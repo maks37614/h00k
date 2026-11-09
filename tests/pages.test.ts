@@ -52,8 +52,8 @@ for (const [name, page] of pages) {
 
 test('main header centers the original-size h00k robot logo with adjacent fullscreen and language controls', () => {
   const html = renderToString(wrap(React.createElement(Header, {
-    isLoading: false, totalCoins: 0, formationsCount: 0, bullishCount: 0,
-    bearishCount: 0, watchlistCount: 0, soundEnabled: true,
+    isLoading: false, totalCoins: 0, formationsCount: 0,
+    watchlistCount: 0, soundEnabled: true,
     onToggleSound: noop, onRefresh: noop, onOpenWatchlist: noop,
     onOpenGuide: noop, onOpenMetaScalp: noop, lastUpdated: null,
     onOpenTelegramAlerts: noop, activePage: 'screener', onPageChange: noop,
@@ -68,6 +68,11 @@ test('main header centers the original-size h00k robot logo with adjacent fullsc
   const fullscreenPos = region.indexOf('aria-label="На весь екран"');
   const langPos = region.indexOf('<select');
   assert.ok(logoPos >= 0 && logoPos < fullscreenPos && fullscreenPos < langPos, 'buttons are immediately right of the centered logo');
+  assert.match(html, /lg:flex-nowrap lg:justify-between/, 'desktop header sections stay on one line');
+  assert.match(html, /lg:w-auto lg:shrink-0 lg:flex-row/, 'desktop brand and navigation share a row');
+  assert.match(html, /id="nav-category-patterns-btn"[^>]+class="flex lg:hidden/, 'formations navigation is mobile-only');
+  assert.match(html, /lg:overflow-x-auto/, 'desktop actions can scroll rather than wrap on narrow desktops');
+  assert.doesNotMatch(html, /Формацій:/, 'desktop formation count and directional statistics are removed');
 });
 
 test('sort and 24h volume controls share styling and sit side by side on mobile', () => {
