@@ -117,19 +117,13 @@ export const ReplayChart = forwardRef<ReplayChartHandle, ReplayChartProps>(({
   // Hovered or active candle state for tooltip
   const [activeCandle, setActiveCandle] = useState<Kline | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [fullscreenSize, setFullscreenSize] = useState<{ width: number; height: number } | null>(null);
-  const fullscreenDragRef = useRef<{
-    axis: 'width' | 'height' | 'both'; pointerId: number; x: number; y: number; width: number; height: number;
-  } | null>(null);
-
-  // Native browser fullscreen escapes the page's transformed/scrollable parents,
-  // while the fixed-position fallback also works where the API is unavailable.
+  // Like Screener fullscreen: always occupy the viewport, without resize handles.
+  // Native fullscreen escapes transformed ancestors; the fixed overlay is a fallback.
   const closeFullscreen = useCallback(async () => {
     if (nativeFullscreenRef.current) {
       await exitFullscreenSafe();
       nativeFullscreenRef.current = false;
     }
-    setFullscreenSize(null);
     setIsFullscreen(false);
   }, []);
 
@@ -140,10 +134,7 @@ export const ReplayChart = forwardRef<ReplayChartHandle, ReplayChartProps>(({
     }
     const root = fullscreenRootRef.current;
     if (!root) return;
-    const enteredNative = await requestFullscreenSafe(root);
-    nativeFullscreenRef.current = enteredNative;
-    // Use live viewport dimensions until the user deliberately drags a resize handle.
-    setFullscreenSize(null);
+    nativeFullscreenRef.current = await requestFullscreenSafe(root);
     setIsFullscreen(true);
   }, [isFullscreen, closeFullscreen]);
 
@@ -152,7 +143,6 @@ export const ReplayChart = forwardRef<ReplayChartHandle, ReplayChartProps>(({
       if (nativeFullscreenRef.current && !isCurrentlyFullscreen()) {
         nativeFullscreenRef.current = false;
         setIsFullscreen(false);
-        setFullscreenSize(null);
       }
     };
     document.addEventListener('fullscreenchange', onNativeFullscreenChange);
@@ -170,48 +160,15 @@ export const ReplayChart = forwardRef<ReplayChartHandle, ReplayChartProps>(({
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape' && !nativeFullscreenRef.current) {
         setIsFullscreen(false);
-        setFullscreenSize(null);
       }
     };
-    const onWindowResize = () => {
-      setFullscreenSize(value => value && ({
-        width: Math.min(value.width, window.innerWidth),
-        height: Math.min(value.height, window.innerHeight),
-      }));
-    };
     window.addEventListener('keydown', onKeyDown);
-    window.addEventListener('resize', onWindowResize);
     return () => {
       document.body.style.overflow = oldOverflow;
       window.removeEventListener('keydown', onKeyDown);
-      window.removeEventListener('resize', onWindowResize);
-      fullscreenDragRef.current = null;
     };
   }, [isFullscreen]);
 
-  const onFullscreenPointerDown = (axis: 'width' | 'height' | 'both', event: React.PointerEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    event.currentTarget.setPointerCapture(event.pointerId);
-    fullscreenDragRef.current = {
-      axis, pointerId: event.pointerId, x: event.clientX, y: event.clientY,
-      width: fullscreenSize?.width ?? window.innerWidth,
-      height: fullscreenSize?.height ?? window.innerHeight,
-    };
-  };
-  const onFullscreenPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
-    const drag = fullscreenDragRef.current;
-    if (!drag || drag.pointerId !== event.pointerId) return;
-    const width = drag.axis === 'height' ? drag.width : drag.width + event.clientX - drag.x;
-    const height = drag.axis === 'width' ? drag.height : drag.height + event.clientY - drag.y;
-    setFullscreenSize({
-      width: Math.min(window.innerWidth, Math.max(Math.min(320, window.innerWidth), Math.round(width))),
-      height: Math.min(window.innerHeight, Math.max(Math.min(320, window.innerHeight), Math.round(height))),
-    });
-  };
-  const onFullscreenPointerEnd = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (fullscreenDragRef.current?.pointerId === event.pointerId) fullscreenDragRef.current = null;
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
-  };
   const [isFocusedBadge, setIsFocusedBadge] = useState(false);
 
   // Helper to center/focus on candles with optimal spacing
@@ -594,7 +551,7 @@ export const ReplayChart = forwardRef<ReplayChartHandle, ReplayChartProps>(({
     <div
       ref={fullscreenRootRef}
       style={isFullscreen
-        ? { width: fullscreenSize?.width ?? '100vw', height: fullscreenSize?.height ?? '100dvh', maxWidth: '100vw', maxHeight: '100dvh' }
+        ? { width: '100vw', height: '100dvh', maxWidth: '100vw', maxHeight: '100dvh' }
         : { height: height === undefined ? '100dvh' : `${activeHeight}px` }}
       className={`relative flex flex-col bg-[#090d16] border border-slate-800/80 rounded-2xl overflow-hidden shadow-xl ${
         isFullscreen ? 'fixed inset-0 z-[100] rounded-none' : 'w-full'
@@ -728,24 +685,6 @@ export const ReplayChart = forwardRef<ReplayChartHandle, ReplayChartProps>(({
       <div className="absolute bottom-7 left-4 pointer-events-none opacity-20 font-mono text-xs text-slate-400">
         Навчальний режим • Майбутні свічки приховано
       </div>
-
-      {/* Training-only touch and mouse fullscreen resize handles. */}
-      {isFullscreen && (
-        <>
-          <div role="separator" aria-label="Змінити ширину графіка" title="Потягніть для зміни ширини"
-            className="absolute right-0 top-[35%] h-[30%] w-3 z-40 cursor-ew-resize touch-none bg-cyan-500/20 hover:bg-cyan-500/50"
-            onPointerDown={e => onFullscreenPointerDown('width', e)} onPointerMove={onFullscreenPointerMove}
-            onPointerUp={onFullscreenPointerEnd} onPointerCancel={onFullscreenPointerEnd} />
-          <div role="separator" aria-label="Змінити висоту графіка" title="Потягніть для зміни висоти"
-            className="absolute bottom-0 left-[35%] w-[30%] h-3 z-40 cursor-ns-resize touch-none bg-cyan-500/20 hover:bg-cyan-500/50"
-            onPointerDown={e => onFullscreenPointerDown('height', e)} onPointerMove={onFullscreenPointerMove}
-            onPointerUp={onFullscreenPointerEnd} onPointerCancel={onFullscreenPointerEnd} />
-          <div role="separator" aria-label="Змінити ширину та висоту графіка" title="Потягніть кут для зміни розміру"
-            className="absolute right-0 bottom-0 w-7 h-7 z-40 cursor-nwse-resize touch-none rounded-tl-xl border-l-2 border-t-2 border-cyan-400/70 bg-cyan-600/35"
-            onPointerDown={e => onFullscreenPointerDown('both', e)} onPointerMove={onFullscreenPointerMove}
-            onPointerUp={onFullscreenPointerEnd} onPointerCancel={onFullscreenPointerEnd} />
-        </>
-      )}
 
       {/* Bottom Drag Resize Handle */}
       {!isFullscreen && (
