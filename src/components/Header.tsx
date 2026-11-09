@@ -97,12 +97,12 @@ export const Header: React.FC<HeaderProps> = ({
   return (
     <header className="app-header min-w-0 border-b border-slate-800/80 bg-slate-950/80 backdrop-blur-md sticky top-0 z-30" data-page={activePage}>
       <div className="max-w-[1720px] mx-auto px-2.5 sm:px-4 lg:px-6 py-1.5 sm:py-2">
-        <div className="flex min-w-0 flex-wrap items-center justify-center gap-2 sm:gap-3">
-          <div className="flex w-full min-w-0 flex-col items-center gap-2 sm:gap-3">
+        <div className="flex min-w-0 flex-wrap items-center justify-center gap-2 sm:gap-3 xl:justify-between xl:gap-2">
+          <div className="flex w-full min-w-0 flex-col items-center gap-2 sm:gap-3 xl:w-auto xl:shrink-0 xl:flex-row xl:gap-2">
             {/* Symmetric grid keeps the logo at the exact center of the header
-                regardless of the width of the language and fullscreen controls. */}
-            <div data-header-brand-row className="grid min-h-9 w-full min-w-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-x-1.5 sm:min-h-10 sm:gap-x-2">
-              <span aria-hidden="true" />
+                on small screens; wide screens use a compact inline brand group. */}
+            <div data-header-brand-row className="grid min-h-9 w-full min-w-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-x-1.5 sm:min-h-10 sm:gap-x-2 xl:flex xl:w-auto xl:shrink-0">
+              <span aria-hidden="true" className="xl:hidden" />
               <button
                 type="button"
                 onClick={() => onPageChange('screener')}
@@ -118,7 +118,7 @@ export const Header: React.FC<HeaderProps> = ({
                 />
               </button>
 
-              {/* Immediately to the right of the centered logo at every width. */}
+              {/* Fullscreen and language controls stay beside the logo. */}
               <div className="flex min-w-0 shrink-0 items-center justify-start gap-1 sm:gap-1.5">
                 <button
                   type="button"
@@ -145,7 +145,7 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
 
             {/* Navigation Category Tabs */}
-            <nav aria-label="Основна навігація" className="grid w-full min-w-0 grid-cols-2 items-center gap-0.5 p-0.5 sm:flex sm:w-auto sm:flex-wrap sm:p-1 rounded-xl bg-slate-900/90 border border-slate-800 text-xs shadow-inner">
+            <nav aria-label="Основна навігація" className="grid w-full min-w-0 grid-cols-2 items-center gap-0.5 p-0.5 sm:flex sm:w-auto sm:flex-wrap sm:p-1 xl:shrink-0 xl:flex-nowrap rounded-xl bg-slate-900/90 border border-slate-800 text-xs shadow-inner">
               <button
                 id="nav-category-screener-btn"
                 aria-current={activePage === 'screener' ? 'page' : undefined}
@@ -229,7 +229,7 @@ export const Header: React.FC<HeaderProps> = ({
 
 
           {/* Quick Stats Bar */}
-          <div className="hidden xl:flex items-center gap-2.5 sm:gap-4 px-3 py-1.5 rounded-xl bg-slate-900/90 border border-slate-800 text-xs">
+          <div className="hidden xl:flex shrink-0 items-center gap-2.5 sm:gap-4 px-3 py-1.5 rounded-xl bg-slate-900/90 border border-slate-800 text-xs">
             <div className="flex items-center gap-2">
               <span className="text-slate-400">Формацій:</span>
               <span className="font-bold text-white font-mono bg-slate-800 px-1.5 py-0.5 rounded">
@@ -243,7 +243,7 @@ export const Header: React.FC<HeaderProps> = ({
               <span className="text-rose-400 font-semibold">▼ {bearishCount}</span>
             </div>
           </div>
-          <div className="flex w-full min-w-0 flex-wrap items-center justify-center gap-1.5 sm:gap-2 [&>button]:shrink-0">
+          <div className="flex w-full min-w-0 flex-wrap items-center justify-center gap-1.5 sm:gap-2 xl:w-auto xl:flex-nowrap xl:gap-1.5 [&>button]:shrink-0">
             <button
               id="refresh-screener-btn"
               onClick={onRefresh}

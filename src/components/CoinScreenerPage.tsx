@@ -711,10 +711,10 @@ export const CoinScreenerPage: React.FC<CoinScreenerPageProps> = ({
           </div>
         </div>
 
-        {/* Place sort and volume next to each other at every viewport width. Labels sit above values on small screens. */}
-        <div className="grid min-w-0 grid-cols-1 gap-2 border-t border-slate-800/40 pt-2">
-          <div className="grid min-w-0 grid-cols-2 gap-2">
-            <div data-screener-filter="sort" className="flex min-h-12 w-full min-w-0 flex-col items-stretch justify-center gap-0.5 rounded-xl border border-slate-800 bg-slate-950/80 px-2.5 py-1 text-xs sm:min-h-9 sm:flex-row sm:items-center sm:gap-1.5">
+        {/* Keep the paired mobile filters; desktop fields use compact, bounded widths. */}
+        <div className="grid min-w-0 grid-cols-1 gap-2 border-t border-slate-800/40 pt-2 lg:flex lg:flex-wrap lg:items-center lg:justify-between">
+          <div className="grid min-w-0 grid-cols-2 gap-2 lg:flex">
+            <div data-screener-filter="sort" className="flex min-h-12 w-full min-w-0 flex-col items-stretch justify-center gap-0.5 rounded-xl border border-slate-800 bg-slate-950/80 px-2.5 py-1 text-xs sm:min-h-9 sm:flex-row sm:items-center sm:gap-1.5 lg:w-72">
               <span id="screener-sort-label" className="shrink-0 whitespace-nowrap text-[11px] text-slate-500">Сортувати:</span>
               <div className="flex min-w-0 flex-1 items-center gap-1">
                 <ScreenerSortDropdown
@@ -734,7 +734,7 @@ export const CoinScreenerPage: React.FC<CoinScreenerPageProps> = ({
             </div>
 
             {/* The custom volume listbox keeps its existing filtering behavior. */}
-            <div data-screener-filter="volume" className="flex min-h-12 w-full min-w-0 flex-col items-stretch justify-center gap-0.5 rounded-xl border border-slate-800 bg-slate-950/80 px-2.5 py-1 text-xs sm:min-h-9 sm:flex-row sm:items-center sm:gap-1.5">
+            <div data-screener-filter="volume" className="flex min-h-12 w-full min-w-0 flex-col items-stretch justify-center gap-0.5 rounded-xl border border-slate-800 bg-slate-950/80 px-2.5 py-1 text-xs sm:min-h-9 sm:flex-row sm:items-center sm:gap-1.5 lg:w-72">
               <label id="screener-volume-cap-label" htmlFor="screener-volume-cap" className="shrink-0 whitespace-nowrap text-[11px] text-slate-500">{t('volume')}</label>
               <ScreenerVolumeDropdown
                 id="screener-volume-cap"

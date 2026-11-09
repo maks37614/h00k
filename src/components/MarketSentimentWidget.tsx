@@ -52,7 +52,7 @@ export const MarketSentimentWidget: React.FC<MarketSentimentWidgetProps> = ({ co
   if (!data) return null;
 
   return (
-    <div className="rounded-2xl bg-gradient-to-r from-slate-900 via-slate-900/85 to-indigo-950/40 border border-slate-800/90 shadow-lg backdrop-blur-md overflow-hidden">
+    <div className="rounded-2xl bg-gradient-to-r from-slate-900 via-slate-900/85 to-indigo-950/40 border border-slate-800/90 shadow-lg backdrop-blur-md overflow-hidden lg:mx-auto lg:max-w-5xl">
       {/* Header Bar */}
       <div className="p-3 sm:p-4 flex items-center justify-between gap-3 border-b border-slate-800/70">
         <div className="flex items-center gap-3">
