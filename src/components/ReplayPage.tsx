@@ -63,20 +63,21 @@ export const ReplayPage: React.FC<ReplayPageProps> = ({ coins }) => {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [focusTrigger, setFocusTrigger] = useState<number>(0);
 
-  // Chart dimensions & layout state
-  const [chartHeight, setChartHeight] = useState<number>(() => {
+  // Like Screener fullscreen: fill the viewport height by default.
+  // Persist only a deliberate resize, not the old S/M/L/XL presets.
+  const [chartHeight, setChartHeight] = useState<number | undefined>(() => {
     try {
-      const saved = localStorage.getItem('signalhook_replay_chart_height_v2');
-      const defaultHeight = typeof window !== 'undefined' ? Math.max(520, Math.min(1500, window.innerHeight - 96)) : 760;
-      return saved ? Math.max(380, Math.min(1600, parseInt(saved, 10) || defaultHeight)) : defaultHeight;
+      const saved = localStorage.getItem('signalhook_replay_chart_height_v3');
+      const parsed = saved === null ? NaN : Number(saved);
+      return Number.isFinite(parsed) && parsed >= 380 && parsed <= 2200 ? parsed : undefined;
     } catch {
-      return 760;
+      return undefined;
     }
   });
 
   const handleChartHeightChange = useCallback((newH: number) => {
     setChartHeight(newH);
-    try { localStorage.setItem('signalhook_replay_chart_height_v2', newH.toString()); } catch {}
+    try { localStorage.setItem('signalhook_replay_chart_height_v3', newH.toString()); } catch {}
   }, []);
 
   // Playback Control

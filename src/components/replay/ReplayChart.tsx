@@ -16,7 +16,8 @@ import {
 } from 'lightweight-charts';
 import { Kline, Timeframe, ExchangeId, MarketType, ReplayPosition, ReplayPendingOrder } from '../../types';
 import { getChartPriceFormat, formatCryptoPrice } from '../../utils/formatters';
-import { Maximize2, Minimize2, ZoomIn, ZoomOut, RotateCcw, Camera, MoveVertical, GripHorizontal } from 'lucide-react';
+import { Maximize2, Minimize2, RotateCcw, Camera } from 'lucide-react';
+import { requestFullscreenSafe, exitFullscreenSafe, isCurrentlyFullscreen } from '../../utils/fullscreenUtils';
 
 export interface ReplayChartHandle {
   takeScreenshot: () => string | null;
@@ -66,8 +67,10 @@ export const ReplayChart = forwardRef<ReplayChartHandle, ReplayChartProps>(({
   const volumeSeriesRef = useRef<ISeriesApi<'Histogram'> | null>(null);
 
   // Height state
-  const [internalHeight, setInternalHeight] = useState<number>(() => height || 640);
-  const activeHeight = height !== undefined ? height : internalHeight;
+  const [internalHeight, setInternalHeight] = useState<number>(() => typeof window !== 'undefined' ? window.innerHeight : 760);
+  const activeHeight = height ?? internalHeight;
+  const fullscreenRootRef = useRef<HTMLDivElement>(null);
+  const nativeFullscreenRef = useRef(false);
 
   // Dragging logic for bottom resize handle
   const isDraggingRef = useRef(false);
@@ -78,14 +81,14 @@ export const ReplayChart = forwardRef<ReplayChartHandle, ReplayChartProps>(({
     e.preventDefault();
     isDraggingRef.current = true;
     startYRef.current = e.clientY;
-    startHeightRef.current = activeHeight;
+    startHeightRef.current = fullscreenRootRef.current?.getBoundingClientRect().height ?? activeHeight;
     document.body.style.cursor = 'row-resize';
     document.body.style.userSelect = 'none';
 
     const handleMouseMove = (moveEvent: MouseEvent) => {
       if (!isDraggingRef.current) return;
       const deltaY = moveEvent.clientY - startYRef.current;
-      const newHeight = Math.max(380, Math.min(1300, Math.round(startHeightRef.current + deltaY)));
+      const newHeight = Math.max(380, Math.min(2200, Math.round(startHeightRef.current + deltaY)));
       setInternalHeight(newHeight);
       onHeightChange?.(newHeight);
       if (chartRef.current && chartContainerRef.current) {
@@ -119,12 +122,56 @@ export const ReplayChart = forwardRef<ReplayChartHandle, ReplayChartProps>(({
     axis: 'width' | 'height' | 'both'; pointerId: number; x: number; y: number; width: number; height: number;
   } | null>(null);
 
+  // Native browser fullscreen escapes the page's transformed/scrollable parents,
+  // while the fixed-position fallback also works where the API is unavailable.
+  const closeFullscreen = useCallback(async () => {
+    if (nativeFullscreenRef.current) {
+      await exitFullscreenSafe();
+      nativeFullscreenRef.current = false;
+    }
+    setFullscreenSize(null);
+    setIsFullscreen(false);
+  }, []);
+
+  const toggleFullscreen = useCallback(async () => {
+    if (isFullscreen) {
+      await closeFullscreen();
+      return;
+    }
+    const root = fullscreenRootRef.current;
+    if (!root) return;
+    const enteredNative = await requestFullscreenSafe(root);
+    nativeFullscreenRef.current = enteredNative;
+    // Use live viewport dimensions until the user deliberately drags a resize handle.
+    setFullscreenSize(null);
+    setIsFullscreen(true);
+  }, [isFullscreen, closeFullscreen]);
+
+  useEffect(() => {
+    const onNativeFullscreenChange = () => {
+      if (nativeFullscreenRef.current && !isCurrentlyFullscreen()) {
+        nativeFullscreenRef.current = false;
+        setIsFullscreen(false);
+        setFullscreenSize(null);
+      }
+    };
+    document.addEventListener('fullscreenchange', onNativeFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', onNativeFullscreenChange);
+    return () => {
+      document.removeEventListener('fullscreenchange', onNativeFullscreenChange);
+      document.removeEventListener('webkitfullscreenchange', onNativeFullscreenChange);
+    };
+  }, []);
+
   useEffect(() => {
     if (!isFullscreen) return;
     const oldOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') { setIsFullscreen(false); setFullscreenSize(null); }
+      if (event.key === 'Escape' && !nativeFullscreenRef.current) {
+        setIsFullscreen(false);
+        setFullscreenSize(null);
+      }
     };
     const onWindowResize = () => {
       setFullscreenSize(value => value && ({
@@ -545,10 +592,16 @@ export const ReplayChart = forwardRef<ReplayChartHandle, ReplayChartProps>(({
 
   return (
     <div
-      style={isFullscreen ? { width: fullscreenSize?.width ?? '100vw', height: fullscreenSize?.height ?? '100dvh', maxWidth: '100vw', maxHeight: '100dvh' } : { height: `${activeHeight}px` }}
+      ref={fullscreenRootRef}
+      style={isFullscreen
+        ? { width: fullscreenSize?.width ?? '100vw', height: fullscreenSize?.height ?? '100dvh', maxWidth: '100vw', maxHeight: '100dvh' }
+        : { height: height === undefined ? '100dvh' : `${activeHeight}px` }}
       className={`relative flex flex-col bg-[#090d16] border border-slate-800/80 rounded-2xl overflow-hidden shadow-xl ${
-        isFullscreen ? 'fixed top-0 left-0 z-[100] rounded-none' : 'w-full'
+        isFullscreen ? 'fixed inset-0 z-[100] rounded-none' : 'w-full'
       }`}
+      role={isFullscreen ? 'dialog' : undefined}
+      aria-modal={isFullscreen || undefined}
+      aria-label={isFullscreen ? 'Повноекранний графік відтворення' : undefined}
     >
       {/* Chart Top Header Overlay */}
       <div className="flex flex-wrap items-center justify-between gap-2 px-3.5 py-2.5 bg-slate-950/70 border-b border-slate-800/60 backdrop-blur-md z-10 text-xs">
@@ -612,35 +665,6 @@ export const ReplayChart = forwardRef<ReplayChartHandle, ReplayChartProps>(({
             <span>📅 {formattedDate}</span>
           </div>
 
-          {/* Quick Height presets */}
-          <div className="hidden sm:flex items-center p-0.5 rounded-lg bg-slate-900 border border-slate-800 text-[10px] font-mono mr-1">
-            <span className="px-1 text-slate-500 font-sans font-bold flex items-center gap-0.5" title="Швидка зміна висоти блоку графіка">
-              <MoveVertical className="w-2.5 h-2.5" />
-            </span>
-            {[
-              { label: 'S', h: 480 },
-              { label: 'M', h: 640 },
-              { label: 'L', h: 800 },
-              { label: 'XL', h: 960 },
-            ].map((preset) => (
-              <button
-                key={preset.label}
-                onClick={() => {
-                  setInternalHeight(preset.h);
-                  onHeightChange?.(preset.h);
-                }}
-                className={`px-1.5 py-0.5 rounded font-bold transition-all cursor-pointer ${
-                  Math.abs(activeHeight - preset.h) < 30
-                    ? 'bg-amber-500 text-slate-950 font-extrabold shadow-sm'
-                    : 'text-slate-400 hover:text-white hover:bg-slate-800'
-                }`}
-                title={`Висота ${preset.h}px`}
-              >
-                {preset.label}
-              </button>
-            ))}
-          </div>
-
           <button
             onClick={() => {
               const img = captureScreenshot();
@@ -667,11 +691,8 @@ export const ReplayChart = forwardRef<ReplayChartHandle, ReplayChartProps>(({
           </button>
 
           <button
-            onClick={() => {
-              if (isFullscreen) setFullscreenSize(null);
-              else setFullscreenSize({ width: window.innerWidth, height: window.innerHeight });
-              setIsFullscreen(!isFullscreen);
-            }}
+            type="button"
+            onClick={() => { void toggleFullscreen(); }}
             className="p-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800 transition-colors"
             title={isFullscreen ? 'Вийти з повного екрана' : 'Повний екран'}
             aria-label={isFullscreen ? 'Вийти з повного екрана' : 'Розгорнути графік на весь екран'}
