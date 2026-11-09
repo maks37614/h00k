@@ -10,6 +10,7 @@ import {
   recordSessionLiquidation,
   sessionLiquidationScope,
 } from '../src/components/hookchart/liquidationSession';
+import { parseLiquidations } from '../server/liquidationFeed';
 
 test('Long and Short liquidation thresholds are independent', () => {
   const rows = [
@@ -36,16 +37,55 @@ test('Long and Short liquidation thresholds are independent', () => {
   assert.equal(rows.length, 4);
 });
 
-test('Bybit duplicates in packet-index variants do not inflate candle labels', () => {
+test('Bybit occurrence IDs stay distinct while repeated deliveries are deduplicated', () => {
   const first = 'byb:BTCUSDT:1794258000000:Buy:100:2:0';
   const duplicated = 'byb:BTCUSDT:1794258000000:Buy:100:2:3';
-  assert.equal(canonicalLiquidationId(first), canonicalLiquidationId(duplicated));
+  assert.notEqual(canonicalLiquidationId(first), canonicalLiquidationId(duplicated));
   assert.deepEqual(
     deduplicateLiquidations([
-      { id: first, usd: 200 }, { id: duplicated, usd: 200 },
+      { id: first, usd: 200 }, { id: duplicated, usd: 200 }, { id: first, usd: 200 },
     ]).map(row => row.usd),
-    [200],
+    [200, 200],
   );
+});
+
+test('two equal Bybit rows total $400 and a replayed packet cannot count them again', () => {
+  const now = Date.now();
+  const event = { T: now, S: 'Buy', p: '100', v: '2' };
+  const packet = { topic: 'allLiquidation.BATCHUSDT', ts: now, data: [{ ...event }, { ...event }] };
+  const rows = parseLiquidations('bybit', 'BATCHUSDT', packet);
+  const repeated = parseLiquidations('bybit', 'BATCHUSDT', packet);
+  assert.equal(new Set(rows.map(row => row.id)).size, 2);
+  assert.deepEqual(repeated, rows);
+  assert.equal(deduplicateLiquidations([...rows, ...repeated]).length, 2);
+  const scope = sessionLiquidationScope('bybit', 'futures', 'BATCHUSDT');
+  [...rows, ...repeated].forEach(row => recordSessionLiquidation(scope, row));
+  assert.deepEqual(getSessionLiquidationTotals(scope), { totalUsd: 400, longUsd: 400, shortUsd: 0, count: 2 });
+  const nextPacket = parseLiquidations('bybit', 'BATCHUSDT', { ...packet, ts: now + 1 });
+  assert.equal(deduplicateLiquidations([...rows, ...nextPacket]).length, 4);
+});
+
+test('upgrading legacy Bybit session IDs preserves the amount already counted', t => {
+  const descriptor = Object.getOwnPropertyDescriptor(globalThis, 'sessionStorage');
+  const scope = sessionLiquidationScope('bybit', 'futures', 'UPGRADEUSDT');
+  const now = Date.now();
+  const legacyId = `byb:UPGRADEUSDT:${now}:Buy:100:2`;
+  const data = new Map([[`hookchart:liquidations:session:v1:${scope}`, JSON.stringify({
+    totals: { totalUsd: 200, longUsd: 200, shortUsd: 0, count: 1 }, ids: [[legacyId, 'LONG', 200]],
+  })]]);
+  Object.defineProperty(globalThis, 'sessionStorage', { configurable: true, value: {
+    getItem: (key: string) => data.get(key) ?? null,
+    setItem: (key: string, value: string) => data.set(key, value),
+  } });
+  t.after(() => {
+    if (descriptor) Object.defineProperty(globalThis, 'sessionStorage', descriptor);
+    else Reflect.deleteProperty(globalThis, 'sessionStorage');
+  });
+  const row = { side: 'LONG' as const, usd: 200, t: now };
+  assert.equal(recordSessionLiquidation(scope, { ...row, id: `${legacyId}:${now}:0` }), false);
+  assert.equal(recordSessionLiquidation(scope, { ...row, id: `${legacyId}:${now}:1` }), true);
+  assert.equal(recordSessionLiquidation(scope, { ...row, id: `${legacyId}:${now}:1` }), false);
+  assert.deepEqual(getSessionLiquidationTotals(scope), { totalUsd: 400, longUsd: 400, shortUsd: 0, count: 2 });
 });
 
 test('Session totals survive timeframe changes and do not mix coins or exchanges', () => {

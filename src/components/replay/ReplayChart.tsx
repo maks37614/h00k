@@ -75,6 +75,15 @@ export const ReplayChart = forwardRef<ReplayChartHandle, ReplayChartProps>(({
   const hookChartRef = useRef<HookChartHandle | null>(null);
   const hookMarkers = useMemo(() => replayChartMarkers(position, pendingOrders).filter(marker => marker.id !== 'liquidation'), [position, pendingOrders]);
   const chartContainerRef = useRef<HTMLDivElement>(null);
+  const [chartContainer, setChartContainer] = useState<HTMLDivElement | null>(null);
+  const bindChartContainer = useCallback((node: HTMLDivElement | null) => {
+    chartContainerRef.current = node;
+    setChartContainer(node);
+  }, []);
+  const visibleCandlesRef = useRef(visibleCandles);
+  visibleCandlesRef.current = visibleCandles;
+  const rendererScope = `${exchange}:${marketType}:${symbol}:${timeframe}`;
+  const savedRangeRef = useRef<{ scope: string; range: { from: number; to: number } } | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const candleSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
   const volumeSeriesRef = useRef<ISeriesApi<'Histogram'> | null>(null);
@@ -235,11 +244,11 @@ export const ReplayChart = forwardRef<ReplayChartHandle, ReplayChartProps>(({
 
   // Initialize the selected chart renderer.
   useEffect(() => {
-    if (chartProvider === 'hookchart' || !chartContainerRef.current) return;
+    if (chartProvider === 'hookchart' || !chartContainer) return;
 
-    chartContainerRef.current.innerHTML = '';
+    chartContainer.innerHTML = '';
 
-    const chart = createChart(chartContainerRef.current, {
+    const chart = createChart(chartContainer, {
       layout: {
         background: { color: '#090d16' },
         textColor: '#94a3b8',
@@ -295,10 +304,10 @@ export const ReplayChart = forwardRef<ReplayChartHandle, ReplayChartProps>(({
     });
 
     // Remove watermark/logo if any
-    const logo = chartContainerRef.current.querySelector('#tv-attr-logo');
+    const logo = chartContainer.querySelector('#tv-attr-logo');
     if (logo) logo.remove();
 
-    const samplePrice = visibleCandles[visibleCandles.length - 1]?.close || 100;
+    const samplePrice = visibleCandlesRef.current.at(-1)?.close || 100;
     const priceFormat = getChartPriceFormat(samplePrice);
 
     // Candlestick Series
@@ -333,8 +342,8 @@ export const ReplayChart = forwardRef<ReplayChartHandle, ReplayChartProps>(({
     // Crosshair move handler to update candle info display
     chart.subscribeCrosshairMove((param) => {
       if (!param.time || !param.seriesData) {
-        if (visibleCandles.length > 0) {
-          setActiveCandle(visibleCandles[visibleCandles.length - 1]);
+        if (visibleCandlesRef.current.length > 0) {
+          setActiveCandle(visibleCandlesRef.current.at(-1)!);
         }
         return;
       }
@@ -367,11 +376,13 @@ export const ReplayChart = forwardRef<ReplayChartHandle, ReplayChartProps>(({
     };
 
     const resizeObserver = new ResizeObserver(handleResize);
-    resizeObserver.observe(chartContainerRef.current);
+    resizeObserver.observe(chartContainer);
 
     return () => {
       resizeObserver.disconnect();
       clearTimeout(resizeTimer);
+      const range = chart.timeScale().getVisibleLogicalRange();
+      savedRangeRef.current = range ? { scope: rendererScope, range } : null;
       chart.remove();
       chartRef.current = null;
       candleSeriesRef.current = null;
@@ -381,7 +392,7 @@ export const ReplayChart = forwardRef<ReplayChartHandle, ReplayChartProps>(({
       tpLineRef.current = null;
       pendingLinesRef.current = [];
     };
-  }, [chartProvider]);
+  }, [chartProvider, chartContainer, rendererScope]);
 
   // Update data when visibleCandles change
   useEffect(() => {
@@ -402,9 +413,15 @@ export const ReplayChart = forwardRef<ReplayChartHandle, ReplayChartProps>(({
       color: c.close >= c.open ? 'rgba(16, 185, 129, 0.35)' : 'rgba(239, 68, 68, 0.35)',
     }));
 
+    candleSeriesRef.current.applyOptions({ priceFormat: getChartPriceFormat(visibleCandles.at(-1)!.close) });
     candleSeriesRef.current.setData(candleData);
     volumeSeriesRef.current.setData(volumeData);
-  }, [visibleCandles, chartProvider]);
+    const savedRange = savedRangeRef.current;
+    if (savedRange?.scope === rendererScope) {
+      chartRef.current?.timeScale().setVisibleLogicalRange(savedRange.range);
+    }
+    savedRangeRef.current = null;
+  }, [visibleCandles, chartProvider, chartContainer, rendererScope]);
 
   const focusOnCandlesRef = useRef(focusOnCandles);
   useEffect(() => {
@@ -493,7 +510,7 @@ export const ReplayChart = forwardRef<ReplayChartHandle, ReplayChartProps>(({
       }
 
     }
-  }, [position, chartProvider]);
+  }, [position, chartProvider, chartContainer, rendererScope]);
 
   // Update Pending Orders Lines
   useEffect(() => {
@@ -517,7 +534,7 @@ export const ReplayChart = forwardRef<ReplayChartHandle, ReplayChartProps>(({
       });
       pendingLinesRef.current.push(line);
     }
-  }, [pendingOrders, chartProvider]);
+  }, [pendingOrders, chartProvider, chartContainer, rendererScope]);
 
   const latestCandle = visibleCandles[visibleCandles.length - 1] || null;
   const displayCandle = activeCandle || latestCandle;
@@ -690,7 +707,7 @@ export const ReplayChart = forwardRef<ReplayChartHandle, ReplayChartProps>(({
                 exchange={exchange} marketType={marketType} markers={hookMarkers} replay focusTrigger={focusTrigger}
                 onTimeframeChange={onTimeframeChange} timeframeDisabled={isLoadingHistoricalData}
                 replayPlaybackSpeed={playbackSpeed} onReplayPlaybackSpeedChange={onSpeedChange} />
-            : <div ref={chartContainerRef} data-chart-provider="tradingview" className="relative h-full w-full select-none" />}
+            : <div ref={bindChartContainer} data-chart-provider="tradingview" className="relative h-full w-full select-none" />}
         </div>
       </div>
 

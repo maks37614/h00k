@@ -256,11 +256,11 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 function LiquidationHelp({ text, label }: { text: string; label: string }) {
   return <span className="liqSettingHelp"><button type="button" aria-label={label + '. ' + text} title={text}>?</button><span role="tooltip">{text}</span></span>;
 }
-function Setting({ label, desc, help, children }: { label: string; desc?: string; help?: string; children: React.ReactNode }) {
-  return <div className="settingRow"><div className="settingText"><b>{label}{help && <LiquidationHelp label={label} text={help} />}</b>{desc && <small>{desc}</small>}</div><div className="settingControl">{children}</div></div>;
+function Setting({ label, desc, help, unavailable = false, children }: { label: string; desc?: string; help?: string; unavailable?: boolean; children: React.ReactNode }) {
+  return <div className={'settingRow' + (unavailable ? ' settingUnavailable' : '')}><div className="settingText"><b>{label}{help && <LiquidationHelp label={label} text={help} />}</b>{desc && <small>{desc}</small>}{unavailable && <small className="settingUnavailableNote">Ще не реалізовано</small>}</div><div className="settingControl">{unavailable ? <fieldset disabled className="settingUnavailableControl" aria-label={label}>{children}</fieldset> : children}</div></div>;
 }
-function SwitchRow({ label, desc, help, value, onChange }: { label: string; desc?: string; help?: string; value: boolean; onChange: (value: boolean) => void }) {
-  return <Setting label={label} desc={desc} help={help}><label className="settingsSwitch"><input type="checkbox" checked={value} onChange={event => onChange(event.target.checked)} /><span /></label></Setting>;
+function SwitchRow({ label, desc, help, unavailable, value, onChange }: { label: string; desc?: string; help?: string; unavailable?: boolean; value: boolean; onChange: (value: boolean) => void }) {
+  return <Setting label={label} desc={desc} help={help} unavailable={unavailable}><label className="settingsSwitch"><input type="checkbox" aria-label={label} checked={value} onChange={event => onChange(event.target.checked)} /><span /></label></Setting>;
 }
 function LiquidationMinimum({ value, disabled, onChange }: { value?: number | null; disabled?: boolean; onChange: (value: number | null) => void }) {
   return <input className="numInput" type="number" min={0} max={1_000_000_000_000} step={100} inputMode="decimal" placeholder="Авто" disabled={disabled} value={value ?? ''}
@@ -280,11 +280,11 @@ function Num({ value, set, min, max, step = 1, disabled = false }: { value: numb
     set(next);
   }} />;
 }
-function Choice({ label, desc, values, labels, value, set }: { label: string; desc?: string; values: Array<string | number>; labels?: string[]; value: unknown; set: (value: any) => void }) {
-  return <Setting label={label} desc={desc}><div className="settingsChips">{values.map((entry, index) => <button type="button" key={String(entry)} value={String(entry)} aria-pressed={value === entry} className={value === entry ? 'sel' : ''} onClick={() => set(entry)}>{labels?.[index] ?? String(entry)}</button>)}</div></Setting>;
+function Choice({ label, desc, unavailable, values, labels, value, set }: { label: string; desc?: string; unavailable?: boolean; values: Array<string | number>; labels?: string[]; value: unknown; set: (value: any) => void }) {
+  return <Setting label={label} desc={desc} unavailable={unavailable}><div className="settingsChips">{values.map((entry, index) => <button type="button" key={String(entry)} value={String(entry)} aria-pressed={value === entry} className={value === entry ? 'sel' : ''} onClick={() => set(entry)}>{labels?.[index] ?? String(entry)}</button>)}</div></Setting>;
 }
-function MultiChoice({ label, desc, values, selected, toggle, max }: { label: string; desc?: string; values: string[]; selected: string[]; toggle: (value: string) => void; max?: number }) {
-  return <Setting label={label} desc={desc}><div className="settingsChips">{values.map(entry => <button type="button" key={entry} aria-pressed={selected.includes(entry)} className={selected.includes(entry) ? 'sel' : ''} disabled={!selected.includes(entry) && max !== undefined && selected.length >= max} onClick={() => toggle(entry)}>{entry}</button>)}</div></Setting>;
+function MultiChoice({ label, desc, unavailable, values, selected, toggle, max }: { label: string; desc?: string; unavailable?: boolean; values: string[]; selected: string[]; toggle: (value: string) => void; max?: number }) {
+  return <Setting label={label} desc={desc} unavailable={unavailable}><div className="settingsChips">{values.map(entry => <button type="button" key={entry} aria-pressed={selected.includes(entry)} className={selected.includes(entry) ? 'sel' : ''} disabled={!selected.includes(entry) && max !== undefined && selected.length >= max} onClick={() => toggle(entry)}>{entry}</button>)}</div></Setting>;
 }
 
 function HotkeySettings({ hotkeys, setHotkeys }: { hotkeys: HookChartHotkeys; setHotkeys: (value: HookChartHotkeys) => void }) {
@@ -456,7 +456,7 @@ export function OriginalHookChartSettings({
             <Choice label="Мова" values={['uk', 'pl', 'ru', 'en']} labels={['Українська', 'Polski', 'Русский', 'English']} value={prefs.language} set={value => set('language', value)} />
             <Choice label="Часовий пояс" values={['Europe/Warsaw', 'UTC', 'Europe/Kyiv', 'America/New_York']} labels={['Europe/Warsaw', 'UTC', 'Europe/Kyiv', 'America/New_York']} value={prefs.timezone} set={value => set('timezone', value)} />
             <SwitchRow label="Підказки" desc="Підказки в інтерфейсі під час наведення миші" value={prefs.tooltips !== false} onChange={value => set('tooltips', value)} />
-            <SwitchRow label="Зі сповіщень відкривати графіки в новому вікні" value={!!prefs.notificationOpenNew} onChange={value => set('notificationOpenNew', value)} />
+            <SwitchRow unavailable label="Зі сповіщень відкривати графіки в новому вікні" value={!!prefs.notificationOpenNew} onChange={value => set('notificationOpenNew', value)} />
           </Section>
 
           <Section title="Інтерфейс">
@@ -482,11 +482,11 @@ export function OriginalHookChartSettings({
             <SwitchRow label="Показувати суми великих ринкових заявок під свічками" value={prefs.showMarketPrintSums === true} onChange={value => set('showMarketPrintSums', value)} />
             <SwitchRow label="Об’єми на графіку" value={prefs.showVolumes !== false} onChange={value => set('showVolumes', value)} />
             <SwitchRow label="Нижня інформаційна панель" value={prefs.showMarketStatsBar !== false} onChange={value => set('showMarketStatsBar', value)} />
-            <SwitchRow label="Показувати діалог сповіщень у режимі сітки та однієї монети" value={prefs.notificationDialog !== false} onChange={value => set('notificationDialog', value)} />
-            <Choice label="Розмір вікна в режимі однієї монети" desc="Відсоток від ширини та висоти екрана." values={[70, 75, 80, 85, 90, 95, 100]} labels={['70%', '75%', '80%', '85%', '90%', '95%', '100%']} value={prefs.singleWindowSize ?? 85} set={value => set('singleWindowSize', value)} />
-            <SwitchRow label="Кнопки гортання в режимі «Усі графіки»" value={prefs.pagingButtons !== false} onChange={value => set('pagingButtons', value)} />
+            <SwitchRow unavailable label="Показувати діалог сповіщень у режимі сітки та однієї монети" value={prefs.notificationDialog !== false} onChange={value => set('notificationDialog', value)} />
+            <Choice unavailable label="Розмір вікна в режимі однієї монети" desc="Відсоток від ширини та висоти екрана." values={[70, 75, 80, 85, 90, 95, 100]} labels={['70%', '75%', '80%', '85%', '90%', '95%', '100%']} value={prefs.singleWindowSize ?? 85} set={value => set('singleWindowSize', value)} />
+            <SwitchRow unavailable label="Кнопки гортання в режимі «Усі графіки»" value={prefs.pagingButtons !== false} onChange={value => set('pagingButtons', value)} />
             <SwitchRow label="Спільні фігури малювання" desc="Фігури однієї монети можуть використовуватися в усіх режимах і списках." value={prefs.sharedDrawings !== false} onChange={value => set('sharedDrawings', value)} />
-            <SwitchRow label="Дублювати перехрестя на графіку" value={!!prefs.duplicateCrosshair} onChange={value => set('duplicateCrosshair', value)} />
+            <SwitchRow unavailable label="Дублювати перехрестя на графіку" value={!!prefs.duplicateCrosshair} onChange={value => set('duplicateCrosshair', value)} />
           </Section>
 
           <Section title="Ліквідації">
@@ -528,11 +528,11 @@ export function OriginalHookChartSettings({
           </Section>
 
           <Section title="Дані та сортування">
-            <Setting label="Типи та порядок сортування" desc="Клік переміщує тип праворуч. Подвійний клік вмикає/вимикає."><div className="sortGroups">
+            <Setting unavailable label="Типи та порядок сортування" desc="Клік переміщує тип праворуч. Подвійний клік вмикає/вимикає."><div className="sortGroups">
               <small>Увімкнені</small><div className="settingsChips">{(prefs.sortEnabled || []).map(item => <button type="button" key={item} onClick={() => moveSort(item)} onDoubleClick={() => toggleSort(item)}>{item}</button>)}</div>
               <small>Вимкнені</small><div className="settingsChips muted">{(prefs.sortDisabled || []).map(item => <button type="button" key={item} onDoubleClick={() => toggleSort(item)}>{item}</button>)}</div>
             </div></Setting>
-            <MultiChoice label="Інтервали аналізу" desc="Не більше 4" values={['5m', '15m', '30m', '1h', '4h', '1d']} selected={prefs.analyzedIntervals || []} toggle={value => toggleArray('analyzedIntervals', value, 4)} max={4} />
+            <MultiChoice unavailable label="Інтервали аналізу" desc="Не більше 4" values={['5m', '15m', '30m', '1h', '4h', '1d']} selected={prefs.analyzedIntervals || []} toggle={value => toggleArray('analyzedIntervals', value, 4)} max={4} />
           </Section>
 
           <Section title="Скоринг">
@@ -540,7 +540,7 @@ export function OriginalHookChartSettings({
           </Section>
 
           <Section title="Круглі числа (колонка RN)">
-            <SwitchRow label="Показувати відстань до найближчого круглого числа" value={!!prefs.roundDistance} onChange={value => set('roundDistance', value)} />
+            <SwitchRow unavailable label="Показувати відстань до найближчого круглого числа" value={!!prefs.roundDistance} onChange={value => set('roundDistance', value)} />
             <Choice label="Ступінь округлення" values={[1, 2, 3]} value={prefs.roundness ?? 2} set={value => set('roundness', value)} />
             <SwitchRow label="Показувати сітку круглих чисел на графіку" desc="Тонкі ненав’язливі лінії круглих цін." value={!!prefs.roundGrid} onChange={value => set('roundGrid', value)} />
           </Section>
@@ -556,7 +556,7 @@ export function OriginalHookChartSettings({
             <Setting label="Розмір міток рівнів"><Num value={prefs.levelLabelSize ?? 11} min={0.2} max={20} step={0.1} set={value => set('levelLabelSize', value)} /><b className="valueBadge">px</b></Setting>
             <Choice label="Тип міток рівнів" values={['text', 'filled', 'outline']} labels={['Текст', 'Із заливкою', 'Із рамкою']} value={prefs.levelLabelStyle || 'text'} set={value => set('levelLabelStyle', value)} />
             <Choice label="Тип ліній рівнів" values={['solid', 'dash', 'dot']} labels={['Суцільна', 'Пунктир', 'Крапки']} value={prefs.levelLineStyle || 'solid'} set={value => set('levelLineStyle', value)} />
-            <SwitchRow label="Показувати у списку найближчі рівні" value={prefs.showNearestLevels !== false} onChange={value => set('showNearestLevels', value)} />
+            <SwitchRow unavailable label="Показувати у списку найближчі рівні" value={prefs.showNearestLevels !== false} onChange={value => set('showNearestLevels', value)} />
             <Setting label="Кількість свічок для визначення рівня"><Num value={prefs.levelCandleCount ?? 15} min={5} max={60} set={value => set('levelCandleCount', value)} /></Setting>
             <Setting label="Глибина історії для визначення рівнів" desc="Кількість свічок для кожного інтервалу"><Num value={prefs.levelHistory ?? 500} min={80} max={1500} set={value => set('levelHistory', value)} /></Setting>
             <Setting label="Підтвердження рівнів" desc="Скільки незалежних підходів потрібно"><Num value={prefs.levelCount ?? 3} min={2} max={10} set={value => set('levelCount', value)} /></Setting>
@@ -574,8 +574,8 @@ export function OriginalHookChartSettings({
 
           <Section title="Великі лімітні заявки (колонка O)">
             <SwitchRow label="Аналіз великих лімітних заявок (щільностей)" value={prefs.densityAnalysis !== false} onChange={value => set('densityAnalysis', value)} />
-            <SwitchRow label="Таблиця ТОП ордерів" value={prefs.densityTop !== false} onChange={value => set('densityTop', value)} />
-            <SwitchRow label="Показувати об’єм у базовій монеті" value={!!prefs.densityBaseVolume} onChange={value => set('densityBaseVolume', value)} />
+            <SwitchRow unavailable label="Таблиця ТОП ордерів" value={prefs.densityTop !== false} onChange={value => set('densityTop', value)} />
+            <SwitchRow unavailable label="Показувати об’єм у базовій монеті" value={!!prefs.densityBaseVolume} onChange={value => set('densityBaseVolume', value)} />
             <SwitchRow label="Показувати дисбаланс" desc="Сума лімітних ордерів у межах вибраної різниці від ціни для кожної сторони." value={!!prefs.densityImbalance} onChange={value => set('densityImbalance', value)} />
             <Setting label="Щільності на графіку" desc="Незалежно керуйте лініями, мітками та відображенням суми всередині мітки."><div className="densityVisibilityRow">
               {([['showDensityLines', 'Лінії'], ['showDensityLabels', 'Мітки'], ['showDensityAmounts', 'Суми']] as const).map(([key, label]) => <label key={key}><span>{label}</span><input type="checkbox" checked={!!prefs[key]} onChange={event => set(key, event.target.checked)} /></label>)}
@@ -605,7 +605,7 @@ export function OriginalHookChartSettings({
           <Section title="Відкритий інтерес (колонка OI)">
             <SwitchRow label="Показувати колонку OI" value={prefs.oiColumn !== false} onChange={value => set('oiColumn', value)} />
             <Choice label="Показувати як" values={['value', 'change']} labels={['Значення', 'Зміна']} value={prefs.oiDisplay || 'value'} set={value => set('oiDisplay', value)} />
-            <SwitchRow label="Розраховувати зміну за базовою монетою" value={!!prefs.oiBaseChange} onChange={value => set('oiBaseChange', value)} />
+            <SwitchRow unavailable label="Розраховувати зміну за базовою монетою" value={!!prefs.oiBaseChange} onChange={value => set('oiBaseChange', value)} />
             <Choice label="Період для порівняння" values={['1h', '12h', '24h']} value={prefs.oiPeriod || '24h'} set={value => set('oiPeriod', value)} />
           </Section>
 
@@ -635,8 +635,8 @@ export function OriginalHookChartSettings({
           </Section>
 
           <Section title="Кореляція з Біткоїном (колонка rBTC)">
-            <Choice label="Інтервал" values={['', '1h', '4h', '1d']} labels={['Вимк.', '1h', '4h', '1d']} value={prefs.rBtcTf || ''} set={value => set('rBtcTf', value)} />
-            <Setting label="Кількість свічок"><Num value={prefs.rBtcCandles ?? 100} min={10} max={1500} set={value => set('rBtcCandles', value)} /></Setting>
+            <Choice unavailable label="Інтервал" values={['', '1h', '4h', '1d']} labels={['Вимк.', '1h', '4h', '1d']} value={prefs.rBtcTf || ''} set={value => set('rBtcTf', value)} />
+            <Setting unavailable label="Кількість свічок"><Num value={prefs.rBtcCandles ?? 100} min={10} max={1500} set={value => set('rBtcCandles', value)} /></Setting>
           </Section>
 
           <Section title="Кількість угод (лише Binance)">

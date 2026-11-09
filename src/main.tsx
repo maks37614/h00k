@@ -9,6 +9,9 @@ import { ArchiveProvider } from './context/ArchiveContext';
 import { SurveillanceProvider } from './context/SurveillanceContext';
 import { LanguageProvider } from './context/LanguageContext';
 import { TelegramProvider } from './context/TelegramContext';
+import { installChunkRecovery } from './utils/chunkRecovery';
+
+installChunkRecovery(window);
 
 const legalPath = window.location.pathname.replace(/\/+$/, '');
 const publicLegalPage = legalPath === '/terms' ? 'terms' : legalPath === '/privacy' ? 'privacy' : null;
