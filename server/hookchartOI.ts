@@ -1,4 +1,4 @@
-import { exchangeFetch } from './exchangeHttp';
+import { chartExchangeFetch } from './exchangeHttp';
 import { normalizeExchangeSymbol } from '../src/utils/marketSymbols';
 
 export interface OIHistoryPoint { t: number; v: number }
@@ -36,8 +36,10 @@ export function bybitOIToUsd(rows: Array<{ timestamp: string; openInterest: stri
 }
 
 async function json(url: URL): Promise<any> {
-  const response = await exchangeFetch(url, { headers: { 'User-Agent': 'SignalHook/1.0', Accept: 'application/json' }, signal: AbortSignal.timeout(8_000) });
-  if (!response.ok) throw new Error('Open interest source unavailable');
+  // Historical OI is requested by an open chart, so it shares the chart
+  // reservation with candles while retaining the same exchange safety limits.
+  const response = await chartExchangeFetch(url, { headers: { 'User-Agent': 'SignalHook/1.0', Accept: 'application/json' }, signal: AbortSignal.timeout(8_000) });
+  if (!response.ok) throw new Error(`Open interest source HTTP ${response.status}`);
   return response.json();
 }
 
@@ -56,6 +58,15 @@ export async function fetchHookChartOIHistory(symbol: string, timeframe: string)
     const prices = new URL('https://api.bybit.com/v5/market/kline');
     prices.search = new URLSearchParams({ category: 'linear', symbol: cleanSymbol, interval: periods.interval, limit: '200' }).toString();
     const [b, y, p] = await Promise.allSettled([json(binance), json(bybit), json(prices)]);
+    for (const [source, result] of [['binance', b], ['bybit', y], ['bybit-price', p]] as const) {
+      if (result.status === 'rejected') {
+        console.warn('[HookChart OI] source request failed', {
+          source, symbol: cleanSymbol, period: periods.binance,
+          error: result.reason instanceof Error
+            ? `${result.reason.name}: ${result.reason.message}` : 'Unknown error',
+        });
+      }
+    }
     const bRows = b.status === 'fulfilled' && Array.isArray(b.value) ? b.value : [];
     const yRows = y.status === 'fulfilled' && y.value?.retCode === 0 && Array.isArray(y.value.result?.list) ? y.value.result.list : [];
     const pRows = p.status === 'fulfilled' && p.value?.retCode === 0 && Array.isArray(p.value.result?.list) ? p.value.result.list : [];
