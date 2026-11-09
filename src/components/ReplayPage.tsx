@@ -839,7 +839,7 @@ export const ReplayPage: React.FC<ReplayPageProps> = ({ coins }) => {
             }
           />
         </div>
-        <div className="w-full min-w-0">
+        <div className="w-full min-w-0 xl:mx-auto xl:max-w-[980px]">
           <ReplaySimulatorPanel
             currentPrice={currentPrice}
             currentCandle={currentCandle}
