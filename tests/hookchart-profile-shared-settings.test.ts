@@ -94,3 +94,27 @@ test('all preset evaluators tolerate missing market data without emitting imagin
     assert.deepEqual(result.events,[]);
   }
 });
+
+test('profile chart tab stays in flow on mobile and fills a taller desktop panel', () => {
+  const modal = source('../src/components/UserProfileModal.tsx');
+  const styles = source('../src/components/hookchart/integration.css');
+
+  assert.match(modal, /activeProfileSection === 'chart'/);
+  assert.match(modal, /h-\[min\(92dvh,1000px\)\]/);
+  assert.match(modal, /max-h-\[calc\(100dvh-32px\)\]/);
+  assert.match(modal, /activeProfileSection === 'chart' \? 'flex-1'/);
+
+  const begin = styles.lastIndexOf('/* Profile-only embedded chart settings.');
+  const end = styles.indexOf('/* Help beside the Long / Short controls;', begin);
+  assert.ok(begin > 0 && end > begin, 'only profile editor styles are overridden');
+  const profileStyles = styles.slice(begin, end);
+  assert.match(profileStyles, /\.hookchart-root\.profile-hookchart-settings \.originalSettingsBackdrop\.embeddedSettingsBackdrop/);
+  assert.match(profileStyles, /position:relative!important/);
+  assert.match(profileStyles, /inset:auto!important/);
+  assert.match(profileStyles, /display:flex!important/);
+  assert.match(profileStyles, /background:transparent!important/);
+  assert.match(profileStyles, /height:100%!important/);
+  assert.match(profileStyles, /max-height:100%!important/);
+  assert.match(profileStyles, /-webkit-overflow-scrolling:touch/);
+  assert.doesNotMatch(profileStyles, /height:min\(65dvh,620px\)/);
+});

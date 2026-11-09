@@ -128,7 +128,11 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="relative w-full max-w-[850px] rounded-2xl bg-slate-900 border border-slate-800 shadow-2xl shadow-cyan-950/20 overflow-hidden flex flex-col max-h-[90vh]">
+      <div className={`relative w-full max-w-[850px] min-h-0 rounded-2xl bg-slate-900 border border-slate-800 shadow-2xl shadow-cyan-950/20 overflow-hidden flex flex-col ${
+        activeProfileSection === 'chart'
+          ? 'h-[min(92dvh,1000px)] max-h-[calc(100dvh-32px)]'
+          : 'max-h-[90vh]'
+      }`}>
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800/80 bg-slate-950/60">
           <div className="flex items-center gap-3">
@@ -174,7 +178,9 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
         </div>
 
         {/* Chart editor mounts only when selected; it does not mount a chart or open market sockets. */}
-        <div className="min-h-0 overflow-y-auto p-3 sm:p-6">
+        <div className={`min-h-0 overflow-y-auto p-3 sm:p-6 ${
+          activeProfileSection === 'chart' ? 'flex-1' : ''
+        }`}>
           {activeProfileSection === 'chart' ? (
             <Suspense fallback={<div role="status" className="p-5 text-sm text-cyan-300">Завантаження налаштувань графіка…</div>}>
               <ProfileHookChartSettings />
