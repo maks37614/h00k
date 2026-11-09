@@ -63,22 +63,7 @@ export const ReplayPage: React.FC<ReplayPageProps> = ({ coins }) => {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [focusTrigger, setFocusTrigger] = useState<number>(0);
 
-  // Replay auto-fits the CURRENT screen instead of restoring a height saved on
-  // a different device or orientation. Manual resizing remains session-local.
-  const [chartHeight, setChartHeight] = useState<number | undefined>(undefined);
-  const handleChartHeightChange = useCallback((newH: number) => setChartHeight(newH), []);
-
-  useEffect(() => {
-    const resetManualHeight = () => setChartHeight(undefined);
-    window.addEventListener('resize', resetManualHeight);
-    window.addEventListener('orientationchange', resetManualHeight);
-    window.visualViewport?.addEventListener('resize', resetManualHeight);
-    return () => {
-      window.removeEventListener('resize', resetManualHeight);
-      window.removeEventListener('orientationchange', resetManualHeight);
-      window.visualViewport?.removeEventListener('resize', resetManualHeight);
-    };
-  }, []);
+  // Replay chart block sizes itself to the device viewport; no manual height state.
 
   // Playback Control
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
@@ -842,8 +827,6 @@ export const ReplayPage: React.FC<ReplayPageProps> = ({ coins }) => {
             pendingOrders={pendingOrders}
             isReplaying={true}
             focusTrigger={focusTrigger}
-            height={chartHeight}
-            onHeightChange={handleChartHeightChange}
             onTakeScreenshotNotification={() =>
               showToast('success', 'Скриншот завантажено', 'Знімок графіка успішно збережено на вашому пристрої.')
             }

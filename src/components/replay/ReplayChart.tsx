@@ -20,10 +20,12 @@ import { Maximize2, Minimize2, RotateCcw, Camera } from 'lucide-react';
 import { requestFullscreenSafe, exitFullscreenSafe, isCurrentlyFullscreen } from '../../utils/fullscreenUtils';
 import { createPortal } from 'react-dom';
 
-/** Current visible viewport: updates when mobile toolbars or orientation change. */
+/** Visible viewport, including offset while mobile browser chrome/zoom changes. */
 const readViewport = () => ({
   width: typeof window === 'undefined' ? 1024 : Math.max(1, Math.round(window.visualViewport?.width || window.innerWidth)),
   height: typeof window === 'undefined' ? 760 : Math.max(1, Math.round(window.visualViewport?.height || window.innerHeight)),
+  offsetLeft: typeof window === 'undefined' ? 0 : (window.visualViewport?.offsetLeft || 0),
+  offsetTop: typeof window === 'undefined' ? 0 : (window.visualViewport?.offsetTop || 0),
 });
 
 export interface ReplayChartHandle {
@@ -44,8 +46,6 @@ interface ReplayChartProps {
   pendingOrders: ReplayPendingOrder[];
   isReplaying: boolean;
   focusTrigger?: number;
-  height?: number;
-  onHeightChange?: (height: number) => void;
   onTakeScreenshotNotification?: () => void;
 }
 
@@ -61,8 +61,6 @@ export const ReplayChart = forwardRef<ReplayChartHandle, ReplayChartProps>(({
   pendingOrders,
   isReplaying,
   focusTrigger = 0,
-  height,
-  onHeightChange,
   onTakeScreenshotNotification,
 }, ref) => {
   const chartProvider = useChartProvider();
@@ -73,64 +71,31 @@ export const ReplayChart = forwardRef<ReplayChartHandle, ReplayChartProps>(({
   const candleSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
   const volumeSeriesRef = useRef<ISeriesApi<'Histogram'> | null>(null);
 
+  // The outer Replay chart block always fills its own responsive container.
   const [viewport, setViewport] = useState(readViewport);
-  const [internalHeight, setInternalHeight] = useState<number | undefined>(undefined);
-  const activeHeight = height ?? (onHeightChange ? viewport.height : (internalHeight ?? viewport.height));
   const fullscreenRootRef = useRef<HTMLDivElement>(null);
+  const nativeFullscreenRef = useRef(false);
 
   useEffect(() => {
     const syncViewport = () => {
       const next = readViewport();
-      setViewport(current => current.width === next.width && current.height === next.height ? current : next);
-      setInternalHeight(undefined);
+      setViewport(current =>
+        current.width === next.width && current.height === next.height &&
+        current.offsetLeft === next.offsetLeft && current.offsetTop === next.offsetTop
+          ? current : next);
     };
     syncViewport();
     window.addEventListener('resize', syncViewport);
     window.addEventListener('orientationchange', syncViewport);
     window.visualViewport?.addEventListener('resize', syncViewport);
+    window.visualViewport?.addEventListener('scroll', syncViewport);
     return () => {
       window.removeEventListener('resize', syncViewport);
       window.removeEventListener('orientationchange', syncViewport);
       window.visualViewport?.removeEventListener('resize', syncViewport);
+      window.visualViewport?.removeEventListener('scroll', syncViewport);
     };
   }, []);
-  const nativeFullscreenRef = useRef(false);
-
-  // Dragging logic for bottom resize handle
-  const isDraggingRef = useRef(false);
-  const startYRef = useRef(0);
-  const startHeightRef = useRef(0);
-
-  const handleMouseDownResize = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    isDraggingRef.current = true;
-    startYRef.current = e.clientY;
-    startHeightRef.current = fullscreenRootRef.current?.getBoundingClientRect().height ?? activeHeight;
-    document.body.style.cursor = 'row-resize';
-    document.body.style.userSelect = 'none';
-
-    const handleMouseMove = (moveEvent: MouseEvent) => {
-      if (!isDraggingRef.current) return;
-      const deltaY = moveEvent.clientY - startYRef.current;
-      const newHeight = Math.max(380, Math.min(2200, Math.round(startHeightRef.current + deltaY)));
-      setInternalHeight(newHeight);
-      onHeightChange?.(newHeight);
-      if (chartRef.current && chartContainerRef.current) {
-        chartRef.current.resize(chartContainerRef.current.clientWidth, newHeight - 56);
-      }
-    };
-
-    const handleMouseUp = () => {
-      isDraggingRef.current = false;
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-    };
-
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
-  }, [activeHeight, onHeightChange]);
 
   // Price lines refs
   const entryLineRef = useRef<IPriceLine | null>(null);
@@ -177,19 +142,46 @@ export const ReplayChart = forwardRef<ReplayChartHandle, ReplayChartProps>(({
     };
   }, []);
 
-  useEffect(() => {
+  // Keep the original page position when mobile Safari uses the body portal
+  // fallback. Lock scrolling before paint, and restore it on exit.
+  React.useLayoutEffect(() => {
     if (!isFullscreen) return;
-    const oldOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
+    const scrollX = window.scrollX;
+    const scrollY = window.scrollY;
+    const body = document.body;
+    const html = document.documentElement;
+    const old = {
+      bodyOverflow: body.style.overflow,
+      bodyPosition: body.style.position,
+      bodyTop: body.style.top,
+      bodyLeft: body.style.left,
+      bodyWidth: body.style.width,
+      htmlOverflow: html.style.overflow,
+    };
+    html.style.overflow = 'hidden';
+    body.style.overflow = 'hidden';
+    if (!nativeFullscreenRef.current) {
+      body.style.position = 'fixed';
+      body.style.top = `-${scrollY}px`;
+      body.style.left = `-${scrollX}px`;
+      body.style.width = '100%';
+    }
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape' && !nativeFullscreenRef.current) {
+        event.preventDefault();
         setIsFullscreen(false);
       }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => {
-      document.body.style.overflow = oldOverflow;
       window.removeEventListener('keydown', onKeyDown);
+      body.style.overflow = old.bodyOverflow;
+      body.style.position = old.bodyPosition;
+      body.style.top = old.bodyTop;
+      body.style.left = old.bodyLeft;
+      body.style.width = old.bodyWidth;
+      html.style.overflow = old.htmlOverflow;
+      if (!nativeFullscreenRef.current) window.scrollTo(scrollX, scrollY);
     };
   }, [isFullscreen]);
 
@@ -575,10 +567,18 @@ export const ReplayChart = forwardRef<ReplayChartHandle, ReplayChartProps>(({
     <div
       ref={fullscreenRootRef}
       style={isFullscreen
-        ? { width: `${viewport.width}px`, height: `${viewport.height}px`, maxWidth: '100vw', maxHeight: '100dvh' }
-        : { width: '100%', height: `${activeHeight}px` }}
+        ? {
+            position: 'fixed',
+            left: nativeFullscreenRef.current ? 0 : viewport.offsetLeft,
+            top: nativeFullscreenRef.current ? 0 : viewport.offsetTop,
+            width: nativeFullscreenRef.current ? '100vw' : `${viewport.width}px`,
+            height: nativeFullscreenRef.current ? '100dvh' : `${viewport.height}px`,
+            maxWidth: 'none',
+            maxHeight: 'none',
+          }
+        : { width: '100%', height: `${viewport.height}px` }}
       className={`relative flex min-w-0 flex-col bg-[#090d16] border border-slate-800/80 rounded-2xl overflow-hidden shadow-xl ${
-        isFullscreen ? 'fixed inset-0 z-[100] rounded-none' : 'w-full max-w-full'
+        isFullscreen ? 'z-[100] rounded-none' : 'w-full max-w-full'
       }`}
       role={isFullscreen ? 'dialog' : undefined}
       aria-modal={isFullscreen || undefined}
@@ -711,30 +711,19 @@ export const ReplayChart = forwardRef<ReplayChartHandle, ReplayChartProps>(({
         Навчальний режим • Майбутні свічки приховано
       </div>
 
-      {/* Bottom Drag Resize Handle */}
-      {!isFullscreen && (
-        <div
-          onMouseDown={handleMouseDownResize}
-          className="group w-full h-4 bg-slate-950/95 border-t border-slate-800/80 hover:bg-slate-900 cursor-row-resize flex items-center justify-center transition-colors select-none relative z-10 shrink-0"
-          title="Потягніть для зміни висоти графіка (вгору / вниз)"
-        >
-          <div className="flex items-center gap-2 text-[10px] text-slate-500 group-hover:text-amber-400 font-mono transition-colors">
-            <div className="w-10 h-1 rounded-full bg-slate-700 group-hover:bg-amber-400 transition-colors" />
-            <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400 group-hover:text-amber-300">
-              Висота: {activeHeight}px (потягніть)
-            </span>
-            <div className="w-10 h-1 rounded-full bg-slate-700 group-hover:bg-amber-400 transition-colors" />
-          </div>
-        </div>
-      )}
     </div>
   );
 
-  // iOS Safari and embedded browsers can reject native Fullscreen API calls.
-  // A body-level portal escapes clipped/transformed ancestors in that case.
-  return isFullscreen && !nativeFullscreenRef.current && typeof document !== 'undefined'
-    ? createPortal(content, document.body)
-    : content;
+  // Reserve the same block height in page flow when moving the fullscreen
+  // overlay into document.body. Otherwise the page collapses and jumps down
+  // as the user enters fullscreen in Safari / embedded mobile browsers.
+  if (isFullscreen && !nativeFullscreenRef.current && typeof document !== 'undefined') {
+    return <>
+      <div aria-hidden="true" className="w-full max-w-full" style={{ height: `${viewport.height}px` }} />
+      {createPortal(content, document.body)}
+    </>;
+  }
+  return content;
 });
 
 ReplayChart.displayName = 'ReplayChart';
