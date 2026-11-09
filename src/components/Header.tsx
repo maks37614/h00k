@@ -28,8 +28,6 @@ interface HeaderProps {
   isLoading: boolean;
   totalCoins: number;
   formationsCount: number;
-  bullishCount: number;
-  bearishCount: number;
   watchlistCount: number;
   archiveCount?: number;
   soundEnabled: boolean;
@@ -54,8 +52,6 @@ export const Header: React.FC<HeaderProps> = ({
   isLoading,
   totalCoins,
   formationsCount,
-  bullishCount,
-  bearishCount,
   watchlistCount,
   archiveCount = 0,
   soundEnabled,
@@ -97,12 +93,11 @@ export const Header: React.FC<HeaderProps> = ({
   return (
     <header className="app-header min-w-0 border-b border-slate-800/80 bg-slate-950/80 backdrop-blur-md sticky top-0 z-30" data-page={activePage}>
       <div className="max-w-[1720px] mx-auto px-2.5 sm:px-4 lg:px-6 py-1.5 sm:py-2">
-        <div className="flex min-w-0 flex-wrap items-center justify-center gap-2 sm:gap-3">
-          <div className="flex w-full min-w-0 flex-col items-center gap-2 sm:gap-3">
-            {/* Symmetric grid keeps the logo at the exact center of the header
-                regardless of the width of the language and fullscreen controls. */}
-            <div data-header-brand-row className="grid min-h-9 w-full min-w-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-x-1.5 sm:min-h-10 sm:gap-x-2">
-              <span aria-hidden="true" />
+        <div className="flex min-w-0 flex-wrap items-center justify-center gap-2 sm:gap-3 lg:flex-nowrap lg:justify-between lg:gap-2">
+          <div className="flex w-full min-w-0 flex-col items-center gap-2 sm:gap-3 lg:w-auto lg:shrink-0 lg:flex-row lg:gap-2">
+            {/* Keep the logo centered on small screens; use a compact inline brand group on desktop. */}
+            <div data-header-brand-row className="grid min-h-9 w-full min-w-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-x-1.5 sm:min-h-10 sm:gap-x-2 lg:flex lg:w-auto lg:shrink-0 lg:gap-x-1">
+              <span aria-hidden="true" className="lg:hidden" />
               <button
                 type="button"
                 onClick={() => onPageChange('screener')}
@@ -118,7 +113,7 @@ export const Header: React.FC<HeaderProps> = ({
                 />
               </button>
 
-              {/* Immediately to the right of the centered logo at every width. */}
+              {/* Fullscreen and language controls stay beside the logo. */}
               <div className="flex min-w-0 shrink-0 items-center justify-start gap-1 sm:gap-1.5">
                 <button
                   type="button"
@@ -145,7 +140,7 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
 
             {/* Navigation Category Tabs */}
-            <nav aria-label="Основна навігація" className="grid w-full min-w-0 grid-cols-2 items-center gap-0.5 p-0.5 sm:flex sm:w-auto sm:flex-wrap sm:p-1 rounded-xl bg-slate-900/90 border border-slate-800 text-xs shadow-inner">
+            <nav aria-label="Основна навігація" className="grid w-full min-w-0 grid-cols-2 items-center gap-0.5 p-0.5 sm:flex sm:w-auto sm:flex-wrap sm:p-1 lg:shrink-0 lg:flex-nowrap rounded-xl bg-slate-900/90 border border-slate-800 text-xs shadow-inner">
               <button
                 id="nav-category-screener-btn"
                 aria-current={activePage === 'screener' ? 'page' : undefined}
@@ -164,7 +159,7 @@ export const Header: React.FC<HeaderProps> = ({
                 id="nav-category-patterns-btn"
                 aria-current={activePage === 'patterns' ? 'page' : undefined}
                 onClick={() => onPageChange('patterns')}
-                className={`flex min-w-0 items-center justify-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg font-semibold whitespace-nowrap transition-all cursor-pointer ${
+                className={`flex lg:hidden min-w-0 items-center justify-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg font-semibold whitespace-nowrap transition-all cursor-pointer ${
                   activePage === 'patterns'
                     ? 'bg-gradient-to-r from-cyan-600 to-cyan-500 text-white shadow-sm shadow-cyan-900/40'
                     : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/50'
@@ -228,22 +223,7 @@ export const Header: React.FC<HeaderProps> = ({
 
 
 
-          {/* Quick Stats Bar */}
-          <div className="hidden xl:flex items-center gap-2.5 sm:gap-4 px-3 py-1.5 rounded-xl bg-slate-900/90 border border-slate-800 text-xs">
-            <div className="flex items-center gap-2">
-              <span className="text-slate-400">Формацій:</span>
-              <span className="font-bold text-white font-mono bg-slate-800 px-1.5 py-0.5 rounded">
-                {formationsCount}
-              </span>
-            </div>
-            <div className="h-3.5 w-px bg-slate-800" />
-            <div className="flex items-center gap-2">
-              <span className="text-emerald-400 font-semibold">▲ {bullishCount}</span>
-              <span className="text-slate-600">/</span>
-              <span className="text-rose-400 font-semibold">▼ {bearishCount}</span>
-            </div>
-          </div>
-          <div className="flex w-full min-w-0 flex-wrap items-center justify-center gap-1.5 sm:gap-2 [&>button]:shrink-0">
+          <div className="flex w-full min-w-0 flex-wrap items-center justify-center gap-1.5 sm:gap-2 lg:w-auto lg:flex-1 lg:flex-nowrap lg:justify-start lg:gap-1.5 lg:overflow-x-auto xl:justify-end [&>button]:shrink-0">
             <button
               id="refresh-screener-btn"
               onClick={onRefresh}
