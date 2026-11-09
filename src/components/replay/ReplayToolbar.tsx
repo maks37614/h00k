@@ -14,7 +14,6 @@ import {
   Activity,
   CheckCircle2,
   X,
-  Gauge,
   Sliders,
 } from 'lucide-react';
 import { ExchangeId, MarketType, ScannedCoin } from '../../types';
@@ -35,10 +34,6 @@ interface ReplayToolbarProps {
   onStepForward: () => void;
   onResetToCutoff: () => void;
 
-  // Speed
-  playbackSpeed: number; // e.g. 1 (600ms), 2 (300ms), 5 (120ms), 0.5 (1200ms)
-  onSpeedChange: (speed: number) => void;
-
   // Date selection
   currentDateText: string;
   onSelectHistoricalDate: (date: Date) => void;
@@ -49,15 +44,6 @@ interface ReplayToolbarProps {
   totalCandles: number;
   isLoadingHistoricalData: boolean;
 }
-
-const SPEED_OPTIONS = [
-  { label: '0.25x', value: 0.25 },
-  { label: '0.5x', value: 0.5 },
-  { label: '1x', value: 1.0 },
-  { label: '2x', value: 2.0 },
-  { label: '5x', value: 5.0 },
-  { label: '10x', value: 10.0 },
-];
 
 export const ReplayToolbar: React.FC<ReplayToolbarProps> = ({
   selectedSymbol,
@@ -70,8 +56,6 @@ export const ReplayToolbar: React.FC<ReplayToolbarProps> = ({
   onTogglePlay,
   onStepForward,
   onResetToCutoff,
-  playbackSpeed,
-  onSpeedChange,
   currentDateText,
   onSelectHistoricalDate,
   onRandomHistoricalDate,
@@ -237,7 +221,7 @@ export const ReplayToolbar: React.FC<ReplayToolbarProps> = ({
         </div>
       </div>
 
-      {/* Bottom Row: Playback Controls (Play/Pause, Step +1, Speed, Progress Bar) */}
+      {/* Bottom Row: Playback Controls (Play/Pause, Step +1, Progress Bar) */}
       <div className="flex flex-wrap items-center justify-between gap-3 pt-2.5 border-t border-slate-800/70 min-w-0">
         <div className="flex flex-wrap items-center gap-2 w-full min-w-0 xl:w-auto">
           {/* Play / Pause */}
@@ -285,26 +269,6 @@ export const ReplayToolbar: React.FC<ReplayToolbarProps> = ({
             <RotateCcw className="w-3.5 h-3.5" />
           </button>
 
-          {/* Playback Speed Switcher */}
-          <div role="group" aria-label="Швидкість відтворення" className="flex items-center gap-1 p-1 rounded-xl bg-slate-950 border border-slate-800/80 text-xs w-full sm:w-auto min-w-0 max-w-full overflow-x-auto overscroll-x-contain">
-            <span className="shrink-0 px-1 text-[10px] font-bold text-slate-400 uppercase flex items-center gap-1 whitespace-nowrap">
-              <Gauge className="w-3 h-3 text-slate-400" />
-              Швидкість:
-            </span>
-            {SPEED_OPTIONS.map((opt) => (
-              <button
-                key={opt.value}
-                onClick={() => onSpeedChange(opt.value)}
-                className={`shrink-0 whitespace-nowrap px-2 py-1 rounded-lg font-mono text-[11px] font-bold transition-all cursor-pointer ${
-                  playbackSpeed === opt.value
-                    ? 'bg-cyan-500 text-slate-950 shadow-sm'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
         </div>
 
         {/* Live Replay Date & Progress */}

@@ -785,8 +785,6 @@ export const ReplayPage: React.FC<ReplayPageProps> = ({ coins }) => {
         onTogglePlay={() => setIsPlaying(!isPlaying)}
         onStepForward={handleStepForward}
         onResetToCutoff={handleResetToCutoff}
-        playbackSpeed={playbackSpeed}
-        onSpeedChange={setPlaybackSpeed}
         currentDateText={currentDateText}
         onSelectHistoricalDate={(d) => loadHistoryForDate(d, symbol, exchange, marketType, timeframe)}
         onRandomHistoricalDate={handleRandomHistoricalDate}
@@ -821,6 +819,8 @@ export const ReplayPage: React.FC<ReplayPageProps> = ({ coins }) => {
             timeframe={timeframe}
             onTimeframeChange={handleTimeframeChange}
             isLoadingHistoricalData={isLoadingCandles}
+            playbackSpeed={playbackSpeed}
+            onSpeedChange={setPlaybackSpeed}
             exchange={exchange}
             marketType={marketType}
             position={position}

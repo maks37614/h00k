@@ -1,3 +1,4 @@
+import { ReplaySpeedPicker } from '../replay/ReplaySpeedPicker';
 import React, { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronLeft, ChevronRight, Crosshair, Minus, MoveUpRight, Square, Type, Ruler, Bell, BarChart3, Layers, Settings, Target, Trash2, X } from 'lucide-react';
@@ -53,6 +54,8 @@ export interface HookChartCanvasProps {
   onTimeframeChange?: (timeframe: Timeframe) => void;
   /** Replay-only protection while historical candles are loading. */
   timeframeDisabled?: boolean;
+  replayPlaybackSpeed?: number;
+  onReplayPlaybackSpeedChange?: (speed: number) => void;
   onExchangeChange?: (exchange: ExchangeId) => void;
   chartActions?: React.ReactNode;
   toolbarActions?: React.ReactNode;
@@ -110,7 +113,7 @@ function enabledIndicators(preferences?: HookChartPreferences, replay = false, m
 }
 
 const HookChartCanvas = forwardRef<HookChartHandle, HookChartCanvasProps>(function HookChartCanvas({
-  externalData, klines, symbol, timeframe, exchange, marketType, markers = [], expandPriceScaleToMarkers = false, savedChartParams, replay = false, focusTrigger, terminalMode = false, focusFormation, onTimeframeChange, timeframeDisabled = false, chartActions, toolbarActions, toolbarOverlays, tradeLevelToggle, footerActions,
+  externalData, klines, symbol, timeframe, exchange, marketType, markers = [], expandPriceScaleToMarkers = false, savedChartParams, replay = false, focusTrigger, terminalMode = false, focusFormation, onTimeframeChange, timeframeDisabled = false, replayPlaybackSpeed, onReplayPlaybackSpeedChange, chartActions, toolbarActions, toolbarOverlays, tradeLevelToggle, footerActions,
 }, forwardedRef) {
   const { user, profile, updateProfileData } = useAuth();
   const { alerts: priceAlerts, addAlert, deleteAlert } = useAlerts();
@@ -902,6 +905,10 @@ const HookChartCanvas = forwardRef<HookChartHandle, HookChartCanvasProps>(functi
       >
         {topToolbarOpen ? <ChevronLeft size={14} /> : <ChevronRight size={14} />}
       </button>
+
+      {replay && !topToolbarOpen && onReplayPlaybackSpeedChange && (
+        <ReplaySpeedPicker speed={replayPlaybackSpeed ?? 1} onSpeedChange={onReplayPlaybackSpeedChange} />
+      )}
 
       {!integratedToolbar && toolbarActions && <div className="hookchart-toolbar-actions" role="group" aria-label="Інструменти блока">{toolbarActions}</div>}
 

@@ -19,6 +19,7 @@ import { getChartPriceFormat, formatCryptoPrice } from '../../utils/formatters';
 import { Maximize2, Minimize2, RotateCcw, Camera } from 'lucide-react';
 import { requestFullscreenSafe, exitFullscreenSafe, isCurrentlyFullscreen } from '../../utils/fullscreenUtils';
 import { createPortal } from 'react-dom';
+import { ReplaySpeedPicker } from './ReplaySpeedPicker';
 
 export interface ReplayChartHandle {
   takeScreenshot: () => string | null;
@@ -32,6 +33,8 @@ interface ReplayChartProps {
   timeframe: Timeframe;
   onTimeframeChange: (timeframe: Timeframe) => void;
   isLoadingHistoricalData?: boolean;
+  playbackSpeed: number;
+  onSpeedChange: (speed: number) => void;
   exchange: ExchangeId;
   marketType: MarketType;
   position: ReplayPosition | null;
@@ -47,6 +50,8 @@ export const ReplayChart = forwardRef<ReplayChartHandle, ReplayChartProps>(({
   timeframe,
   onTimeframeChange,
   isLoadingHistoricalData = false,
+  playbackSpeed,
+  onSpeedChange,
   exchange,
   marketType,
   position,
@@ -645,6 +650,7 @@ export const ReplayChart = forwardRef<ReplayChartHandle, ReplayChartProps>(({
                 ? 'bg-amber-500 text-slate-950 border-amber-400'
                 : 'bg-slate-900 text-slate-300 border-slate-700 hover:border-amber-500/60'}`}>{tf}</button>
           ))}
+          <ReplaySpeedPicker speed={playbackSpeed} onSpeedChange={onSpeedChange} />
         </div>
       )}
 
@@ -659,14 +665,10 @@ export const ReplayChart = forwardRef<ReplayChartHandle, ReplayChartProps>(({
           {chartProvider === 'hookchart'
             ? <HookChart ref={hookChartRef} klines={visibleCandles} symbol={symbol} timeframe={timeframe}
                 exchange={exchange} marketType={marketType} markers={hookMarkers} replay focusTrigger={focusTrigger}
-                onTimeframeChange={onTimeframeChange} timeframeDisabled={isLoadingHistoricalData} />
+                onTimeframeChange={onTimeframeChange} timeframeDisabled={isLoadingHistoricalData}
+                replayPlaybackSpeed={playbackSpeed} onReplayPlaybackSpeedChange={onSpeedChange} />
             : <div ref={chartContainerRef} data-chart-provider="tradingview" className="relative h-full w-full select-none" />}
         </div>
-      </div>
-
-      {/* Watermark in Replay */}
-      <div className="absolute bottom-7 left-4 pointer-events-none opacity-20 font-mono text-xs text-slate-400">
-        Навчальний режим • Майбутні свічки приховано
       </div>
 
     </div>
