@@ -222,9 +222,9 @@ export const ReplaySimulatorPanel: React.FC<ReplaySimulatorPanelProps> = ({
   };
 
   return (
-    <div className="flex flex-col gap-3 p-3.5 sm:p-4 rounded-2xl bg-slate-900/90 border border-slate-800 shadow-xl backdrop-blur-md">
+    <div className="flex flex-col gap-3 p-3.5 sm:p-4 xl:grid xl:grid-cols-3 xl:items-start xl:gap-x-3 xl:gap-y-2.5 xl:p-3 rounded-2xl bg-slate-900/90 border border-slate-800 shadow-xl backdrop-blur-md">
       {/* Account Balance & Settings Header */}
-      <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+      <div className="flex items-center justify-between pb-3 xl:col-span-3 xl:pb-2 border-b border-slate-800">
         <div>
           <div className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
             Баланс симулятора
@@ -257,7 +257,7 @@ export const ReplaySimulatorPanel: React.FC<ReplaySimulatorPanelProps> = ({
 
       {/* Active Position Card (if position is open) */}
       {position && (
-        <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-700 shadow-inner space-y-2.5">
+        <div className="p-3 xl:col-span-3 xl:p-2 rounded-xl bg-slate-950/80 border border-slate-700 shadow-inner space-y-2.5">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <span
@@ -328,8 +328,10 @@ export const ReplaySimulatorPanel: React.FC<ReplaySimulatorPanelProps> = ({
         </div>
       )}
 
-      {/* Order Type Tabs: Market / Limit / Stop */}
-      <div className="flex items-center p-1 rounded-xl bg-slate-950 border border-slate-800 text-xs">
+      {/* Desktop: order type and its optional price stay in one column. */}
+      <div className="flex min-w-0 flex-col gap-3 xl:gap-2">
+        {/* Order Type Tabs: Market / Limit / Stop */}
+        <div className="flex items-center p-1 rounded-xl bg-slate-950 border border-slate-800 text-xs">
         {(['market', 'limit', 'stop'] as const).map((type) => (
           <button
             key={type}
@@ -373,9 +375,10 @@ export const ReplaySimulatorPanel: React.FC<ReplaySimulatorPanelProps> = ({
           />
         </div>
       )}
+      </div>
 
       {/* Leverage Selector */}
-      <div className="space-y-1.5">
+      <div className="space-y-1.5 xl:space-y-1">
         <div className="flex items-center justify-between text-[11px] font-mono text-slate-400">
           <span>Кредитне плече:</span>
           <b className="text-amber-400 font-extrabold">{leverage}x</b>
@@ -398,7 +401,7 @@ export const ReplaySimulatorPanel: React.FC<ReplaySimulatorPanelProps> = ({
       </div>
 
       {/* Position Size Input */}
-      <div className="space-y-1.5">
+      <div className="space-y-1.5 xl:space-y-1">
         <div className="flex items-center justify-between text-[11px] font-mono text-slate-400">
           <span>Розмір позиції ($):</span>
           <span>Маржа: <b className="text-slate-200">${requiredMargin.toFixed(1)}</b></span>
@@ -427,7 +430,7 @@ export const ReplaySimulatorPanel: React.FC<ReplaySimulatorPanelProps> = ({
       </div>
 
       {/* Stop-Loss & Take-Profit Toggle & Inputs */}
-      <div className="space-y-2 p-2.5 rounded-xl bg-slate-950/60 border border-slate-800 text-xs">
+      <div className="space-y-2 p-2.5 xl:space-y-1.5 xl:p-2 rounded-xl bg-slate-950/60 border border-slate-800 text-xs">
         {/* SL */}
         <div className="space-y-1">
           <div className="flex items-center justify-between">
@@ -512,7 +515,7 @@ export const ReplaySimulatorPanel: React.FC<ReplaySimulatorPanelProps> = ({
       </div>
 
       {/* Trade Reason / Tag Selector */}
-      <div className="space-y-1.5">
+      <div className="space-y-1.5 xl:space-y-1">
         <div className="flex items-center justify-between text-[11px] font-mono text-slate-400">
           <span className="flex items-center gap-1">
             <Tag className="w-3 h-3 text-cyan-400" />
@@ -559,11 +562,11 @@ export const ReplaySimulatorPanel: React.FC<ReplaySimulatorPanelProps> = ({
       </div>
 
       {/* Big Action Buttons: BUY / LONG vs SELL / SHORT */}
-      <div className="grid grid-cols-2 gap-2.5 pt-1">
+      <div className="grid grid-cols-2 gap-2.5 pt-1 xl:gap-2 xl:pt-0 xl:self-start">
         <button
           onClick={handleExecuteLong}
           disabled={requiredMargin > availableBalance}
-          className="flex flex-col items-center justify-center py-3 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-slate-950 font-extrabold text-sm shadow-lg shadow-emerald-950/50 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+          className="flex flex-col items-center justify-center py-3 xl:py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-slate-950 font-extrabold text-sm shadow-lg shadow-emerald-950/50 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <div className="flex items-center gap-1.5">
             <TrendingUp className="w-4 h-4 stroke-[3]" />
@@ -577,7 +580,7 @@ export const ReplaySimulatorPanel: React.FC<ReplaySimulatorPanelProps> = ({
         <button
           onClick={handleExecuteShort}
           disabled={requiredMargin > availableBalance}
-          className="flex flex-col items-center justify-center py-3 rounded-xl bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white font-extrabold text-sm shadow-lg shadow-rose-950/50 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+          className="flex flex-col items-center justify-center py-3 xl:py-2 rounded-xl bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white font-extrabold text-sm shadow-lg shadow-rose-950/50 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <div className="flex items-center gap-1.5">
             <TrendingDown className="w-4 h-4 stroke-[3]" />
