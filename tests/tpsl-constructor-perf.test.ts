@@ -4,7 +4,7 @@ import { performance } from 'node:perf_hooks';
 import type { DetectedFormation, ScannedCoin } from '../src/types';
 import { TP_SL_DEFAULT_RULE, projectUserCoins, sampleWickTouches } from '../src/utils/tpSlConstructor';
 
-/** Synthetic CPU/payload benchmark. This is NOT a substitute for live Railway/APM load tests. */
+/** Synthetic CPU/payload benchmark. This is NOT a substitute for live VPS/APM load tests. */
 test('opt-in trade levels remain linear and disabled processing is O(1)', () => {
   const seed: DetectedFormation = {
     id: 'id', patternKey: 'double_bottom', name: 'W', nameEn: 'W',

@@ -837,7 +837,7 @@ export default function App() {
         console.warn('Backend scan failed, trying direct exchange access:', backendErr);
       }
 
-      // If backend did not yield data (e.g. cloud provider geoblock on Railway), fall back to direct browser connection
+      // If backend did not yield data (e.g. an upstream network failure), fall back to direct browser connection
       if (!dataLoaded) {
         const directCoins = await runDirectClientScan({
           exchange: currentExchange,
