@@ -20,6 +20,7 @@ import { Maximize2, Minimize2, RotateCcw, Camera } from 'lucide-react';
 import { requestFullscreenSafe, exitFullscreenSafe, isCurrentlyFullscreen } from '../../utils/fullscreenUtils';
 import { createPortal } from 'react-dom';
 import { ReplaySpeedPicker } from './ReplaySpeedPicker';
+import { ReplayFullscreenActions } from './ReplayFullscreenActions';
 
 export interface ReplayChartHandle {
   takeScreenshot: () => string | null;
@@ -35,6 +36,11 @@ interface ReplayChartProps {
   isLoadingHistoricalData?: boolean;
   playbackSpeed: number;
   onSpeedChange: (speed: number) => void;
+  isPlaying: boolean;
+  canAdvance: boolean;
+  onTogglePlay: () => void;
+  onStepForward: () => void;
+  onRandomHistoricalDate: () => void;
   exchange: ExchangeId;
   marketType: MarketType;
   position: ReplayPosition | null;
@@ -52,6 +58,11 @@ export const ReplayChart = forwardRef<ReplayChartHandle, ReplayChartProps>(({
   isLoadingHistoricalData = false,
   playbackSpeed,
   onSpeedChange,
+  isPlaying,
+  canAdvance,
+  onTogglePlay,
+  onStepForward,
+  onRandomHistoricalDate,
   exchange,
   marketType,
   position,
@@ -595,11 +606,23 @@ export const ReplayChart = forwardRef<ReplayChartHandle, ReplayChartProps>(({
         </div>
 
         {/* Action controls */}
-        <div className="flex items-center w-full min-w-0 sm:w-auto gap-1.5 justify-between sm:justify-end">
-          <div className="min-w-0 max-w-[55vw] sm:max-w-none text-[10px] sm:text-[11px] font-mono text-cyan-300/80 mr-1 flex items-center gap-1 bg-cyan-950/40 px-2 py-0.5 rounded border border-cyan-800/40 overflow-hidden whitespace-nowrap">
-
+        <div className="flex w-full min-w-0 flex-wrap items-center justify-end gap-1.5 sm:w-auto">
+          <div className={`min-w-0 text-[10px] sm:text-[11px] font-mono text-cyan-300/80 mr-auto flex items-center gap-1 bg-cyan-950/40 px-2 py-0.5 rounded border border-cyan-800/40 overflow-hidden whitespace-nowrap ${
+            isFullscreen ? 'w-full sm:w-auto sm:max-w-none' : 'max-w-[55vw] sm:max-w-none'
+          }`}>
             <span className="truncate">📅 {formattedDate}</span>
           </div>
+
+          {isFullscreen && chartProvider === 'hookchart' && (
+            <ReplayFullscreenActions
+              isPlaying={isPlaying}
+              isLoading={isLoadingHistoricalData}
+              canAdvance={canAdvance}
+              onTogglePlay={onTogglePlay}
+              onStepForward={onStepForward}
+              onRandomHistoricalDate={onRandomHistoricalDate}
+            />
+          )}
 
           <button
             onClick={() => {
