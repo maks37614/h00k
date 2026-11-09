@@ -1254,6 +1254,9 @@ const HookChartCanvas = forwardRef<HookChartHandle, HookChartCanvasProps>(functi
         densities={replay ? [] : chartDensities}
         marketPrints={replay ? [] : liveFeed.marketPrints}
         liquidations={replay ? [] : liveFeed.liquidations}
+        sessionLiquidationsUsd={liveFeed.sessionLiquidationsUsd}
+        showLiquidationLong={settings.showLiquidationLong !== false}
+        showLiquidationShort={settings.showLiquidationShort !== false}
         autoLevels={visibleAutoLevels}
         cascadeRisk={liveFeed.cascadeRisk}
         liquidationCut={liveFeed.liquidationCut}

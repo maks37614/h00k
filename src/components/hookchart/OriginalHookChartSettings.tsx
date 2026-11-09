@@ -60,6 +60,8 @@ export const ORIGINAL_HOOKCHART_DEFAULTS: HookChartPreferences = {
   showMarketStatsBar: true,
   showLiquidations: true,
   showLiqRiskBlock: true,
+  showLiquidationLong: true,
+  showLiquidationShort: true,
   showDensityLines: false,
   showDensityLabels: false,
   showDensityAmounts: false,
@@ -148,6 +150,11 @@ export function normalizeOriginalHookChartPreferences(source?: HookChartPreferen
   if (source?.maxChartCandles !== undefined) next.maxChartCandles = clampHookChartHistory(source.maxChartCandles);
   next.densityDiffPct = normalizeDensityDistance(source?.densityDiffPct);
   next.crosshairLineWidth = normalizeCrosshairLineWidth(source?.crosshairLineWidth);
+  for (const key of ['liquidationLongMinUsd', 'liquidationShortMinUsd'] as const) {
+    const value = source?.[key];
+    next[key] = typeof value === 'number' && Number.isFinite(value) && value >= 0
+      ? Math.min(1_000_000_000_000, Math.round(value * 100) / 100) : null;
+  }
   next.densityAutoDisplay = source?.densityAutoDisplay === 'all' ? 'all' : 'potential';
   // Legacy values were pixels; only version 2 stores a candle count.
   next.rightPadding = source?.rightPaddingVersion === 2 && Number.isFinite(source.rightPadding)
@@ -246,11 +253,23 @@ const HOTKEY_GROUPS: Array<{ title: string; rows: Array<{ id: HookChartHotkeyAct
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return <section className="settingsSection"><h3>{title}</h3>{children}</section>;
 }
-function Setting({ label, desc, children }: { label: string; desc?: string; children: React.ReactNode }) {
-  return <div className="settingRow"><div className="settingText"><b>{label}</b>{desc && <small>{desc}</small>}</div><div className="settingControl">{children}</div></div>;
+function LiquidationHelp({ text, label }: { text: string; label: string }) {
+  return <span className="liqSettingHelp"><button type="button" aria-label={label + '. ' + text} title={text}>?</button><span role="tooltip">{text}</span></span>;
 }
-function SwitchRow({ label, desc, value, onChange }: { label: string; desc?: string; value: boolean; onChange: (value: boolean) => void }) {
-  return <Setting label={label} desc={desc}><label className="settingsSwitch"><input type="checkbox" checked={value} onChange={event => onChange(event.target.checked)} /><span /></label></Setting>;
+function Setting({ label, desc, help, children }: { label: string; desc?: string; help?: string; children: React.ReactNode }) {
+  return <div className="settingRow"><div className="settingText"><b>{label}{help && <LiquidationHelp label={label} text={help} />}</b>{desc && <small>{desc}</small>}</div><div className="settingControl">{children}</div></div>;
+}
+function SwitchRow({ label, desc, help, value, onChange }: { label: string; desc?: string; help?: string; value: boolean; onChange: (value: boolean) => void }) {
+  return <Setting label={label} desc={desc} help={help}><label className="settingsSwitch"><input type="checkbox" checked={value} onChange={event => onChange(event.target.checked)} /><span /></label></Setting>;
+}
+function LiquidationMinimum({ value, disabled, onChange }: { value?: number | null; disabled?: boolean; onChange: (value: number | null) => void }) {
+  return <input className="numInput" type="number" min={0} max={1_000_000_000_000} step={100} inputMode="decimal" placeholder="Авто" disabled={disabled} value={value ?? ''}
+    aria-label="Мінімальна сума ліквідації у доларах США" onChange={event => {
+      const text = event.target.value.trim();
+      if (!text) { onChange(null); return; }
+      const next = Number(text);
+      if (Number.isFinite(next) && next >= 0) onChange(Math.min(1_000_000_000_000, next));
+    }} />;
 }
 function Num({ value, set, min, max, step = 1, disabled = false }: { value: number; set: (value: number) => void; min?: number; max?: number; step?: number; disabled?: boolean }) {
   return <input className="numInput" type="number" value={value} min={min} max={max} step={step} disabled={disabled} onChange={event => {
@@ -463,13 +482,25 @@ export function OriginalHookChartSettings({
             <SwitchRow label="Показувати суми великих ринкових заявок під свічками" value={prefs.showMarketPrintSums === true} onChange={value => set('showMarketPrintSums', value)} />
             <SwitchRow label="Об’єми на графіку" value={prefs.showVolumes !== false} onChange={value => set('showVolumes', value)} />
             <SwitchRow label="Нижня інформаційна панель" value={prefs.showMarketStatsBar !== false} onChange={value => set('showMarketStatsBar', value)} />
-            <SwitchRow label="Ліквідації на графіку" value={prefs.showLiquidations !== false} onChange={value => set('showLiquidations', value)} />
-            <SwitchRow label="Блок Liq + каскад" value={prefs.showLiqRiskBlock !== false} onChange={value => set('showLiqRiskBlock', value)} />
             <SwitchRow label="Показувати діалог сповіщень у режимі сітки та однієї монети" value={prefs.notificationDialog !== false} onChange={value => set('notificationDialog', value)} />
             <Choice label="Розмір вікна в режимі однієї монети" desc="Відсоток від ширини та висоти екрана." values={[70, 75, 80, 85, 90, 95, 100]} labels={['70%', '75%', '80%', '85%', '90%', '95%', '100%']} value={prefs.singleWindowSize ?? 85} set={value => set('singleWindowSize', value)} />
             <SwitchRow label="Кнопки гортання в режимі «Усі графіки»" value={prefs.pagingButtons !== false} onChange={value => set('pagingButtons', value)} />
             <SwitchRow label="Спільні фігури малювання" desc="Фігури однієї монети можуть використовуватися в усіх режимах і списках." value={prefs.sharedDrawings !== false} onChange={value => set('sharedDrawings', value)} />
             <SwitchRow label="Дублювати перехрестя на графіку" value={!!prefs.duplicateCrosshair} onChange={value => set('duplicateCrosshair', value)} />
+          </Section>
+
+          <Section title="Ліквідації">
+            <SwitchRow label="Ліквідації на графіку" value={prefs.showLiquidations !== false} onChange={value => set('showLiquidations', value)} />
+            <SwitchRow label="Блок Liq + каскад" value={prefs.showLiqRiskBlock !== false} onChange={value => set('showLiqRiskBlock', value)} />
+            <div className="settingsHint">Liq: сума всіх унікальних отриманих ліквідацій за поточну сесію, незалежно від порогів і перемикачів.</div>
+            <SwitchRow label="Long (L)" help="Long: примусово закриті довгі позиції. Вимкнення приховує їх на графіку, але не змінює загальну суму Liq." value={prefs.showLiquidationLong !== false} onChange={value => set('showLiquidationLong', value)} />
+            <Setting label="Мінімальна сума Long (USD)" desc="Порожнє поле = автоматичний поріг. 0 = усі ліквідації Long.">
+              <LiquidationMinimum value={prefs.liquidationLongMinUsd} disabled={prefs.showLiquidationLong === false} onChange={value => set('liquidationLongMinUsd', value)} />
+            </Setting>
+            <SwitchRow label="Short (S)" help="Short: примусово закриті короткі позиції. Вимкнення приховує їх на графіку, але не змінює загальну суму Liq." value={prefs.showLiquidationShort !== false} onChange={value => set('showLiquidationShort', value)} />
+            <Setting label="Мінімальна сума Short (USD)" desc="Порожнє поле = автоматичний поріг. 0 = усі ліквідації Short.">
+              <LiquidationMinimum value={prefs.liquidationShortMinUsd} disabled={prefs.showLiquidationShort === false} onChange={value => set('liquidationShortMinUsd', value)} />
+            </Setting>
           </Section>
 
           <Section title="Перехрестя">

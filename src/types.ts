@@ -473,6 +473,12 @@ export interface HookChartPreferences {
   showMarketStatsBar?: boolean;
   showLiquidations?: boolean;
   showLiqRiskBlock?: boolean;
+  /** Hide only Long/Short marks; never affect the session's collected volume. */
+  showLiquidationLong?: boolean;
+  showLiquidationShort?: boolean;
+  /** Null/undefined = automatic, 0 = show all, positive = manual USD threshold. */
+  liquidationLongMinUsd?: number | null;
+  liquidationShortMinUsd?: number | null;
 
   gridHorizontal?: boolean;
   gridVertical?: boolean;
