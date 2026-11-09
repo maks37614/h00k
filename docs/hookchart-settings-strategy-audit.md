@@ -1,6 +1,6 @@
 # HookChart settings, strategies and performance audit
 
-Checked: 2026-11-09. Source audit covers HookChart settings, controller, renderer, strategy engine, live feeds, terminal/fullscreen integrations and profile persistence.
+Checked: 2026-11-10. Source audit covers HookChart settings, controller, renderer, strategy engine, live feeds, terminal/fullscreen integrations and profile persistence.
 
 ## Implemented in this change
 
@@ -18,7 +18,7 @@ Chart controller consumes preferences for history limits, padding, toolbars, dra
 
 ## Settings requiring further product integration
 
-The canonical form reads 88 `prefs.*` keys. The main chart controller, renderer, live feed, strategy engine, terminal and fullscreen components did not reveal an operational consumer for these fields beyond storing/displaying their controls:
+The canonical form reads 92 `prefs.*` keys. The main chart controller, renderer, live feed, strategy engine, terminal and fullscreen components do not have an operational consumer for these fields beyond storing/displaying their controls:
 
 - `sortEnabled`, `sortDisabled` — sorting configuration
 - `analyzedIntervals` — generic analysis intervals
@@ -28,13 +28,13 @@ The canonical form reads 88 `prefs.*` keys. The main chart controller, renderer,
 - `oiBaseChange` — base-coin OI comparison
 - `rBtcTf`, `rBtcCandles` — correlation currently uses chart timeframe and fixed reference history depth
 - `duplicateCrosshair` — cross-chart synchronization
-- `notificationOpenNew`, `notificationDialog`, `singleWindowSize`, `pagingButtons` — may be handled outside the core HookChart; verify separately in authenticated page flows
+- `notificationOpenNew`, `notificationDialog`, `singleWindowSize`, `pagingButtons` — window and paging options awaiting integration
 
-These settings can be saved, but do **not** claim every visible control is fully operational. They remain unchanged rather than removing existing user preferences without evidence.
+These controls are now disabled and labelled as not yet implemented in both the chart and the shared profile editor. Existing stored values are retained. Operational settings, including liquidation controls, remain editable. This makes the current implementation explicit without presenting an inactive control as a working feature.
 
 ## Verification and deployment
 
-- GitHub Actions currently cannot start jobs due to account billing/spending-limit restrictions; no successful CI or production deploy can be claimed.
-- Changes were checked by code review with targeted regression tests added, but a full TypeScript build and authenticated browser tests require a runnable environment.
+- Verification includes TypeScript, the complete offline test suite and a production build. DOM regressions cover Replay portal remounts, latest-candle crosshair data, viewport preservation and read-only unsupported settings.
+- Native fullscreen layout on real devices and authenticated browser flows still require deployment validation.
 - Before publishing: `npm ci && npm run lint && npm test && npm run build`; keep `.env` and named Docker volumes untouched.
 - Benchmark 2–8 simultaneous terminal charts, test profile-to-chart synchronization and inspect network request counts.

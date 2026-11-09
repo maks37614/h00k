@@ -133,7 +133,22 @@ export function recordSessionLiquidation(
       (row.side !== 'LONG' && row.side !== 'SHORT')) return false;
   const state = currentState(scope);
   const id = canonicalLiquidationId(row.id);
-  const previous = state.seen.get(id);
+  let previous = state.seen.get(id);
+  // Older clients saved Bybit IDs without the occurrence suffix. Transfer
+  // that already-counted entry to the first matching received row once;
+  // additional identical rows must each contribute their own notional.
+  const parts = id.split(':');
+  const legacyId = parts[0] === 'byb' && (parts.length === 7 || parts.length === 8)
+    ? parts.slice(0, 6).join(':') : null;
+  if (!previous && legacyId) {
+    const legacy = state.seen.get(legacyId);
+    if (legacy?.side === row.side) {
+      previous = legacy;
+      state.seen.delete(legacyId);
+      state.seen.set(id, legacy);
+      queuePersist(scope);
+    }
+  }
   // Binance may update the cumulative fill of the same liquidation order.
   // Count the order once, but add only the increased notional (if any).
   if (previous && (previous.side !== row.side || row.usd <= previous.usd)) return false;

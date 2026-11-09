@@ -20,6 +20,13 @@ const IDLE_GRACE_MS = 30 * 60_000;
 const MAX_MARKETS = 64;
 const MAX_CLIENTS = 2000;
 const STORE_FILE = path.join(process.cwd(), 'server', 'data', 'liquidations.json');
+const validSymbol = (symbol: string) => symbol.length <= 80 && /^[\p{L}\p{M}\p{N}]{3,80}$/u.test(symbol);
+
+export function liquidationUpstreamUrl(exchange: Exchange, symbol: string): string {
+  return exchange === 'binance'
+    ? `wss://fstream.binance.com/market/ws/${encodeURIComponent(symbol.toLowerCase())}@forceOrder`
+    : 'wss://stream.bybit.com/v5/public/linear';
+}
 
 /** Normalize exchange messages once on the server, never fabricate unavailable trades. */
 export function parseLiquidations(exchange: Exchange, symbol: string, payload: unknown): LiquidationRow[] {
@@ -39,12 +46,19 @@ export function parseLiquidations(exchange: Exchange, symbol: string, payload: u
       t, p, q, usd: p * q,
     });
   } else if (msg.topic === `allLiquidation.${symbol}` && Array.isArray(msg.data)) {
+    const occurrences = new Map<string, number>();
     for (let index = 0; index < msg.data.length; index++) {
       const row = msg.data[index];
       const p = Number(row?.p), q = Number(row?.v), t = Number(row?.T ?? msg.ts);
+      const side = String(row?.S).toLowerCase();
+      if ((side !== 'buy' && side !== 'sell') || (row?.s && String(row.s).toUpperCase() !== symbol)) continue;
+      const eventKey = `${t}:${side}:${p}:${q}`;
+      const occurrence = occurrences.get(eventKey) ?? 0;
+      occurrences.set(eventKey, occurrence + 1);
+      const packetTime = Number.isSafeInteger(msg.ts) && msg.ts > 0 ? msg.ts : t;
       rows.push({
-        id: `byb:${symbol}:${t}:${row?.S}:${row?.p}:${row?.v}:${index}`,
-        side: String(row?.S).toLowerCase() === 'buy' ? 'LONG' : 'SHORT',
+        id: `byb:${symbol}:${t}:${row?.S}:${p}:${q}:${packetTime}:${occurrence}`,
+        side: side === 'buy' ? 'LONG' : 'SHORT',
         t, p, q, usd: p * q,
       });
     }
@@ -68,7 +82,7 @@ export class SharedLiquidationFeed {
       if (saved && typeof saved === 'object' && !Array.isArray(saved)) {
         for (const [key, rows] of Object.entries(saved).slice(0, MAX_MARKETS)) {
           const [exchange, symbol] = key.split(':');
-          if (!['binance', 'bybit'].includes(exchange) || !/^[A-Z0-9]{3,30}$/.test(symbol) ||
+          if (!['binance', 'bybit'].includes(exchange) || !validSymbol(symbol || '') ||
               !Array.isArray(rows)) continue;
           const valid = rows.slice(-MAX_ROWS).filter(row =>
             row && typeof row.id === 'string' && ['LONG', 'SHORT'].includes(row.side) &&
@@ -146,9 +160,7 @@ export class SharedLiquidationFeed {
 
   private connect(entry: Entry) {
     if (entry.upstream || entry.reconnect) return;
-    const url = entry.exchange === 'binance'
-      ? `wss://fstream.binance.com/market/ws/${entry.symbol.toLowerCase()}@forceOrder`
-      : 'wss://stream.bybit.com/v5/public/linear';
+    const url = liquidationUpstreamUrl(entry.exchange, entry.symbol);
     let socket: WebSocket;
     try { socket = new WebSocket(url, { handshakeTimeout: 10_000, perMessageDeflate: false }); }
     catch { this.retry(entry); return; }
@@ -283,8 +295,8 @@ export function installLiquidationStream(server: Server) {
     }
     const url = new URL(request.url || '/', 'http://localhost');
     const exchange = url.searchParams.get('exchange');
-    const symbol = (url.searchParams.get('symbol') || '').toUpperCase();
-    if ((exchange !== 'binance' && exchange !== 'bybit') || !/^[A-Z0-9]{3,30}$/.test(symbol)) {
+    const symbol = (url.searchParams.get('symbol') || '').trim().toUpperCase();
+    if ((exchange !== 'binance' && exchange !== 'bybit') || !validSymbol(symbol)) {
       client.close(1008, 'Invalid exchange or symbol');
       return;
     }

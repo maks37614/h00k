@@ -1,9 +1,7 @@
-/** Bybit packets contain an unstable local index instead of an exchange event ID.
- * Normalize only the trailing packet index (7-part server event key). */
+/** The server ID includes packet identity and occurrence within that packet.
+ * Preserve it: equal time, side, price and size do not identify one order. */
 export function canonicalLiquidationId(id: string): string {
-  const parts = id.split(':');
-  return parts.length === 7 && parts[0] === 'byb' && /^\d+$/.test(parts[6])
-    ? parts.slice(0, 6).join(':') : id;
+  return id;
 }
 
 /** Deduplicate the chart feed too: labels and cascade calculations must not

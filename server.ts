@@ -1,5 +1,6 @@
 import express from 'express';
 import path from 'path';
+import { installProductionAssets } from './server/productionAssets';
 import { createServer as createViteServer } from 'vite';
 import { runScreenerScan, fetchKlines, fetchDualExchangeOI } from './server/marketService';
 import { installMarketQuoteRoutes, publicQuoteResponseCache } from './server/marketQuoteResponse';
@@ -844,10 +845,7 @@ async function startServer() {
     app.use(vite.middlewares);
   } else {
     const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath));
-    app.get('*', (req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
-    });
+    installProductionAssets(app, distPath);
   }
 
   const httpServer = app.listen(PORT, '0.0.0.0', () => {
