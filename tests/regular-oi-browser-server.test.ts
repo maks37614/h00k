@@ -68,6 +68,9 @@ test('eight-record responses choose the latest three, not the oldest three or pr
 
 test('missing, stale, duplicate, malformed or gapped history NEVER produces fake OI', () => {
   const epoch = Math.floor(now() / PERIOD) * PERIOD;
+  // Use a stable point inside the 5m bucket. With wall-clock now(), the
+  // duplicated-record fixture becomes stale after 90s and hides the gap error.
+  const referenceNow = epoch + 30_000;
   const base = snapshots(epoch);
   const tests = [
     { input: base.slice(0, 2), reason: 'incomplete-history' },
@@ -77,13 +80,13 @@ test('missing, stale, duplicate, malformed or gapped history NEVER produces fake
     { input: base.map(x => ({...x, timestamp: x.timestamp - 6*PERIOD})), reason: 'stale-history' },
   ];
   for (const t of tests) {
-    const got = evaluateRegularOIHistory('binance', t.input, PERIOD, now());
+    const got = evaluateRegularOIHistory('binance', t.input, PERIOD, referenceNow);
     assert.equal(got.reason, t.reason);
     assert.equal(got.snapshot, null);
   }
   assert.equal(evaluateRegularOIHistory('bybit', { retCode: 10001, result: { list: [] } },
-    PERIOD, now()).reason, 'invalid-response');
-  assert.equal(verifyOIHistory(parseBinanceOIHistory(base).slice(1), PERIOD, now())?.changePct, 0.99);
+    PERIOD, referenceNow).reason, 'invalid-response');
+  assert.equal(verifyOIHistory(parseBinanceOIHistory(base).slice(1), PERIOD, referenceNow)?.changePct, 0.99);
 });
 
 test('shared network reader handles both server and browser requests with injected fetch, without changing market geometry', async () => {
