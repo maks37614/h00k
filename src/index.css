@@ -1,0 +1,251 @@
+@import "tailwindcss";
+
+@layer base {
+  html {
+    font-size: 13.5px;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  @media (min-width: 640px) {
+    html {
+      font-size: 14px;
+    }
+  }
+
+  @media (min-width: 1024px) {
+    html {
+      font-size: 13.5px;
+    }
+  }
+
+  @media (min-width: 1440px) {
+    html {
+      font-size: 14px;
+    }
+  }
+
+  @media (min-width: 1920px) {
+    html {
+      font-size: 14.5px;
+    }
+  }
+
+  body {
+    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+    background-color: #090d16;
+    color: #f1f5f9;
+    overflow-x: hidden;
+    scrollbar-width: none !important;
+    -ms-overflow-style: none !important;
+  }
+  
+  html {
+    scrollbar-width: none !important;
+    -ms-overflow-style: none !important;
+  }
+
+  #root {
+    scrollbar-width: none !important;
+    -ms-overflow-style: none !important;
+  }
+  
+  .font-mono {
+    font-family: 'JetBrains Mono', monospace;
+  }
+}
+
+/* Universal scrollbar removal across the whole application */
+*,
+*::before,
+*::after {
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+
+*::-webkit-scrollbar {
+  display: none !important;
+  width: 0px !important;
+  height: 0px !important;
+}
+
+html,
+body,
+#root,
+main,
+dialog,
+div,
+section,
+article,
+.no-scrollbar {
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Smooth momentum scrolling for iOS/Android touch devices */
+.touch-scroll {
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
+}
+
+/* Borderless icon controls on Screener and Formations pages. */
+.app-header:is([data-page="screener"], [data-page="patterns"]) button,
+.app-header:is([data-page="screener"], [data-page="patterns"]) button * {
+  border-width: 0;
+}
+
+/* Chart controls respond to their own block, including narrow desktop columns. */
+.terminal-chart-block {
+  container: terminal-chart / inline-size;
+}
+
+.terminal-chart-header {
+  --chart-icon-size: 14px;
+  --chart-control-size: 28px;
+  --chart-control-gap: 6px;
+}
+
+.terminal-chart-toolbar-scroll {
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  touch-action: pan-x;
+}
+
+.terminal-chart-toolbar-row {
+  display: flex;
+  align-items: center;
+  width: max-content;
+  min-width: 100%;
+  gap: var(--chart-control-gap);
+  padding-block: 2px;
+  white-space: nowrap;
+}
+
+.terminal-chart-toolbar-group {
+  flex-shrink: 0;
+  gap: var(--chart-control-gap);
+}
+
+.terminal-chart-toolbar-group > * {
+  flex-shrink: 0;
+}
+
+.terminal-chart-toolbar-row button,
+.terminal-chart-header-actions button,
+.terminal-chart-drag-handle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  min-width: var(--chart-control-size);
+  min-height: var(--chart-control-size);
+}
+
+.terminal-chart-drag-handle {
+  min-width: calc(var(--chart-control-size) - 8px);
+  min-height: calc(var(--chart-control-size) - 8px);
+}
+
+.terminal-chart-toolbar-row svg,
+.terminal-chart-header-actions svg,
+.terminal-chart-drag-handle svg {
+  flex-shrink: 0;
+  width: var(--chart-icon-size);
+  height: var(--chart-icon-size);
+}
+
+.terminal-chart-drag-handle svg {
+  width: calc(var(--chart-icon-size) - 2px);
+  height: calc(var(--chart-icon-size) - 2px);
+}
+
+.terminal-chart-header-popover {
+  max-width: calc(100% - 16px);
+}
+
+@container terminal-chart (max-width: 420px) {
+  .terminal-chart-header {
+    --chart-icon-size: 12px;
+    --chart-control-size: 24px;
+    --chart-control-gap: 4px;
+  }
+
+  .terminal-chart-optional-label {
+    display: none;
+  }
+}
+
+
+/* Formations quick-chart header must respond to card width, not viewport width. */
+.formation-chart-card {
+  container: formation-card / inline-size;
+}
+
+.formation-chart-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 6px;
+  min-width: 0;
+}
+
+.formation-chart-identity {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: 6px;
+  row-gap: 3px;
+  min-width: 0;
+}
+
+.formation-chart-symbol {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.formation-chart-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+}
+
+.formation-chart-header-actions > button {
+  display: grid;
+  place-items: center;
+  flex: 0 0 27px;
+  width: 27px;
+  height: 26px;
+  padding: 0;
+  line-height: 1;
+}
+
+/* Quick-chart extra tools remain in the main toolbar. Restrict overflow to
+ * their own scroll region so the settings/action icons stay pinned. */
+.formation-chart-card .hookchart-root:not(.hookchart-terminal) > .hookchart-toolbar {
+  overflow: hidden;
+}
+
+@container formation-card (max-width: 365px) {
+  .formation-chart-header {
+    gap: 4px;
+  }
+
+  .formation-chart-identity {
+    column-gap: 4px;
+  }
+
+  .formation-chart-header-actions {
+    gap: 3px;
+  }
+
+  .formation-chart-header-actions > button {
+    flex-basis: 24px;
+    width: 24px;
+    height: 24px;
+  }
+}

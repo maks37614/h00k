@@ -1,0 +1,66 @@
+import { timingSafeEqual } from 'node:crypto';
+import type { Express, Request } from 'express';
+import { exchangeHttp } from './exchangeHttp';
+import { publicPriceFeed } from './publicPriceFeed';
+import { binanceTickerStream } from './binanceTickerStream';
+import { exchangeHistoryCache } from './exchangeHistoryCache';
+import { getLiveOiCacheStats } from './marketService';
+import { marketTickerFeed } from './marketTickerFeed';
+import { liquidationFeed } from './liquidationFeed';
+import { getSharedExchangeStreamStats } from './surveillance/sharedExchangeStream';
+import { RuntimeMetrics } from './runtimeMetrics';
+import { publicQuoteResponseCache } from './marketQuoteResponse';
+import { cronManager } from './cronService';
+import { surveillanceManager } from './surveillance/surveillanceManager';
+
+function authorized(req: Request): boolean {
+  const secret = process.env.H00K_OPS_TOKEN;
+  if (!secret || Buffer.byteLength(secret) < 32) return false;
+  const header = req.get('authorization') || '';
+  if (!header.startsWith('Bearer ')) return false;
+  const token = Buffer.from(header.slice(7));
+  const expected = Buffer.from(secret);
+  return token.length === expected.length && timingSafeEqual(token, expected);
+}
+
+/**
+ * Optional private read-only diagnostics for controlled VPS load testing.
+ * No route exists without a strong operator token. This endpoint never returns
+ * user IDs, API keys, chat IDs, or application data.
+ */
+export function installOpsMetrics(app: Express,
+  chartDepth: () => { activeMarkets: number; clients: number } | null = () => null) {
+  // The event-loop histogram starts only after the first authorized operator
+  // request, so it adds zero measurement overhead on unconfigured deployments.
+  let runtime: RuntimeMetrics | null = null;
+  app.get('/api/ops/market-data', (req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    if (!authorized(req)) { res.status(404).end(); return; }
+    runtime ??= new RuntimeMetrics();
+    const processSample = runtime.sample();
+    const shared = getSharedExchangeStreamStats();
+    const memory = process.memoryUsage();
+    res.json({
+      recordedAt: Date.now(),
+      pid: process.pid,
+      uptimeSeconds: Math.floor(process.uptime()),
+      memory: { rssBytes: memory.rss, heapUsedBytes: memory.heapUsed,
+        heapTotalBytes: memory.heapTotal, externalBytes: memory.external },
+      exchangeHttp: exchangeHttp.stats(),
+      processPerformance: processSample,
+      cronJobs: cronManager.getOperatorJobStats(),
+      activeSurveillanceWorkers: surveillanceManager.getActiveWorkerCount(),
+      historicalOiCache: exchangeHistoryCache.stats(),
+      liveOiCache: getLiveOiCacheStats(),
+      marketTickerFeed: marketTickerFeed.diagnostics(),
+      liquidationFeed: liquidationFeed.stats(),
+      publicQuoteDelivery: publicQuoteResponseCache.stats(),
+      publicPriceWebSockets: publicPriceFeed.status(),
+      binanceMarketTickers: binanceTickerStream.status(),
+      sharedExchange: { marketStreams: shared.length,
+        totalSubscribers: shared.reduce((sum, x) => sum + x.subscribers, 0),
+        byInstrument: shared },
+      hookChartDepth: chartDepth(),
+    });
+  });
+}
