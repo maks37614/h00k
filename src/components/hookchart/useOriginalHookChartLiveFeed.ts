@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import type { ExchangeId, HookChartPreferences, MarketType } from '../../types';
 import { adaptiveCut, atr, quantile, type MarketPrint } from './marketAnalytics';
 import { calcCascadeRisk, type Candle, type Density, type Liquidation } from './engine';
@@ -7,6 +7,8 @@ import type { ChartDepthStatus } from '../../utils/hookChartDepthProtocol';
 import { connectHookChartDepth } from './depthStream';
 import { connectHookChartLiquidations } from './liquidationStream';
 import { HookChartDensityBook, type DensityAutoStats } from './densityBook';
+import { EMPTY_SESSION_LIQUIDATIONS, getSessionLiquidationTotals, recordSessionLiquidation, sessionLiquidationScope, subscribeSessionLiquidations } from './liquidationSession';
+import { canonicalLiquidationId, deduplicateLiquidations, filterVisibleLiquidations } from './liquidationDisplay';
 
 type BookLevel = { p: number; q: number };
 
@@ -54,6 +56,13 @@ export function useOriginalHookChartLiveFeed({
   replay = false,
 }: LiveFeedArgs) {
   const symbol = normalizeExchangeSymbol(rawSymbol);
+  // Key deliberately excludes candle timeframe and display threshold.
+  const liquidationScope = sessionLiquidationScope(exchange, marketType, symbol);
+  const sessionSubscription = useMemo(() => ({
+    subscribe: (notify: () => void) => subscribeSessionLiquidations(liquidationScope, notify),
+    snapshot: () => getSessionLiquidationTotals(liquidationScope),
+  }), [liquidationScope]);
+  const sessionTotals = useSyncExternalStore(sessionSubscription.subscribe, sessionSubscription.snapshot, () => EMPTY_SESSION_LIQUIDATIONS);
   const [densities, setDensities] = useState<Density[]>([]);
   const [marketPrints, setMarketPrints] = useState<MarketPrint[]>([]);
   const [liquidations, setLiquidations] = useState<Liquidation[]>([]);
@@ -306,9 +315,13 @@ export function useOriginalHookChartLiveFeed({
     };
     const push = (row: Liquidation) => {
       if (dead || !Number.isFinite(row.usd) || row.usd <= 0) return;
-      const index = raw.findIndex(item => item.id === row.id);
-      if (index >= 0) raw[index] = row;
-      else raw.push(row);
+      recordSessionLiquidation(liquidationScope, row);
+      const id = canonicalLiquidationId(row.id);
+      const index = raw.findIndex(item => item.id === id);
+      if (index >= 0) {
+        if (row.usd <= raw[index].usd) return; // replayed event or older fill
+        raw[index] = { ...row, id };
+      } else raw.push({ ...row, id });
       setLiquidationLastEventAt(current => Math.max(current || 0, row.t));
       publish();
     };
@@ -320,7 +333,10 @@ export function useOriginalHookChartLiveFeed({
       exchange, symbol,
       onSnapshot: (events, connected) => {
         if (dead) return;
-        raw = events;
+        raw = deduplicateLiquidations(events);
+        // Recover session-era events from a reconnect snapshot, without counting
+        // pre-session historical events or repeating IDs already received.
+        for (const row of events) recordSessionLiquidation(liquidationScope, row, 'snapshot');
         setLiquidationLastEventAt(raw.length ? Math.max(...raw.map(row => row.t)) : null);
         setLiquidationStreamLive(connected);
         publish();
@@ -420,12 +436,10 @@ export function useOriginalHookChartLiveFeed({
     };
   }, [exchange, marketType, symbol, replay]);
 
-  const visibleLiquidations = useMemo(
-    () => liquidationCut > 0
-      ? liquidations.filter(row => row.usd >= liquidationCut).slice(-160)
-      : [],
-    [liquidations, liquidationCut],
-  );
+  // Display thresholds never mutate the incoming events or the session totals.
+  const visibleLiquidations = useMemo(() => filterVisibleLiquidations(liquidations, liquidationCut, settings),
+    [liquidations, liquidationCut, settings.showLiquidationLong,
+      settings.showLiquidationShort, settings.liquidationLongMinUsd, settings.liquidationShortMinUsd]);
   const risk = useMemo(
     () => calcCascadeRisk(liquidations, liquidationCut, candles.at(-1)?.c || 0),
     [liquidations, liquidationCut, candles.at(-1)?.c],
@@ -440,6 +454,9 @@ export function useOriginalHookChartLiveFeed({
     marketPrints: marketPrints.slice(-40),
     liquidations: visibleLiquidations,
     allLiquidations: liquidations,
+    sessionLiquidationsUsd: sessionTotals.totalUsd,
+    sessionLiquidationsLongUsd: sessionTotals.longUsd,
+    sessionLiquidationsShortUsd: sessionTotals.shortUsd,
     liquidationCut,
     liquidationStreamLive,
     liquidationLastEventAt,
