@@ -20,14 +20,6 @@ import { Maximize2, Minimize2, RotateCcw, Camera } from 'lucide-react';
 import { requestFullscreenSafe, exitFullscreenSafe, isCurrentlyFullscreen } from '../../utils/fullscreenUtils';
 import { createPortal } from 'react-dom';
 
-/** Visible viewport, including offset while mobile browser chrome/zoom changes. */
-const readViewport = () => ({
-  width: typeof window === 'undefined' ? 1024 : Math.max(1, Math.round(window.visualViewport?.width || window.innerWidth)),
-  height: typeof window === 'undefined' ? 760 : Math.max(1, Math.round(window.visualViewport?.height || window.innerHeight)),
-  offsetLeft: typeof window === 'undefined' ? 0 : (window.visualViewport?.offsetLeft || 0),
-  offsetTop: typeof window === 'undefined' ? 0 : (window.visualViewport?.offsetTop || 0),
-});
-
 export interface ReplayChartHandle {
   takeScreenshot: () => string | null;
   fitContent: () => void;
@@ -71,31 +63,11 @@ export const ReplayChart = forwardRef<ReplayChartHandle, ReplayChartProps>(({
   const candleSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
   const volumeSeriesRef = useRef<ISeriesApi<'Histogram'> | null>(null);
 
-  // The outer Replay chart block always fills its own responsive container.
-  const [viewport, setViewport] = useState(readViewport);
+  // Same sizing as the Screener fullscreen chart: the surrounding block
+  // controls layout; HookChart independently responds to its canvas size.
   const fullscreenRootRef = useRef<HTMLDivElement>(null);
   const nativeFullscreenRef = useRef(false);
-
-  useEffect(() => {
-    const syncViewport = () => {
-      const next = readViewport();
-      setViewport(current =>
-        current.width === next.width && current.height === next.height &&
-        current.offsetLeft === next.offsetLeft && current.offsetTop === next.offsetTop
-          ? current : next);
-    };
-    syncViewport();
-    window.addEventListener('resize', syncViewport);
-    window.addEventListener('orientationchange', syncViewport);
-    window.visualViewport?.addEventListener('resize', syncViewport);
-    window.visualViewport?.addEventListener('scroll', syncViewport);
-    return () => {
-      window.removeEventListener('resize', syncViewport);
-      window.removeEventListener('orientationchange', syncViewport);
-      window.visualViewport?.removeEventListener('resize', syncViewport);
-      window.visualViewport?.removeEventListener('scroll', syncViewport);
-    };
-  }, []);
+  const inlineBlockHeightRef = useRef(540);
 
   // Price lines refs
   const entryLineRef = useRef<IPriceLine | null>(null);
@@ -123,6 +95,9 @@ export const ReplayChart = forwardRef<ReplayChartHandle, ReplayChartProps>(({
     }
     const root = fullscreenRootRef.current;
     if (!root) return;
+    // Preserve the original space on the page when a mobile browser requires
+    // the Screener-style body portal instead of native fullscreen.
+    inlineBlockHeightRef.current = Math.round(root.getBoundingClientRect().height) || 540;
     nativeFullscreenRef.current = await requestFullscreenSafe(root);
     setIsFullscreen(true);
   }, [isFullscreen, closeFullscreen]);
@@ -142,30 +117,17 @@ export const ReplayChart = forwardRef<ReplayChartHandle, ReplayChartProps>(({
     };
   }, []);
 
-  // Keep the original page position when mobile Safari uses the body portal
-  // fallback. Lock scrolling before paint, and restore it on exit.
+  // Follow the same body-level fullscreen modal behavior as Screener.
+  // Do not reposition the body or apply VisualViewport offsets: on mobile
+  // this previously pushed the chart down instead of centering the overlay.
   React.useLayoutEffect(() => {
     if (!isFullscreen) return;
-    const scrollX = window.scrollX;
-    const scrollY = window.scrollY;
-    const body = document.body;
-    const html = document.documentElement;
-    const old = {
-      bodyOverflow: body.style.overflow,
-      bodyPosition: body.style.position,
-      bodyTop: body.style.top,
-      bodyLeft: body.style.left,
-      bodyWidth: body.style.width,
-      htmlOverflow: html.style.overflow,
-    };
-    html.style.overflow = 'hidden';
-    body.style.overflow = 'hidden';
-    if (!nativeFullscreenRef.current) {
-      body.style.position = 'fixed';
-      body.style.top = `-${scrollY}px`;
-      body.style.left = `-${scrollX}px`;
-      body.style.width = '100%';
-    }
+    const originalBodyOverflow = document.body.style.overflow;
+    const originalHtmlOverflow = document.documentElement.style.overflow;
+    const savedX = window.scrollX;
+    const savedY = window.scrollY;
+    document.body.style.overflow = 'hidden';
+    document.documentElement.style.overflow = 'hidden';
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape' && !nativeFullscreenRef.current) {
         event.preventDefault();
@@ -175,13 +137,9 @@ export const ReplayChart = forwardRef<ReplayChartHandle, ReplayChartProps>(({
     window.addEventListener('keydown', onKeyDown);
     return () => {
       window.removeEventListener('keydown', onKeyDown);
-      body.style.overflow = old.bodyOverflow;
-      body.style.position = old.bodyPosition;
-      body.style.top = old.bodyTop;
-      body.style.left = old.bodyLeft;
-      body.style.width = old.bodyWidth;
-      html.style.overflow = old.htmlOverflow;
-      if (!nativeFullscreenRef.current) window.scrollTo(scrollX, scrollY);
+      document.body.style.overflow = originalBodyOverflow;
+      document.documentElement.style.overflow = originalHtmlOverflow;
+      if (!nativeFullscreenRef.current) window.scrollTo(savedX, savedY);
     };
   }, [isFullscreen]);
 
@@ -566,19 +524,10 @@ export const ReplayChart = forwardRef<ReplayChartHandle, ReplayChartProps>(({
   const content = (
     <div
       ref={fullscreenRootRef}
-      style={isFullscreen
-        ? {
-            position: 'fixed',
-            left: nativeFullscreenRef.current ? 0 : viewport.offsetLeft,
-            top: nativeFullscreenRef.current ? 0 : viewport.offsetTop,
-            width: nativeFullscreenRef.current ? '100vw' : `${viewport.width}px`,
-            height: nativeFullscreenRef.current ? '100dvh' : `${viewport.height}px`,
-            maxWidth: 'none',
-            maxHeight: 'none',
-          }
-        : { width: '100%', height: `${viewport.height}px` }}
-      className={`relative flex min-w-0 flex-col bg-[#090d16] border border-slate-800/80 rounded-2xl overflow-hidden shadow-xl ${
-        isFullscreen ? 'z-[100] rounded-none' : 'w-full max-w-full'
+      className={`flex min-w-0 flex-col overflow-hidden bg-[#090d16] ${
+        isFullscreen
+          ? 'fixed inset-0 z-[100] w-screen h-[100dvh] max-h-[100dvh] min-h-[100dvh] rounded-none'
+          : 'relative w-full max-w-full rounded-2xl border border-slate-800 shadow-xl'
       }`}
       role={isFullscreen ? 'dialog' : undefined}
       aria-modal={isFullscreen || undefined}
@@ -699,12 +648,21 @@ export const ReplayChart = forwardRef<ReplayChartHandle, ReplayChartProps>(({
         </div>
       )}
 
-      {/* Main Chart Canvas Container */}
-      {chartProvider === 'hookchart' ? <div className="flex-1 w-full min-h-0 relative select-none">
-        <HookChart ref={hookChartRef} klines={visibleCandles} symbol={symbol} timeframe={timeframe}
-          exchange={exchange} marketType={marketType} markers={hookMarkers} replay focusTrigger={focusTrigger}
-          onTimeframeChange={onTimeframeChange} timeframeDisabled={isLoadingHistoricalData} />
-      </div> : <div ref={chartContainerRef} data-chart-provider="tradingview" className="flex-1 w-full relative select-none" />}
+      {/* Exact Screener chart area breakpoints in-page; fullscreen fills the
+          remaining viewport below the header, with its p-2/sm:p-4 inset. */}
+      <div className={`relative w-full min-w-0 overflow-hidden flex flex-col p-2 sm:p-4 ${
+        isFullscreen
+          ? 'flex-1 min-h-0'
+          : 'h-[520px] xs:h-[540px] sm:h-[540px] md:h-[350px] lg:h-[390px] xl:h-[430px]'
+      }`}>
+        <div className="relative flex-1 min-h-0 w-full overflow-hidden rounded-xl border border-slate-800 bg-slate-950 select-none">
+          {chartProvider === 'hookchart'
+            ? <HookChart ref={hookChartRef} klines={visibleCandles} symbol={symbol} timeframe={timeframe}
+                exchange={exchange} marketType={marketType} markers={hookMarkers} replay focusTrigger={focusTrigger}
+                onTimeframeChange={onTimeframeChange} timeframeDisabled={isLoadingHistoricalData} />
+            : <div ref={chartContainerRef} data-chart-provider="tradingview" className="relative h-full w-full select-none" />}
+        </div>
+      </div>
 
       {/* Watermark in Replay */}
       <div className="absolute bottom-7 left-4 pointer-events-none opacity-20 font-mono text-xs text-slate-400">
@@ -714,12 +672,11 @@ export const ReplayChart = forwardRef<ReplayChartHandle, ReplayChartProps>(({
     </div>
   );
 
-  // Reserve the same block height in page flow when moving the fullscreen
-  // overlay into document.body. Otherwise the page collapses and jumps down
-  // as the user enters fullscreen in Safari / embedded mobile browsers.
+  // Same body-level portal as Screener's FullscreenChartModal: fixed to the
+  // viewport on phones and tablets, while preserving the page's layout space.
   if (isFullscreen && !nativeFullscreenRef.current && typeof document !== 'undefined') {
     return <>
-      <div aria-hidden="true" className="w-full max-w-full" style={{ height: `${viewport.height}px` }} />
+      <div aria-hidden="true" className="w-full max-w-full" style={{ height: `${inlineBlockHeightRef.current}px` }} />
       {createPortal(content, document.body)}
     </>;
   }
