@@ -1014,16 +1014,6 @@ export default function App() {
     );
   }, [coins, filters.searchQuery]);
 
-  // Counts for header stats
-  const bullishCount = useMemo(
-    () => flattenedItems.filter((i) => i.formation.bias === 'bullish').length,
-    [flattenedItems]
-  );
-  const bearishCount = useMemo(
-    () => flattenedItems.filter((i) => i.formation.bias === 'bearish').length,
-    [flattenedItems]
-  );
-
   // Loading screen during initial authentication check
   if (authLoading) {
     return (
@@ -1052,8 +1042,6 @@ export default function App() {
         isLoading={isLoading}
         totalCoins={coins.length}
         formationsCount={flattenedItems.length}
-        bullishCount={bullishCount}
-        bearishCount={bearishCount}
         watchlistCount={watchlistCount}
         soundEnabled={soundEnabled}
         onToggleSound={handleToggleSound}
