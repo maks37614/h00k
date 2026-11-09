@@ -18,6 +18,13 @@ import { Kline, Timeframe, ExchangeId, MarketType, ReplayPosition, ReplayPending
 import { getChartPriceFormat, formatCryptoPrice } from '../../utils/formatters';
 import { Maximize2, Minimize2, RotateCcw, Camera } from 'lucide-react';
 import { requestFullscreenSafe, exitFullscreenSafe, isCurrentlyFullscreen } from '../../utils/fullscreenUtils';
+import { createPortal } from 'react-dom';
+
+/** Current visible viewport: updates when mobile toolbars or orientation change. */
+const readViewport = () => ({
+  width: typeof window === 'undefined' ? 1024 : Math.max(1, Math.round(window.visualViewport?.width || window.innerWidth)),
+  height: typeof window === 'undefined' ? 760 : Math.max(1, Math.round(window.visualViewport?.height || window.innerHeight)),
+});
 
 export interface ReplayChartHandle {
   takeScreenshot: () => string | null;
@@ -66,10 +73,27 @@ export const ReplayChart = forwardRef<ReplayChartHandle, ReplayChartProps>(({
   const candleSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
   const volumeSeriesRef = useRef<ISeriesApi<'Histogram'> | null>(null);
 
-  // Height state
-  const [internalHeight, setInternalHeight] = useState<number>(() => typeof window !== 'undefined' ? window.innerHeight : 760);
-  const activeHeight = height ?? internalHeight;
+  const [viewport, setViewport] = useState(readViewport);
+  const [internalHeight, setInternalHeight] = useState<number | undefined>(undefined);
+  const activeHeight = height ?? (onHeightChange ? viewport.height : (internalHeight ?? viewport.height));
   const fullscreenRootRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const syncViewport = () => {
+      const next = readViewport();
+      setViewport(current => current.width === next.width && current.height === next.height ? current : next);
+      setInternalHeight(undefined);
+    };
+    syncViewport();
+    window.addEventListener('resize', syncViewport);
+    window.addEventListener('orientationchange', syncViewport);
+    window.visualViewport?.addEventListener('resize', syncViewport);
+    return () => {
+      window.removeEventListener('resize', syncViewport);
+      window.removeEventListener('orientationchange', syncViewport);
+      window.visualViewport?.removeEventListener('resize', syncViewport);
+    };
+  }, []);
   const nativeFullscreenRef = useRef(false);
 
   // Dragging logic for bottom resize handle
@@ -547,22 +571,22 @@ export const ReplayChart = forwardRef<ReplayChartHandle, ReplayChartProps>(({
       }) + ' UTC'
     : '—';
 
-  return (
+  const content = (
     <div
       ref={fullscreenRootRef}
       style={isFullscreen
-        ? { width: '100vw', height: '100dvh', maxWidth: '100vw', maxHeight: '100dvh' }
-        : { height: height === undefined ? '100dvh' : `${activeHeight}px` }}
-      className={`relative flex flex-col bg-[#090d16] border border-slate-800/80 rounded-2xl overflow-hidden shadow-xl ${
-        isFullscreen ? 'fixed inset-0 z-[100] rounded-none' : 'w-full'
+        ? { width: `${viewport.width}px`, height: `${viewport.height}px`, maxWidth: '100vw', maxHeight: '100dvh' }
+        : { width: '100%', height: `${activeHeight}px` }}
+      className={`relative flex min-w-0 flex-col bg-[#090d16] border border-slate-800/80 rounded-2xl overflow-hidden shadow-xl ${
+        isFullscreen ? 'fixed inset-0 z-[100] rounded-none' : 'w-full max-w-full'
       }`}
       role={isFullscreen ? 'dialog' : undefined}
       aria-modal={isFullscreen || undefined}
       aria-label={isFullscreen ? 'Повноекранний графік відтворення' : undefined}
     >
       {/* Chart Top Header Overlay */}
-      <div className="flex flex-wrap items-center justify-between gap-2 px-3.5 py-2.5 bg-slate-950/70 border-b border-slate-800/60 backdrop-blur-md z-10 text-xs">
-        <div className="flex flex-wrap items-center gap-2.5">
+      <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center justify-between gap-1.5 sm:gap-2 px-2 sm:px-3.5 py-1.5 sm:py-2.5 bg-slate-950/70 border-b border-slate-800/60 backdrop-blur-md z-10 text-xs">
+        <div className="flex flex-wrap items-center min-w-0 max-w-full gap-1.5 sm:gap-2.5">
           <div className="flex items-center gap-1.5 font-mono">
             <span className="font-extrabold text-white text-sm sm:text-base">{symbol}</span>
             {chartProvider !== 'hookchart' && (
@@ -589,7 +613,7 @@ export const ReplayChart = forwardRef<ReplayChartHandle, ReplayChartProps>(({
 
           {/* Candle OHLC stats */}
           {displayCandle && (
-            <div className="hidden sm:flex items-center gap-2 font-mono text-[11px] text-slate-400">
+            <div className="flex items-center w-full sm:w-auto min-w-0 max-w-full gap-2 overflow-x-auto whitespace-nowrap font-mono text-[10px] sm:text-[11px] text-slate-400" aria-label="Ціни відкриття, максимуму, мінімуму й закриття свічки">
               <span>
                 O: <b className="text-slate-200">{formatCryptoPrice(displayCandle.open)}</b>
               </span>
@@ -617,9 +641,10 @@ export const ReplayChart = forwardRef<ReplayChartHandle, ReplayChartProps>(({
         </div>
 
         {/* Action controls */}
-        <div className="flex items-center gap-1.5">
-          <div className="text-[11px] font-mono text-cyan-300/80 mr-1 flex items-center gap-1 bg-cyan-950/40 px-2 py-0.5 rounded border border-cyan-800/40">
-            <span>📅 {formattedDate}</span>
+        <div className="flex items-center w-full min-w-0 sm:w-auto gap-1.5 justify-between sm:justify-end">
+          <div className="min-w-0 max-w-[55vw] sm:max-w-none text-[10px] sm:text-[11px] font-mono text-cyan-300/80 mr-1 flex items-center gap-1 bg-cyan-950/40 px-2 py-0.5 rounded border border-cyan-800/40 overflow-hidden whitespace-nowrap">
+
+            <span className="truncate">📅 {formattedDate}</span>
           </div>
 
           <button
@@ -704,6 +729,12 @@ export const ReplayChart = forwardRef<ReplayChartHandle, ReplayChartProps>(({
       )}
     </div>
   );
+
+  // iOS Safari and embedded browsers can reject native Fullscreen API calls.
+  // A body-level portal escapes clipped/transformed ancestors in that case.
+  return isFullscreen && !nativeFullscreenRef.current && typeof document !== 'undefined'
+    ? createPortal(content, document.body)
+    : content;
 });
 
 ReplayChart.displayName = 'ReplayChart';

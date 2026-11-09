@@ -63,21 +63,21 @@ export const ReplayPage: React.FC<ReplayPageProps> = ({ coins }) => {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [focusTrigger, setFocusTrigger] = useState<number>(0);
 
-  // Like Screener fullscreen: fill the viewport height by default.
-  // Persist only a deliberate resize, not the old S/M/L/XL presets.
-  const [chartHeight, setChartHeight] = useState<number | undefined>(() => {
-    try {
-      const saved = localStorage.getItem('signalhook_replay_chart_height_v3');
-      const parsed = saved === null ? NaN : Number(saved);
-      return Number.isFinite(parsed) && parsed >= 380 && parsed <= 2200 ? parsed : undefined;
-    } catch {
-      return undefined;
-    }
-  });
+  // Replay auto-fits the CURRENT screen instead of restoring a height saved on
+  // a different device or orientation. Manual resizing remains session-local.
+  const [chartHeight, setChartHeight] = useState<number | undefined>(undefined);
+  const handleChartHeightChange = useCallback((newH: number) => setChartHeight(newH), []);
 
-  const handleChartHeightChange = useCallback((newH: number) => {
-    setChartHeight(newH);
-    try { localStorage.setItem('signalhook_replay_chart_height_v3', newH.toString()); } catch {}
+  useEffect(() => {
+    const resetManualHeight = () => setChartHeight(undefined);
+    window.addEventListener('resize', resetManualHeight);
+    window.addEventListener('orientationchange', resetManualHeight);
+    window.visualViewport?.addEventListener('resize', resetManualHeight);
+    return () => {
+      window.removeEventListener('resize', resetManualHeight);
+      window.removeEventListener('orientationchange', resetManualHeight);
+      window.visualViewport?.removeEventListener('resize', resetManualHeight);
+    };
   }, []);
 
   // Playback Control
