@@ -64,7 +64,7 @@ test('News widget shows localized News title, more button and non-clickable head
   assert.match(widget, /heading: 'News'/);
   assert.match(widget, /heading: 'Новости'/);
   assert.match(widget, /heading: 'Wiadomości'/);
-  assert.match(widget, /flex h-\[410px\] min-w-0 flex-col overflow-hidden/);
+  assert.match(widget, /flex h-\[346px\] min-w-0 flex-col overflow-hidden/);
   assert.match(widget, /ref=\{listRef\}/);
   assert.match(widget, /min-h-0 flex-1 divide-y divide-slate-800\/70 overflow-y-auto/);
   assert.match(widget, /h-\[56px\] shrink-0/);
@@ -150,11 +150,25 @@ test('Four headlines with fixed-height panel and inner-only load-more scrolling'
   const widget = readFileSync(new URL('../src/components/CryptoNewsWidget.tsx', import.meta.url), 'utf8');
   assert.match(widget, /const PAGE_SIZE = 4/);
   assert.match(widget, /limit: Math.min\(MAX_HEADLINES, limit \+ PAGE_SIZE\)/);
-  assert.match(widget, /h-\[410px\]/);
+  assert.match(widget, /h-\[346px\]/);
   assert.match(widget, /h-\[56px\] shrink-0/);
   assert.match(widget, /ref=\{listRef\}/);
   assert.match(widget, /overflow-y-auto overscroll-contain/);
   assert.match(widget, /nextScrollIndex.current = items.length/);
   assert.doesNotMatch(widget, /h-\[460px\]|h-\[560px\]|h-\[640px\]/);
   assert.doesNotMatch(widget, /<a\s|href=\{item\./);
+});
+
+test('The news panel fits exactly four two-line headlines without a blank bottom area', () => {
+  const widget = readFileSync(new URL('../src/components/CryptoNewsWidget.tsx', import.meta.url), 'utf8');
+  // 2px section borders + 64px header + 4*56px headline rows + 56px footer.
+  assert.equal(2 + 64 + 4 * 56 + 56, 346);
+  assert.match(widget, /flex h-\[346px\] min-w-0 flex-col overflow-hidden/);
+  assert.match(widget, /h-\[64px\] min-h-\[64px\] shrink-0/);
+  assert.match(widget, /className="flex h-\[56px\] items-center overflow-hidden"/);
+  assert.match(widget, /line-clamp-2 w-full/);
+  assert.match(widget, /min-h-0 flex-1 divide-y divide-slate-800\/70 overflow-y-auto/);
+  assert.match(widget, /h-\[56px\] shrink-0/);
+  assert.match(widget, /onClick=\{showMore\}/);
+  assert.doesNotMatch(widget, /h-\[410px\]/);
 });

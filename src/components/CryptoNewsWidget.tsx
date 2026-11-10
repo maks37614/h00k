@@ -126,8 +126,8 @@ export const CryptoNewsWidget: React.FC = () => {
   }, [language, limit, refresh]);
 
   return (
-    <section className="flex h-[410px] min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-800/90 bg-slate-900/90 shadow-lg backdrop-blur-md" aria-label={labels.heading}>
-      <header className="flex min-h-[64px] shrink-0 items-center justify-between gap-2 border-b border-slate-800/70 p-3 sm:p-4">
+    <section className="flex h-[346px] min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-800/90 bg-slate-900/90 shadow-lg backdrop-blur-md" aria-label={labels.heading}>
+      <header className="flex h-[64px] min-h-[64px] shrink-0 items-center justify-between gap-2 border-b border-slate-800/70 p-3 sm:p-4">
         <div className="flex min-w-0 items-center gap-2.5">
           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-cyan-500/25 bg-cyan-500/10 text-cyan-300">
             <Newspaper className="h-4 w-4" aria-hidden="true" />
@@ -151,9 +151,9 @@ export const CryptoNewsWidget: React.FC = () => {
           className="min-h-0 flex-1 divide-y divide-slate-800/70 overflow-y-auto overscroll-contain"
           aria-label={labels.heading}>
           {items.map(item => (
-            <li key={item.title + item.publishedAt}>
+            <li key={item.title + item.publishedAt} className="flex h-[56px] items-center overflow-hidden">
               <p data-no-translate
-                className="px-3.5 py-2.5 text-xs font-semibold leading-relaxed text-slate-200 sm:text-sm">
+                className="line-clamp-2 w-full px-3.5 text-xs font-semibold leading-5 text-slate-200 sm:text-sm">
                 {item.title}
               </p>
             </li>
