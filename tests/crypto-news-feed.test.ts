@@ -34,7 +34,8 @@ test('Crypto news widget uses site language, displays only headlines, and does n
   const screener = readFileSync(new URL('../src/components/CoinScreenerPage.tsx', import.meta.url), 'utf8');
   const server = readFileSync(new URL('../server.ts', import.meta.url), 'utf8');
   assert.match(widget, /const \{ language \} = useLanguage\(\)/);
-  assert.match(widget, /\/api\/news\/crypto\?lang=/);
+  assert.match(widget, /new URLSearchParams\(\{ lang: language, limit: String\(limit\) \}\)/);
+  assert.match(widget, /\/api\/news\/crypto\?/);
   assert.match(widget, /data-no-translate/);
   assert.match(widget, /item\.title/);
   assert.doesNotMatch(widget, /item\.(?:description|source)/);
