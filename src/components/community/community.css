@@ -562,3 +562,26 @@
     flex-wrap: wrap;
   }
 }
+.community-security-secret {
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+.community-recovery-codes {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  padding: 14px;
+  border: 1px solid #334155;
+  border-radius: 10px;
+  background: #020617;
+  user-select: all;
+}
+.community-session-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.community-account-deletion {
+  border-color: #be123c;
+}

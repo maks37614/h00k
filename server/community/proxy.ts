@@ -1,5 +1,7 @@
 import express from "express";
 import type { Express } from "express";
+import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
 /** Stream no market data through Community. This bounded proxy precedes the market JSON parser. */
 export function installCommunityProxy(app: Express) {
   let active = 0;
@@ -7,12 +9,10 @@ export function installCommunityProxy(app: Express) {
     ["/api/account", "/api/community"],
     (_req, res, next) => {
       if (active >= 8) {
-        res
-          .status(503)
-          .json({
-            success: false,
-            error: "Community зайняте. Повторіть запит.",
-          });
+        res.status(503).json({
+          success: false,
+          error: "Community зайняте. Повторіть запит.",
+        });
         return;
       }
       active++;
@@ -29,6 +29,14 @@ export function installCommunityProxy(app: Express) {
     },
     express.raw({ type: () => true, limit: "6mb" }),
     async (req, res) => {
+      const controller = new AbortController();
+      const timer = setTimeout(
+        () => controller.abort(),
+        req.originalUrl.startsWith("/api/account/export/") ? 320_000 : 25_000,
+      );
+      timer.unref();
+      const close = () => controller.abort();
+      res.once("close", close);
       const origin =
         process.env.COMMUNITY_INTERNAL_ORIGIN ?? "http://127.0.0.1:3001";
       try {
@@ -51,26 +59,37 @@ export function installCommunityProxy(app: Express) {
           headers,
           ...(["GET", "HEAD"].includes(req.method) ? {} : { body: req.body }),
           redirect: "manual",
-          signal: AbortSignal.timeout(25_000),
+          signal: controller.signal,
         });
         res.status(response.status);
         for (const name of [
           "content-type",
           "cache-control",
           "x-content-type-options",
+          "content-disposition",
+          "referrer-policy",
         ]) {
           const value = response.headers.get(name);
           if (value) res.set(name, value);
         }
         for (const cookie of response.headers.getSetCookie())
           res.append("Set-Cookie", cookie);
-        res.send(Buffer.from(await response.arrayBuffer()));
+        if (response.body)
+          await pipeline(Readable.fromWeb(response.body as any), res);
+        else res.end();
       } catch {
+        if (res.headersSent) {
+          res.destroy();
+          return;
+        }
         res.status(503).json({
           success: false,
           error:
             "Community тимчасово недоступне. Ринкові графіки працюють окремо.",
         });
+      } finally {
+        clearTimeout(timer);
+        res.off("close", close);
       }
     },
   );

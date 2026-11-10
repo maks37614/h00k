@@ -46,7 +46,35 @@ export function installCommunityRoutes(app: Express, getDb: () => Database) {
           a = await accountFor(db, req);
         if (!a) fail("Увійдіть у свій акаунт", 401);
         limits.take(a.id + ":" + method + ":" + url, max);
-        await run(req, res, db, a, await policy(db, a.id));
+        if (
+          method === "get" ||
+          (method === "post" &&
+            (url === "/connections" || url === "/connections/:id/sync"))
+        )
+          await run(req, res, db, a, await policy(db, a.id));
+        else {
+          let status = 200,
+            body: unknown;
+          const deferred = {
+            status(code: number) {
+              status = code;
+              return deferred;
+            },
+            json(value: unknown) {
+              body = value;
+              return deferred;
+            },
+          } as unknown as Response;
+          await db.transaction(async (tx) => {
+            const live = await tx.query(
+              "SELECT id FROM hc_users WHERE id=$1 AND deleted_at IS NULL FOR SHARE",
+              [a.id],
+            );
+            if (!live.rows.length) fail("Сеанс акаунта закінчився", 401);
+            await run(req, deferred, tx, a, await policy(tx, a.id));
+          });
+          res.status(status).json(body);
+        }
       } catch (error: any) {
         res.status(error.status ?? 503).json({
           success: false,
@@ -335,7 +363,7 @@ export function installCommunityRoutes(app: Express, getDb: () => Database) {
         return;
       }
       const { rows } = await db.query(
-        `SELECT id,profile FROM hc_users WHERE id<>$1 AND profile->>'displayName' ILIKE $2 ESCAPE '\\' LIMIT 30`,
+        `SELECT id,profile FROM hc_users WHERE id<>$1 AND deleted_at IS NULL AND profile->>'displayName' ILIKE $2 ESCAPE '\\' LIMIT 30`,
         [a.id, "%" + q.replace(/[\\%_]/g, "\\$&") + "%"],
       );
       res.json({
@@ -374,7 +402,10 @@ export function installCommunityRoutes(app: Express, getDb: () => Database) {
     async (req, res, db, a, p) => {
       const id = uuid(req.params.id);
       if (id === a.id || p.blocked.has(id)) fail("Контакт недоступний", 403);
-      const other = await db.query("SELECT id FROM hc_users WHERE id=$1", [id]);
+      const other = await db.query(
+        "SELECT id FROM hc_users WHERE id=$1 AND deleted_at IS NULL FOR SHARE",
+        [id],
+      );
       if (!other.rows.length) fail("Контакт недоступний", 404);
       const incoming = await db.query(
         "UPDATE hc_friendships SET accepted=true WHERE sender=$1 AND recipient=$2 RETURNING sender",
@@ -415,7 +446,7 @@ export function installCommunityRoutes(app: Express, getDb: () => Database) {
     const id = uuid(req.params.id);
     if (p.blocked.has(id)) fail("Профіль недоступний", 404);
     const { rows } = await db.query(
-      "SELECT profile,created_at FROM hc_users WHERE id=$1",
+      "SELECT profile,created_at FROM hc_users WHERE id=$1 AND deleted_at IS NULL",
       [id],
     );
     if (!rows.length) fail("Профіль недоступний", 404);
@@ -473,6 +504,12 @@ export function installCommunityRoutes(app: Express, getDb: () => Database) {
       for (const id of members)
         if (!p.accepted.has(id) || p.blocked.has(id))
           fail("Запрошувати можна лише друзів, що прийняли запит", 403);
+      const living = await db.query(
+        "SELECT id FROM hc_users WHERE id=ANY($1::uuid[]) AND deleted_at IS NULL FOR SHARE",
+        [members],
+      );
+      if (living.rows.length !== members.length)
+        fail("Один із контактів уже недоступний", 404);
       const id = randomUUID(),
         title = bounded(req.body.title ?? "Розмова", 100);
       await db.transaction(async (tx) => {
@@ -897,6 +934,7 @@ export function installMediaRoutes(app: Express, getDb: () => Database) {
     }),
     async (req, res) => {
       let ownsSlot = false;
+      let writtenFile: string | undefined;
       try {
         checkMutation(req);
         const db = getDb(),
@@ -906,10 +944,13 @@ export function installMediaRoutes(app: Express, getDb: () => Database) {
         if (!Buffer.isBuffer(req.body) || !req.body.length)
           fail("Потрібне фото JPEG, PNG або WebP");
         const quota = await db.query(
-          "SELECT COALESCE(sum(bytes),0)::text AS used FROM hc_media WHERE owner_id=$1",
+          "SELECT COALESCE(sum(bytes),0)::text AS used,count(*)::integer AS count FROM hc_media WHERE owner_id=$1",
           [a.id],
         );
-        if (Number(quota.rows[0].used) >= 200 * 1024 * 1024)
+        if (
+          Number(quota.rows[0].used) >= 200 * 1024 * 1024 ||
+          quota.rows[0].count >= 2000
+        )
           fail("Досягнуто ліміт зображень цього акаунта", 413);
         if (active >= 2) fail("Обробка фото тимчасово зайнята", 503);
         active++;
@@ -930,12 +971,32 @@ export function installMediaRoutes(app: Express, getDb: () => Database) {
           mode: 0o600,
           flag: "wx",
         });
-        await db.query(
-          "INSERT INTO hc_media(id,owner_id,bytes) VALUES($1,$2,$3)",
-          [id, a.id, image.length],
-        );
+        writtenFile = path.join(root(), id + ".webp");
+        await db.transaction(async (tx) => {
+          const live = await tx.query(
+            "SELECT id FROM hc_users WHERE id=$1 AND deleted_at IS NULL FOR UPDATE",
+            [a.id],
+          );
+          if (!live.rows.length) fail("Акаунт закрито", 401);
+          const current = await tx.query(
+            "SELECT COALESCE(sum(bytes),0)::text AS used,count(*)::integer AS count FROM hc_media WHERE owner_id=$1",
+            [a.id],
+          );
+          if (
+            Number(current.rows[0].used) + image.length > 200 * 1024 * 1024 ||
+            current.rows[0].count >= 2000
+          )
+            fail("Досягнуто ліміт зображень", 413);
+          await tx.query(
+            "INSERT INTO hc_media(id,owner_id,bytes) VALUES($1,$2,$3)",
+            [id, a.id, image.length],
+          );
+        });
+        writtenFile = undefined;
         res.status(201).json({ success: true, id });
       } catch (error: any) {
+        if (writtenFile)
+          await fs.rm(writtenFile, { force: true }).catch(() => {});
         res.status(error.status ?? 400).json({
           success: false,
           error: error.status ? error.message : "Не вдалося обробити фото",

@@ -4,6 +4,15 @@ import { apiJson } from "../../utils/apiFetch";
 /** One small per-account inbox poll, never per chart and never an exchange request. */
 export function CommunityNotifications() {
   const { user } = useAuth();
+  const [deleted, setDeleted] = useState(false);
+  useEffect(() => {
+    const show = () => setDeleted(true);
+    window.addEventListener("h00k:account-deleted", show);
+    return () => window.removeEventListener("h00k:account-deleted", show);
+  }, []);
+  useEffect(() => {
+    if (user) setDeleted(false);
+  }, [user?.uid]);
   const [notice, setNotice] = useState<any>(null),
     epoch = useRef(user?.uid);
   epoch.current = user?.uid;
@@ -18,7 +27,9 @@ export function CommunityNotifications() {
         const d = await apiJson("/api/community/notifications");
         if (active && epoch.current === uid)
           setNotice(
-            d.items.find((n: any) => n.type === "risk" && !n.read_at) ?? null,
+            d.items.find((n: any) => n.type === "risk" && !n.read_at) ??
+              d.items.find((n: any) => n.type === "security" && !n.read_at) ??
+              null,
           );
       } catch {}
     };
@@ -29,15 +40,37 @@ export function CommunityNotifications() {
       clearInterval(timer);
     };
   }, [user?.uid]);
+  if (deleted)
+    return (
+      <aside
+        role="status"
+        className="fixed bottom-4 right-4 z-[150] max-w-sm rounded-xl border border-cyan-500/50 bg-slate-950 p-4 text-sm text-cyan-100 shadow-xl"
+      >
+        <b>Акаунт видалено</b>
+        <p>
+          Доступ закрито, а збережені ключі стерто. Файли й пов’язані дані
+          скрінера очищуються у фоні. Ключ на біржі відкличте самостійно.
+        </p>
+        <button type="button" onClick={() => setDeleted(false)}>
+          Зрозуміло
+        </button>
+      </aside>
+    );
   if (!notice) return null;
   return (
     <aside
       role="alert"
       className="fixed bottom-4 right-4 z-[150] max-w-sm rounded-xl border border-amber-500/50 bg-slate-950 p-4 text-sm text-amber-200 shadow-xl"
     >
-      <b>Досягнуто особистий ліміт збитку</b>
+      <b>
+        {notice.type === "risk"
+          ? "Досягнуто особистий ліміт збитку"
+          : "Подія безпеки акаунта"}
+      </b>
       <p>
-        Перевірте свій план і свіжість даних. h00k не зупиняє торгівлю на біржі.
+        {notice.type === "risk"
+          ? "Перевірте свій план і свіжість даних. h00k не зупиняє торгівлю на біржі."
+          : notice.body?.text}
       </p>
       <div className="mt-3 flex gap-3">
         <a href="#community?section=settings" className="underline">

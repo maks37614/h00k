@@ -71,15 +71,22 @@ export async function connectBybit(db: Database, owner: string, input: any) {
   const accountHash = tokenHash("bybit:" + String(info.userID)),
     id = randomUUID();
   try {
-    await db.query(
-      `INSERT INTO hc_connections(id,owner_id,exchange,account_hash,credential) VALUES($1,$2,'bybit',$3,$4)`,
-      [
-        id,
-        owner,
-        accountHash,
-        seal(JSON.stringify(credential), owner + ":" + id),
-      ],
-    );
+    await db.transaction(async (tx) => {
+      const live = await tx.query(
+        "SELECT id FROM hc_users WHERE id=$1 AND deleted_at IS NULL FOR SHARE",
+        [owner],
+      );
+      if (!live.rows.length) fail("Акаунт закрито", 401);
+      await tx.query(
+        `INSERT INTO hc_connections(id,owner_id,exchange,account_hash,credential) VALUES($1,$2,'bybit',$3,$4)`,
+        [
+          id,
+          owner,
+          accountHash,
+          seal(JSON.stringify(credential), owner + ":" + id),
+        ],
+      );
+    });
   } catch (error: any) {
     if (error.code === "23505")
       fail("Цей біржовий акаунт уже підключений", 409);
@@ -131,35 +138,47 @@ export async function syncBybit(db: Database, id: string, owner: string) {
           },
         );
         if (!Array.isArray(result.list)) fail("Некоректний журнал біржі", 503);
-        for (const row of result.list) {
-          if (
-            !/^[\p{L}\p{M}\p{N}]{2,30}$/u.test(row.symbol) ||
-            typeof row.orderId !== "string" ||
-            !new Decimal(row.closedPnl).isFinite() ||
-            !Number.isFinite(Number(row.updatedTime))
-          )
-            fail("Некоректні дані виконання", 503);
-          // closedPnl is the exchange's closed-order result; do not subtract fees again.
-          const currency = row.symbol.endsWith("USDT")
-            ? "USDT"
-            : row.symbol.endsWith("USDC")
-              ? "USDC"
-              : "UNSUPPORTED";
-          await db.query(
-            `INSERT INTO hc_trades(connection_id,source_id,owner_id,symbol,currency,pnl,closed_at,source) SELECT $1,$2,$3,$4,$5,$6,$7,$8 WHERE EXISTS(SELECT 1 FROM hc_connections WHERE id=$1 AND credential<>'')
-            ON CONFLICT(connection_id,source_id) DO UPDATE SET pnl=excluded.pnl,source=excluded.source`,
-            [
-              id,
-              row.orderId,
-              owner,
-              row.symbol,
-              currency,
-              row.closedPnl,
-              new Date(Number(row.updatedTime)),
-              row,
-            ],
+        await db.transaction(async (tx) => {
+          const live = await tx.query(
+            "SELECT id FROM hc_users WHERE id=$1 AND deleted_at IS NULL FOR SHARE",
+            [owner],
           );
-        }
+          if (!live.rows.length) fail("Акаунт закрито", 401);
+          const linked = await tx.query(
+            "SELECT id FROM hc_connections WHERE id=$1 AND owner_id=$2 AND credential<>'' FOR SHARE",
+            [id, owner],
+          );
+          if (!linked.rows.length) fail("Підключення від’єднано", 409);
+          for (const row of result.list) {
+            if (
+              !/^[\p{L}\p{M}\p{N}]{2,30}$/u.test(row.symbol) ||
+              typeof row.orderId !== "string" ||
+              !new Decimal(row.closedPnl).isFinite() ||
+              !Number.isFinite(Number(row.updatedTime))
+            )
+              fail("Некоректні дані виконання", 503);
+            // closedPnl is the exchange's closed-order result; do not subtract fees again.
+            const currency = row.symbol.endsWith("USDT")
+              ? "USDT"
+              : row.symbol.endsWith("USDC")
+                ? "USDC"
+                : "UNSUPPORTED";
+            await tx.query(
+              `INSERT INTO hc_trades(connection_id,source_id,owner_id,symbol,currency,pnl,closed_at,source) SELECT $1,$2,$3,$4,$5,$6,$7,$8 WHERE EXISTS(SELECT 1 FROM hc_connections WHERE id=$1 AND credential<>'')
+            ON CONFLICT(connection_id,source_id) DO UPDATE SET pnl=excluded.pnl,source=excluded.source`,
+              [
+                id,
+                row.orderId,
+                owner,
+                row.symbol,
+                currency,
+                row.closedPnl,
+                new Date(Number(row.updatedTime)),
+                row,
+              ],
+            );
+          }
+        });
         cursor = result.nextPageCursor ?? "";
         pages++;
         if (cursor && pages >= 10) {

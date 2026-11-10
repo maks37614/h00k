@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import {assertActiveMarketAccount} from './deletedAccounts';
 import path from 'node:path';
 import { createHash, randomBytes } from 'node:crypto';
 import { normalizeLanguage, telegramText, type SupportedLanguage } from '../src/locales';
@@ -47,6 +48,7 @@ export function getSharedTelegramStatus(userId: string) {
   };
 }
 export async function beginSharedTelegramLink(userId: string, language?: string) {
+  assertActiveMarketAccount(userId);
   if (!userId || userId === 'guest') return { success: false, errorCode: 'sign_in' };
   const bot = getSharedTelegramBot();
   if (!bot) return { success: false, errorCode: 'bot_unavailable' };
@@ -63,6 +65,7 @@ export async function beginSharedTelegramLink(userId: string, language?: string)
     botInfoCache = { tokenHash, username, expiresAt: Date.now() + 300000 };
   }
   if (getSharedTelegramBot()?.botToken !== bot.botToken) return { success: false, errorCode: 'try_later' };
+  assertActiveMarketAccount(userId);
   const code = `h00k_${randomBytes(24).toString('base64url')}`, expiresAt = Date.now() + 600000;
   current.pending = current.pending.filter(link => link.userId !== userId);
   current.pending.push({ userId, codeHash: hash(code), botId: bot.botId, createdAt: Date.now(), expiresAt, language: normalizeLanguage(language) });
@@ -75,6 +78,7 @@ export function disconnectSharedTelegram(userId: string) {
   load().pending = load().pending.filter(link => link.userId !== userId);
   persist();
 }
+export function eraseTelegramLinks(userId:string){load().pending=load().pending.filter(link=>link.userId!==userId);persist();}
 async function processUpdate(update: any, bot: { botToken: string; botId: string }) {
   const message = update.message, chatId = message?.chat?.id;
   if (message?.chat?.type !== 'private' || message.from?.is_bot || !Number.isSafeInteger(chatId) || chatId <= 0 || chatId !== message.from?.id) return;

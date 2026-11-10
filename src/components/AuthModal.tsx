@@ -19,12 +19,14 @@ export const AuthModal: React.FC<Props> = ({
   onSuccess,
   isRestrictedMode,
 }) => {
-  const { signInWithEmail, registerWithEmail } = useAuth();
+  const { signInWithEmail, registerWithEmail, clearSession } = useAuth();
   const [mode, setMode] = useState(initialMode),
     [email, setEmail] = useState(""),
     [password, setPassword] = useState(""),
     [name, setName] = useState(""),
     [code, setCode] = useState(""),
+    [recoveryMode, setRecoveryMode] = useState(false),
+    [recoveryCode, setRecoveryCode] = useState(""),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false);
   const reset =
@@ -35,6 +37,11 @@ export const AuthModal: React.FC<Props> = ({
     if (isOpen) {
       setMode(initialMode);
       setError("");
+    } else {
+      setPassword("");
+      setCode("");
+      setRecoveryCode("");
+      setRecoveryMode(false);
     }
   }, [isOpen, initialMode]);
   if (!isOpen) return null;
@@ -75,13 +82,27 @@ export const AuthModal: React.FC<Props> = ({
               if (reset) {
                 await apiJson("/api/account/reset", {
                   method: "POST",
-                  body: JSON.stringify({ token: reset, password, code }),
+                  body: JSON.stringify({
+                    token: reset,
+                    password,
+                    ...(recoveryMode ? { recoveryCode } : { code }),
+                  }),
                 });
+                clearSession();
+                setPassword("");
+                setCode("");
+                setRecoveryCode("");
                 history.replaceState({}, "", location.pathname);
                 setError("Пароль змінено. Увійдіть знову.");
               } else if (mode === "signup")
                 await registerWithEmail(email, password, name);
-              else await signInWithEmail(email, password, code);
+              else
+                await signInWithEmail(
+                  email,
+                  password,
+                  recoveryMode ? undefined : code,
+                  recoveryMode ? recoveryCode : undefined,
+                );
               if (!reset) {
                 onSuccess?.();
                 onClose();
@@ -133,16 +154,44 @@ export const AuthModal: React.FC<Props> = ({
             required
             onChange={(e) => setPassword(e.target.value)}
           />
-          <input
-            className="w-full bg-slate-950 rounded-lg p-3"
-            inputMode="numeric"
-            autoComplete="one-time-code"
-            placeholder="Код 2FA, якщо налаштовано"
-            aria-label="Код 2FA"
-            maxLength={6}
-            value={code}
-            onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
-          />
+          {(mode !== "signup" || reset) && (
+            <>
+              <label className="flex gap-2 items-center text-sm text-slate-300">
+                <input
+                  type="checkbox"
+                  checked={recoveryMode}
+                  onChange={(e) => {
+                    setRecoveryMode(e.target.checked);
+                    setCode("");
+                    setRecoveryCode("");
+                  }}
+                />
+                Використати резервний код 2FA
+              </label>
+              {recoveryMode ? (
+                <input
+                  className="w-full bg-slate-950 rounded-lg p-3"
+                  autoComplete="off"
+                  aria-label="Резервний код 2FA"
+                  placeholder="Одноразовий резервний код"
+                  value={recoveryCode}
+                  maxLength={64}
+                  onChange={(e) => setRecoveryCode(e.target.value)}
+                />
+              ) : (
+                <input
+                  className="w-full bg-slate-950 rounded-lg p-3"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  placeholder="Код 2FA, якщо налаштовано"
+                  aria-label="Код 2FA"
+                  maxLength={6}
+                  value={code}
+                  onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
+                />
+              )}
+            </>
+          )}
           {mode === "signup" && (
             <p className="text-xs text-slate-400">
               Щонайменше 15 символів. Реєстрація не підключає біржу й не

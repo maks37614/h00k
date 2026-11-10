@@ -1,3 +1,4 @@
+import { AccountSecuritySettings } from "./AccountSecuritySettings";
 import { STRATEGY_PRESETS } from "../hookchart/strategyEngine";
 import { saveChartArchive } from "../../community/archiveChart";
 import React, { lazy, Suspense, useEffect, useRef, useState } from "react";
@@ -2016,10 +2017,6 @@ function Profile({
 
 function CommunitySettings({ run }: { run: Run }) {
   const { profile, updateProfileData } = useAuth();
-  const [security, setSecurity] = useState<any>(null),
-    [password, setPassword] = useState(""),
-    [code, setCode] = useState(""),
-    [secret, setSecret] = useState("");
   const connections = useResource("connections", () =>
       apiJson(api + "/connections"),
     ),
@@ -2036,20 +2033,6 @@ function CommunitySettings({ run }: { run: Run }) {
       currency: "USDT",
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     });
-  const verificationStarted = useRef(false);
-  useEffect(() => {
-    if (verificationStarted.current) return;
-    verificationStarted.current = true;
-    const token = new URLSearchParams(location.search).get("verify");
-    void run(async () => {
-      if (token) {
-        await post("/api/account/verify", { token });
-        history.replaceState({}, "", location.pathname + location.hash);
-      }
-      const current = await apiJson("/api/account/me");
-      setSecurity(current.security);
-    });
-  }, []);
   useEffect(() => {
     if (risk.data?.risk?.rule) setLimits(risk.data.risk.rule);
   }, [risk.data]);
@@ -2074,77 +2057,7 @@ function CommunitySettings({ run }: { run: Run }) {
           phrase.
         </p>
       </section>
-      <section className="community-card community-form">
-        <h3>Безпека власного акаунта</h3>
-        <p>
-          Email: {security?.emailVerified ? "підтверджено" : "не підтверджено"}{" "}
-          · Другий фактор:{" "}
-          {security?.mfaEnabled ? "налаштовано" : "не налаштовано"}
-        </p>
-        <button
-          type="button"
-          onClick={() =>
-            void run(() => post("/api/account/verify/request", {}))
-          }
-        >
-          Надіслати підтвердження email
-        </button>
-        <input
-          type="password"
-          autoComplete="current-password"
-          aria-label="Поточний пароль для налаштування 2FA"
-          placeholder="Поточний пароль для налаштування 2FA"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-        />
-        <button
-          type="button"
-          onClick={() =>
-            void run(async () => {
-              const d = await post("/api/account/mfa/setup", { password });
-              setSecret(d.secret);
-              setPassword("");
-            })
-          }
-        >
-          Налаштувати TOTP
-        </button>
-        {secret && (
-          <p>
-            Додайте до застосунку автентифікації цей секрет і підтвердіть код:{" "}
-            <code>{secret}</code>
-          </p>
-        )}
-        <input
-          inputMode="numeric"
-          autoComplete="one-time-code"
-          aria-label="Код другого фактора"
-          placeholder="6-значний код"
-          value={code}
-          maxLength={6}
-          onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))}
-        />
-        <button
-          type="button"
-          onClick={() =>
-            void run(async () => {
-              await post(
-                secret ? "/api/account/mfa/confirm" : "/api/account/mfa/check",
-                { code },
-              );
-              setCode("");
-              setSecret("");
-              setSecurity((s: any) => ({
-                ...s,
-                mfaEnabled: true,
-                strong: true,
-              }));
-            })
-          }
-        >
-          {secret ? "Підтвердити налаштування" : "Підтвердити чутливу дію"}
-        </button>
-      </section>
+      <AccountSecuritySettings />
       <section className="community-card community-form">
         <h3>Біржі та API · Bybit Global / linear</h3>
         <p>
@@ -2342,7 +2255,7 @@ function CommunitySettings({ run }: { run: Run }) {
             {new Date(n.created_at).toLocaleString("uk-UA")} ·{" "}
             {n.type === "risk"
               ? `Досягнуто ліміт ${n.body.window}: ${n.body.used} / ${n.body.limit} ${n.body.currency}`
-              : n.type}
+              : (n.body?.text ?? n.type)}
           </p>
         ))}
         {!notifications.data?.items?.length && <p>Сповіщень поки немає.</p>}

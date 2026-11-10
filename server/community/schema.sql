@@ -127,3 +127,34 @@ CREATE TABLE IF NOT EXISTS hc_audit (
   id uuid PRIMARY KEY, actor_id uuid REFERENCES hc_users(id), action text NOT NULL,
   target text NOT NULL, details jsonb NOT NULL DEFAULT '{}', created_at timestamptz NOT NULL DEFAULT now()
 );
+ALTER TABLE hc_users ADD COLUMN IF NOT EXISTS deleted_at timestamptz;
+ALTER TABLE hc_users ADD COLUMN IF NOT EXISTS mfa_last_counter bigint NOT NULL DEFAULT -1;
+ALTER TABLE hc_sessions ADD COLUMN IF NOT EXISTS id uuid NOT NULL DEFAULT gen_random_uuid();
+CREATE UNIQUE INDEX IF NOT EXISTS hc_sessions_public_id ON hc_sessions(id);
+ALTER TABLE hc_charts ADD COLUMN IF NOT EXISTS deleted boolean NOT NULL DEFAULT false;
+CREATE TABLE IF NOT EXISTS hc_recovery_codes (
+  user_id uuid NOT NULL REFERENCES hc_users(id) ON DELETE CASCADE,
+  code_hash text NOT NULL, used_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now(), PRIMARY KEY(user_id,code_hash)
+);
+CREATE TABLE IF NOT EXISTS hc_export_tickets (
+  token_hash text PRIMARY KEY, owner_id uuid NOT NULL REFERENCES hc_users(id),
+  session_hash text NOT NULL REFERENCES hc_sessions(token_hash) ON DELETE CASCADE,
+  expires_at timestamptz NOT NULL, created_at timestamptz NOT NULL DEFAULT now(),
+  scope text NOT NULL DEFAULT 'community' CHECK(scope IN ('community','market'))
+);
+CREATE TABLE IF NOT EXISTS hc_account_cleanup (
+  owner_id uuid PRIMARY KEY REFERENCES hc_users(id),
+  market_pending boolean NOT NULL DEFAULT true,
+  lease_until timestamptz, attempts integer NOT NULL DEFAULT 0,
+  created_at timestamptz NOT NULL DEFAULT now(), completed_at timestamptz
+);
+CREATE TABLE IF NOT EXISTS hc_media_cleanup (
+  id uuid PRIMARY KEY, owner_id uuid NOT NULL REFERENCES hc_users(id),
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS hc_items_owner ON hc_items(owner_id,id);
+CREATE INDEX IF NOT EXISTS hc_charts_owner ON hc_charts(owner_id,id);
+CREATE INDEX IF NOT EXISTS hc_media_owner ON hc_media(owner_id,id);
+CREATE INDEX IF NOT EXISTS hc_notifications_owner ON hc_notifications(owner_id,created_at DESC);
+CREATE INDEX IF NOT EXISTS hc_members_user ON hc_members(user_id,conversation_id);

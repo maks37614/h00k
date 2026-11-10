@@ -14,10 +14,11 @@ import { historyBlock } from '../server/community/history';
 import { lossSum, evaluateRisk, riskWindows } from '../server/community/risk';
 import { bybitRead, checkReadOnly } from '../server/community/bybit';
 import type { Kline } from '../src/types';
+import {testDatabase} from './fixtures/community-db';
 
 const engine=new PGlite();
-const wrap=(client:any):Database=>({query:(sql,values)=>client.query(sql,values),transaction:run=>client.transaction((tx:any)=>run(wrap(tx)))});
-const db=wrap(engine),mail: Array<{email:string;url:string}>=[];
+const db=testDatabase(engine),mail: Array<{email:string;url:string}>=[];
+let authNow=Date.now();
 let server:any,base:string;
 const previousKey=process.env.COMMUNITY_ENCRYPTION_KEY,previousMedia=process.env.COMMUNITY_MEDIA_DIR,previousOrigin=process.env.APP_ORIGIN;
 process.env.COMMUNITY_ENCRYPTION_KEY=randomBytes(32).toString('base64');
@@ -40,7 +41,7 @@ function snapshot(){const now=Date.now(),start=Math.floor(now/1000/60)*60-6000;
     markers:[{id:'entry',type:'entry',label:'Вхід',price:102,color:'#38bdf8'}],drawings:[{id:'trend',type:'trend',pts:[{t:start*1000,p:100},{t:(start+600)*1000,p:105}]}]});
 }
 test.before(async()=>{
-  await migrate(db);const app=express();installMediaRoutes(app,()=>db);app.use(express.json({limit:'2mb'}));installAccountRoutes(app,()=>db,async(email,_subject,url)=>{mail.push({email,url});});installCommunityRoutes(app,()=>db);
+  await migrate(db);const app=express();installMediaRoutes(app,()=>db);app.use(express.json({limit:'2mb'}));installAccountRoutes(app,()=>db,async(email,_subject,url)=>{mail.push({email,url});},()=>authNow);installCommunityRoutes(app,()=>db);
   server=app.listen(0,'127.0.0.1');await new Promise<void>(resolve=>server.once('listening',resolve));base='http://127.0.0.1:'+server.address().port;process.env.APP_ORIGIN=base;
   alice=await register('Alice');bob=await register('Bob');eve=await register('Eve');
 });
@@ -182,13 +183,14 @@ test('native email verification and password recovery preserve MFA and revoke ol
   assert.equal((await call('/api/account/me',actor)).data.security.emailVerified,true);
   const setup=await call('/api/account/mfa/setup',actor,'POST',{password});assert.equal(setup.res.status,200);
   const totp=new OTPAuth.TOTP({secret:setup.data.secret});
-  assert.equal((await call('/api/account/mfa/confirm',actor,'POST',{code:totp.generate()})).res.status,200);
+  const nextCode=()=>{authNow+=30_000;return totp.generate({timestamp:authNow});};
+  assert.equal((await call('/api/account/mfa/confirm',actor,'POST',{code:nextCode()})).res.status,200);
   const protectedLogin=await call('/api/account/login',undefined,'POST',{email:actor.email,password});assert.equal(protectedLogin.res.status,401);
-  const login=await call('/api/account/login',undefined,'POST',{email:actor.email,password,code:totp.generate()});assert.equal(login.res.status,200);assert.equal(login.data.security.strong,true);
+  const login=await call('/api/account/login',undefined,'POST',{email:actor.email,password,code:nextCode()});assert.equal(login.res.status,200);assert.equal(login.data.security.strong,true);
   assert.equal((await call('/api/account/reset/request',undefined,'POST',{email:actor.email})).res.status,200);
   const token=new URL(mail.filter(item=>item.email===actor.email).at(-1)!.url).searchParams.get('reset');
   assert.equal((await call('/api/account/reset',undefined,'POST',{token,password:'another long password for test'})).res.status,401);
-  assert.equal((await call('/api/account/reset',undefined,'POST',{token,password:'another long password for test',code:totp.generate()})).res.status,200);
+  assert.equal((await call('/api/account/reset',undefined,'POST',{token,password:'another long password for test',code:nextCode()})).res.status,200);
   assert.equal((await call('/api/account/me',actor)).data.user,null);
-  assert.equal((await call('/api/account/reset',undefined,'POST',{token,password:'another long password for test',code:totp.generate()})).res.status,400);
+  assert.equal((await call('/api/account/reset',undefined,'POST',{token,password:'another long password for test',code:nextCode()})).res.status,400);
 });

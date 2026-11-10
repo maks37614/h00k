@@ -115,6 +115,16 @@ export async function evaluateRisk(
     };
     const breached = !!rule[name] && new Decimal(used).gte(rule[name]);
     await db.transaction(async (tx) => {
+      const live = await tx.query(
+        "SELECT id FROM hc_users WHERE id=$1 AND deleted_at IS NULL FOR SHARE",
+        [userId],
+      );
+      if (!live.rows.length) return;
+      const current = await tx.query(
+        "SELECT version FROM hc_risk_policies WHERE owner_id=$1 AND version=$2",
+        [userId, rule.version],
+      );
+      if (!current.rows.length) return;
       await tx.query(
         "INSERT INTO hc_risk_state(owner_id,policy_version,window_key) VALUES($1,$2,$3) ON CONFLICT DO NOTHING",
         [userId, rule.version, window.key],

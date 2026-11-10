@@ -24,6 +24,7 @@ interface AuthContextType {
     email: string,
     password: string,
     code?: string,
+    recoveryCode?: string,
   ) => Promise<void>;
   registerWithEmail: (
     email: string,
@@ -33,6 +34,7 @@ interface AuthContextType {
   ) => Promise<void>;
   updateProfileData: (updates: Partial<UserProfile>) => Promise<void>;
   logout: () => Promise<void>;
+  clearSession: () => void;
   authError: string | null;
   authErrorCode: string | null;
   clearAuthError: () => void;
@@ -132,12 +134,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         authError,
         authErrorCode: null,
         clearAuthError: () => setError(null),
-        signInWithEmail: (email, password, code) =>
-          authenticate("login", { email, password, code }),
+        signInWithEmail: (email, password, code, recoveryCode) =>
+          authenticate("login", { email, password, code, recoveryCode }),
         registerWithEmail: (email, password, displayName) =>
           authenticate("register", { email, password, displayName }),
         updateProfileData,
         logout,
+        clearSession: () => apply({}),
       }}
     >
       {children}

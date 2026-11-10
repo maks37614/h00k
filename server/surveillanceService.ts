@@ -1,4 +1,5 @@
 import fs from 'fs';
+import {assertActiveMarketAccount,isDeletedAccount} from './deletedAccounts';
 import path from 'path';
 import { randomUUID } from 'node:crypto';
 import {
@@ -102,6 +103,7 @@ export function loadSurveillanceStore(): UserSurveillanceStore {
 }
 
 export function saveSurveillanceStore(store: UserSurveillanceStore): boolean {
+  for(const userId of Object.keys(store))if(isDeletedAccount(userId))delete store[userId];
   try {
     ensureDataDir();
     let safeStore: UserSurveillanceStore = store;
@@ -220,6 +222,7 @@ export function loadSurveillanceList(userId?: string): SurveillanceCoin[] {
 }
 
 export function saveSurveillanceList(userId: string, list: SurveillanceCoin[]): boolean {
+  assertActiveMarketAccount(userId);
   const store = loadSurveillanceStore();
   const uid = (userId && userId.trim() !== '') ? userId.trim() : 'guest';
   for (const coin of store[uid] || []) {
@@ -228,9 +231,17 @@ export function saveSurveillanceList(userId: string, list: SurveillanceCoin[]): 
   store[uid] = list;
   return saveSurveillanceStore(store);
 }
+export function eraseUserSurveillance(userId:string){
+  surveillanceManager.stopWorkersForUser(userId);
+  const store=loadSurveillanceStore();
+  for(const coin of store[userId]??[])surveillanceManager.stopWorkerForCoin(coin.id,userId);
+  delete store[userId];
+  if(!saveSurveillanceStore(store))throw new Error('Surveillance cleanup failed');
+}
 
 // An async check must never restore a deleted coin or overwrite a user's edits.
 export function commitSurveillanceCheck(checked: SurveillanceCoin): SurveillanceCoin | null {
+  if(isDeletedAccount(checked.userId))return null;
   const found = findSurveillanceCoinById(checked.id, checked.userId);
   if (!found) return null;
   const current = found.coin;

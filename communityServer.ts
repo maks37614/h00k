@@ -7,6 +7,10 @@ import {
   installMediaRoutes,
 } from "./server/community/routes";
 import { syncBybit } from "./server/community/bybit";
+import {
+  cleanupAccountMedia,
+  closeMediaSweep,
+} from "./server/community/accountData";
 const app = express();
 app.disable("x-powered-by");
 app.set("trust proxy", process.env.COMMUNITY_TRUST_PROXY ?? "loopback");
@@ -27,6 +31,19 @@ if (process.argv.includes("--migrate")) {
     () => console.log("Community service ready"),
   );
   let running = false;
+  let cleaning = false;
+  const cleanupTimer = setInterval(async () => {
+    if (cleaning) return;
+    cleaning = true;
+    try {
+      await cleanupAccountMedia(postgres());
+    } catch {
+      console.warn("Community data cleanup will retry");
+    } finally {
+      cleaning = false;
+    }
+  }, 5000);
+  cleanupTimer.unref();
   const timer = setInterval(async () => {
     if (running || process.env.COMMUNITY_SYNC_ENABLED !== "1") return;
     running = true;
@@ -50,6 +67,10 @@ if (process.argv.includes("--migrate")) {
   timer.unref();
   process.on("SIGTERM", () => {
     clearInterval(timer);
-    server.close(() => void closeDatabase());
+    clearInterval(cleanupTimer);
+    server.close(() => {
+      void closeMediaSweep();
+      void closeDatabase();
+    });
   });
 }

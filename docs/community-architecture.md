@@ -45,7 +45,7 @@ Run Community and PostgreSQL with reserved resources, preferably a separate host
 
 ## Native accounts and personal data
 
-Firebase imports and runtime dependency are removed. Registration uses Argon2id, server-side hashed opaque sessions and HttpOnly/Secure cookies. Changes require the same-origin request header plus an allowed Origin; authenticated ownership is server derived. Sensitive connector operations require verified email and recent TOTP authentication. Password recovery cannot bypass an active second factor.
+Firebase imports and runtime dependency are removed. Registration uses Argon2id, server-side hashed opaque sessions and HttpOnly/Secure cookies. Changes require the same-origin request header plus an allowed Origin; authenticated ownership is server derived. Sensitive connector operations require verified email and recent second-factor authentication (TOTP or a recovery code). Password recovery cannot bypass an active second factor. TOTP counters are consumed atomically; reuse of the same counter is rejected across sessions. Ten random single-use recovery codes are displayed once and stored only as owner-scoped hashes. Factor enrollment is bound to the initiating session and current factor; replacement, disabling, password changes, exports and deletion require fresh password/factor proof. The settings page lists safe session IDs, revokes individual sessions and supports sign-out everywhere. See [account-data-operations.md](account-data-operations.md) for the exact lifecycle and retention boundaries.
 
 `COMMUNITY_ENCRYPTION_KEY` is a 32-byte base64 key provided through secret configuration, never Git. It encrypts MFA and connector secrets with AES-GCM and owner/connection associated data. Passwords use hashes. A read-only connector still has necessary machine access to its secret; this is not a zero-access or end-to-end-encrypted service. Back up and rotate the encryption key with a deliberate re-encryption/re-enrollment procedure.
 
@@ -72,7 +72,7 @@ Required configuration:
 | `COMMUNITY_SYNC_ENABLED` | Opt-in periodic read-only synchronization; disabled by default. |
 | `COMMUNITY_MODERATOR_IDS` | Operator-controlled list of native account UUIDs; not a profile field. |
 
-`npm run community:migrate` applies the idempotent initial schema. `npm run community` starts the independent service. `npm run dev` starts the established market/frontend server. `compose.community.yaml` is an optional deployment on separately reserved resources, not an automatic modification of the production stack. In that compose file, provide both `COMMUNITY_DB_PASSWORD` and a matching `COMMUNITY_DATABASE_URL` pointing at `postgres:5432/h00k_community`. Prepare writable volume ownership for the non-root node user before running the service.
+`npm run community:migrate` applies the idempotent schema, including additive account-lifecycle columns/tables. Back up and apply it before running this revision against a staging database; it does not run automatically on startup. `npm run community` starts the independent service. `npm run dev` starts the established market/frontend server. `compose.community.yaml` is an optional deployment on separately reserved resources, not an automatic modification of the production stack. In that compose file, provide both `COMMUNITY_DB_PASSWORD` and a matching `COMMUNITY_DATABASE_URL` pointing at `postgres:5432/h00k_community`. Prepare writable volume ownership for the non-root node user before running the service.
 
 ## First connector and truth labels
 
@@ -98,9 +98,22 @@ Reports and operator-gated decisions are persisted with reasons/audit. Fresh-acc
 
 - Export and verify the existing Firebase identities, profiles, archive, drawings and watchlists; create a deliberate old-ID → native-ID mapping and migrate market-side alert/Telegram/surveillance ownership. Do not link accounts merely by an unverified typed email.
 - Provision PostgreSQL, private media persistence, SMTP, backup/restore, encryption-key management and exact trusted proxy settings.
-- Complete account deletion/export, MFA recovery/enrollment hardening and production abuse/retention procedures before an open financial-data service launch.
+- Exercise the implemented account export/deletion, MFA recovery, session revocation and cleanup workers on staging; finalize retention, backup erasure/replay, email delivery/retry and production abuse procedures before an open financial-data service launch.
 - Exercise real PostgreSQL networking/pooling, email delivery and Bybit permissions/history on a staging account with a dedicated read-only key. Offline tests are not those checks.
 - Run browser visual/mobile QA and joint market/Community load testing. The current managed preview relay was unavailable; do not call browser QA passed.
 - Review the changed authentication and social/data-processing notices, and localize the new Community interface for the agreed launch languages.
 
 No schema migration, user-data migration, main-branch merge or production deployment is performed by preparing this branch. Keep the PR draft until these gates are satisfied.
+
+
+## Account lifecycle added in the second implementation pass
+
+Community exports are streamed as JSONL.gz, with keyset pages of 50 rows and one bounded image at a time. A password/factor-authorized ticket is random, expires after ten minutes, works once and is bound to the current owner, session and export scope. A different session or HEAD request cannot consume it. Revoking the session stops subsequent Community export pages. The compatibility proxy now streams responses and forwards attachment headers rather than buffering the entire file.
+
+The separate market export includes only the owner's alerts, history, surveillance and Telegram connection/delivery data. Global bot secrets and pending linking tokens are excluded. Neither export requests exchange history. The copy is paginated live data, not an atomic database backup; an ending `complete` record marks successful completion. Unavailable private sources remain unavailable to the exporter.
+
+Deletion immediately revokes native sessions/tickets, erases stored connector credentials, trades, notes, archives, recovery codes and profile data, scrubs the author's content/versions and makes chart descendants unavailable. A minimal tombstone preserves referential integrity. Shared conversations transfer to their oldest admin/member; other authors' content remains theirs. A durable queue cleans image bytes and market-side files, links, pending Telegram deliveries and surveillance workers with retries. Already delivered external messages, downloaded copies and backup retention are separate boundaries. h00k cannot revoke a read-only API key at the exchange; the user must do that there.
+
+Community mutations use a short owner row lock and acknowledge success after transaction commit. Network connector requests do not hold that transaction: their writes recheck the live owner under a short lock. Upload metadata, risk notifications and background trade imports likewise cannot recreate a deleted owner's data. Nested PostgreSQL transactions use savepoints on the existing connection rather than acquiring another pool connection.
+
+Offline validation now covers account lifecycle and the streaming proxy in addition to the original chart/security suite. The full test count at this pass is 521. Browser/mobile QA, real PostgreSQL networking/pooling and operational cleanup on the deployed volumes still require staging.

@@ -93,7 +93,7 @@ export async function policy(db: Database, viewer: string) {
   async function canReadChart(id: string, depth = 0): Promise<boolean> {
     if (depth > 12) return false;
     const row = await chart(id);
-    if (!row || blocked.has(row.owner_id)) return false;
+    if (!row || row.deleted || blocked.has(row.owner_id)) return false;
     if (row.parent_id && !(await canReadChart(row.parent_id, depth + 1)))
       return false;
     if (row.owner_id === viewer) return true;
