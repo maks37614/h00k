@@ -1,11 +1,10 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { ExternalLink, Newspaper, RefreshCw } from 'lucide-react';
+import { Newspaper, RefreshCw } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
 import type { SupportedLanguage } from '../locales';
 
 interface CryptoHeadline {
   title: string;
-  url: string;
   publishedAt: string;
 }
 
@@ -15,12 +14,12 @@ interface HeadlinesResponse {
   hasMore: boolean;
 }
 
-const PAGE_SIZE = 9;
+const PAGE_SIZE = 18;
 const MAX_HEADLINES = 45;
 
 const UI: Record<SupportedLanguage, {
   heading: string; refresh: string; unavailable: string; empty: string;
-  loading: string; showMore: string; open: string;
+  loading: string; showMore: string;
 }> = {
   uk: {
     heading: 'Новини',
@@ -29,7 +28,6 @@ const UI: Record<SupportedLanguage, {
     empty: 'Новин поки немає',
     loading: 'Завантажуємо останні новини…',
     showMore: 'Показати ще новини',
-    open: 'Читати новину',
   },
   en: {
     heading: 'News',
@@ -38,7 +36,6 @@ const UI: Record<SupportedLanguage, {
     empty: 'No news yet',
     loading: 'Loading latest news…',
     showMore: 'Show more news',
-    open: 'Read article',
   },
   ru: {
     heading: 'Новости',
@@ -47,7 +44,6 @@ const UI: Record<SupportedLanguage, {
     empty: 'Новостей пока нет',
     loading: 'Загружаем последние новости…',
     showMore: 'Показать больше новостей',
-    open: 'Читать новость',
   },
   pl: {
     heading: 'Wiadomości',
@@ -56,14 +52,13 @@ const UI: Record<SupportedLanguage, {
     empty: 'Brak wiadomości',
     loading: 'Wczytywanie wiadomości…',
     showMore: 'Pokaż więcej wiadomości',
-    open: 'Czytaj wiadomość',
   },
 };
 
 export const CryptoNewsWidget: React.FC = () => {
   const { language } = useLanguage();
   const labels = UI[language];
-  // Switching languages starts with the first nine news, without showing
+  // Switching languages starts with the latest 18 news, without showing
   // any headlines cached from the preceding language during the request.
   const [page, setPage] = useState({ language, limit: PAGE_SIZE });
   const limit = page.language === language ? page.limit : PAGE_SIZE;
@@ -131,18 +126,14 @@ export const CryptoNewsWidget: React.FC = () => {
         <div role="status" className="px-4 py-6 text-sm text-slate-400">{labels.empty}</div>
       ) : (
         <>
-          <ul className="max-h-[520px] divide-y divide-slate-800/70 overflow-y-auto overscroll-contain"
+          <ul className="h-[460px] sm:h-[560px] xl:h-[640px] divide-y divide-slate-800/70 overflow-y-auto overscroll-contain"
             aria-label={labels.heading}>
             {items.map(item => (
-              <li key={item.url + item.publishedAt}>
-                {/* Same-tab navigation also works in mobile browsers and in-app
-                    webviews where opening a new tab may appear to do nothing. */}
-                <a href={item.url} target="_self" rel="noreferrer" title={labels.open}
-                  data-no-translate
-                  className="flex w-full items-start gap-2 px-3.5 py-2.5 text-xs font-semibold leading-relaxed text-slate-200 transition-colors hover:bg-slate-800/60 hover:text-cyan-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 sm:text-sm">
-                  <span className="min-w-0 flex-1">{item.title}</span>
-                  <ExternalLink aria-hidden="true" className="mt-0.5 h-3.5 w-3.5 shrink-0 text-cyan-500/80" />
-                </a>
+              <li key={item.title + item.publishedAt}>
+                <p data-no-translate
+                  className="px-3.5 py-2.5 text-xs font-semibold leading-relaxed text-slate-200 sm:text-sm">
+                  {item.title}
+                </p>
               </li>
             ))}
           </ul>

@@ -12,7 +12,7 @@ const SOURCE_TTL_MS = 5 * 60_000;
 const SOURCE_STALE_MS = 60 * 60_000;
 const MAX_AGE_MS = 7 * 24 * 60 * 60_000;
 const ARTICLE_COUNT = 45;
-const INITIAL_NEWS_COUNT = 9;
+const INITIAL_NEWS_COUNT = 18;
 
 /** Cap each public request; client progressively unlocks more headlines. */
 export function normalizeHeadlineLimit(value: unknown): number {
@@ -172,7 +172,13 @@ export function installCryptoNewsRoutes(app: Express) {
       const page = news.slice(0, limit);
       const items = language === 'en' ? page : await localizedNews(page, language);
       res.setHeader('Cache-Control', 'public, max-age=60, stale-while-revalidate=120');
-      res.json({ success: true, language, items, hasMore: news.length > limit });
+      // Headlines-only public response: do not expose article destinations.
+      res.json({
+        success: true,
+        language,
+        items: items.map(({ title, publishedAt }) => ({ title, publishedAt })),
+        hasMore: news.length > limit,
+      });
     } catch (error) {
       console.warn('[crypto-news] Feed currently unavailable:', error);
       res.status(503).json({ success: false, language, items: [], error: 'News are temporarily unavailable' });

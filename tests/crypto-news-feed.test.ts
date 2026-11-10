@@ -45,28 +45,38 @@ test('Crypto news widget uses site language, displays only headlines, and does n
 });
 
 test('News API allows progressively showing up to 45 items without translating the entire feed', () => {
-  assert.equal(normalizeHeadlineLimit(undefined), 9);
+  assert.equal(normalizeHeadlineLimit(undefined), 18);
   assert.equal(normalizeHeadlineLimit('18'), 18);
   assert.equal(normalizeHeadlineLimit('27'), 27);
   assert.equal(normalizeHeadlineLimit('999'), 45);
-  assert.equal(normalizeHeadlineLimit('not-a-number'), 9);
-  assert.equal(normalizeHeadlineLimit(['45']), 9);
+  assert.equal(normalizeHeadlineLimit('not-a-number'), 18);
+  assert.equal(normalizeHeadlineLimit(['45']), 18);
   const feed = readFileSync(new URL('../server/cryptoNewsFeed.ts', import.meta.url), 'utf8');
   assert.match(feed, /const ARTICLE_COUNT = 45/);
   assert.match(feed, /const page = news.slice\(0, limit\)/);
   assert.match(feed, /hasMore: news.length > limit/);
 });
 
-test('News widget shows localized News title, more button and working same-tab article links', () => {
+test('News widget shows localized News title, more button and non-clickable headlines', () => {
   const widget = readFileSync(new URL('../src/components/CryptoNewsWidget.tsx', import.meta.url), 'utf8');
   assert.match(widget, /heading: 'Новини'/);
   assert.match(widget, /heading: 'News'/);
   assert.match(widget, /heading: 'Новости'/);
   assert.match(widget, /heading: 'Wiadomości'/);
-  assert.match(widget, /max-h-\[520px\]/);
+  assert.match(widget, /h-\[460px\]/);
+  assert.match(widget, /sm:h-\[560px\]/);
+  assert.match(widget, /xl:h-\[640px\]/);
   assert.match(widget, /onClick=\{showMore\}/);
-  assert.match(widget, /target="_self"/);
-  assert.match(widget, /href=\{item.url\}/);
-  assert.doesNotMatch(widget, /target="_blank"/);
-  assert.doesNotMatch(widget, /item\.(?:description|source)/);
+  assert.match(widget, /<p data-no-translate/);
+  assert.doesNotMatch(widget, /ExternalLink|target="_self"|target="_blank"|href=\{item.url\}/);
+  assert.doesNotMatch(widget, /item\.(?:description|source|url)/);
+});
+
+test('News headline-only API does not leak article links to visitors', () => {
+  const feed = readFileSync(new URL('../server/cryptoNewsFeed.ts', import.meta.url), 'utf8');
+  const widget = readFileSync(new URL('../src/components/CryptoNewsWidget.tsx', import.meta.url), 'utf8');
+  assert.match(feed, /const INITIAL_NEWS_COUNT = 18/);
+  assert.match(feed, /items: items.map\(\(\{ title, publishedAt \}\) => \(\{ title, publishedAt \}\)\)/);
+  assert.doesNotMatch(widget, /<a\s|<button[^>]*item\.title|ExternalLink|Читати новину|Read article/);
+  assert.match(widget, /const PAGE_SIZE = 18/);
 });
