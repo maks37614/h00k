@@ -118,3 +118,18 @@ test('profile chart tab stays in flow on mobile and fills a taller desktop panel
   assert.match(profileStyles, /-webkit-overflow-scrolling:touch/);
   assert.doesNotMatch(profileStyles, /height:min\(65dvh,620px\)/);
 });
+
+test('profile hotkeys use desktop-only readable fonts and buttons without changing charts or mobile', () => {
+  const styles = source('../src/components/hookchart/integration.css');
+  const begin = styles.indexOf('/* Larger, readable keyboard shortcut editor only inside Profile > Chart,');
+  const end = styles.indexOf('/* Help beside the Long / Short controls;', begin);
+  assert.ok(begin > 0 && end > begin, 'profile hotkey overrides are isolated');
+  const rules = styles.slice(begin, end);
+  assert.ok(rules.includes('@media (min-width:1024px)'));
+  assert.ok(rules.includes('.hookchart-root.profile-hookchart-settings .hotkeySettings .hotkeyRow'));
+  assert.ok(rules.includes('font-size:14px'));
+  assert.ok(rules.includes('font:600 13px/1.2 system-ui'));
+  assert.ok(rules.includes('min-height:48px'));
+  assert.ok(rules.includes('height:34px'));
+  assert.ok(!rules.includes('.hookchart-root .hotkeyRow{'));
+});

@@ -1245,6 +1245,54 @@
   .hookchart-root.profile-hookchart-settings .strategySettings .strategyCard { padding:12px; }
 }
 
+/* Larger, readable keyboard shortcut editor only inside Profile > Chart,
+   and only on desktop. The chart popup and mobile editor keep their sizes. */
+@media (min-width:1024px) {
+  .hookchart-root.profile-hookchart-settings .hotkeySettings .settingsHint {
+    font-size:13px;
+    line-height:1.55;
+    padding:11px 108px 11px 14px;
+    margin-bottom:13px;
+  }
+  .hookchart-root.profile-hookchart-settings .hotkeySettings .resetHotkeys {
+    top:3px;
+    right:4px;
+    height:36px;
+    padding:0 14px;
+    font:650 12px/1.2 system-ui;
+  }
+  .hookchart-root.profile-hookchart-settings .hotkeySettings .settingsSection {
+    padding-top:17px;
+    padding-bottom:12px;
+  }
+  .hookchart-root.profile-hookchart-settings .hotkeySettings .settingsSection>h3 {
+    font-size:15px;
+    line-height:1.4;
+    margin-bottom:11px;
+  }
+  .hookchart-root.profile-hookchart-settings .hotkeySettings .hotkeyRow {
+    grid-template-columns:minmax(0,1fr) minmax(174px,auto) 34px 34px;
+    min-height:48px;
+    gap:9px;
+    padding:7px 10px;
+    font-size:14px;
+    line-height:1.4;
+  }
+  .hookchart-root.profile-hookchart-settings .hotkeySettings .hotkeyRow>button {
+    height:34px;
+    min-height:34px;
+    border-radius:6px;
+    padding:0 9px;
+    font:600 13px/1.2 system-ui;
+  }
+  .hookchart-root.profile-hookchart-settings .hotkeySettings .hotkeyRow>.hotkeyClear,
+  .hookchart-root.profile-hookchart-settings .hotkeySettings .hotkeyRow>.hotkeyResetOne {
+    width:34px;
+    padding:0;
+    font-size:20px;
+  }
+}
+
 /* Help beside the Long / Short controls; hover on desktop, tap/focus on mobile. */
 .liqSettingHelp{display:inline-flex;position:relative;margin-inline-start:6px;vertical-align:middle}
 .liqSettingHelp>button{width:17px;height:17px;display:inline-grid;place-items:center;border:1px solid #718198;border-radius:50%;background:transparent;color:#acbdd0;font:700 11px/1 system-ui;cursor:help;padding:0}
