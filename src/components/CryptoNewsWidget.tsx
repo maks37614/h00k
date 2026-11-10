@@ -14,8 +14,8 @@ interface HeadlinesResponse {
   hasMore: boolean;
 }
 
-const PAGE_SIZE = 18;
-const MAX_HEADLINES = 45;
+const PAGE_SIZE = 20;
+const MAX_HEADLINES = 180;
 
 const UI: Record<SupportedLanguage, {
   heading: string; refresh: string; unavailable: string; empty: string;
@@ -58,7 +58,7 @@ const UI: Record<SupportedLanguage, {
 export const CryptoNewsWidget: React.FC = () => {
   const { language } = useLanguage();
   const labels = UI[language];
-  // Switching languages starts with the latest 18 news, without showing
+  // Switching languages starts with the latest 20 news, without showing
   // any headlines cached from the preceding language during the request.
   const [page, setPage] = useState({ language, limit: PAGE_SIZE });
   const limit = page.language === language ? page.limit : PAGE_SIZE;

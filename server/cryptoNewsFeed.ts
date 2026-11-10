@@ -5,14 +5,20 @@ import type { SupportedLanguage } from '../src/locales';
 // Do not request translations per viewer: both source items and title
 // translations are shared by all h00k visitors.
 export type CryptoNewsHeadline = { title: string; url: string; publishedAt: string };
-type Article = CryptoNewsHeadline & { originalTitle: string };
-const CRYPTO_VISION_URL = 'https://cryptocurrency.cv/api/news?limit=80';
+// The anonymous /api/news route is limited to three articles. Instead use
+// the uncapped 50-entry JSON Feed alongside free topic feeds, then deduplicate.
+const CRYPTO_VISION_SOURCES = [
+  'https://cryptocurrency.cv/feed.json',
+  'https://cryptocurrency.cv/api/bitcoin?limit=100',
+  'https://cryptocurrency.cv/api/ethereum?limit=100',
+  'https://cryptocurrency.cv/api/defi?limit=100',
+] as const;
 const MYMEMORY_URL = 'https://api.mymemory.translated.net/get';
 const SOURCE_TTL_MS = 5 * 60_000;
 const SOURCE_STALE_MS = 60 * 60_000;
 const MAX_AGE_MS = 7 * 24 * 60 * 60_000;
-const ARTICLE_COUNT = 45;
-const INITIAL_NEWS_COUNT = 18;
+const ARTICLE_COUNT = 180;
+const INITIAL_NEWS_COUNT = 20;
 
 /** Cap each public request; client progressively unlocks more headlines. */
 export function normalizeHeadlineLimit(value: unknown): number {
@@ -21,13 +27,6 @@ export function normalizeHeadlineLimit(value: unknown): number {
 }
 
 const CRYPTO_TERMS = /\b(?:bitcoin|btc|ethereum|ether|eth|solana|sol|crypto(?:currency|currencies)?|blockchain|web3|defi|stablecoin|usdt|usdc|altcoin|memecoin|tokeniz(?:ation|ed|ing)?|coinbase|binance|kraken|ripple|xrp|dogecoin|cardano|polkadot|avalanche|chainlink|bitget|okx|bybit|tether|microstrategy|satoshi|metamask|digital assets?|spot etf)\b/i;
-const CRYPTO_CATEGORIES = new Set([
-  'bitcoin', 'ethereum', 'solana', 'defi', 'altcoin', 'altl1', 'layer2',
-  'onchain', 'stablecoin', 'security', 'mining', 'etf', 'crypto', 'trading',
-  'institutional', 'derivatives', 'nft', 'depin', 'gaming', 'ai_crypto',
-  'research', 'regulation', 'fintech', 'developer',
-]);
-
 function isObject(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value);
 }
@@ -44,24 +43,33 @@ function decodeBasicEntities(input: string) {
 
 /** Keep the latest genuine crypto headlines; reject unrelated mainstream articles, stats and unsafe links. */
 export function selectLatestCryptoHeadlines(payload: unknown, now = Date.now()): CryptoNewsHeadline[] {
-  const raw = isObject(payload) && Array.isArray(payload.articles) ? payload.articles : [];
+  const raw = isObject(payload) && Array.isArray(payload.articles) ? payload.articles
+    : isObject(payload) && Array.isArray(payload.items) ? payload.items : [];
   const results: CryptoNewsHeadline[] = [];
   const seen = new Set<string>();
   for (const value of raw) {
-    if (!isObject(value) || typeof value.title !== 'string' || typeof value.link !== 'string') continue;
+    if (!isObject(value) || typeof value.title !== 'string') continue;
+    const rawUrl = typeof value.external_url === 'string' ? value.external_url
+      : typeof value.link === 'string' ? value.link
+      : typeof value.url === 'string' ? value.url : '';
+    if (!rawUrl) continue;
     const title = decodeBasicEntities(value.title.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim());
     if (title.length < 12 || title.length > 260 || /(?:gas price|gas tracker|funding rate\s*:)/i.test(title)) continue;
     if (typeof value.sourceKey === 'string' && /(?:_gas|_ticker|_price)$/.test(value.sourceKey)) continue;
     let target: URL;
     try {
-      target = new URL(value.link);
+      target = new URL(rawUrl);
       if (!['https:', 'http:'].includes(target.protocol)) continue;
     } catch { continue; }
-    const stamp = typeof value.pubDate === 'string' ? Date.parse(value.pubDate) : NaN;
+    const dateText = typeof value.pubDate === 'string' ? value.pubDate : value.date_published;
+    const stamp = typeof dateText === 'string' ? Date.parse(dateText) : NaN;
     if (!Number.isFinite(stamp) || stamp > now + 5 * 60_000 || stamp < now - MAX_AGE_MS) continue;
-    const category = typeof value.category === 'string' ? value.category.toLowerCase() : '';
-    const description = typeof value.description === 'string' ? value.description : '';
-    if (!CRYPTO_CATEGORIES.has(category) && !CRYPTO_TERMS.test(title + ' ' + description)) continue;
+    const description = typeof value.description === 'string' ? value.description
+      : typeof value.summary === 'string' ? value.summary : '';
+    // A broad "cryptocurrency" tag alone must not admit unrelated AI,
+    // politics or stock-market headlines into this crypto news module.
+    if (!CRYPTO_TERMS.test(title + ' ' + description)) continue;
+    if (/\b(?:promo code|betting bonus|sportsbook|free bets)\b/i.test(title)) continue;
     const key = title.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '') ||
       target.hostname + target.pathname;
     if (seen.has(key)) continue;
@@ -69,6 +77,25 @@ export function selectLatestCryptoHeadlines(payload: unknown, now = Date.now()):
     results.push({ title, url: target.href, publishedAt: new Date(stamp).toISOString() });
   }
   return results.sort((a, b) => Date.parse(b.publishedAt) - Date.parse(a.publishedAt)).slice(0, ARTICLE_COUNT);
+}
+
+/** Accumulate recent items across feed refreshes so readers can load older news. */
+export function mergeCryptoHeadlineBatches(
+  batches: CryptoNewsHeadline[][],
+  now = Date.now(),
+): CryptoNewsHeadline[] {
+  const seen = new Set<string>();
+  const result: CryptoNewsHeadline[] = [];
+  for (const item of batches.flat()) {
+    const timestamp = Date.parse(item.publishedAt);
+    if (!Number.isFinite(timestamp) || timestamp > now + 5 * 60_000 || timestamp < now - MAX_AGE_MS) continue;
+    const key = item.title.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '');
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    result.push(item);
+  }
+  return result.sort((a, b) => Date.parse(b.publishedAt) - Date.parse(a.publishedAt))
+    .slice(0, ARTICLE_COUNT);
 }
 
 let sourceCache: { articles: CryptoNewsHeadline[]; updated: number } | null = null;
@@ -81,11 +108,24 @@ async function latestNews(): Promise<CryptoNewsHeadline[]> {
 
   sourceInFlight = (async () => {
     try {
-      const response = await fetch(CRYPTO_VISION_URL, {
-        headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(9_000),
-      });
-      if (!response.ok) throw new Error('Crypto Vision returned ' + response.status);
-      const articles = selectLatestCryptoHeadlines(await response.json());
+      // One shared fetch per refresh interval, regardless of site traffic.
+      // One feed failing should not blank the others.
+      const batches = await Promise.allSettled(CRYPTO_VISION_SOURCES.map(async url => {
+        const response = await fetch(url, {
+          headers: { Accept: 'application/json' },
+          signal: AbortSignal.timeout(9_000),
+        });
+        if (!response.ok) throw new Error('Crypto Vision returned ' + response.status);
+        return selectLatestCryptoHeadlines(await response.json());
+      }));
+      const fresh = batches
+        .filter((batch): batch is PromiseFulfilledResult<CryptoNewsHeadline[]> => batch.status === 'fulfilled')
+        .map(batch => batch.value);
+      if (!fresh.length) throw new Error('All Crypto Vision feeds unavailable');
+      const articles = mergeCryptoHeadlineBatches([
+        ...fresh,
+        ...(sourceCache ? [sourceCache.articles] : []),
+      ]);
       if (!articles.length) throw new Error('No recent crypto headlines available');
       sourceCache = { articles, updated: Date.now() };
       return articles;
