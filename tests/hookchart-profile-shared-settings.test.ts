@@ -133,3 +133,25 @@ test('profile hotkeys use desktop-only readable fonts and buttons without changi
   assert.ok(rules.includes('height:34px'));
   assert.ok(!rules.includes('.hookchart-root .hotkeyRow{'));
 });
+
+test('desktop profile Graph editor enlarges all settings tabs, controls and strategy cards', () => {
+  const styles = source('../src/components/hookchart/integration.css');
+  const start = styles.indexOf('/* Desktop readability for the entire embedded Profile > Chart editor.');
+  const end = styles.indexOf('/* Larger, readable keyboard shortcut editor only inside Profile > Chart,', start);
+  assert.ok(start >= 0 && end > start, 'desktop profile-only styles exist');
+  const desktop = styles.slice(start, end);
+  assert.ok(desktop.includes('@media (min-width:1024px)'));
+  assert.ok(desktop.includes('.hookchart-root.profile-hookchart-settings .settingsTabs button'));
+  assert.ok(desktop.includes('font-size:14px!important'));
+  assert.ok(desktop.includes('.hookchart-root.profile-hookchart-settings .settingText>b'));
+  assert.ok(desktop.includes('.hookchart-root.profile-hookchart-settings .settingText>small'));
+  assert.ok(desktop.includes('.hookchart-root.profile-hookchart-settings .settingsSwitch'));
+  assert.ok(desktop.includes('.hookchart-root.profile-hookchart-settings .settingsChips button'));
+  assert.ok(desktop.includes('.hookchart-root.profile-hookchart-settings .numInput'));
+  assert.ok(desktop.includes('.hookchart-root.profile-hookchart-settings .strategySettings .strategyCard'));
+  assert.ok(desktop.includes('font-size:16px'));
+  // Every selector is scoped to the profile editor, never global HookChart.
+  const selectorLines = desktop.split('\n').filter(line => line.trim().startsWith('.hookchart-root'));
+  assert.ok(selectorLines.length >= 20);
+  assert.ok(selectorLines.every(line => line.includes('.profile-hookchart-settings')));
+});

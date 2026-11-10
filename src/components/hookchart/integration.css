@@ -1245,6 +1245,167 @@
   .hookchart-root.profile-hookchart-settings .strategySettings .strategyCard { padding:12px; }
 }
 
+/* Desktop readability for the entire embedded Profile > Chart editor.
+   Scoped to profile-only embedding so chart popups, mobile and tablet stay as-is. */
+@media (min-width:1024px) {
+  .hookchart-root.profile-hookchart-settings > div:first-child {
+    font-size:14px;
+    line-height:1.5;
+    gap:10px;
+  }
+  .hookchart-root.profile-hookchart-settings .originalSettingsPanel .settingsHeader {
+    height:64px;
+    min-height:64px;
+    flex:0 0 64px;
+    padding:0 18px;
+  }
+  .hookchart-root.profile-hookchart-settings .settingsHeader b {
+    font-size:17px;
+    line-height:1.4;
+  }
+  .hookchart-root.profile-hookchart-settings .settingsHeader small {
+    font-size:12px;
+    line-height:1.4;
+  }
+  .hookchart-root.profile-hookchart-settings .settingsTabs {
+    height:49px!important;
+    min-height:49px!important;
+    flex:0 0 49px!important;
+    align-items:center!important;
+    gap:8px!important;
+    padding:0 18px!important;
+  }
+  .hookchart-root.profile-hookchart-settings .settingsTabs button {
+    height:37px!important;
+    padding:0 16px!important;
+    font-size:14px!important;
+    line-height:1.2!important;
+  }
+  .hookchart-root.profile-hookchart-settings .settingsBody {
+    padding:10px 18px 28px!important;
+  }
+  .hookchart-root.profile-hookchart-settings .settingsSection {
+    padding:16px 0 10px;
+  }
+  .hookchart-root.profile-hookchart-settings .settingsSection>h3 {
+    font-size:15px;
+    line-height:1.4;
+    margin-bottom:12px;
+  }
+  .hookchart-root.profile-hookchart-settings .settingRow {
+    min-height:56px;
+    grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+    gap:16px;
+    padding:9px 0;
+  }
+  .hookchart-root.profile-hookchart-settings .settingText {
+    gap:4px;
+  }
+  .hookchart-root.profile-hookchart-settings .settingText>b {
+    font-size:14px;
+    line-height:1.4;
+  }
+  .hookchart-root.profile-hookchart-settings .settingText>small {
+    font-size:12px;
+    line-height:1.45;
+  }
+  .hookchart-root.profile-hookchart-settings .settingControl {
+    gap:9px;
+    flex-wrap:wrap;
+  }
+  .hookchart-root.profile-hookchart-settings .settingsHint {
+    font-size:13px;
+    line-height:1.5;
+    padding:11px 13px;
+    margin-bottom:12px;
+  }
+  .hookchart-root.profile-hookchart-settings .numInput,
+  .hookchart-root.profile-hookchart-settings .settingControl select {
+    height:36px;
+    min-width:88px;
+    max-width:176px;
+    font:600 13px/1.2 system-ui;
+    padding:0 9px;
+  }
+  .hookchart-root.profile-hookchart-settings .numInput {
+    width:112px;
+  }
+  .hookchart-root.profile-hookchart-settings .colorInput {
+    width:45px;
+    height:35px;
+  }
+  .hookchart-root.profile-hookchart-settings .valueBadge {
+    font:600 12px/1.2 system-ui;
+  }
+  .hookchart-root.profile-hookchart-settings .settingsSwitch {
+    width:44px!important;
+    height:24px!important;
+    flex-basis:44px!important;
+  }
+  .hookchart-root.profile-hookchart-settings .settingsSwitch span:after {
+    width:16px!important;
+    height:16px!important;
+    left:3px!important;
+    top:3px!important;
+  }
+  .hookchart-root.profile-hookchart-settings .settingsSwitch input:checked+span:after {
+    left:23px!important;
+  }
+  .hookchart-root.profile-hookchart-settings .settingsChips {
+    gap:7px;
+  }
+  .hookchart-root.profile-hookchart-settings .settingsChips button,
+  .hookchart-root.profile-hookchart-settings .densityModeRow button {
+    height:35px;
+    min-height:35px;
+    padding:0 11px;
+    font:650 12px/1.2 system-ui;
+  }
+  .hookchart-root.profile-hookchart-settings .sortGroups {
+    gap:7px;
+  }
+  .hookchart-root.profile-hookchart-settings .sortGroups small,
+  .hookchart-root.profile-hookchart-settings .densityVisibilityRow label {
+    font-size:12px;
+    line-height:1.4;
+  }
+  .hookchart-root.profile-hookchart-settings .densityVisibilityRow,
+  .hookchart-root.profile-hookchart-settings .densityModeRow {
+    gap:9px;
+  }
+  .hookchart-root.profile-hookchart-settings .strategyOff {
+    height:36px;
+    padding:0 14px;
+    font:650 12px/1.2 system-ui;
+  }
+  .hookchart-root.profile-hookchart-settings .strategySettings .strategyGrid {
+    gap:12px;
+    padding:10px 0 14px;
+  }
+  .hookchart-root.profile-hookchart-settings .strategySettings .strategyCard {
+    gap:11px;
+    padding:17px;
+  }
+  .hookchart-root.profile-hookchart-settings .strategySettings .strategyTitle b {
+    font-size:16px;
+  }
+  .hookchart-root.profile-hookchart-settings .strategySettings .strategyTitle span {
+    font-size:11px;
+    padding:5px 8px;
+  }
+  .hookchart-root.profile-hookchart-settings .strategySettings .strategyCard p {
+    font-size:14px;
+    line-height:1.55;
+  }
+  .hookchart-root.profile-hookchart-settings .strategySettings .strategyCard strong,
+  .hookchart-root.profile-hookchart-settings .strategySettings .strategyCard ul,
+  .hookchart-root.profile-hookchart-settings .strategySettings .strategyNote {
+    font-size:13px;
+    line-height:1.5;
+  }
+}
+
+/* The Hotkeys tab has extra row-specific sizing immediately below. */
 /* Larger, readable keyboard shortcut editor only inside Profile > Chart,
    and only on desktop. The chart popup and mobile editor keep their sizes. */
 @media (min-width:1024px) {
