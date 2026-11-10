@@ -43,6 +43,7 @@ import {
 import { formatCryptoPrice, formatVolume, formatPercent } from '../utils/formatters';
 import { getStoredPreferences, useAppPreferences } from '../utils/userPreferences';
 import { MarketSentimentWidget } from './MarketSentimentWidget';
+import { CryptoNewsWidget } from './CryptoNewsWidget';
 import { useLanguage } from '../context/LanguageContext';
 import {
   TOP_POPULAR_PAIRS,
@@ -460,8 +461,14 @@ export const CoinScreenerPage: React.FC<CoinScreenerPageProps> = ({
         </div>
       )}
 
-      {/* Market Sentiment Block ("Настрій Ринку") */}
-      <MarketSentimentWidget coins={coins} />
+      {/* On desktop, headlines sit to the right of Market Sentiment;
+          smaller screens keep the original sentiment block above news. */}
+      <div className="grid min-w-0 grid-cols-1 items-start gap-4 xl:grid-cols-2">
+        <div className="min-w-0">
+          <MarketSentimentWidget coins={coins} />
+        </div>
+        <CryptoNewsWidget />
+      </div>
 
       {/* Quick navigation and watchlist controls */}
       <div
