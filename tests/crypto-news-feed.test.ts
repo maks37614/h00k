@@ -45,12 +45,13 @@ test('Crypto news widget uses site language, displays only headlines, and does n
 });
 
 test('News API allows progressively showing up to 180 items without translating the entire feed', () => {
-  assert.equal(normalizeHeadlineLimit(undefined), 20);
-  assert.equal(normalizeHeadlineLimit('18'), 20);
+  assert.equal(normalizeHeadlineLimit(undefined), 4);
+  assert.equal(normalizeHeadlineLimit('2'), 4);
+  assert.equal(normalizeHeadlineLimit('18'), 18);
   assert.equal(normalizeHeadlineLimit('27'), 27);
   assert.equal(normalizeHeadlineLimit('999'), 180);
-  assert.equal(normalizeHeadlineLimit('not-a-number'), 20);
-  assert.equal(normalizeHeadlineLimit(['45']), 20);
+  assert.equal(normalizeHeadlineLimit('not-a-number'), 4);
+  assert.equal(normalizeHeadlineLimit(['45']), 4);
   const feed = readFileSync(new URL('../server/cryptoNewsFeed.ts', import.meta.url), 'utf8');
   assert.match(feed, /const ARTICLE_COUNT = 180/);
   assert.match(feed, /const page = news.slice\(0, limit\)/);
@@ -63,9 +64,11 @@ test('News widget shows localized News title, more button and non-clickable head
   assert.match(widget, /heading: 'News'/);
   assert.match(widget, /heading: 'Новости'/);
   assert.match(widget, /heading: 'Wiadomości'/);
-  assert.match(widget, /h-\[460px\]/);
-  assert.match(widget, /sm:h-\[560px\]/);
-  assert.match(widget, /xl:h-\[640px\]/);
+  assert.match(widget, /flex h-\[410px\] min-w-0 flex-col overflow-hidden/);
+  assert.match(widget, /ref=\{listRef\}/);
+  assert.match(widget, /min-h-0 flex-1 divide-y divide-slate-800\/70 overflow-y-auto/);
+  assert.match(widget, /h-\[56px\] shrink-0/);
+  assert.match(widget, /list.scrollTop = Math.max\(0, next.offsetTop - first.offsetTop\)/);
   assert.match(widget, /onClick=\{showMore\}/);
   assert.match(widget, /<p data-no-translate/);
   assert.doesNotMatch(widget, /ExternalLink|target="_self"|target="_blank"|href=\{item.url\}/);
@@ -75,10 +78,10 @@ test('News widget shows localized News title, more button and non-clickable head
 test('News headline-only API does not leak article links to visitors', () => {
   const feed = readFileSync(new URL('../server/cryptoNewsFeed.ts', import.meta.url), 'utf8');
   const widget = readFileSync(new URL('../src/components/CryptoNewsWidget.tsx', import.meta.url), 'utf8');
-  assert.match(feed, /const INITIAL_NEWS_COUNT = 20/);
+  assert.match(feed, /const INITIAL_NEWS_COUNT = 4/);
   assert.match(feed, /items: items.map\(\(\{ title, publishedAt \}\) => \(\{ title, publishedAt \}\)\)/);
   assert.doesNotMatch(widget, /<a\s|<button[^>]*item\.title|ExternalLink|Читати новину|Read article/);
-  assert.match(widget, /const PAGE_SIZE = 20/);
+  assert.match(widget, /const PAGE_SIZE = 4/);
 });
 
 test('Crypto Vision JSON Feed 1.1 is supported alongside free topic endpoints', () => {
@@ -139,6 +142,19 @@ test('Screener news has more headline sources and continues paginating beyond 45
   assert.match(feed, /https:\/\/cryptocurrency\.cv\/api\/defi/);
   assert.match(widget, /const MAX_HEADLINES = 180/);
   assert.match(widget, /onClick=\{showMore\}/);
-  assert.match(widget, /const PAGE_SIZE = 20/);
+  assert.match(widget, /const PAGE_SIZE = 4/);
   assert.doesNotMatch(widget, /href=\{item\./);
+});
+
+test('Four headlines with fixed-height panel and inner-only load-more scrolling', () => {
+  const widget = readFileSync(new URL('../src/components/CryptoNewsWidget.tsx', import.meta.url), 'utf8');
+  assert.match(widget, /const PAGE_SIZE = 4/);
+  assert.match(widget, /limit: Math.min\(MAX_HEADLINES, limit \+ PAGE_SIZE\)/);
+  assert.match(widget, /h-\[410px\]/);
+  assert.match(widget, /h-\[56px\] shrink-0/);
+  assert.match(widget, /ref=\{listRef\}/);
+  assert.match(widget, /overflow-y-auto overscroll-contain/);
+  assert.match(widget, /nextScrollIndex.current = items.length/);
+  assert.doesNotMatch(widget, /h-\[460px\]|h-\[560px\]|h-\[640px\]/);
+  assert.doesNotMatch(widget, /<a\s|href=\{item\./);
 });

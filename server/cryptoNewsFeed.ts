@@ -18,7 +18,7 @@ const SOURCE_TTL_MS = 5 * 60_000;
 const SOURCE_STALE_MS = 60 * 60_000;
 const MAX_AGE_MS = 7 * 24 * 60 * 60_000;
 const ARTICLE_COUNT = 180;
-const INITIAL_NEWS_COUNT = 20;
+const INITIAL_NEWS_COUNT = 4;
 
 /** Cap each public request; client progressively unlocks more headlines. */
 export function normalizeHeadlineLimit(value: unknown): number {
