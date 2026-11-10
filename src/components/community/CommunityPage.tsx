@@ -1,4 +1,5 @@
 import { AccountSecuritySettings } from "./AccountSecuritySettings";
+import { PublicProfileSettings } from "./PublicProfileSettings";
 import { STRATEGY_PRESETS } from "../hookchart/strategyEngine";
 import { saveChartArchive } from "../../community/archiveChart";
 import React, { lazy, Suspense, useEffect, useRef, useState } from "react";
@@ -106,12 +107,15 @@ export function CommunityPage({ onReplay }: { onReplay: () => void }) {
       new URLSearchParams(location.hash.split("?")[1] ?? "").get("section") ===
       "settings"
         ? "settings"
-        : "feed",
+        : new URLSearchParams(location.hash.split("?")[1] ?? "").get("section") === "profile" ? "profile" : "feed",
     ),
     [notice, setNotice] = useState(""),
     [picker, setPicker] = useState<Target | null>(null),
     [draft, setDraft] = useState<DraftChart | null>(null);
-  const [viewProfile, setViewProfile] = useState<string | null>(null),
+  const [viewProfile, setViewProfile] = useState<string | null>(() => {
+    const owner = new URLSearchParams(location.hash.split("?")[1] ?? "").get("owner");
+    return owner && /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(owner) ? owner : null;
+  }),
     [revision, bump] = useState(0);
   async function run(fn: () => Promise<unknown>) {
     setNotice("");
@@ -126,6 +130,12 @@ export function CommunityPage({ onReplay }: { onReplay: () => void }) {
   const changed = () => bump((v) => v + 1);
   useEffect(() => {
     const jump = () => {
+      const query = new URLSearchParams(location.hash.split("?")[1] ?? "");
+      if (query.get("section") === "profile") {
+        const owner = query.get("owner");
+        setViewProfile(owner && /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(owner) ? owner : null);
+        setTab("profile");
+      }
       if (new URLSearchParams(location.hash.split("?")[1] ?? "").has("post"))
         setTab("feed");
       if (
@@ -1895,6 +1905,7 @@ function Profile({
       {resource.error && <p>{resource.error}</p>}
       {p && (
         <article className="community-card">
+          {p.publicUrl && <p><a href={p.publicUrl} target="_blank" rel="noopener noreferrer">Персональна сторінка ↗</a></p>}
           <p>{p.bio}</p>
           {p.status && <p>{p.status.text}</p>}
           <p>{p.interests}</p>
@@ -1914,7 +1925,8 @@ function Profile({
           onSubmit={(e) => {
             e.preventDefault();
             void run(async () => {
-              await updateProfileData({ displayName, community: form });
+              const { publicProfileEnabled: _publicVisibility, ...fields } = form;
+              await updateProfileData({ displayName, community: fields });
               resource.refresh();
             });
           }}
@@ -1989,6 +2001,7 @@ function Profile({
       <button type="button" onClick={() => setShowTrades((v) => !v)}>
         Угоди та статистика цього профілю
       </button>
+      {id === user?.uid && <PublicProfileSettings />}
       {showTrades && <Trades owner={id} run={run} />}
       <h3>Стіна</h3>
       {id === user?.uid && (

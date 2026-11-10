@@ -158,3 +158,13 @@ CREATE INDEX IF NOT EXISTS hc_charts_owner ON hc_charts(owner_id,id);
 CREATE INDEX IF NOT EXISTS hc_media_owner ON hc_media(owner_id,id);
 CREATE INDEX IF NOT EXISTS hc_notifications_owner ON hc_notifications(owner_id,created_at DESC);
 CREATE INDEX IF NOT EXISTS hc_members_user ON hc_members(user_id,conversation_id);
+CREATE TABLE IF NOT EXISTS hc_profile_names (
+  name_hash text PRIMARY KEY CHECK(length(name_hash)=64),
+  username text UNIQUE CHECK(username ~ '^[a-z][a-z0-9-]{1,28}[a-z0-9]$'),
+  owner_id uuid UNIQUE REFERENCES hc_users(id), claimed_at timestamptz NOT NULL DEFAULT now(),
+  retired_at timestamptz,
+  CHECK ((username IS NOT NULL AND owner_id IS NOT NULL AND retired_at IS NULL)
+    OR (username IS NULL AND owner_id IS NULL AND retired_at IS NOT NULL))
+);
+CREATE INDEX IF NOT EXISTS hc_public_wall ON hc_items(owner_id,created_at DESC,id DESC)
+  WHERE kind='post' AND audience='public' AND conversation_id IS NULL AND NOT deleted;

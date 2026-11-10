@@ -22,6 +22,7 @@ import { historyBlock } from "./history";
 import { TF_SECONDS } from "../../src/community/chartDocument";
 import { amount, evaluateRisk } from "./risk";
 import { connectBybit, syncBybit } from "./bybit";
+import { publicProfileUrl } from "./profileNames";
 
 export function installCommunityRoutes(app: Express, getDb: () => Database) {
   const limits = new RequestLimits();
@@ -446,7 +447,7 @@ export function installCommunityRoutes(app: Express, getDb: () => Database) {
     const id = uuid(req.params.id);
     if (p.blocked.has(id)) fail("Профіль недоступний", 404);
     const { rows } = await db.query(
-      "SELECT profile,created_at FROM hc_users WHERE id=$1 AND deleted_at IS NULL",
+      "SELECT u.profile,u.created_at,n.username FROM hc_users u LEFT JOIN hc_profile_names n ON n.owner_id=u.id WHERE u.id=$1 AND u.deleted_at IS NULL",
       [id],
     );
     if (!rows.length) fail("Профіль недоступний", 404);
@@ -470,6 +471,7 @@ export function installCommunityRoutes(app: Express, getDb: () => Database) {
         id,
         displayName: profile.displayName ?? "Трейдер",
         joinedAt: rows[0].created_at,
+        publicUrl: profile.community?.publicProfileEnabled === true && rows[0].username ? publicProfileUrl(rows[0].username) : null,
         points: score.rows[0].points,
         bio: canShare(profile.community?.bioAudience ?? "public")
           ? profile.community?.bio

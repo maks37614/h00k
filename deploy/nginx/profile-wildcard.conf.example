@@ -1,0 +1,28 @@
+# Audit existing subdomain virtual hosts first. Existing exact server names take precedence.
+# Reserved service names are rejected by the Community service.
+server {
+    listen 80;
+    listen [::]:80;
+    server_name *.h00k.top;
+    return 301 https://$host$request_uri;
+}
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    server_name *.h00k.top;
+    ssl_certificate /etc/letsencrypt/live/h00k-community-wildcard/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/h00k-community-wildcard/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    limit_req_status 429;
+    limit_conn_status 429;
+    include /etc/nginx/snippets/h00k-community-allowlist.conf;
+    location / {
+        limit_except GET { deny all; }
+        limit_req zone=h00k_community_requests burst=40 nodelay;
+        limit_conn h00k_community_connections 8;
+        include /etc/nginx/snippets/h00k-community-proxy.conf;
+        proxy_set_header Cookie "";
+        proxy_set_header Authorization "";
+        proxy_pass http://127.0.0.1:3101;
+    }
+}

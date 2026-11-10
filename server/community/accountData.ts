@@ -6,6 +6,7 @@ import type { Database } from "./db";
 import type { Account } from "./session";
 import { fail, tokenHash, uuid } from "./security";
 import { policy } from "./content";
+import { retireProfileName } from "./profileNames";
 
 export const mediaRoot = () =>
   process.env.COMMUNITY_MEDIA_DIR ??
@@ -60,6 +61,10 @@ async function removeOrphanMedia(db: Database) {
 const jsonLine = (section: string, record: unknown) =>
   JSON.stringify({ section, record }) + "\n";
 const sections = [
+  {
+    name: "profile_address", table: "hc_profile_names", where: "owner_id=$1",
+    key: "username", columns: "username,claimed_at",
+  },
   {
     name: "archives",
     table: "hc_archives",
@@ -305,6 +310,7 @@ export async function deleteAccountData(tx: Database, owner: string) {
     [owner],
   );
   if (!current.rows.length) fail("Акаунт уже видалено", 404);
+  await retireProfileName(tx, owner);
   const groups = await tx.query(
     "SELECT id FROM hc_conversations WHERE owner_id=$1 FOR UPDATE",
     [owner],

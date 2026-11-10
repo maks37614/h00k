@@ -869,13 +869,13 @@ export default function App() {
   // The full early scan has its own throttled job. Avoid running the 75-pair
   // standard scan every minute at the same time and competing for exchange quota.
   useEffect(() => {
-    if (earlyMode && activePage === 'screener') return;
+    if (activePage === 'community' || (earlyMode && activePage === 'screener')) return;
     fetchScreenerData(filters.timeframe, filters.exchange, filters.marketType);
   }, [earlyMode, activePage, filters.timeframe, filters.exchange, filters.marketType, filters.minVolumeUsd]);
 
   // Lightweight screener refresh remains unchanged outside full W/M mode.
   useEffect(() => {
-    if (earlyMode && activePage === 'screener') return;
+    if (activePage === 'community' || (earlyMode && activePage === 'screener')) return;
     const interval = setInterval(() => {
       fetchScreenerData();
     }, 60000);

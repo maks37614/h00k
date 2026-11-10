@@ -7,6 +7,7 @@ import {
   installMediaRoutes,
 } from "./server/community/routes";
 import { syncBybit } from "./server/community/bybit";
+import { installPublicProfiles } from "./server/community/publicProfiles";
 import {
   cleanupAccountMedia,
   closeMediaSweep,
@@ -17,6 +18,7 @@ app.set("trust proxy", process.env.COMMUNITY_TRUST_PROXY ?? "loopback");
 app.get("/api/community-health", (_req, res) =>
   res.json({ status: "ok", service: "community" }),
 );
+installPublicProfiles(app, postgres);
 installMediaRoutes(app, postgres);
 app.use(express.json({ limit: "2mb" }));
 installAccountRoutes(app, postgres);

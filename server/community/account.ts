@@ -22,6 +22,7 @@ import {
   uuid,
 } from "./security";
 import { mergeProfileUpdate } from "../../src/utils/hookchartData";
+import { claimProfileName, ownProfileName } from "./profileNames";
 
 import { accountFor, type Account } from "./session";
 import {
@@ -129,7 +130,7 @@ export function installAccountRoutes(
       try {
         checkMutation(req);
         limits.take(`ip:${req.ip}`, method === "get" ? 180 : 40);
-        if (
+        if (method !== "get" &&
           [
             "/register",
             "/login",
@@ -140,6 +141,7 @@ export function installAccountRoutes(
             "/password",
             "/export",
             "/delete",
+            "/username",
           ].includes(path)
         ) {
           if (passwordOperations >= 2)
@@ -151,7 +153,7 @@ export function installAccountRoutes(
           account = await accountFor(db, req);
         if (auth && !account) fail("Увійдіть у свій акаунт", 401);
         if (
-          account &&
+          method !== "get" && account &&
           [
             "/mfa/setup",
             "/mfa/confirm",
@@ -161,6 +163,7 @@ export function installAccountRoutes(
             "/export",
             "/delete",
             "/password",
+            "/username",
           ].includes(path)
         )
           limits.take("sensitive:" + account.id + ":" + path, 10, 900_000);
@@ -405,6 +408,16 @@ export function installAccountRoutes(
     res.clearCookie("h00k_session", { path: "/" });
     res.json({ success: true, deleted: true, backgroundCleanup: "queued" });
   });
+  route("get", "/username", async (_req, res, db, a) => {
+    res.json({ success: true, emailVerified: a!.email_verified, ...(await ownProfileName(db, a!.id)) });
+  });
+  route("post", "/username", async (req, res, db, a) => {
+    const result = await withCredentials(db, a!, req.body, async (tx, user) => {
+      if (!user.email_verified) fail("Спочатку підтвердіть email", 403);
+      return claimProfileName(tx, user.id, req.body.username, clock());
+    }, clock());
+    res.json({ success: true, emailVerified: a!.email_verified, ...result });
+  });
   route("patch", "/profile", async (req, res, db, a) => {
     const patch = { ...req.body };
     for (const key of [
@@ -417,6 +430,7 @@ export function installAccountRoutes(
       "verified",
       "role",
       "points",
+      "username",
     ])
       delete patch[key];
     if (patch.displayName !== undefined)
@@ -460,6 +474,10 @@ export function installAccountRoutes(
       }
       if (raw.rankingPublic !== undefined)
         clean.rankingPublic = raw.rankingPublic === true;
+      if (raw.publicProfileEnabled !== undefined) {
+        if (typeof raw.publicProfileEnabled !== "boolean") fail("Некоректна видимість профілю");
+        clean.publicProfileEnabled = raw.publicProfileEnabled;
+      }
       if (raw.status !== undefined) {
         if (
           !raw.status ||
@@ -487,10 +505,15 @@ export function installAccountRoutes(
         [a!.id],
       );
       if (!rows.length) fail("Сеанс акаунта закінчився", 401);
+      if (patch.community?.publicProfileEnabled === true) {
+        const name = await tx.query("SELECT username FROM hc_profile_names WHERE owner_id=$1", [a!.id]);
+        if (!name.rows.length) fail("Спочатку зарезервуйте персональну адресу", 409);
+      }
       const merged = mergeProfileUpdate(
         { ...rows[0].profile, uid: a!.id },
         patch,
       );
+      if (patch.community) merged.community = { ...rows[0].profile.community, ...patch.community };
       await tx.query("UPDATE hc_users SET profile=$2 WHERE id=$1", [
         a!.id,
         merged,

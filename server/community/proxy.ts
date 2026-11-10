@@ -6,7 +6,7 @@ import { pipeline } from "node:stream/promises";
 export function installCommunityProxy(app: Express) {
   let active = 0;
   app.use(
-    ["/api/account", "/api/community"],
+    ["/api/account", "/api/community", "/api/public/profiles", "/u", "/profile-assets"],
     (_req, res, next) => {
       if (active >= 8) {
         res.status(503).json({

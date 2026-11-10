@@ -5,13 +5,13 @@
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
-    "build": "vite build",
+    "build": "vite build && vite build --config vite.profile.config.ts",
     "start": "tsx server.ts",
     "preview": "vite preview",
-    "clean": "rm -rf dist server.js",
+    "clean": "rm -rf dist dist-profile server.js",
     "lint": "tsc --noEmit",
     "audit:surveillance": "tsx server/auditSurveillance.ts",
-    "test": "node --import ./tests/fixtures/offline-network.mjs --import tsx --test tests/*.test.ts",
+    "test": "node --import ./tests/fixtures/offline-network.mjs --import tsx --test --test-concurrency=2 tests/*.test.ts",
     "community": "tsx communityServer.ts",
     "community:migrate": "tsx communityServer.ts --migrate",
     "community:migration-plan": "tsx scripts/community-migration-plan.ts"
