@@ -208,6 +208,10 @@ export const Header: React.FC<HeaderProps> = ({
                 </span>
               </button>
 
+              <button id="nav-category-community-btn" aria-current={activePage === 'community' ? 'page' : undefined} onClick={() => onPageChange('community')}
+                className={`flex min-w-0 items-center justify-center gap-1 px-2 py-1.5 rounded-lg font-semibold whitespace-nowrap transition-colors ${activePage === 'community' ? 'bg-cyan-700 text-white' : 'text-slate-400 hover:bg-slate-800'}`}>
+                <UserPlus className="w-4 h-4"/><span>Community</span>
+              </button>
               <button
                 id="nav-category-terminal-btn"
                 aria-current={activePage === 'terminal' ? 'page' : undefined}

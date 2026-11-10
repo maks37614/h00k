@@ -1,3 +1,4 @@
+import { CommunityNotifications } from './components/community/CommunityNotifications';
 import React, { useState, useEffect, useLayoutEffect, useMemo, useCallback, useRef } from 'react';
 import { InstallAppButton } from './components/InstallAppButton';
 import { Header } from './components/Header';
@@ -57,6 +58,8 @@ import {
 } from 'lucide-react';
 import { AUTHOR_TELEGRAM_CHANNEL_URL, AUTHOR_TELEGRAM_USERNAME } from './utils/accessCodes';
 import { getStoredPreferences, useAppPreferences } from './utils/userPreferences';
+
+const CommunityPage = React.lazy(() => import('./components/community/CommunityPage').then(module => ({ default: module.CommunityPage })));
 
 const DEFAULT_FILTERS: ScreenerFilterState = {
   exchange: 'binance',
@@ -347,6 +350,9 @@ export default function App() {
     setAuthPromptReason(reason);
     setIsAuthModalOpen(true);
   }, []);
+  useEffect(() => {
+    if (!authLoading && new URLSearchParams(window.location.search).has('reset')) handleOpenAuthModal('signin', 'general');
+  }, [authLoading, handleOpenAuthModal]);
 
   // Active Category: 'patterns' | 'screener' | 'terminal' | 'surveillance'
   // Default main page of the site is always 'screener'
@@ -355,7 +361,8 @@ export default function App() {
   // Enforce access control and hash sync
   useEffect(() => {
     const handleHashChange = () => {
-      const hash = window.location.hash;
+      if (authLoading) return;
+      const hash = window.location.hash.split('?')[0];
       if (hash === '#replay') {
         setActivePage((prev) => (prev === 'replay' ? prev : 'replay'));
         return;
@@ -364,7 +371,6 @@ export default function App() {
         setActivePage((prev) => (prev === 'screener' ? prev : 'screener'));
         if (hash && hash !== '#screener' && hash !== '') {
           handleOpenAuthModal('signin', 'general');
-          window.location.hash = 'screener';
         }
         return;
       }
@@ -374,6 +380,8 @@ export default function App() {
         setActivePage((prev) => (prev === 'terminal' ? prev : 'terminal'));
       } else if (hash === '#surveillance') {
         setActivePage((prev) => (prev === 'surveillance' ? prev : 'surveillance'));
+      } else if (hash === '#community') {
+        setActivePage('community');
       } else if (hash === '#replay') {
         setActivePage((prev) => (prev === 'replay' ? prev : 'replay'));
       } else {
@@ -385,7 +393,7 @@ export default function App() {
     handleHashChange();
     window.addEventListener('hashchange', handleHashChange);
     return () => window.removeEventListener('hashchange', handleHashChange);
-  }, [user?.uid, handleOpenAuthModal]);
+  }, [user?.uid, authLoading, handleOpenAuthModal]);
 
   const handlePageChange = (page: ActivePageType) => {
     if (!user && page !== 'screener' && page !== 'replay') {
@@ -1047,6 +1055,7 @@ export default function App() {
     <div className="min-h-screen bg-[#070a12] text-slate-100 flex flex-col selection:bg-cyan-500/20 selection:text-cyan-300">
       {/* First-visit installation tip remains available to guests on all devices. */}
       <InstallAppButton variant="tip" />
+      <CommunityNotifications />
       {/* Header */}
       <Header
         isLoading={isLoading}
@@ -1094,7 +1103,9 @@ export default function App() {
 
       {/* Main Content Area */}
       <main className="flex-1 max-w-[2560px] 3xl:max-w-[3440px] w-full mx-auto px-2 sm:px-4 lg:px-6 2xl:px-8 py-2 sm:py-4 space-y-3 sm:space-y-4">
-        {activePage === 'terminal' ? (
+        {activePage === 'community' ? (
+          <React.Suspense fallback={<div className="p-8 text-slate-400">Завантаження Community…</div>}><CommunityPage key={user?.uid ?? 'guest'} onReplay={() => handlePageChange('replay')} /></React.Suspense>
+        ) : activePage === 'terminal' ? (
           <TerminalPage
             key={user?.uid || 'guest'}
             coins={coins}

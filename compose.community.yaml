@@ -1,0 +1,40 @@
+# Run on resources reserved for Community, preferably a separate host.
+# This file never changes the existing market app's resource limits or volumes.
+services:
+  postgres:
+    image: postgres:18
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: h00k_community
+      POSTGRES_USER: h00k_community
+      POSTGRES_PASSWORD: ${COMMUNITY_DB_PASSWORD:?Set a database password}
+    volumes:
+      - community_postgres:/var/lib/postgresql
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U h00k_community -d h00k_community"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    security_opt: ["no-new-privileges:true"]
+  community:
+    build: .
+    command: [node, --import, tsx, communityServer.ts]
+    restart: unless-stopped
+    init: true
+    env_file: [.env]
+    environment:
+      NODE_ENV: production
+      COMMUNITY_HOST: 0.0.0.0
+      COMMUNITY_PORT: 3001
+      COMMUNITY_TRUST_PROXY: ${COMMUNITY_TRUST_PROXY:-loopback}
+      COMMUNITY_MEDIA_DIR: /app/community-media
+      DATABASE_URL: ${COMMUNITY_DATABASE_URL:?Set the Community PostgreSQL URL}
+    ports: ["127.0.0.1:${COMMUNITY_PORT:-3001}:3001"]
+    volumes: [community_media:/app/community-media]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    security_opt: ["no-new-privileges:true"]
+volumes:
+  community_postgres:
+  community_media:

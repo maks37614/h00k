@@ -11,7 +11,9 @@
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
     "audit:surveillance": "tsx server/auditSurveillance.ts",
-    "test": "node --import ./tests/fixtures/offline-network.mjs --import tsx --test tests/*.test.ts"
+    "test": "node --import ./tests/fixtures/offline-network.mjs --import tsx --test tests/*.test.ts",
+    "community": "tsx communityServer.ts",
+    "community:migrate": "tsx communityServer.ts --migrate"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
@@ -19,21 +21,29 @@
     "@rolldown/binding-wasm32-wasi": "^1.2.11",
     "@tailwindcss/vite": "^4.3.3",
     "@vitejs/plugin-react": "^6.1.1",
+    "argon2": "^0.45.2",
+    "decimal.js": "^10.6.0",
     "dotenv": "^17.2.3",
     "express": "^4.21.2",
-    "firebase": "^12.19.0",
     "lightweight-charts": "^5.2.1",
     "lucide-react": "^0.546.0",
     "motion": "^12.23.24",
+    "nodemailer": "^10.5.0",
+    "otpauth": "^9.6.0",
+    "pg": "^8.23.1",
     "react": "^19.0.1",
     "react-dom": "^19.0.1",
+    "sharp": "^0.35.5",
     "tsx": "^4.23.15",
     "vite": "^8.3.0",
     "ws": "^8.22.0"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.16",
     "@types/express": "^4.17.21",
     "@types/node": "^22.14.0",
+    "@types/nodemailer": "^8.0.2",
+    "@types/pg": "^8.23.1",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@types/ws": "^8.18.2",
@@ -45,8 +55,5 @@
   },
   "optionalDependencies": {
     "@rolldown/binding-linux-x64-musl": "^1.2.11"
-  },
-  "overrides": {
-    "@grpc/grpc-js": "1.13.6"
   }
 }

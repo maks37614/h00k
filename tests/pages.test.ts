@@ -2,8 +2,6 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import React from 'react';
 import { renderToString } from 'react-dom/server';
-import { terminate } from 'firebase/firestore';
-import { db } from '../src/firebase';
 import { AuthProvider } from '../src/context/AuthContext';
 import { AlertsProvider } from '../src/context/AlertsContext';
 import { ArchiveProvider } from '../src/context/ArchiveContext';
@@ -21,7 +19,6 @@ import { detectFormations } from '../src/utils/patternRecognition';
 import { getFallbackScannedCoins } from '../src/utils/directExchangeClient';
 
 Object.defineProperty(globalThis, 'localStorage', { value: { getItem: () => null, setItem: () => {}, removeItem: () => {} }, configurable: true });
-test.after(() => terminate(db));
 const noop = () => {};
 const wrap = (child: React.ReactNode) =>
   React.createElement(AuthProvider, { children:
