@@ -27,6 +27,8 @@ COPY --from=build --chown=node:node /app/scripts/benchmark-ws.mjs ./scripts/benc
 
 RUN mkdir -p /app/server/data && chown -R node:node /app/server/data
 
+COPY --from=build --chown=node:node /app/scripts/community-migration-plan.ts ./scripts/community-migration-plan.ts
+
 USER node
 
 EXPOSE 3000

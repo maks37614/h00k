@@ -13,7 +13,8 @@
     "audit:surveillance": "tsx server/auditSurveillance.ts",
     "test": "node --import ./tests/fixtures/offline-network.mjs --import tsx --test tests/*.test.ts",
     "community": "tsx communityServer.ts",
-    "community:migrate": "tsx communityServer.ts --migrate"
+    "community:migrate": "tsx communityServer.ts --migrate",
+    "community:migration-plan": "tsx scripts/community-migration-plan.ts"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

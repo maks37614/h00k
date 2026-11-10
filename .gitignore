@@ -5,3 +5,6 @@ node_modules/
 server/data/
 *.log
 .community-preview/
+
+migration-input/
+migration-reports/

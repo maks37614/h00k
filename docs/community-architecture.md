@@ -117,3 +117,8 @@ Deletion immediately revokes native sessions/tickets, erases stored connector cr
 Community mutations use a short owner row lock and acknowledge success after transaction commit. Network connector requests do not hold that transaction: their writes recheck the live owner under a short lock. Upload metadata, risk notifications and background trade imports likewise cannot recreate a deleted owner's data. Nested PostgreSQL transactions use savepoints on the existing connection rather than acquiring another pool connection.
 
 Offline validation now covers account lifecycle and the streaming proxy in addition to the original chart/security suite. The full test count at this pass is 521. Browser/mobile QA, real PostgreSQL networking/pooling and operational cleanup on the deployed volumes still require staging.
+
+
+## Read-only migration preflight
+
+`npm run community:migration-plan -- <normalized-bundle.json> [--check-target]` validates explicit owner mappings, profiles and archives without importing or linking accounts. The target option executes SELECT only. Reports use input hashes, counts and index-based issue codes instead of personal values. Raw Firebase exports need a trusted normalization step first. See [identity-migration-preflight.md](identity-migration-preflight.md). This does not remove the migration release gate.
