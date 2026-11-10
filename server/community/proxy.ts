@@ -68,6 +68,7 @@ export function installCommunityProxy(app: Express) {
           "x-content-type-options",
           "content-disposition",
           "referrer-policy",
+          "content-security-policy",
         ]) {
           const value = response.headers.get(name);
           if (value) res.set(name, value);
