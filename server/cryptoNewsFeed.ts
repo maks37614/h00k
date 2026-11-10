@@ -54,7 +54,7 @@ export function selectLatestCryptoHeadlines(payload: unknown, now = Date.now()):
       : typeof value.url === 'string' ? value.url : '';
     if (!rawUrl) continue;
     const title = decodeBasicEntities(value.title.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim());
-    if (title.length < 12 || title.length > 260 || /(?:gas price|gas tracker|funding rate\s*:)/i.test(title)) continue;
+    if (title.length < 12 || title.length > 260 || /(?:\bETH\s+Gas\s*:|gas price|gas tracker|funding rate\s*:)/i.test(title)) continue;
     if (typeof value.sourceKey === 'string' && /(?:_gas|_ticker|_price)$/.test(value.sourceKey)) continue;
     let target: URL;
     try {
