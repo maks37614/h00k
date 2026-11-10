@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import {isDeletedAccount} from './deletedAccounts';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { getUserTelegram } from './userTelegram';
@@ -86,6 +87,7 @@ export function recordSentTelegramMessage(userId: string, text: string, messageI
 }
 
 async function deliver(record: TelegramDelivery): Promise<DeliveryResult> {
+  if(isDeletedAccount(record.userId))return {success:false,error:'Акаунт видалено'};
   const existing = inFlight.get(record.id);
   if (existing) return existing;
   const task = (async (): Promise<DeliveryResult> => {
@@ -116,6 +118,7 @@ async function deliver(record: TelegramDelivery): Promise<DeliveryResult> {
 }
 
 export async function sendUserTelegramMessage(userId: string, text: string, eventKey?: string): Promise<DeliveryResult> {
+  if(isDeletedAccount(userId))return {success:false,error:'Акаунт видалено'};
   const target = getUserTelegram(userId);
   if (target?.needsConfirmation) return { success: false, error: 'Підключіть ваш Telegram до спільного бота у профілі.' };
   if (!target?.botToken || !target.chatId) return { success: false, error: 'Сповіщення Telegram не підключені. Підключіть свій чат у профілі.' };
@@ -161,6 +164,8 @@ export function startTelegramDeliveryWorker() {
   }, 5000);
   retryTimer.unref();
 }
+export function exportTelegramDeliveries(userId:string){return load().filter(item=>item.userId===userId).map(item=>({...item,messageIds:[...item.messageIds]}));}
+export function eraseTelegramDeliveries(userId:string){deliveries=load().filter(item=>item.userId!==userId);persist();}
 
 /** Edit only messages whose Telegram IDs and owner were recorded on this server. */
 export async function reformatUserTelegramMessages(userId: string) {

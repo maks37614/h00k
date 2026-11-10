@@ -1,3 +1,4 @@
+import type { ChartDocument } from '../community/chartDocument';
 import React, { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import {
@@ -48,7 +49,7 @@ interface FullscreenChartModalProps {
   onOpenTelegramModal?: (data: any) => void;
   onSendMetaScalp?: (coin: any) => void;
   metaScalpBinding?: string;
-  onAddToArchive?: () => void;
+  onAddToArchive?: (snapshot?: ChartDocument) => void;
   isArchived?: boolean;
   customMarkers?: ChartMarkerInfo[];
   savedChartParams?: ChartRestoreParams;
@@ -273,11 +274,12 @@ export const FullscreenChartModal: React.FC<FullscreenChartModalProps> = ({
     onTimeframeChange?.(tf);
   };
 
-  const showEarlyLevels = !!earlyCandidate
-    && activeCoin.symbol === coin.symbol
+  const isOriginalMarket = activeCoin.symbol === coin.symbol
     && activeCoin.exchange === coin.exchange
     && activeCoin.marketType === coin.marketType;
+  const showEarlyLevels = !!earlyCandidate && isOriginalMarket;
   const visibleChartMarkers = useMemo(() => {
+    if (!isOriginalMarket) return [];
     if (!displayedEarlyCandidate) return customMarkers;
     if (!showEarlyLevels) return [];
     const markers = displayedEarlyCandidate.tpSlBuilder
@@ -286,7 +288,7 @@ export const FullscreenChartModal: React.FC<FullscreenChartModalProps> = ({
     return filterEarlyFormationChartMarkers(
       markers, displayedEarlyCandidate, earlyLevelVisibility,
     );
-  }, [displayedEarlyCandidate, customMarkers, earlyLevelVisibility, showEarlyLevels]);
+  }, [displayedEarlyCandidate, customMarkers, earlyLevelVisibility, showEarlyLevels, isOriginalMarket]);
   const toggleEarlyLevel = (level: EarlyFormationLevelKey) =>
     setEarlyLevelVisibility(previous => ({ ...previous, [level]: !previous[level] }));
 
@@ -652,15 +654,15 @@ export const FullscreenChartModal: React.FC<FullscreenChartModalProps> = ({
             forceHookChart
             fullHeight
             klines={activeKlines}
-            formation={formation}
+            formation={isOriginalMarket ? formation : null}
             symbol={activeCoin.symbol}
             timeframe={timeframe}
             onTimeframeChange={handleTimeframeSelect}
             exchange={activeCoin.exchange}
             marketType={activeCoin.marketType}
             historyLimit={1000}
-            onAddToArchive={onAddToArchive}
-            isArchived={isArchived}
+            onAddToArchive={isOriginalMarket ? onAddToArchive : undefined}
+            isArchived={isOriginalMarket && isArchived}
             customMarkers={visibleChartMarkers}
             previewMarkers={showEarlyLevels}
             hideSymbolAndPrice
@@ -673,7 +675,7 @@ export const FullscreenChartModal: React.FC<FullscreenChartModalProps> = ({
                   applyClosedEarlyWickTouch(previous ?? displayedEarlyCandidate,
                     closed, timeframe as Timeframe, earlyTouchRule))
               : undefined}
-            savedChartParams={savedChartParams}
+            savedChartParams={isOriginalMarket ? savedChartParams : undefined}
           />
         </div>
       </main>

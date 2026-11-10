@@ -1,3 +1,5 @@
+import { apiJson } from '../../utils/apiFetch';
+import { useAuth } from '../../context/AuthContext';
 import React, { useState, useMemo } from 'react';
 import {
   BookOpen,
@@ -36,6 +38,8 @@ export const ReplayJournal: React.FC<ReplayJournalProps> = ({
   onClearJournal,
   onDeleteJournalItem,
 }) => {
+  const { user } = useAuth();
+  const [shareNotice, setShareNotice] = useState('');
   const [activeTab, setActiveTab] = useState<'journal' | 'stats' | 'pending'>('journal');
   const [selectedScreenshot, setSelectedScreenshot] = useState<{
     url: string;
@@ -223,10 +227,21 @@ export const ReplayJournal: React.FC<ReplayJournalProps> = ({
           </button>
         </div>
 
+        {shareNotice && <p role="status" className="text-xs text-cyan-300">{shareNotice}</p>}
         {/* Global Journal Actions */}
         <div className="flex items-center gap-2">
           {journalItems.length > 0 && (
             <>
+              <button
+                onClick={async () => {
+                  if (!user) { setShareNotice('Увійдіть, щоб зберегти приватний навчальний звіт'); return; }
+                  try {
+                    await apiJson('/api/community/items',{method:'POST',body:JSON.stringify({kind:'test',audience:'private',body:{title:'Replay: '+new Date().toLocaleDateString('uk-UA'),text:'Навчальний звіт із наявного Replay. Не реальна API-торгівля.',mode:'replay',stats,results:journalItems.slice(-100).map(({screenshotUrl,...item})=>item)}})});
+                    setShareNotice('Приватний звіт збережено: Community → Навчання → Лабораторія');
+                  } catch(error) { setShareNotice(error instanceof Error?error.message:'Не вдалося зберегти звіт'); }
+                }}
+                className="px-3 py-1.5 rounded-xl bg-cyan-900/40 text-cyan-200 text-xs border border-cyan-800"
+              >До Community · SIM</button>
               <button
                 onClick={handleExportCsv}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition-colors"

@@ -1,0 +1,69 @@
+# Independent Community beside the existing h00k.top. Does not start a market app.
+# Use --project-name h00k-community-stage and an external --env-file .env.community.
+name: h00k-community-stage
+services:
+  postgres:
+    image: postgres:18
+    restart: unless-stopped
+    cpus: "0.50"
+    mem_limit: 1g
+    environment:
+      POSTGRES_DB: h00k_community_stage
+      POSTGRES_USER: h00k_community
+      POSTGRES_PASSWORD: ${COMMUNITY_DB_PASSWORD:?Set database password}
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    networks: [community]
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U h00k_community -d h00k_community_stage"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 15s
+    security_opt: ["no-new-privileges:true"]
+    logging: &logs
+      driver: local
+      options: {max-size: "10m", max-file: "3"}
+  community:
+    image: ${H00K_COMMUNITY_IMAGE:?Set the reviewed prebuilt image tag}
+    command: [node, --import, tsx, communityServer.ts]
+    restart: unless-stopped
+    init: true
+    cpus: "0.75"
+    mem_limit: 1g
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://h00k_community:${COMMUNITY_DB_PASSWORD:?Set database password}@postgres:5432/h00k_community_stage
+      COMMUNITY_HOST: 0.0.0.0
+      COMMUNITY_PORT: "3001"
+      COMMUNITY_TRUST_PROXY: loopback,172.30.89.1
+      APP_ORIGIN: ${APP_ORIGIN:?Set HTTPS Community origin}
+      COMMUNITY_PROFILE_DOMAIN: ${COMMUNITY_PROFILE_DOMAIN:-}
+      COMMUNITY_STANDALONE_ENABLED: "1"
+      COMMUNITY_ENCRYPTION_KEY: ${COMMUNITY_ENCRYPTION_KEY:?Set persistent encryption key}
+      SMTP_URL: ${SMTP_URL:?Set SMTP connection URL}
+      MAIL_FROM: ${MAIL_FROM:?Set verified sender}
+      COMMUNITY_MODERATOR_IDS: ${COMMUNITY_MODERATOR_IDS:-}
+      COMMUNITY_MEDIA_DIR: /app/community-media
+      COMMUNITY_EXCHANGE_EGRESS_ISOLATED: "0"
+      COMMUNITY_SYNC_ENABLED: "0"
+    ports: ["127.0.0.1:3101:3001"]
+    volumes: [community_media:/app/community-media]
+    networks: [community]
+    depends_on:
+      postgres: {condition: service_healthy}
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:3001/api/community-health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    security_opt: ["no-new-privileges:true"]
+    logging: *logs
+volumes:
+  postgres_data:
+  community_media:
+networks:
+  community:
+    driver: bridge
+    ipam:
+      config: [{subnet: 172.30.89.0/24, gateway: 172.30.89.1}]

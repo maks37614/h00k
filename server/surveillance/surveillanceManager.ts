@@ -3,6 +3,7 @@ import { CoinWorker, CoinWorkerSnapshot } from './coinWorker';
 import { MacroAndNewsEngine } from './macroAndNewsEngine';
 import { StateMachineAndAlerts } from './stateMachineAndAlerts';
 import { loadSurveillanceStore } from '../surveillanceService';
+import { assertActiveMarketAccount } from '../deletedAccounts';
 
 export class SurveillanceManager {
   private static instance: SurveillanceManager | null = null;
@@ -49,6 +50,7 @@ export class SurveillanceManager {
   }
 
   public startWorkerForCoin(coin: SurveillanceCoin): CoinWorker {
+    assertActiveMarketAccount(coin.userId);
     const existing = this.workers.get(this.workerKey(coin.id, coin.userId));
     if (existing) {
       existing.updateCoin(coin);
@@ -100,6 +102,9 @@ export class SurveillanceManager {
 
   public getActiveWorkerCount(): number {
     return this.workers.size;
+  }
+  public stopWorkersForUser(userId:string){
+    for(const worker of [...this.workers.values()])if(worker.coin.userId===userId)this.stopWorkerForCoin(worker.coin.id,userId);
   }
 }
 

@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { assertActiveMarketAccount,isDeletedAccount } from './deletedAccounts';
 import path from 'node:path';
 import { normalizeLanguage, type SupportedLanguage } from '../src/locales';
 
@@ -61,6 +62,7 @@ export function loadUserTelegram(): Map<string, StoredTelegram> {
   return cache;
 }
 export function getUserTelegram(userId?: string): UserTelegramData | undefined {
+  if(isDeletedAccount(userId))return undefined;
   if (!userId || userId === 'guest') return undefined;
   const stored = loadUserTelegram().get(userId);
   if (!stored) return undefined;
@@ -74,6 +76,7 @@ export function getUserTelegram(userId?: string): UserTelegramData | undefined {
 }
 /** Alert sync can change language only; legacy tokens and chat IDs are ignored. */
 export function saveUserTelegram(userId: string, changes: Partial<UserTelegramData>): void {
+  assertActiveMarketAccount(userId);
   if (!userId || userId === 'guest') throw new Error('Увійдіть у свій акаунт, щоб підключити Telegram');
   const existing = loadUserTelegram().get(userId) || {};
   const language = changes.language === undefined ? existing.language : normalizeLanguage(changes.language);
@@ -84,6 +87,7 @@ export function saveUserTelegram(userId: string, changes: Partial<UserTelegramDa
 }
 /** Only a verified one-time /start from Telegram calls this function. */
 export function connectUserTelegram(userId: string, botId: string, chatId: string, language: SupportedLanguage = 'uk', username?: string): void {
+  assertActiveMarketAccount(userId);
   const bot = getSharedTelegramBot();
   if (!userId || userId === 'guest' || !bot || bot.botId !== botId || !/^[1-9]\d{0,19}$/.test(chatId) || chatId === botId) throw new Error('invalid_destination');
   for (const [owner, item] of loadUserTelegram()) {
@@ -100,6 +104,7 @@ export function disconnectUserTelegram(userId: string): void {
   next.set(userId, { mode: 'shared', language: next.get(userId)?.language, updatedAt: new Date().toISOString() });
   persist(next);
 }
+export function eraseUserTelegram(userId:string){const next=new Map(loadUserTelegram());next.delete(userId);persist(next);}
 export function disconnectTelegramChat(botId: string, chatId: string): SupportedLanguage | undefined {
   for (const [userId, item] of loadUserTelegram()) {
     if (item.mode === 'shared' && item.botId === botId && item.chatId === chatId && item.confirmedAt) {

@@ -1,16 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, useCallback, useMemo } from 'react';
-import {
-  collection,
-  doc,
-  setDoc,
-  deleteDoc,
-  onSnapshot,
-  query,
-  orderBy,
-  getDocs,
-  writeBatch,
-} from 'firebase/firestore';
-import { db } from '../firebase';
+import React, { createContext, useContext, useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { useAuth } from './AuthContext';
 import {
   ArchivedFormation,
@@ -20,10 +8,12 @@ import {
   ChartMarkerInfo,
   ChartRestoreParams,
 } from '../types';
-import { handleFirestoreError, OperationType } from '../lib/firestoreErrors';
-import { cleanForFirestore } from '../lib/firestoreUtils';
+import { apiJson } from '../utils/apiFetch';
+import { normalizeChartDocument, type ChartDocument } from '../community/chartDocument';
 
 interface SaveArchiveOptions {
+  chartDocument?: ChartDocument;
+  sourceChartId?: string;
   timeframe?: Timeframe;
   historyLimit?: number;
   markers?: ChartMarkerInfo[];
@@ -51,92 +41,18 @@ const ArchiveContext = createContext<ArchiveContextType | undefined>(undefined);
 
 export const ArchiveProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user } = useAuth();
+  const currentOwner = useRef(user?.uid);
+  currentOwner.current = user?.uid;
   const [archivedFormations, setArchivedFormations] = useState<ArchivedFormation[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
 
-  // Sync with Firestore (if user is authenticated) or user-scoped localStorage (if local/offline)
   useEffect(() => {
-    let unsubscribeFirestore: (() => void) | null = null;
-
-    if (!user) {
-      // Unauthenticated: clean out memory to guarantee zero data leakage between users
-      setArchivedFormations([]);
-      setLoading(false);
-      return;
-    }
-
-    const currentUid = user.uid;
-    // Reset immediately on user change to prevent any visual flicker of previous user's items
-    setArchivedFormations([]);
+    let active = true; setArchivedFormations([]);
+    if (!user) { setLoading(false); return; }
     setLoading(true);
-
-    const isLocal = Boolean((user as any).isLocalUser);
-
-    if (isLocal) {
-      try {
-        const saved = localStorage.getItem(`signalhook_archive_${currentUid}`);
-        const list: ArchivedFormation[] = saved ? JSON.parse(saved) : [];
-        const userScopedList = Array.isArray(list)
-          ? list.filter((item) => item.userId === currentUid || !item.userId).map(item => ({ ...item, userId: currentUid }))
-          : [];
-        setArchivedFormations(userScopedList);
-      } catch {
-        setArchivedFormations([]);
-      }
-      setLoading(false);
-      return;
-    }
-
-    // Real Firebase User: Subscribe to personal Firestore subcollection users/{uid}/archive
-    const colPath = `users/${currentUid}/archive`;
-    const archiveColRef = collection(db, 'users', currentUid, 'archive');
-
-    try {
-      unsubscribeFirestore = onSnapshot(
-        archiveColRef,
-        (snapshot) => {
-          const items: ArchivedFormation[] = [];
-          snapshot.forEach((docSnap) => {
-            const data = docSnap.data() as ArchivedFormation;
-            // Guarantee ownership
-            if (!data.userId || data.userId === currentUid) {
-              items.push({ ...data, userId: currentUid });
-            }
-          });
-
-          // Sort by savedAtTimestamp descending
-          items.sort((a, b) => (b.savedAtTimestamp || 0) - (a.savedAtTimestamp || 0));
-          setArchivedFormations(items);
-
-          // Update strictly user-scoped cache
-          try {
-            localStorage.setItem(`signalhook_archive_${currentUid}`, JSON.stringify(items));
-          } catch {}
-
-          setLoading(false);
-        },
-        (error) => {
-          console.warn('Firestore Archive snapshot listener error:', error);
-          // Fallback to user-scoped local cache if network/offline
-          try {
-            const saved = localStorage.getItem(`signalhook_archive_${currentUid}`);
-            if (saved) {
-              setArchivedFormations(JSON.parse(saved));
-            }
-          } catch {}
-          setLoading(false);
-        }
-      );
-    } catch (err) {
-      handleFirestoreError(err, OperationType.GET, colPath);
-      setLoading(false);
-    }
-
-    return () => {
-      if (unsubscribeFirestore) {
-        unsubscribeFirestore();
-      }
-    };
+    const reload = () => { void apiJson('/api/community/archives').then(data => { if (active) setArchivedFormations(data.items ?? []); }).catch(() => {}).finally(() => { if (active) setLoading(false); }); };
+    reload(); window.addEventListener('h00k:archive-saved', reload);
+    return () => { active = false; window.removeEventListener('h00k:archive-saved', reload); };
   }, [user?.uid]);
 
   // Check if a specific coin + formation is already in archive
@@ -183,16 +99,24 @@ export const ArchiveProvider: React.FC<{ children: React.ReactNode }> = ({ child
         throw new Error('Увійдіть у профіль, щоб зберегти формацію у свій особистий архів');
       }
       const currentUserId = user.uid;
+      const snapshot = options?.chartDocument ? normalizeChartDocument(options.chartDocument) : undefined;
+      if (snapshot) {
+        coin = { ...coin, symbol: snapshot.symbol, exchange: snapshot.exchange, marketType: snapshot.marketType, timeframe: snapshot.timeframe };
+        const original = JSON.parse(JSON.stringify(formation));
+        const level = (type: string, fallback: number) => snapshot.markers.find(marker => marker.type === type)?.price ?? fallback;
+        formation = { ...original, levels: { ...original.levels, entryPrice: level('entry', original.levels.entryPrice),
+          targetPrice: level('target', original.levels.targetPrice), stopLossPrice: level('stop_loss', original.levels.stopLossPrice) } };
+      }
       const cleanSym = coin.symbol.toUpperCase().replace('/', '').trim();
       const timestamp = Date.now();
       const uniqueId = `arch_${cleanSym.toLowerCase()}_${formation.patternKey || 'p'}_${timestamp}`;
 
-      const activeTimeframe = options?.timeframe || coin.timeframe || '1h';
+      const activeTimeframe = snapshot?.timeframe || options?.timeframe || coin.timeframe || '1h';
       const activeLimit = options?.historyLimit || 500;
       const refPrice = options?.currentPrice || coin.currentPrice || formation.levels.entryPrice;
 
       // Construct comprehensive markers list
-      const markersList: ChartMarkerInfo[] = options?.markers && options.markers.length > 0
+      const markersList: ChartMarkerInfo[] = snapshot ? snapshot.markers : options?.markers && options.markers.length > 0
         ? options.markers
         : [
             {
@@ -227,7 +151,7 @@ export const ArchiveProvider: React.FC<{ children: React.ReactNode }> = ({ child
             },
           ];
 
-      if (formation.levels.necklinePrice) {
+      if (!snapshot && formation.levels.necklinePrice) {
         markersList.push({
           id: `marker_neckline_${uniqueId}`,
           type: 'neckline',
@@ -239,7 +163,7 @@ export const ArchiveProvider: React.FC<{ children: React.ReactNode }> = ({ child
         });
       }
 
-      if (formation.levels.resistancePrice) {
+      if (!snapshot && formation.levels.resistancePrice) {
         markersList.push({
           id: `marker_res_${uniqueId}`,
           type: 'resistance',
@@ -251,7 +175,7 @@ export const ArchiveProvider: React.FC<{ children: React.ReactNode }> = ({ child
         });
       }
 
-      if (formation.levels.supportPrice) {
+      if (!snapshot && formation.levels.supportPrice) {
         markersList.push({
           id: `marker_sup_${uniqueId}`,
           type: 'support',
@@ -267,7 +191,7 @@ export const ArchiveProvider: React.FC<{ children: React.ReactNode }> = ({ child
         timeframe: activeTimeframe,
         historyLimit: activeLimit,
         lastClosePrice: refPrice,
-        visibleRange: options?.chartParams?.visibleRange || { from: 0, to: 80 },
+        visibleRange: snapshot?.viewport || options?.chartParams?.visibleRange || { from: 0, to: 80 },
         savedAtCandleTime: Math.floor(timestamp / 1000),
       };
 
@@ -294,22 +218,15 @@ export const ArchiveProvider: React.FC<{ children: React.ReactNode }> = ({ child
         formation: { ...formation },
         markers: markersList,
         chartParams,
+        ...(snapshot ? { chartDocument: snapshot } : {}),
+        ...(options?.sourceChartId ? { sourceChartId: options.sourceChartId } : {}),
         notes: options?.notes || `${formation.name} • ${coin.exchange.toUpperCase()} • ${activeTimeframe}`,
         createdAt: new Date(timestamp).toISOString(),
         savedAtTimestamp: timestamp,
       };
 
-      const isFirebase = Boolean(user && !(user as any).isLocalUser);
-
-      if (isFirebase) {
-        const docPath = `users/${currentUserId}/archive/${uniqueId}`;
-        try {
-          const docRef = doc(db, 'users', currentUserId, 'archive', uniqueId);
-          await setDoc(docRef, cleanForFirestore(newArchiveItem));
-        } catch (err) {
-          handleFirestoreError(err, OperationType.WRITE, docPath);
-        }
-      }
+      await apiJson('/api/community/archives', { method: 'POST', body: JSON.stringify(newArchiveItem) });
+      if (currentOwner.current !== currentUserId) throw new Error('Акаунт змінився. Повторіть дію.');
 
       // Update state & user-scoped storage immediately
       setArchivedFormations((prev) => {
@@ -331,18 +248,8 @@ export const ArchiveProvider: React.FC<{ children: React.ReactNode }> = ({ child
     async (id: string): Promise<boolean> => {
       if (!user) return false;
       const currentUserId = user.uid;
-      const isFirebase = Boolean(user && !(user as any).isLocalUser);
-
-      if (isFirebase) {
-        const docPath = `users/${currentUserId}/archive/${id}`;
-        try {
-          const docRef = doc(db, 'users', currentUserId, 'archive', id);
-          await deleteDoc(docRef);
-        } catch (err) {
-          handleFirestoreError(err, OperationType.DELETE, docPath);
-          return false;
-        }
-      }
+      await apiJson('/api/community/archives/' + encodeURIComponent(id), { method: 'DELETE' });
+      if (currentOwner.current !== currentUserId) return false;
 
       setArchivedFormations((prev) => {
         const updated = prev.filter((item) => item.id !== id);
@@ -361,23 +268,8 @@ export const ArchiveProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const clearUserArchive = useCallback(async (): Promise<boolean> => {
     if (!user) return false;
     const currentUserId = user.uid;
-    const isFirebase = Boolean(user && !(user as any).isLocalUser);
-
-    if (isFirebase) {
-      const colPath = `users/${currentUserId}/archive`;
-      try {
-        const archiveColRef = collection(db, 'users', currentUserId, 'archive');
-        const snap = await getDocs(archiveColRef);
-        const batch = writeBatch(db);
-        snap.forEach((docSnap) => {
-          batch.delete(docSnap.ref);
-        });
-        await batch.commit();
-      } catch (err) {
-        handleFirestoreError(err, OperationType.DELETE, colPath);
-        return false;
-      }
-    }
+    await apiJson('/api/community/archives', { method: 'DELETE' });
+    if (currentOwner.current !== currentUserId) return false;
 
     setArchivedFormations([]);
     try {

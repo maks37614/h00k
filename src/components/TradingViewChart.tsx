@@ -1,3 +1,6 @@
+import { captureChartDocument } from '../community/chartDocument';
+import { saveChartArchive } from '../community/archiveChart';
+import type { ChartDocument } from '../community/chartDocument';
 import { normalizeExchangeSymbol } from '../utils/marketSymbols';
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import {
@@ -47,7 +50,7 @@ interface TradingViewChartProps {
   /** Called at most once when a new candle starts; reuses the existing chart feed. */
   onClosedCandle?: (candle: Kline) => void;
   onOpenFullscreen?: () => void;
-  onAddToArchive?: () => void;
+  onAddToArchive?: (snapshot?: ChartDocument) => void;
   isArchived?: boolean;
   isSavingArchive?: boolean;
   customMarkers?: ChartMarkerInfo[];
@@ -392,13 +395,19 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
     klinesLengthRef.current = effectiveKlines.length;
   }, [effectiveKlines]);
 
+  const [archiveNotice, setArchiveNotice] = useState('');
+  const [manualLevels, setManualLevels] = useState<ChartMarkerInfo[] | null>(null);
+  useEffect(() => setManualLevels(null), [symbol, exchange, marketType, formation?.id]);
+  const [markerEdits, setMarkerEdits] = useState<Record<string, ChartMarkerInfo>>({});
+  useEffect(() => setMarkerEdits({}), [symbol, exchange, marketType, formation?.id]);
   const hookMarkers = useMemo(() => {
     const visibility = { entry: showEntryLevel, target: showTargetLevel, stop: showStopLevel };
-    const markers = customMarkers?.length ? customMarkers
-      : formationChartMarkers(formation, visibility, timeframe as Timeframe);
-    return previewMarkers ? markers : filterVisibleTradeMarkers(markers, visibility);
-  }, [customMarkers, formation, showEntryLevel, showTargetLevel, showStopLevel, timeframe, previewMarkers]);
-  const hasTradeLevels = hasCompleteTradeLevelSet(formation, customMarkers);
+    const source = customMarkers?.length ? customMarkers : manualLevels ?? formationChartMarkers(formation, { entry: true, target: true, stop: true }, timeframe as Timeframe);
+    const edited = source.map(marker => markerEdits[marker.id] || marker);
+    return previewMarkers ? edited : filterVisibleTradeMarkers(edited, visibility);
+  }, [customMarkers, formation, manualLevels, markerEdits, showEntryLevel, showTargetLevel, showStopLevel, timeframe, previewMarkers]);
+
+  const hasTradeLevels = !!manualLevels || hasCompleteTradeLevelSet(formation, customMarkers);
 
   useEffect(() => () => {
     if (hookTickTimer.current) clearTimeout(hookTickTimer.current);
@@ -1097,18 +1106,34 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
   // of chart provider, page or fullscreen state.
   const combinedTradeLevels = {
     visible: showEntryLevel && showTargetLevel && showStopLevel,
-    available: hasTradeLevels,
-    onToggle: () => applyTradeLevels(toggleCombinedTradeLevels({
-      entry: showEntryLevel, target: showTargetLevel, stop: showStopLevel,
-    })),
+    available: true,
+    onToggle: () => {
+      if (!hasTradeLevels) {
+        const price = effectiveKlines.at(-1)?.close;
+        if (!price) return;
+        setManualLevels([
+          {id:'manual-entry',type:'entry',price,label:'Власний вхід',color:'#38bdf8'},
+          {id:'manual-target',type:'target',price:price*1.01,label:'Власна ціль — перемістіть',color:'#10b981'},
+          {id:'manual-stop',type:'stop_loss',price:price*.99,label:'Власний стоп — перемістіть',color:'#ef4444'},
+        ]);
+        applyTradeLevels({entry:true,target:true,stop:true}); return;
+      }
+      applyTradeLevels(toggleCombinedTradeLevels({entry:showEntryLevel,target:showTargetLevel,stop:showStopLevel}));
+    },
   };
 
-  const chartActions = (onAddToArchive || onOpenFullscreen) ? (
+  const chartActions = (
     <>
-      {onAddToArchive && (
+      {(
         <button
           type="button"
-          onClick={onAddToArchive}
+          onClick={async () => {
+            try {
+              const snapshot = hookChartRef.current?.getDocument?.() ?? captureChartDocument({ symbol: normalizeExchangeSymbol(symbol), exchange, marketType, timeframe: timeframe as Timeframe, candles: effectiveKlines, markers: hookMarkers, drawings: [] });
+              if (onAddToArchive) await onAddToArchive(snapshot);
+              else { if (!user) throw new Error('Увійдіть у свій акаунт, щоб зберегти графік'); await saveChartArchive(snapshot,user.uid); setArchiveNotice('Графік і мітки збережено до обраних формацій'); }
+            } catch (error) { setArchiveNotice(error instanceof Error ? error.message : 'Не вдалося зберегти графік'); }
+          }}
           disabled={isSavingArchive}
           className="chart-archive-action p-1 sm:p-1.5 rounded-lg bg-purple-600/20 hover:bg-purple-600/30 border border-purple-500/40 text-purple-300 transition-colors disabled:opacity-50 cursor-pointer shrink-0"
           title={isArchived ? 'Формацію збережено в архіві' : 'Додати монету та формацію в архів'}
@@ -1129,10 +1154,11 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
         </button>
       )}
     </>
-  ) : null;
+  );
 
   return (
     <div className={`relative w-full rounded-2xl overflow-hidden border border-slate-800 bg-slate-950 shadow-xl flex flex-col ${fullHeight ? 'h-full flex-1 min-h-0' : ''}`}>
+      {archiveNotice && <p role="status" className="px-3 py-2 text-xs text-amber-300">{archiveNotice}</p>}
       {/* Top Header Bar */}
       {showNavigationControls && (!hideSymbolAndPrice || !hideHeaderLiveIndicator || (!hideHeaderFormationBadge && !!formation)) && (
         <div className="flex flex-wrap items-center justify-between gap-1.5 sm:gap-2 px-2.5 sm:px-4 py-2 bg-slate-900/95 border-b border-slate-800 text-xs z-10 shrink-0">
@@ -1291,7 +1317,7 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
         {chartProvider === 'hookchart' ? <HookChart ref={hookChartRef} klines={effectiveKlines}
           symbol={symbol} timeframe={timeframe} exchange={exchange} marketType={marketType}
           terminalMode={terminalMode} focusFormation={formation}
-          markers={hookMarkers} expandPriceScaleToMarkers={previewMarkers} savedChartParams={savedChartParams} onTimeframeChange={onTimeframeChange}
+          markers={hookMarkers} onMarkersChange={next => setMarkerEdits(previous => ({ ...previous, ...Object.fromEntries(next.map(m => [m.id, m])) }))} expandPriceScaleToMarkers={previewMarkers} savedChartParams={savedChartParams} onTimeframeChange={onTimeframeChange}
           tradeLevelToggle={previewMarkers ? undefined : combinedTradeLevels}
           toolbarActions={hookchartToolbarActions} toolbarOverlays={hookchartToolbarOverlays}
           chartActions={showNavigationControls ? chartActions : null} /> : <div

@@ -1,4 +1,5 @@
 import { publicPriceFeed } from './publicPriceFeed';
+import { assertActiveMarketAccount,isDeletedAccount } from './deletedAccounts';
 import { exchangeFetch } from './exchangeHttp';
 import fs from 'fs';
 import path from 'path';
@@ -109,6 +110,7 @@ export function loadAlerts(): PriceAlert[] {
 }
 
 export function saveAlerts(alerts: PriceAlert[]): boolean {
+  alerts=alerts.filter(alert=>!isDeletedAccount(alert.userId));
   try {
     ensureDataDir();
     const temp = `${ALERTS_FILE}.tmp`;
@@ -142,6 +144,7 @@ export function loadHistory(): AlertHistoryItem[] {
 }
 
 export function saveHistory(items: AlertHistoryItem[]): boolean {
+  items=items.filter(item=>!isDeletedAccount(item.userId));
   try {
     ensureDataDir();
     historyCache = items;
@@ -173,6 +176,7 @@ export function getAlertHistory(userId?: string): AlertHistoryItem[] {
 }
 
 export function addHistoryItem(item: AlertHistoryItem): void {
+  if(isDeletedAccount(item.userId))return;
   const history = loadHistory();
   const ownHistory = [item, ...history.filter(entry =>
     entry.userId === item.userId &&
@@ -221,6 +225,7 @@ export function createAlert(
 ): PriceAlert {
   const alerts = loadAlerts();
   const userId = data.userId || 'guest';
+  assertActiveMarketAccount(userId);
 
   if (data.language) saveUserTelegram(userId, { language: data.language });
 
@@ -269,6 +274,7 @@ export function createAlertsBatch(
   telegramChatId?: string,
   language?: SupportedLanguage
 ): PriceAlert[] {
+  assertActiveMarketAccount(userId);
   const alerts = loadAlerts();
 
   if (language) saveUserTelegram(userId, { language });
@@ -329,6 +335,7 @@ export function createSetupAlertsGroup(
   currentPrice?: number,
   autoActivate = true
 ): { success: boolean; alerts?: PriceAlert[]; error?: string } {
+  assertActiveMarketAccount(userId);
   const mathValidation = validateSetupAlertsMath(setup);
   if (!mathValidation.valid) {
     return {
@@ -446,6 +453,7 @@ export function syncUserAlerts(
   telegramChatId?: string,
   language?: SupportedLanguage
 ): PriceAlert[] {
+  assertActiveMarketAccount(userId);
   if (language) saveUserTelegram(userId, { language });
 
   const all = loadAlerts();
@@ -803,4 +811,10 @@ export function stopAlertMonitor() {
     clearInterval(monitorInterval);
     monitorInterval = null;
   }
+}
+export function eraseUserAlerts(userId:string){
+  if(!saveAlerts(loadAlerts().filter(item=>item.userId!==userId))) throw new Error('Alert cleanup failed');
+  if(!saveHistory(loadHistory().filter(item=>item.userId!==userId))) throw new Error('History cleanup failed');
+  for(const id of deletedAlertIds)if(id.startsWith(userId+':'))deletedAlertIds.delete(id);
+  saveDeletedAlertIds();
 }

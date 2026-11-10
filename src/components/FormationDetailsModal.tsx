@@ -1,3 +1,4 @@
+import type { ChartDocument } from '../community/chartDocument';
 import { normalizeExchangeSymbol } from '../utils/marketSymbols';
 import { useTelegram } from '../context/TelegramContext';
 import React, { useState, useEffect, useMemo, useRef } from 'react';
@@ -128,11 +129,11 @@ export const FormationDetailsModal: React.FC<FormationDetailsModalProps> = ({
   const [alertFeedback, setAlertFeedback] = useState<string | null>(null);
   const [settingAlert, setSettingAlert] = useState<string | null>(null);
 
-  const handleSaveToArchive = async () => {
+  const handleSaveToArchive = async (snapshot?: ChartDocument) => {
     if (isSavingArchive) return;
     setIsSavingArchive(true);
     try {
-      if (alreadyArchived) {
+      if (alreadyArchived && !snapshot) {
         setArchiveToastMsg('Формація вже в архіві');
         setTimeout(() => setArchiveToastMsg(null), 3000);
         return;
@@ -141,6 +142,8 @@ export const FormationDetailsModal: React.FC<FormationDetailsModalProps> = ({
         timeframe,
         historyLimit,
         currentPrice: livePrice || coin.currentPrice,
+        chartDocument: snapshot,
+        sourceChartId: archivedItem?.sourceChartId,
       });
       setArchiveToastMsg('Формацію додано в архів!');
       onAlertToast?.({

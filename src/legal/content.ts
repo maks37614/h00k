@@ -62,7 +62,7 @@ export const legalContent: Record<SupportedLanguage, LegalCopy> = {
           'Ризики включають різкі коливання ціни, ліквідацію позицій, нестачу ліквідності, прослизання, збої бірж, помилки даних та затримку сповіщень. Минулі результати не гарантують майбутніх.'
         ]},
         { heading: '6. Обліковий запис і безпека', paragraphs: [
-          'Окремі функції доступні лише після реєстрації. Для входу може використовуватися електронна адреса й пароль або обліковий запис Google через Firebase Authentication.',
+          'Окремі функції доступні лише після реєстрації. Вхід використовує власний обліковий запис h00k з електронною адресою та паролем; для чутливих дій потрібні підтвердження email і двофакторна перевірка.',
           'Надавайте коректні дані й бережіть свої засоби входу. Не використовуйте чужі облікові записи та повідомляйте про підозру на несанкціонований доступ на info@h00k.top.',
           'Запит на закриття облікового запису або видалення пов’язаних даних можна надіслати на контактну адресу. Законні винятки зі стирання описані в Політиці обробки персональних даних.'
         ]},
@@ -107,13 +107,13 @@ export const legalContent: Record<SupportedLanguage, LegalCopy> = {
           'Цей контакт не замінює відомості про юридичну особу контролера, які можуть вимагатися застосовним законодавством. Перш ніж вважати Політику юридично завершеною, такі відомості необхідно перевірити та за потреби оприлюднити.'
         ]},
         { heading: '2. Які дані можуть оброблятися', paragraphs: [
-          'Під час реєстрації та входу: електронна адреса, ім’я профілю (якщо надано), ідентифікатор користувача та відомості про автентифікацію через Firebase Authentication або Google.',
+          'Під час реєстрації та входу: електронна адреса, ім’я профілю (якщо надано), ідентифікатор користувача, хеш пароля та захищені сеанси. У Community також обробляються створені вами матеріали, налаштування приватності, а за добровільного підключення біржі — зашифрований читальний API-ключ, історія результатів і ваші нотатки.',
           'Під час використання: IP-адреса, час запитів, тип браузера, технічні журнали, налаштування фільтрів, графіків, обрані активи, збережені параметри та інформація про сповіщення.',
           'У разі підключення Telegram: ідентифікатор чату, ім’я користувача (якщо передається), мова і налаштування сповіщень. При зверненні до підтримки: адреса відправника, текст повідомлення та надіслані вкладення.'
         ]},
         { heading: '3. Звідки отримуються дані', paragraphs: [
           'Частину даних ви повідомляєте самостійно під час реєстрації, підключення інтеграцій і звернення до підтримки. Технічні дані надходять автоматично під час роботи вебсайту.',
-          'Деякі відомості про вхід можуть надходити від Google/Firebase, а дані для повідомлень — від Telegram при добровільному підключенні. Котирування Binance і Bybit зазвичай не є вашими персональними даними.'
+          'Дані для повідомлень можуть надходити від Telegram при добровільному підключенні. Історія підключеного біржового рахунка отримується через читальний API. Загальнодоступні котирування Binance і Bybit зазвичай не є вашими персональними даними.'
         ]},
         { heading: '4. Цілі та правові підстави', paragraphs: [
           'Дані профілю та налаштувань використовуються для надання запитаних функцій і виконання договору (стаття 6(1)(b) GDPR). Технічні дані безпеки можуть оброблятися на підставі законного інтересу в захисті Сервісу (стаття 6(1)(f)).',
@@ -126,12 +126,12 @@ export const legalContent: Record<SupportedLanguage, LegalCopy> = {
           'Ви можете керувати сховищем у налаштуваннях браузера. Фактичний перелік cookies, їхні строки та постачальників необхідно перевіряти відповідно до конфігурації Сервісу.'
         ]},
         { heading: '6. Отримувачі та постачальники', paragraphs: [
-          'Для входу та зберігання профілів використовуються сервіси Google Firebase, зокрема Authentication і Firestore. Частину інфраструктури забезпечує сторонній VPS/хостинг-провайдер.',
+          'Вхід обслуговує власний сервер h00k; профілі та дані Community зберігаються у PostgreSQL. Інфраструктуру забезпечують VPS/хостинг-провайдери; перевірочні листи та відновлення доступу доставляє налаштований поштовий провайдер.',
           'У разі використання сповіщень дані, необхідні для доставки, передаються Telegram. При роботі інших інтеграцій дані можуть оброблятися відповідними незалежними постачальниками.',
           'Постачальники обробляють дані в межах своїх функцій та застосовних договірних і законодавчих вимог. Для окремих сторонніх платформ діють їхні власні політики конфіденційності.'
         ]},
         { heading: '7. Міжнародна обробка даних', paragraphs: [
-          'VPS, що використовується Сервісом, розташований у Великій Британії. Це не означає, що всі дані Firebase або інших постачальників зберігаються тільки там.',
+          'VPS, що використовується Сервісом, розташований у Великій Британії. Це не означає, що дані всіх інтеграцій і постачальників зберігаються тільки там.',
           'Для передавання даних із Європейської економічної зони до Великої Британії може застосовуватися чинне рішення ЄС про належний рівень захисту. Інші міжнародні передавання здійснюються за наявності правомірного механізму, якщо він необхідний.',
           'Відомості про застосовні гарантії та можливість отримати їх копію можна запитати за адресою info@h00k.top.'
         ]},
@@ -202,7 +202,7 @@ export const legalContent: Record<SupportedLanguage, LegalCopy> = {
           'Risks include volatility, liquidations, illiquidity, slippage, exchange outages, incorrect data and delayed notifications. Past performance does not guarantee future results.'
         ]},
         { heading: '6. Accounts and security', paragraphs: [
-          'Some features require registration. Sign-in may use an email address and password or a Google account through Firebase Authentication.',
+          'Some features require registration. Sign-in uses a native h00k email and password account; sensitive actions require verified email and two-factor authentication.',
           'Provide accurate information and protect your sign-in credentials. Do not access other accounts without authorization. Report suspected account compromise to info@h00k.top.',
           'Requests to close an account or delete related data can be sent to the contact address. Legal exceptions to erasure are explained in the Privacy Policy.'
         ]},
@@ -247,13 +247,13 @@ export const legalContent: Record<SupportedLanguage, LegalCopy> = {
           'This contact address does not replace controller identity details that applicable law may require. Those details must be verified and disclosed where required before treating this Policy as legally complete.'
         ]},
         { heading: '2. Categories of personal data', paragraphs: [
-          'Registration and sign-in: email address, profile name where supplied, user identifier and authentication details processed via Firebase Authentication or Google.',
+          'Registration and sign-in: email address, profile name where supplied, user identifier, password hash and protected sessions. Community also processes content you create and privacy settings; voluntarily connecting an exchange adds an encrypted read-only API credential, result history and your notes.',
           'Service use: IP address, request timestamps, browser type, technical logs, chart and filter preferences, selected assets, saved settings and alert information.',
           'Telegram integration: chat identifier, username if supplied, language and alert settings. Support requests: sender address, message content and any attachments.'
         ]},
         { heading: '3. Sources of information', paragraphs: [
           'You provide certain details when registering, connecting integrations or contacting support. Technical information is automatically generated when you use the website.',
-          'Google/Firebase may supply login-related data, and Telegram may supply details for notifications you enable. Market quotes from Binance and Bybit generally are not personal data about you.'
+          'Telegram may supply details for notifications you enable. Connected exchange account history is obtained through read-only APIs. Public market quotes from Binance and Bybit generally are not personal data about you.'
         ]},
         { heading: '4. Purposes and legal bases', paragraphs: [
           'Account data and preferences are used to deliver requested features and perform the agreement (GDPR Art. 6(1)(b)). Technical security data may be processed under legitimate interests in service security (Art. 6(1)(f)).',
@@ -266,12 +266,12 @@ export const legalContent: Record<SupportedLanguage, LegalCopy> = {
           'You can manage browser storage through your browser settings. Actual cookie names, durations and suppliers must be verified against the deployed configuration.'
         ]},
         { heading: '6. Recipients and providers', paragraphs: [
-          'Google Firebase services, including Authentication and Firestore, are used for sign-in and user profiles. A third-party VPS/hosting provider operates part of the infrastructure.',
+          'Sign-in is handled by the native h00k server; profiles and Community data are stored in PostgreSQL. VPS/hosting providers supply infrastructure, and the configured email provider delivers verification and recovery messages.',
           'Where Telegram alerts are enabled, delivery-related data is sent to Telegram. Other integrations may involve independent providers processing relevant information.',
           'Providers process data under their applicable agreements and legal duties. Independent platforms have their own privacy policies.'
         ]},
         { heading: '7. International data processing', paragraphs: [
-          'The Service uses a VPS located in the United Kingdom. This does not mean that all Firebase or third-party data is stored exclusively in the UK.',
+          'The Service uses a VPS located in the United Kingdom. This does not mean that data from all integrations and providers is stored exclusively in the UK.',
           'Transfers from the EEA to the UK may rely on the applicable EU adequacy decision. Other international transfers require a lawful transfer mechanism where applicable.',
           'You may request information about relevant safeguards and obtaining a copy by emailing info@h00k.top.'
         ]},
@@ -342,7 +342,7 @@ export const legalContent: Record<SupportedLanguage, LegalCopy> = {
           'Риски включают волатильность, ликвидации, недостаток ликвидности, проскальзывание, сбои бирж, неточные данные и задержанные уведомления. Прошлые результаты не гарантируют будущих.'
         ]},
         { heading: '6. Аккаунты и безопасность', paragraphs: [
-          'Для некоторых функций нужна регистрация. Вход может осуществляться по электронной почте и паролю либо через Google с использованием Firebase Authentication.',
+          'Для некоторых функций нужна регистрация. Вход использует собственную учётную запись h00k с email и паролем; чувствительные действия требуют подтверждения email и двухфакторной проверки.',
           'Предоставляйте достоверные сведения и защищайте учётные данные. Не пользуйтесь чужими аккаунтами без разрешения. О подозрении на взлом сообщайте на info@h00k.top.',
           'Запрос на закрытие аккаунта и удаление данных можно отправить на контактный адрес. Законные исключения из удаления указаны в Политике конфиденциальности.'
         ]},
@@ -387,13 +387,13 @@ export const legalContent: Record<SupportedLanguage, LegalCopy> = {
           'Этот адрес не заменяет сведения о личности контролёра, если их требует закон. До признания Политики юридически завершённой такие сведения необходимо проверить и раскрыть, когда это обязательно.'
         ]},
         { heading: '2. Категории персональных данных', paragraphs: [
-          'Регистрация и вход: email, имя профиля при наличии, идентификатор пользователя и сведения аутентификации через Firebase Authentication или Google.',
+          'Регистрация и вход: email, имя профиля при наличии, идентификатор пользователя, хеш пароля и защищённые сеансы. Community также обрабатывает созданные вами материалы и настройки приватности; добровольное подключение биржи добавляет зашифрованный читальный API-ключ, историю результатов и ваши заметки.',
           'Использование: IP-адрес, время запросов, браузер, технические журналы, настройки фильтров и графиков, выбранные активы и уведомления.',
           'Интеграция Telegram: идентификатор чата, имя пользователя при передаче, язык и настройки уведомлений. Поддержка: email, сообщения и вложения.'
         ]},
         { heading: '3. Источники информации', paragraphs: [
           'Часть данных вы предоставляете при регистрации, подключении интеграций и обращении в поддержку. Технические данные формируются автоматически.',
-          'Сведения о входе могут поступать от Google/Firebase, а данные уведомлений — от Telegram при добровольном подключении. Рыночные котировки Binance и Bybit обычно не являются вашими персональными данными.'
+          'Данные уведомлений могут поступать от Telegram при добровольном подключении. История подключённого биржевого счёта получается через читальный API. Общедоступные котировки Binance и Bybit обычно не являются вашими персональными данными.'
         ]},
         { heading: '4. Цели и правовые основания', paragraphs: [
           'Данные аккаунта и настроек нужны для предоставления функций и выполнения договора (ст. 6(1)(b) GDPR). Данные безопасности могут обрабатываться в законных интересах защиты Сервиса (ст. 6(1)(f)).',
@@ -406,12 +406,12 @@ export const legalContent: Record<SupportedLanguage, LegalCopy> = {
           'Управлять хранилищем можно в браузере. Реальные имена cookies, сроки и поставщиков следует проверять по фактической конфигурации.'
         ]},
         { heading: '6. Получатели и поставщики', paragraphs: [
-          'Google Firebase, включая Authentication и Firestore, используется для входа и профилей. Часть инфраструктуры работает у стороннего VPS/хостинг-провайдера.',
+          'Вход обслуживает собственный сервер h00k; профили и данные Community хранятся в PostgreSQL. Инфраструктуру обеспечивают VPS/хостинг-провайдеры, а проверочные письма и восстановление доступа доставляет настроенный почтовый провайдер.',
           'При включённых Telegram-уведомлениях необходимые данные передаются Telegram. Другие интеграции могут включать независимых поставщиков.',
           'Поставщики обрабатывают данные в рамках своих договоров и требований закона. У независимых платформ действуют собственные политики.'
         ]},
         { heading: '7. Международная обработка', paragraphs: [
-          'Используемый Сервисом VPS расположен в Великобритании. Это не означает, что все данные Firebase и других поставщиков хранятся только там.',
+          'Используемый Сервисом VPS расположен в Великобритании. Это не означает, что данные всех интеграций и поставщиков хранятся только там.',
           'Для передачи данных из ЕЭЗ в Великобританию может использоваться решение ЕС об адекватной защите. Иные международные передачи требуют законного механизма, когда он применим.',
           'Информацию о гарантиях и получении их копии можно запросить по адресу info@h00k.top.'
         ]},
@@ -482,7 +482,7 @@ export const legalContent: Record<SupportedLanguage, LegalCopy> = {
           'Ryzyka obejmują zmienność, likwidację pozycji, brak płynności, poślizg cenowy, awarie giełd, błędne dane i opóźnione powiadomienia. Wyniki historyczne nie gwarantują przyszłych.'
         ]},
         { heading: '6. Konta i bezpieczeństwo', paragraphs: [
-          'Niektóre funkcje wymagają rejestracji. Logowanie może odbywać się przez e-mail i hasło lub konto Google za pomocą Firebase Authentication.',
+          'Niektóre funkcje wymagają rejestracji. Logowanie korzysta z własnego konta h00k z adresem e-mail i hasłem; działania wrażliwe wymagają potwierdzenia adresu i uwierzytelniania dwuskładnikowego.',
           'Podawaj prawdziwe dane i chroń dane logowania. Nie uzyskuj dostępu do cudzych kont bez zgody. Podejrzenia przejęcia konta zgłaszaj na info@h00k.top.',
           'Prośbę o zamknięcie konta lub usunięcie danych możesz wysłać na wskazany adres. Ustawowe wyjątki od usunięcia opisuje Polityka prywatności.'
         ]},
@@ -527,13 +527,13 @@ export const legalContent: Record<SupportedLanguage, LegalCopy> = {
           'Ten adres kontaktowy nie zastępuje danych identyfikujących administratora, jeśli wymaga ich prawo. Przed uznaniem Polityki za prawnie kompletną należy je zweryfikować i ujawnić tam, gdzie jest to obowiązkowe.'
         ]},
         { heading: '2. Kategorie danych osobowych', paragraphs: [
-          'Rejestracja i logowanie: adres e-mail, nazwa profilu (jeżeli podana), identyfikator użytkownika oraz dane uwierzytelniania przez Firebase Authentication lub Google.',
+          'Rejestracja i logowanie: adres e-mail, nazwa profilu (jeżeli podana), identyfikator użytkownika, skrót hasła i chronione sesje. Community przetwarza także tworzone treści i ustawienia prywatności; dobrowolne połączenie giełdy dodaje zaszyfrowany klucz API tylko do odczytu, historię wyników i notatki.',
           'Korzystanie z Serwisu: adres IP, czas żądań, rodzaj przeglądarki, logi techniczne, ustawienia filtrów i wykresów, wybrane aktywa, zapisane preferencje oraz alerty.',
           'Integracja Telegram: identyfikator czatu, nazwa użytkownika (jeśli przekazana), język i ustawienia powiadomień. Pomoc techniczna: adres nadawcy, treść wiadomości i załączniki.'
         ]},
         { heading: '3. Źródła danych', paragraphs: [
           'Część danych podajesz podczas rejestracji, uruchamiania integracji i kontaktu z pomocą. Dane techniczne powstają automatycznie podczas korzystania ze strony.',
-          'Dane logowania mogą pochodzić od Google/Firebase, a informacje do alertów od Telegrama po dobrowolnym połączeniu. Notowania Binance i Bybit zwykle nie są Twoimi danymi osobowymi.'
+          'Informacje do alertów mogą pochodzić od Telegrama po dobrowolnym połączeniu. Historia połączonego rachunku giełdowego pochodzi z API tylko do odczytu. Publiczne notowania Binance i Bybit zwykle nie są Twoimi danymi osobowymi.'
         ]},
         { heading: '4. Cele i podstawy prawne', paragraphs: [
           'Dane konta i ustawień służą świadczeniu zamówionych funkcji i wykonaniu umowy (art. 6 ust. 1 lit. b RODO). Dane bezpieczeństwa mogą być przetwarzane w prawnie uzasadnionym interesie ochrony Serwisu (art. 6 ust. 1 lit. f).',
@@ -546,12 +546,12 @@ export const legalContent: Record<SupportedLanguage, LegalCopy> = {
           'Pamięcią przeglądarki możesz zarządzać w jej ustawieniach. Faktyczne nazwy, okresy i dostawców cookies należy zweryfikować z konfiguracją Serwisu.'
         ]},
         { heading: '6. Odbiorcy i dostawcy', paragraphs: [
-          'Google Firebase, w tym Authentication i Firestore, obsługuje logowanie oraz profile. Część infrastruktury działa u zewnętrznego dostawcy VPS/hostingu.',
+          'Logowanie obsługuje własny serwer h00k; profile i dane Community są przechowywane w PostgreSQL. Infrastrukturę zapewniają dostawcy VPS/hostingu, a skonfigurowany dostawca poczty dostarcza wiadomości weryfikacyjne i odzyskiwania dostępu.',
           'Przy włączonych alertach informacje niezbędne do doręczenia są przekazywane Telegramowi. Inne integracje mogą obejmować niezależnych dostawców.',
           'Dostawcy przetwarzają dane zgodnie z odpowiednimi umowami i obowiązkami prawnymi. Niezależne platformy mają własne polityki prywatności.'
         ]},
         { heading: '7. Międzynarodowe przetwarzanie', paragraphs: [
-          'Serwis korzysta z serwera VPS w Wielkiej Brytanii. Nie oznacza to, że wszystkie dane Firebase lub innych dostawców znajdują się wyłącznie w Wielkiej Brytanii.',
+          'Serwis korzysta z serwera VPS w Wielkiej Brytanii. Nie oznacza to, że dane wszystkich integracji i dostawców znajdują się wyłącznie w Wielkiej Brytanii.',
           'Przekazywanie danych z EOG do Wielkiej Brytanii może opierać się na obowiązującej decyzji UE o odpowiednim stopniu ochrony. Inne transfery międzynarodowe wymagają właściwej podstawy prawnej, gdy ma to zastosowanie.',
           'Informacje o zabezpieczeniach i możliwości uzyskania ich kopii można uzyskać pod adresem info@h00k.top.'
         ]},

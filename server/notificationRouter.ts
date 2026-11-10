@@ -125,6 +125,7 @@ export class NotificationRouter {
    */
   public shouldNotify(params: ShouldNotifyParams): ShouldNotifyResult {
     const scopedKey = this.buildScopedKey(params);
+    if(isDeletedAccount(params.userId))return {allowed:false,reason:'account_deleted',scopedKey};
     const now = Date.now();
 
     // 1. If coin context provided, check active status & config toggles
@@ -240,7 +241,7 @@ export class NotificationRouter {
     try {
       const res = await sendUserTelegramMessage(payload.userId, payload.htmlMessage, gateResult.scopedKey);
 
-      if (res.success || res.queued) {
+      if ((res.success || res.queued) && !isDeletedAccount(payload.userId)) {
         const now = Date.now();
         this.scopedAlertTimestamps.set(gateResult.scopedKey, now);
 
@@ -271,6 +272,12 @@ export class NotificationRouter {
   public clear() {
     this.scopedAlertTimestamps.clear();
   }
+  public forgetUser(userId:string){
+    const own=(key:string)=>{try{return JSON.parse(key)[1]===userId;}catch{return false;}};
+    for(const key of this.scopedAlertTimestamps.keys())if(own(key))this.scopedAlertTimestamps.delete(key);
+    for(const key of this.inFlight)if(own(key))this.inFlight.delete(key);
+  }
 }
 
 export const notificationRouter = NotificationRouter.getInstance();
+import {isDeletedAccount} from './deletedAccounts';

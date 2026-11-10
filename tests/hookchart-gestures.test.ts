@@ -38,7 +38,7 @@ function setup(overrides: Record<string, unknown> = {}) {
     transient:{current:null},touchHold:{current:hold},cancelTouchHold:()=>hold.cancel(),
     touchCursorVisible:{current:false},suppressTouchClick:{current:false},magnifierPointer:{current:null},
     mouseRef:{current:null},pointers:{current:new Map()},drag:{current:null},lastTap:{current:0},
-    scheduleDraw:()=>{},editingDrawingId:null,drawings:[],draft:null,tool:'cursor',levelLabelMode:'always',timeMarkers:[],
+    scheduleDraw:()=>{},onMarkersChange:undefined,markers:[],hitDrawing:()=>null,editingDrawingId:null,drawings:[],symbol:'BTCUSDT',draft:null,tool:'cursor',levelLabelMode:'always',timeMarkers:[],
     vp:{barWidth:9,rightOffset:0,autoY:true,manualCenter:null,manualRange:null},candles:[{t:0}],rightPaddingBars:0,rightPadding:0,
     setVp:(update:any)=>viewportUpdates.push(update(env.vp)),
     interactionRef:{current:{width:1,height:1}},interactionDrawRef:{current:()=>{}},
@@ -126,4 +126,35 @@ test('changing chart identity cancels pending or active inspection and accepts a
     assert.equal(t.env.magnifierPointer.current,null);
     t.fireHold();assert.equal(t.env.magnifierPointer.current,2);
   }
+});
+
+test('entry, target and stop drag through controlled annotations without panning or mutating source markers', () => {
+  for(const type of ['entry','target','stop_loss']){
+    const original=[{id:type,type,price:100,label:type,color:'#38bdf8'}];let result:any[]=[];
+    const t=setup({markers:original,onMarkersChange:(next:any[])=>{result=next;}});
+    t.env.geom.current.y=(price:number)=>(110-price)*35;
+    t.handlers.handlePointerDown(t.event(100,350));
+    t.handlers.handlePointerMove(t.event(100,280));
+    assert.equal(result[0].price,102);assert.equal(original[0].price,100);assert.equal(t.viewportUpdates.length,0);
+    t.handlers.handlePointerUp(t.event(100,280,1,'pointerup'));assert.equal(t.captured.size,0);
+  }
+});
+
+test('moving a drawing creates independent time/price points rather than changing the shared original', () => {
+  const drawing={id:'BTCUSDT:line',type:'trend',pts:[{t:100000,p:100},{t:200000,p:103}]};let result:any[]=[];
+  const t=setup({drawings:[drawing],hitDrawing:()=>drawing,setDrawings:(update:any)=>{result=update([drawing]);}});
+  t.env.geom.current.x=(time:number)=>time/1000;t.env.geom.current.y=(price:number)=>(110-price)*35;
+  t.handlers.handlePointerDown(t.event(150,300));t.handlers.handlePointerMove(t.event(200,265));
+  assert.equal(result[0].pts[0].t,150000);assert.equal(result[0].pts[0].p,101);assert.deepEqual(drawing.pts,[{t:100000,p:100},{t:200000,p:103}]);
+});
+
+
+test('annotations from another coin never intercept the current chart pan', () => {
+  const drawing={id:'ETHUSDT:private-line',type:'trend',pts:[{t:100000,p:100},{t:200000,p:103}]};
+  const t=setup({drawings:[drawing]});
+  t.env.geom.current.x=(time:number)=>time/1000;t.env.geom.current.y=(price:number)=>(110-price)*35;
+  t.handlers.handlePointerDown(t.event(100,350));
+  assert.equal(t.env.drag.current.kind,'touchCursor');
+  t.handlers.handlePointerMove(t.event(160,390));
+  assert.equal(t.viewportUpdates.length,1);
 });

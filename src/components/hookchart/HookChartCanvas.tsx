@@ -1,3 +1,4 @@
+import { captureChartDocument } from '../../community/chartDocument';
 import { ReplaySpeedPicker } from '../replay/ReplaySpeedPicker';
 import React, { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -44,6 +45,7 @@ export interface HookChartCanvasProps {
   exchange: ExchangeId;
   marketType: MarketType;
   markers?: ChartMarkerInfo[];
+  onMarkersChange?: (markers: ChartMarkerInfo[]) => void;
   /** Include provisional targets and stops in the auto price scale when previewing. */
   expandPriceScaleToMarkers?: boolean;
   savedChartParams?: ChartRestoreParams;
@@ -113,7 +115,7 @@ function enabledIndicators(preferences?: HookChartPreferences, replay = false, m
 }
 
 const HookChartCanvas = forwardRef<HookChartHandle, HookChartCanvasProps>(function HookChartCanvas({
-  externalData, klines, symbol, timeframe, exchange, marketType, markers = [], expandPriceScaleToMarkers = false, savedChartParams, replay = false, focusTrigger, terminalMode = false, focusFormation, onTimeframeChange, timeframeDisabled = false, replayPlaybackSpeed, onReplayPlaybackSpeedChange, chartActions, toolbarActions, toolbarOverlays, tradeLevelToggle, footerActions,
+  externalData, klines, symbol, timeframe, exchange, marketType, markers = [], onMarkersChange, expandPriceScaleToMarkers = false, savedChartParams, replay = false, focusTrigger, terminalMode = false, focusFormation, onTimeframeChange, timeframeDisabled = false, replayPlaybackSpeed, onReplayPlaybackSpeedChange, chartActions, toolbarActions, toolbarOverlays, tradeLevelToggle, footerActions,
 }, forwardedRef) {
   const { user, profile, updateProfileData } = useAuth();
   const { alerts: priceAlerts, addAlert, deleteAlert } = useAlerts();
@@ -848,10 +850,22 @@ const HookChartCanvas = forwardRef<HookChartHandle, HookChartCanvasProps>(functi
     return () => { controller.abort(); clearInterval(timer); };
   }, [showOi, symbol, timeframe, replay, marketType, !!externalData]);
 
+  const documentReader = useRef<() => ReturnType<typeof captureChartDocument>>(() => { throw new Error('Графік ще завантажується'); });
+  documentReader.current = () => {
+    const visible=engineRef.current?.getVisibleRange?.();
+    const from=candles.length>2000?Math.max(0,Math.min(candles.length-2000,Math.floor(visible?.from??candles.length-2000)-100)):0;
+    const window=candles.slice(from,from+2000);
+    return captureChartDocument({ symbol: normalizeExchangeSymbol(symbol), exchange, marketType,
+      timeframe:timeframe as Timeframe,markers,drawings:drawingsRef.current.filter(d=>d.id.startsWith(symbol+':')),
+      ...(visible?{viewport:{from:Math.max(-100,visible.from-from),to:Math.min(window.length+100,visible.to-from)}}:{}),
+      candles:window.map(c=>({time:Math.round(c.t/1000),open:c.o,high:c.h,low:c.l,close:c.c,volume:c.v})),
+    });
+  };
   const assignRef = useCallback((handle: HookChartHandle | null) => {
     engineRef.current = handle;
-    if (typeof forwardedRef === 'function') forwardedRef(handle);
-    else if (forwardedRef) forwardedRef.current = handle;
+    const exposed = handle ? { ...handle, getDocument: () => documentReader.current() } : null;
+    if (typeof forwardedRef === 'function') forwardedRef(exposed);
+    else if (forwardedRef) forwardedRef.current = exposed;
   }, [forwardedRef]);
 
   // Keep popovers outside the horizontally scrolling strip so they are not clipped.
@@ -1279,7 +1293,7 @@ const HookChartCanvas = forwardRef<HookChartHandle, HookChartCanvasProps>(functi
         rightPaddingBars={rightPaddingBars}
         roundGrid={!!settings.roundGrid}
         roundness={settings.roundness ?? 2}
-        markers={markers}
+        markers={markers} onMarkersChange={onMarkersChange}
         expandPriceScaleToMarkers={expandPriceScaleToMarkers}
         timeMarkers={externalData?.timeMarkers}
         splitVolumes={!!externalData}

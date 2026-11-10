@@ -4,7 +4,7 @@ export type ExchangeId = 'binance' | 'bybit';
 export type MarketType = 'futures' | 'spot';
 export type ChartProvider = 'tradingview' | 'hookchart';
 export type Timeframe = '1m' | '5m' | '15m' | '1h' | '4h' | '1d';
-export type ActivePageType = 'patterns' | 'screener' | 'terminal' | 'surveillance' | 'replay';
+export type ActivePageType = 'patterns' | 'screener' | 'terminal' | 'surveillance' | 'replay' | 'community';
 
 export interface TerminalChartBlock {
   id: string;
@@ -397,6 +397,7 @@ export interface SearchUserSettings {
 }
 
 export interface UserProfile {
+  community?: Record<string, any>;
   uid: string;
   email?: string | null;
   displayName?: string | null;
@@ -673,6 +674,9 @@ export interface ArchivedFormation {
   formation: DetectedFormation;
   markers: ChartMarkerInfo[];
   chartParams: ChartRestoreParams;
+  chartDocument?: import('./community/chartDocument').ChartDocument;
+  hasChartDocument?: boolean;
+  sourceChartId?: string;
   notes?: string;
   createdAt: string;
   savedAtTimestamp: number;

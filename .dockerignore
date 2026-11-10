@@ -1,0 +1,11 @@
+node_modules
+dist-profile
+.git
+.env
+.env.*
+!.env.example
+server/data
+*.log
+
+migration-input/
+migration-reports/

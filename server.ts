@@ -1,3 +1,5 @@
+import { installCommunityProxy } from './server/community/proxy';
+import { installAccountLifecycle,startAccountCleanup } from './server/accountLifecycle';
 import express from 'express';
 import path from 'path';
 import { installProductionAssets } from './server/productionAssets';
@@ -59,7 +61,10 @@ async function startServer() {
   const app = express();
   const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
+  if(process.env.H00K_TRUST_PROXY)app.set('trust proxy',process.env.H00K_TRUST_PROXY);
+  installCommunityProxy(app);
   app.use(express.json());
+  installAccountLifecycle(app);
 
   // Read-only operator endpoint is disabled unless H00K_OPS_TOKEN is configured.
   let chartDepthMetrics: (() => { activeMarkets: number; clients: number }) | null = null;
@@ -857,6 +862,7 @@ async function startServer() {
     // Start unified background CRON for all notifications (Price Alerts 5s, Surveillance 15s, Screener 60s)
     startTelegramDeliveryWorker();
     startSharedTelegramBot();
+    startAccountCleanup();
     cronManager.init();
     formationDensityFeed.start();
     binanceTickerStream.start();
