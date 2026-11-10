@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Newspaper, RefreshCw } from 'lucide-react';
+import { ExternalLink, Newspaper, RefreshCw } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
 import type { SupportedLanguage } from '../locales';
 
@@ -9,22 +9,73 @@ interface CryptoHeadline {
   publishedAt: string;
 }
 
-const UI: Record<SupportedLanguage, { heading: string; refresh: string; unavailable: string; empty: string; loading: string }> = {
-  uk: { heading: 'Криптоновини', refresh: 'Оновити новини', unavailable: 'Наразі не вдалося отримати новини', empty: 'Новин поки немає', loading: 'Завантажуємо останні новини…' },
-  en: { heading: 'Crypto news', refresh: 'Refresh news', unavailable: 'News are temporarily unavailable', empty: 'No news yet', loading: 'Loading latest news…' },
-  ru: { heading: 'Криптоновости', refresh: 'Обновить новости', unavailable: 'Не удалось получить новости', empty: 'Новостей пока нет', loading: 'Загружаем последние новости…' },
-  pl: { heading: 'Wiadomości krypto', refresh: 'Odśwież wiadomości', unavailable: 'Nie można teraz pobrać wiadomości', empty: 'Brak wiadomości', loading: 'Wczytywanie wiadomości…' },
+interface HeadlinesResponse {
+  language: SupportedLanguage;
+  items: CryptoHeadline[];
+  hasMore: boolean;
+}
+
+const PAGE_SIZE = 9;
+const MAX_HEADLINES = 45;
+
+const UI: Record<SupportedLanguage, {
+  heading: string; refresh: string; unavailable: string; empty: string;
+  loading: string; showMore: string; open: string;
+}> = {
+  uk: {
+    heading: 'Новини',
+    refresh: 'Оновити новини',
+    unavailable: 'Наразі не вдалося отримати новини',
+    empty: 'Новин поки немає',
+    loading: 'Завантажуємо останні новини…',
+    showMore: 'Показати ще новини',
+    open: 'Читати новину',
+  },
+  en: {
+    heading: 'News',
+    refresh: 'Refresh news',
+    unavailable: 'News are temporarily unavailable',
+    empty: 'No news yet',
+    loading: 'Loading latest news…',
+    showMore: 'Show more news',
+    open: 'Read article',
+  },
+  ru: {
+    heading: 'Новости',
+    refresh: 'Обновить новости',
+    unavailable: 'Не удалось получить новости',
+    empty: 'Новостей пока нет',
+    loading: 'Загружаем последние новости…',
+    showMore: 'Показать больше новостей',
+    open: 'Читать новость',
+  },
+  pl: {
+    heading: 'Wiadomości',
+    refresh: 'Odśwież wiadomości',
+    unavailable: 'Nie można teraz pobrać wiadomości',
+    empty: 'Brak wiadomości',
+    loading: 'Wczytywanie wiadomości…',
+    showMore: 'Pokaż więcej wiadomości',
+    open: 'Czytaj wiadomość',
+  },
 };
 
 export const CryptoNewsWidget: React.FC = () => {
   const { language } = useLanguage();
   const labels = UI[language];
-  const [items, setItems] = useState<CryptoHeadline[]>([]);
+  // Switching languages starts with the first nine news, without showing
+  // any headlines cached from the preceding language during the request.
+  const [page, setPage] = useState({ language, limit: PAGE_SIZE });
+  const limit = page.language === language ? page.limit : PAGE_SIZE;
+  const [received, setReceived] = useState<HeadlinesResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [refresh, setRefresh] = useState(0);
+  const items = received?.language === language ? received.items : [];
+  const hasMore = received?.language === language && received.hasMore;
 
   const requestRefresh = useCallback(() => setRefresh(value => value + 1), []);
+  const showMore = () => setPage({ language, limit: Math.min(MAX_HEADLINES, limit + PAGE_SIZE) });
 
   useEffect(() => {
     let active = true;
@@ -34,23 +85,20 @@ export const CryptoNewsWidget: React.FC = () => {
       setLoading(true);
       setError(false);
       try {
-        const response = await fetch('/api/news/crypto?lang=' + encodeURIComponent(language), {
+        const query = new URLSearchParams({ lang: language, limit: String(limit) });
+        const response = await fetch('/api/news/crypto?' + query, {
           signal: controller.signal,
         });
         if (!response.ok) throw new Error('News request failed');
-        const data: { success?: boolean; items?: CryptoHeadline[] } = await response.json();
+        const data: { success?: boolean; items?: CryptoHeadline[]; hasMore?: boolean } = await response.json();
         if (!data.success || !Array.isArray(data.items)) throw new Error('Invalid news response');
-        if (active) setItems(data.items);
-      } catch (err) {
-        if (active && !controller.signal.aborted) {
-          setItems([]);
-          setError(true);
-        }
+        if (active) setReceived({ language, items: data.items, hasMore: data.hasMore === true });
+      } catch {
+        if (active && !controller.signal.aborted) setError(true);
       } finally {
         if (active) setLoading(false);
       }
     };
-    setItems([]);
     void load();
     const timer = window.setInterval(() => void load(), 5 * 60_000);
     return () => {
@@ -58,7 +106,7 @@ export const CryptoNewsWidget: React.FC = () => {
       controller.abort();
       window.clearInterval(timer);
     };
-  }, [language, refresh]);
+  }, [language, limit, refresh]);
 
   return (
     <section className="min-w-0 overflow-hidden rounded-2xl border border-slate-800/90 bg-slate-900/90 shadow-lg backdrop-blur-md" aria-label={labels.heading}>
@@ -77,22 +125,37 @@ export const CryptoNewsWidget: React.FC = () => {
       </header>
       {loading && items.length === 0 ? (
         <div role="status" className="px-4 py-6 text-sm text-slate-400">{labels.loading}</div>
-      ) : error ? (
+      ) : error && items.length === 0 ? (
         <div role="status" className="px-4 py-6 text-sm text-slate-400">{labels.unavailable}</div>
       ) : items.length === 0 ? (
         <div role="status" className="px-4 py-6 text-sm text-slate-400">{labels.empty}</div>
       ) : (
-        <ul className="max-h-[360px] divide-y divide-slate-800/70 overflow-y-auto overscroll-contain" aria-label={labels.heading}>
-          {items.map(item => (
-            <li key={item.url + item.publishedAt}>
-              <a href={item.url} target="_blank" rel="noopener noreferrer"
-                data-no-translate
-                className="block px-3.5 py-2.5 text-xs font-semibold leading-relaxed text-slate-200 transition-colors hover:bg-slate-800/60 hover:text-cyan-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 sm:text-sm">
-                {item.title}
-              </a>
-            </li>
-          ))}
-        </ul>
+        <>
+          <ul className="max-h-[520px] divide-y divide-slate-800/70 overflow-y-auto overscroll-contain"
+            aria-label={labels.heading}>
+            {items.map(item => (
+              <li key={item.url + item.publishedAt}>
+                {/* Same-tab navigation also works in mobile browsers and in-app
+                    webviews where opening a new tab may appear to do nothing. */}
+                <a href={item.url} target="_self" rel="noreferrer" title={labels.open}
+                  data-no-translate
+                  className="flex w-full items-start gap-2 px-3.5 py-2.5 text-xs font-semibold leading-relaxed text-slate-200 transition-colors hover:bg-slate-800/60 hover:text-cyan-200 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 sm:text-sm">
+                  <span className="min-w-0 flex-1">{item.title}</span>
+                  <ExternalLink aria-hidden="true" className="mt-0.5 h-3.5 w-3.5 shrink-0 text-cyan-500/80" />
+                </a>
+              </li>
+            ))}
+          </ul>
+          {hasMore && limit < MAX_HEADLINES && (
+            <div className="border-t border-slate-800/70 p-2.5">
+              <button type="button" disabled={loading} onClick={showMore}
+                className="w-full rounded-lg border border-cyan-700/40 bg-slate-800/70 px-3 py-2.5 text-xs font-bold text-cyan-300 transition-colors hover:bg-slate-700/75 disabled:cursor-wait disabled:opacity-60">
+                {loading ? labels.loading : labels.showMore}
+              </button>
+            </div>
+          )}
+          {error && <div role="status" className="px-3.5 pb-2.5 text-xs text-amber-300">{labels.unavailable}</div>}
+        </>
       )}
     </section>
   );

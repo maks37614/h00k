@@ -11,7 +11,14 @@ const MYMEMORY_URL = 'https://api.mymemory.translated.net/get';
 const SOURCE_TTL_MS = 5 * 60_000;
 const SOURCE_STALE_MS = 60 * 60_000;
 const MAX_AGE_MS = 7 * 24 * 60 * 60_000;
-const ARTICLE_COUNT = 9;
+const ARTICLE_COUNT = 45;
+const INITIAL_NEWS_COUNT = 9;
+
+/** Cap each public request; client progressively unlocks more headlines. */
+export function normalizeHeadlineLimit(value: unknown): number {
+  if (typeof value !== 'string' || !/^\d{1,3}$/.test(value)) return INITIAL_NEWS_COUNT;
+  return Math.max(INITIAL_NEWS_COUNT, Math.min(ARTICLE_COUNT, Number(value)));
+}
 
 const CRYPTO_TERMS = /\b(?:bitcoin|btc|ethereum|ether|eth|solana|sol|crypto(?:currency|currencies)?|blockchain|web3|defi|stablecoin|usdt|usdc|altcoin|memecoin|tokeniz(?:ation|ed|ing)?|coinbase|binance|kraken|ripple|xrp|dogecoin|cardano|polkadot|avalanche|chainlink|bitget|okx|bybit|tether|microstrategy|satoshi|metamask|digital assets?|spot etf)\b/i;
 const CRYPTO_CATEGORIES = new Set([
@@ -159,9 +166,13 @@ export function installCryptoNewsRoutes(app: Express) {
     const language = normalizeNewsLanguage(req.query.lang);
     try {
       const news = await latestNews();
-      const items = language === 'en' ? news : await localizedNews(news, language);
+      const limit = normalizeHeadlineLimit(req.query.limit);
+      // Translate only the requested number of titles, not the entire feed.
+      // The shared translation cache prevents repeat requests for earlier pages.
+      const page = news.slice(0, limit);
+      const items = language === 'en' ? page : await localizedNews(page, language);
       res.setHeader('Cache-Control', 'public, max-age=60, stale-while-revalidate=120');
-      res.json({ success: true, language, items });
+      res.json({ success: true, language, items, hasMore: news.length > limit });
     } catch (error) {
       console.warn('[crypto-news] Feed currently unavailable:', error);
       res.status(503).json({ success: false, language, items: [], error: 'News are temporarily unavailable' });

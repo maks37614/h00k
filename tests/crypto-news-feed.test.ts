@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { normalizeNewsLanguage, selectLatestCryptoHeadlines } from '../server/cryptoNewsFeed';
+import { normalizeNewsLanguage, normalizeHeadlineLimit, selectLatestCryptoHeadlines } from '../server/cryptoNewsFeed';
 
 const now = Date.parse('2026-11-10T00:00:00Z');
 
@@ -41,4 +41,31 @@ test('Crypto news widget uses site language, displays only headlines, and does n
   assert.match(screener, /xl:grid-cols-2/);
   assert.match(screener, /<CryptoNewsWidget/);
   assert.match(server, /installCryptoNewsRoutes\(app\)/);
+});
+
+test('News API allows progressively showing up to 45 items without translating the entire feed', () => {
+  assert.equal(normalizeHeadlineLimit(undefined), 9);
+  assert.equal(normalizeHeadlineLimit('18'), 18);
+  assert.equal(normalizeHeadlineLimit('27'), 27);
+  assert.equal(normalizeHeadlineLimit('999'), 45);
+  assert.equal(normalizeHeadlineLimit('not-a-number'), 9);
+  assert.equal(normalizeHeadlineLimit(['45']), 9);
+  const feed = readFileSync(new URL('../server/cryptoNewsFeed.ts', import.meta.url), 'utf8');
+  assert.match(feed, /const ARTICLE_COUNT = 45/);
+  assert.match(feed, /const page = news.slice\(0, limit\)/);
+  assert.match(feed, /hasMore: news.length > limit/);
+});
+
+test('News widget shows localized News title, more button and working same-tab article links', () => {
+  const widget = readFileSync(new URL('../src/components/CryptoNewsWidget.tsx', import.meta.url), 'utf8');
+  assert.match(widget, /heading: 'Новини'/);
+  assert.match(widget, /heading: 'News'/);
+  assert.match(widget, /heading: 'Новости'/);
+  assert.match(widget, /heading: 'Wiadomości'/);
+  assert.match(widget, /max-h-\[520px\]/);
+  assert.match(widget, /onClick=\{showMore\}/);
+  assert.match(widget, /target="_self"/);
+  assert.match(widget, /href=\{item.url\}/);
+  assert.doesNotMatch(widget, /target="_blank"/);
+  assert.doesNotMatch(widget, /item\.(?:description|source)/);
 });
