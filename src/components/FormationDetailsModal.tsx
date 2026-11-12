@@ -1132,16 +1132,20 @@ export const FormationDetailsModal: React.FC<FormationDetailsModalProps> = ({
 
               {/* Custom Price Alert Section Below Chart */}
               <div className={telegramAlertPanelCollapsed
-                ? 'flex w-full min-w-0 flex-col gap-2 rounded-xl border border-slate-800 bg-slate-950/90 p-2.5 sm:p-3'
+                ? 'flex w-full min-w-0 flex-col gap-2 rounded-xl border border-slate-800 bg-slate-950/90 p-3 sm:p-4'
                 : 'w-full space-y-4 rounded-2xl border border-slate-800 bg-slate-950/90 p-4 sm:p-5'}>
-                <div className="relative flex w-full min-w-0 items-start gap-2 sm:gap-3">
+                <div className={telegramAlertPanelCollapsed
+                  ? 'relative flex w-full min-w-0 items-center gap-2 sm:gap-3'
+                  : 'relative flex w-full min-w-0 items-start gap-2 sm:gap-3'}>
                   <div className={telegramAlertPanelCollapsed
-                    ? 'shrink-0 rounded-lg border border-cyan-500/30 bg-cyan-500/10 p-1.5 text-cyan-400'
+                    ? 'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-cyan-500/30 bg-cyan-500/10 text-cyan-400'
                     : 'shrink-0 rounded-xl border border-cyan-500/30 bg-cyan-500/10 p-2 text-cyan-400'}>
                     <Bell className="h-4 w-4" />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <h4 className="text-xs font-bold leading-7 text-white sm:text-sm">
+                    <h4 className={telegramAlertPanelCollapsed
+                      ? 'min-w-0 truncate text-xs font-bold leading-7 text-white sm:text-sm'
+                      : 'text-xs font-bold leading-7 text-white sm:text-sm'}>
                       Сповіщення Telegram
                     </h4>
                     {!telegramAlertPanelCollapsed && (
@@ -1162,7 +1166,7 @@ export const FormationDetailsModal: React.FC<FormationDetailsModalProps> = ({
                       aria-controls="telegram-price-alert-panel-details"
                       aria-label={telegramAlertPanelCollapsed ? 'Розгорнути сповіщення Telegram' : 'Згорнути сповіщення Telegram'}
                       title={telegramAlertPanelCollapsed ? 'Розгорнути' : 'Згорнути'}
-                      className="absolute right-0 top-0 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-slate-700 bg-slate-900 text-slate-300 transition-colors hover:border-cyan-600 hover:text-cyan-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400"
+                      className={`absolute right-0 top-0 inline-flex shrink-0 items-center justify-center rounded-lg border border-slate-700 bg-slate-900 text-slate-300 transition-colors hover:border-cyan-600 hover:text-cyan-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 ${telegramAlertPanelCollapsed ? 'h-8 w-8' : 'h-7 w-7'}`}
                     >
                       {telegramAlertPanelCollapsed ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
                     </button>
