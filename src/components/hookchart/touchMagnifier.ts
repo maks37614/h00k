@@ -24,7 +24,7 @@ export function touchMagnifierLayout(width: number, height: number, point: Magni
   // The touch stays on the selected candle/crosshair, but the magnifier
   // floats ABOVE the finger. Keep the full lens inside the chart canvas.
   const edgeInset = radius + 6;
-  const fingerGap = 24;
+  const fingerGap = 36; // 12px more clearance above the inspecting finger.
   let x = clamp(selectedX, edgeInset, width - edgeInset);
   const y = clamp(selectedY - radius - fingerGap, edgeInset, height - edgeInset);
 
