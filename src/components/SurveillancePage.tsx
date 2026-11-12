@@ -465,7 +465,7 @@ export const SurveillancePage: React.FC<SurveillancePageProps> = ({
                   </span>
                 </div>
                 <p className="text-xs text-slate-400">
-                  Постійний фоновий моніторинг ринку на серверах Signalhook: Local Order Book, Multi-Timeframe структура, рівні, щільності та Telegram алерти
+                  Комплексний моніторинг ринку на серверах h00k.top: Local Order Book, Multi-Timeframe структура, рівні, щільності та Telegram алерти
                 </p>
               </div>
             </div>
