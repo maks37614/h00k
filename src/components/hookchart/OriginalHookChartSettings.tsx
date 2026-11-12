@@ -277,13 +277,24 @@ function LiquidationMinimum({ value, disabled, onChange }: { value?: number | nu
     }} />;
 }
 function Num({ value, set, min, max, step = 1, disabled = false }: { value: number; set: (value: number) => void; min?: number; max?: number; step?: number; disabled?: boolean }) {
-  return <input className="numInput" type="number" value={value} min={min} max={max} step={step} disabled={disabled} onChange={event => {
-    let next = Number(event.target.value);
+  // Keep a temporary string while editing. Number('') is zero, so committing
+  // on every keystroke prevents users from deleting a displayed 0 on iOS.
+  const [draft, setDraft] = useState<string | null>(null);
+  const commit = (raw: string) => {
+    setDraft(null);
+    if (!raw.trim()) return; // Empty input cancels the edit, not a new zero.
+    let next = Number(raw);
     if (!Number.isFinite(next)) return;
     if (min !== undefined) next = Math.max(min, next);
     if (max !== undefined) next = Math.min(max, next);
-    set(next);
-  }} />;
+    if (next !== value) set(next);
+  };
+  return <input className="numInput" type="number" value={draft ?? value} min={min} max={max} step={step} disabled={disabled}
+    onFocus={event => { setDraft(String(value)); event.currentTarget.select(); }}
+    onChange={event => setDraft(event.currentTarget.value)}
+    onBlur={event => commit(event.currentTarget.value)}
+    onKeyDown={event => { if (event.key === 'Enter') event.currentTarget.blur(); }}
+  />;
 }
 function Choice({ label, desc, unavailable, values, labels, value, set }: { label: string; desc?: string; unavailable?: boolean; values: Array<string | number>; labels?: string[]; value: unknown; set: (value: any) => void }) {
   return <Setting label={label} desc={desc} unavailable={unavailable}><div className="settingsChips">{values.map((entry, index) => <button type="button" key={String(entry)} value={String(entry)} aria-pressed={value === entry} className={value === entry ? 'sel' : ''} onClick={() => set(entry)}>{labels?.[index] ?? String(entry)}</button>)}</div></Setting>;
