@@ -1544,7 +1544,7 @@ export const FormationDetailsModal: React.FC<FormationDetailsModalProps> = ({
           </div>
         </div>
         {/* Same localized legal/contact footer as the main Screener page. */}
-        {!pageMode && <SiteFooter />}
+        <SiteFooter />
       </div>
 
     </div>
