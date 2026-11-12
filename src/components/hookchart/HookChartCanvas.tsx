@@ -441,7 +441,7 @@ const HookChartCanvas = forwardRef<HookChartHandle, HookChartCanvasProps>(functi
       ? terminalToolbarVisibility.drawingToolsOpen
       : settings.drawingToolbarOpen === true
   );
-  const rightPaddingBars = terminalMode ? 8 : settings.rightPaddingEnabled === false ? 0 : (settings.rightPadding ?? 10);
+  const rightPaddingBars = activeVisualProfile ? 0 : terminalMode ? 8 : settings.rightPaddingEnabled === false ? 0 : (settings.rightPadding ?? 10);
   const channel = useMemo(() => (replay ? replayOverlays.includes('channel') : settings.autoChannel)
     ? buildStructuralChannel(analysisSeries, candles.at(-1)?.c) : null,
     [analysisSeries, candles, settings.autoChannel, replay, replayOverlays]);
