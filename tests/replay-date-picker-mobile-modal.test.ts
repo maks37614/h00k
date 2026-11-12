@@ -20,7 +20,7 @@ test('Replay date modal fits short mobile viewports and keeps content scrollable
   assert.match(toolbar, /sm:max-h-\[calc\(100dvh-32px\)\]/);
   assert.match(toolbar, /min-h-0 min-w-0 flex-1 space-y-4 overflow-x-hidden overflow-y-auto overscroll-contain/);
   assert.match(toolbar, /grid grid-cols-2 gap-2 min-\[380px\]:grid-cols-3/);
-  assert.match(toolbar, /block w-full min-w-0 max-w-full/);
+  assert.match(toolbar, /block w-full min-w-0 max-w-\[300px\]/);
   assert.match(toolbar, /shrink-0 items-center justify-between gap-3 border-b/);
   assert.match(toolbar, /shrink-0 items-center justify-end gap-2 border-t/);
   assert.match(toolbar, /document\.body\.style\.overflow = 'hidden'/);
@@ -38,10 +38,10 @@ test('Replay date picker preserves date choice actions and only changes date dia
   assert.match(toolbar, /isCoinModalOpen && \(/);
 });
 
-test('Replay quick dates add Today, 1 day ago and 5 days ago before older presets', () => {
+test('Replay quick dates start with 1, 3 and 5 days ago before older presets', () => {
   const expected = [
-    "{ label: 'Сьогодні', days: 0 }",
     "{ label: '1 день тому', days: 1 }",
+    "{ label: '3 дні тому', days: 3 }",
     "{ label: '5 днів тому', days: 5 }",
     "{ label: '14 днів тому', days: 14 }",
   ];
@@ -51,12 +51,13 @@ test('Replay quick dates add Today, 1 day ago and 5 days ago before older preset
     assert.ok(offset > lastOffset, 'Missing or out-of-order preset: ' + label);
     lastOffset = offset;
   }
+  assert.doesNotMatch(toolbar, /\{ label: 'Сьогодні', days: 0 \}/);
   assert.match(toolbar, /onSelectHistoricalDate\(getReplayPresetDate\(days\)\)/);
 });
 
 test('Replay presets target local calendar day midnight, even across month boundaries', () => {
   const now = new Date(2026, 10, 12, 1, 33, 52);
-  for (const days of [0, 1, 5, 14, 30, 60, 90, 180, 365]) {
+  for (const days of [0, 1, 3, 5, 14, 30, 60, 90, 180, 365]) {
     const expected = new Date(now);
     expected.setDate(expected.getDate() - days);
     expected.setHours(0, 0, 0, 0);
@@ -67,6 +68,7 @@ test('Replay presets target local calendar day midnight, even across month bound
   }
   assert.equal(getReplayPresetDate(0, now).getDate(), 12);
   assert.equal(getReplayPresetDate(1, now).getDate(), 11);
+  assert.equal(getReplayPresetDate(3, now).getDate(), 9);
   assert.equal(getReplayPresetDate(5, now).getDate(), 7);
 });
 

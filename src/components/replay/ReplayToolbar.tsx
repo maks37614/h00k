@@ -384,8 +384,8 @@ export const ReplayToolbar: React.FC<ReplayToolbarProps> = ({
                 </span>
                 <div className="grid grid-cols-2 gap-2 min-[380px]:grid-cols-3">
                   {[
-                    { label: 'Сьогодні', days: 0 },
                     { label: '1 день тому', days: 1 },
+                    { label: '3 дні тому', days: 3 },
                     { label: '5 днів тому', days: 5 },
                     { label: '14 днів тому', days: 14 },
                     { label: '30 днів тому', days: 30 },
@@ -415,7 +415,7 @@ export const ReplayToolbar: React.FC<ReplayToolbarProps> = ({
                   type="datetime-local"
                   value={customDateTime}
                   onChange={(event) => setCustomDateTime(event.target.value)}
-                  className="block w-full min-w-0 max-w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 font-mono text-base text-white focus:border-cyan-500 focus:outline-none sm:text-xs"
+                  className="block w-full min-w-0 max-w-[300px] rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 font-mono text-base text-white focus:border-cyan-500 focus:outline-none sm:text-xs"
                 />
               </div>
             </div>
