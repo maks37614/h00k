@@ -12,6 +12,9 @@ export interface RawTicker {
   volumeUsd: number;
   high24h: number;
   low24h: number;
+  /** Source-provided Bybit linear derivatives values only. */
+  openInterestUsd?: number;
+  fundingRatePct?: number;
 }
 
 export interface MarketSourceStatus {
@@ -233,6 +236,16 @@ export class MarketTickerFeed {
             volumeUsd: Number(exchange === 'binance' ? item.quoteVolume : item.turnover24h),
             high24h: Number(exchange === 'binance' ? item.highPrice : item.highPrice24h),
             low24h: Number(exchange === 'binance' ? item.lowPrice : item.lowPrice24h),
+            // The existing Bybit all-linear-tickers response already contains
+            // real openInterestValue and fundingRate; no additional HTTP call.
+            ...(exchange === 'bybit' && market === 'futures' &&
+              item.openInterestValue !== undefined && item.openInterestValue !== '' &&
+              Number.isFinite(Number(item.openInterestValue)) && Number(item.openInterestValue) > 0
+              ? { openInterestUsd: Number(item.openInterestValue) } : {}),
+            ...(exchange === 'bybit' && market === 'futures' &&
+              item.fundingRate !== undefined && item.fundingRate !== '' &&
+              Number.isFinite(Number(item.fundingRate))
+              ? { fundingRatePct: Number(item.fundingRate) * 100 } : {}),
           }))
           .filter(t => Number.isFinite(t.price) && t.price > 0 && Number.isFinite(t.volumeUsd) && t.volumeUsd >= 0
             && Number.isFinite(t.change24h) && Number.isFinite(t.high24h) && Number.isFinite(t.low24h))

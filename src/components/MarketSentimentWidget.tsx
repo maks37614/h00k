@@ -197,7 +197,10 @@ export const MarketSentimentWidget: React.FC<MarketSentimentWidgetProps> = ({ co
                   {data.priceTrendDynamics.advancingPct}%
                 </span>
                 <span className="text-[10px] text-slate-400 font-sans block">
-                  {data.priceTrendDynamics.advancingCount} ростуть / {data.priceTrendDynamics.decliningCount} падають
+                  {data.priceTrendDynamics.advancingCount} зростають / {data.priceTrendDynamics.decliningCount} падають
+                </span>
+                <span className="block text-[10px] text-slate-500">
+                  Без суттєвого руху: {data.priceTrendDynamics.unchangedCount ?? 'н/д'}
                 </span>
               </div>
             </div>
@@ -250,6 +253,11 @@ export const MarketSentimentWidget: React.FC<MarketSentimentWidgetProps> = ({ co
                 <span className="text-[10px] text-slate-400 font-sans block truncate">
                   EMA20: {data.marketBreadth.aboveEma20Pct === null ? 'н/д' : `${data.marketBreadth.aboveEma20Pct}% вище`}
                 </span>
+                {data.dataQuality && (
+                  <span className="block truncate text-[10px] text-slate-400" title="Частка інструментів із достатньою добовою історією">
+                    Історія: {data.dataQuality.locationCoveragePct}% · {data.dataQuality.locationReliable ? 'достатньо' : 'недостатньо'}
+                  </span>
+                )}
               </div>
             </div>
 
@@ -261,9 +269,12 @@ export const MarketSentimentWidget: React.FC<MarketSentimentWidgetProps> = ({ co
               </div>
 
               <div>
-                <span className="block text-base font-bold text-slate-400 sm:text-lg">
-                  {data.capitalFlow.netInflow24hUsd === null ? 'н/д' :
-                    formatVolume(Math.abs(data.capitalFlow.netInflow24hUsd))}
+                <span
+                  className={`block text-base font-bold sm:text-lg ${data.capitalFlow.takerDeltaUsd == null
+                    ? 'text-slate-400' : data.capitalFlow.takerDeltaUsd >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}
+                >
+                  {data.capitalFlow.takerDeltaUsd == null ? 'н/д' :
+                    `${data.capitalFlow.takerDeltaUsd > 0 ? '+' : data.capitalFlow.takerDeltaUsd < 0 ? '−' : ''}${formatVolume(Math.abs(data.capitalFlow.takerDeltaUsd))}`}
                 </span>
                 <span className="block truncate font-sans text-[10px] text-slate-400" title={data.capitalFlow.label}>
                   {data.capitalFlow.label}
@@ -283,7 +294,11 @@ export const MarketSentimentWidget: React.FC<MarketSentimentWidgetProps> = ({ co
                   {data.derivativesOverview.aggregatedOIUsd === null ? 'н/д' : formatVolume(data.derivativesOverview.aggregatedOIUsd)}
                 </span>
                 <span className="text-[10px] text-slate-400 font-sans block truncate">
-                  Фандинг: {data.derivativesOverview.avgFundingRate === null ? 'н/д' : `${data.derivativesOverview.avgFundingRate}%`}
+                  Фандинг: {data.derivativesOverview.avgFundingRate === null ? 'н/д' :
+                    `${data.derivativesOverview.avgFundingRate > 0 ? '+' : ''}${data.derivativesOverview.avgFundingRate.toFixed(4)}%`}
+                </span>
+                <span className="block truncate text-[10px] text-slate-500" title={data.derivativesOverview.sourceLabel ?? 'OI/Funding недоступні'}>
+                  {data.derivativesOverview.sourceLabel ?? 'Джерело: Bybit USDT Perpetual'}
                 </span>
               </div>
             </div>

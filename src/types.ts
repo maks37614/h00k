@@ -634,6 +634,10 @@ export interface MarketCoin {
   distanceToLowPct: number;
   volatility24hPct: number;
   volatility5mPct?: number;
+  /** Observed Bybit linear ticker openInterestValue; not inferred from volume. */
+  openInterestUsd?: number;
+  /** Observed Bybit linear fundingRate × 100, in percent. */
+  fundingRatePct?: number;
   location?: import('./utils/marketLocation').MarketLocation;
   isNearHigh: boolean;
   isNearLow: boolean;
@@ -904,6 +908,8 @@ export interface MarketSentimentData {
   priceTrendDynamics: {
     advancingCount: number;
     decliningCount: number;
+    /** Instruments with absolute 24h change <= 0.1%. */
+    unchangedCount?: number;
     advancingPct: number;
     trendBias: 'bullish' | 'bearish' | 'neutral';
     avgChange24h: number;
@@ -923,8 +929,8 @@ export interface MarketSentimentData {
 
   marketBreadth: {
     aboveEma20Pct: number | null;
-    nearHighsPct: number;
-    nearLowsPct: number;
+    nearHighsPct: number | null;
+    nearLowsPct: number | null;
     breadthScore: number;
     verdict: string;
   };
@@ -933,6 +939,11 @@ export interface MarketSentimentData {
     netInflow24hUsd: number | null;
     direction: 'inflow' | 'outflow' | 'neutral' | null;
     label: string;
+    /** Signed taker-buy minus taker-sell volume, Binance futures UTC day, sample only. */
+    takerDeltaUsd?: number | null;
+    sampledPairs?: number;
+    sampleCoverage?: string;
+    sampledAt?: number | null;
   };
 
   derivativesOverview: {
@@ -940,12 +951,18 @@ export interface MarketSentimentData {
     oiChange24hPct: number | null;
     avgFundingRate: number | null;
     fundingBias: 'long_heavy' | 'short_heavy' | 'balanced' | null;
+    /** Number of observed Bybit linear instruments included in this sample. */
+    instrumentCount?: number;
+    fundingInstrumentCount?: number;
+    sourceLabel?: string;
   };
 
   /** Actual snapshot quality, no extra exchange requests. */
   dataQuality?: {
     analyzedPairs: number;
     locationCoveragePct: number;
+    locationPairs?: number;
+    locationReliable?: boolean;
     freshSources: number;
     availableSources: number;
     totalSources: number;

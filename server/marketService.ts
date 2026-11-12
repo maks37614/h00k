@@ -745,6 +745,8 @@ export async function fetchMarketCoins(params: {
         distanceToLowPct: Number(distanceToLowPct.toFixed(2)),
         volatility24hPct: Number(volatility24hPct.toFixed(2)),
         volatility5mPct: Number((volatility24hPct * 0.12).toFixed(2)),
+        ...(t.openInterestUsd !== undefined ? { openInterestUsd: t.openInterestUsd } : {}),
+        ...(t.fundingRatePct !== undefined ? { fundingRatePct: t.fundingRatePct } : {}),
         isNearHigh,
         isNearLow,
         isActiveCoin: (volatility24hPct >= 4 && t.volumeUsd >= 2_000_000) || Math.abs(t.change24h) >= 5,

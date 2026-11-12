@@ -2,6 +2,7 @@ import type { MarketSentimentData, MarketCoin } from '../src/types';
 import { sentimentStateForScore } from '../src/utils/marketSentiment';
 import { fetchMarketCoins } from './marketService';
 import { getMarketSourceStatuses } from './marketTickerFeed';
+import { aggregateBybitDerivatives, getSampledTakerDelta } from './sentimentMarketMetrics';
 
 let sentimentCache: { timestamp: number; data: MarketSentimentData } | null = null;
 const CACHE_TTL_MS = 25_000;
@@ -74,13 +75,18 @@ export async function calculateMarketSentiment(providedCoins?: MarketCoin[]): Pr
     }
   }
 
+  const unchangedCount = total - advancingCount - decliningCount;
   const advancingPct = Number((advancingCount / total * 100).toFixed(1));
   const avgChange24h = Number((totalChange / total).toFixed(2));
   const avgVolatility = Number((totalVolatility / total).toFixed(2));
   const directionStrength = directionalStrengthSum / total;
   const volumeDirection = totalVolume24h > 0 ? volumeWeightedDirectionSum / totalVolume24h : 0;
   const locationCoverage = locationCount / total;
-  const locationDirection = locationCount > 0 ? (nearHighCount - nearLowCount) / locationCount : 0;
+  const locationCoverageReliable = !isLiveRequest ||
+    (locationCount >= 50 && locationCoverage >= 0.30);
+  // Ignore unrepresentative long-term history (often 0% soon after startup).
+  const locationDirection = locationCoverageReliable && locationCount > 0
+    ? (nearHighCount - nearLowCount) / locationCount : 0;
   const trendBias: MarketSentimentData['priceTrendDynamics']['trendBias'] =
     directionStrength > 0.15 ? 'bullish' : directionStrength < -0.15 ? 'bearish' : 'neutral';
 
@@ -103,8 +109,10 @@ export async function calculateMarketSentiment(providedCoins?: MarketCoin[]): Pr
   };
   const sentimentLabel = sentimentLabels[sentimentState];
 
-  const nearHighsPct = locationCount > 0 ? Math.round(nearHighCount / locationCount * 100) : 0;
-  const nearLowsPct = locationCount > 0 ? Math.round(nearLowCount / locationCount * 100) : 0;
+  const nearHighsPct = locationCoverageReliable && locationCount > 0
+    ? Math.round(nearHighCount / locationCount * 100) : null;
+  const nearLowsPct = locationCoverageReliable && locationCount > 0
+    ? Math.round(nearLowCount / locationCount * 100) : null;
   const breadthScore = Math.round(clamp(50 + directionStrength * 50, 0, 100));
   const breadthVerdict = breadthScore >= 65
     ? 'Переважає зростання цін серед торгових пар'
@@ -119,14 +127,23 @@ export async function calculateMarketSentiment(providedCoins?: MarketCoin[]): Pr
   const sources = isLiveRequest ? getMarketSourceStatuses({ exchange: 'all', marketType: 'all' }) : [];
   const freshSources = sources.filter(s => s.status === 'live').length;
   const availableSources = sources.filter(s => s.status !== 'unavailable').length;
+  const bybitLive = sources.some(s => s.exchange === 'bybit' && s.marketType === 'futures' && s.status === 'live');
+  const binanceLive = sources.some(s => s.exchange === 'binance' && s.marketType === 'futures' && s.status === 'live');
+  // OI and funding are already supplied by Bybit's cached full-ticker feed.
+  const derivativesOverview = bybitLive ? aggregateBybitDerivatives(coins) : aggregateBybitDerivatives([]);
+  // Bounded 8-symbol snapshot, shared by all users and cached for five minutes.
+  const taker = binanceLive ? await getSampledTakerDelta(coins) : null;
   const latestSourceTime = Math.max(0, ...sources.map(s => s.updatedAt ?? 0));
   const updatedAt = latestSourceTime > 0 ? latestSourceTime : now;
 
   const summary = `Настрій ринку: ${sentimentLabel} (${compositeScore}/100). ` +
-    `Зростають ${advancingCount} із ${total} пар (${advancingPct}%), падають ${decliningCount}; ` +
+    `Зростають ${advancingCount} із ${total} пар (${advancingPct}%), падають ${decliningCount}, без суттєвого руху ${unchangedCount}; ` +
     `середня зміна ціни за 24 год: ${avgChange24h >= 0 ? '+' : ''}${avgChange24h}%. ` +
     `Середній добовий діапазон: ${avgVolatility}%. ` +
-    'Індекс є орієнтовною оцінкою цінової динаміки, не вимірюванням грошових потоків.';
+    'Індекс є орієнтовною оцінкою цінової динаміки, не вимірюванням грошових потоків.' +
+    (isLiveRequest && !locationCoverageReliable
+      ? ` Багатомісячні рівні не враховано: достатня історія доступна лише для ${locationCount} пар (${Math.round(locationCoverage * 100)}%).`
+      : '');
 
   const data: MarketSentimentData = {
     compositeScore,
@@ -136,6 +153,7 @@ export async function calculateMarketSentiment(providedCoins?: MarketCoin[]): Pr
     priceTrendDynamics: {
       advancingCount,
       decliningCount,
+      unchangedCount,
       advancingPct,
       trendBias,
       avgChange24h,
@@ -160,21 +178,23 @@ export async function calculateMarketSentiment(providedCoins?: MarketCoin[]): Pr
       verdict: breadthVerdict,
     },
     capitalFlow: {
-      // Turnover times price change is NOT a net capital inflow.
+      // This is NOT net capital inflow: use only observed buyer/seller taker delta.
       netInflow24hUsd: null,
       direction: null,
-      label: 'Дані про фактичні потоки капіталу недоступні',
+      label: taker
+        ? `Дельта тейкерів Binance Futures · ${taker.sampledPairs}/${taker.requestedPairs} пар · UTC сьогодні`
+        : 'Дельта тейкерів: дані вибірки тимчасово недоступні',
+      takerDeltaUsd: taker?.deltaUsd ?? null,
+      sampledPairs: taker?.sampledPairs ?? 0,
+      sampleCoverage: taker ? `${taker.sampledPairs}/${taker.requestedPairs}` : undefined,
+      sampledAt: taker?.sampledAt ?? null,
     },
-    derivativesOverview: {
-      // Never infer open interest or funding from turnover.
-      aggregatedOIUsd: null,
-      oiChange24hPct: null,
-      avgFundingRate: null,
-      fundingBias: null,
-    },
+    derivativesOverview,
     dataQuality: {
       analyzedPairs: total,
       locationCoveragePct: Math.round(locationCoverage * 100),
+      locationPairs: locationCount,
+      locationReliable: locationCoverageReliable,
       freshSources,
       availableSources,
       totalSources: sources.length,
