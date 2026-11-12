@@ -141,8 +141,12 @@ export function HookChartVisualPreview({
       const baseline = dragBaseline.current ?? {
         gap: current.rightGapBars, offset: viewportRef.current?.rightOffset ?? 0,
       };
+      // HookChart compensates its transient viewport offset as the saved
+      // right-gap changes during a single drag. Subtract that compensation
+      // before measuring the total movement from the pointer-down baseline.
+      const compensatedOffset = nextViewport.rightOffset - (current.rightGapBars - baseline.gap);
       const gap = Math.max(0, Math.min(VISUAL_GAP_MAX,
-        Math.round(baseline.gap - (nextViewport.rightOffset - baseline.offset))));
+        Math.round(baseline.gap - (compensatedOffset - baseline.offset))));
       next = { ...current, rightGapBars: gap, autoPriceScale: nextViewport.autoY };
       if (!nextViewport.autoY && nextViewport.manualRange) {
         next.verticalZoom = captured.verticalZoom;
