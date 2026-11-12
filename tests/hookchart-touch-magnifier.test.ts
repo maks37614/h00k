@@ -19,11 +19,11 @@ test('touch magnifier samples the chart under its visible lens on every screen s
 test('lens clears the finger above the crosshair, and moves sideways near the upper edge', () => {
   for (const point of [{x:180,y:400}, {x:180,y:690}, {x:12,y:400}, {x:380,y:400}]) {
     const lens = touchMagnifierLayout(390, 700, point)!;
-    assert.ok(lens.y + lens.radius <= point.y - 24, JSON.stringify({point,lens}));
+    assert.ok(lens.y + lens.radius <= point.y - 36, JSON.stringify({point,lens}));
   }
   const nearTop = touchMagnifierLayout(390, 700, {x:180,y:10})!;
   assert.ok(nearTop.y - nearTop.radius >= 0);
-  assert.ok(Math.abs(nearTop.x - 180) >= nearTop.radius + 24);
+  assert.ok(Math.abs(nearTop.x - 180) >= nearTop.radius + 36);
   // The source follows the relocated lens, NOT the finger/crosshair.
   assert.equal(nearTop.sourceX + nearTop.sourceSize / 2, nearTop.x);
   assert.equal(nearTop.sourceY + nearTop.sourceSize / 2, nearTop.y);
