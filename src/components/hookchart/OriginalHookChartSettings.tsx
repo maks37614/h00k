@@ -386,7 +386,7 @@ function VisualProfileEditor({
       rising: value >= previous,
     };
   });
-  return <div className="space-y-4">
+  return <div className="visualProfileEditor space-y-4">
     <Section title="Візуальні налаштування">
       <div className="settingsHint">
         Окремі профілі для Скрінера, Формацій і Термінала, а також для телефона й комп’ютера.
@@ -394,7 +394,7 @@ function VisualProfileEditor({
         «Відтворення» не використовує ці налаштування.
       </div>
       <Setting label="Тип графіка">
-        <select aria-label="Тип графіка для візуальних налаштувань" className="numInput"
+        <select aria-label="Тип графіка для візуальних налаштувань" className="numInput visualProfileSelect"
           value={visualContext} onChange={event => onContextChange(event.target.value as VisualContextId)}>
           {VISUAL_CONTEXTS.map(profile => <option key={profile.id} value={profile.id}>{profile.label}</option>)}
         </select>
@@ -420,14 +420,14 @@ function VisualProfileEditor({
       </div>
       <Setting label="Кількість видимих свічок" desc="Кількість на ширину графіка; на вузькому екрані обмежується мінімальною шириною свічки.">
         <div className="flex items-center gap-2">
-          <input aria-label="Кількість видимих свічок" type="range" min="15" max="500" step="5"
+          <input aria-label="Кількість видимих свічок" type="range" className="visualProfileRange" min="15" max="500" step="5"
             value={selectedProfile.visibleBars} onChange={event => onProfileChange({ visibleBars: Number(event.target.value) })}/>
           <b className="valueBadge">{selectedProfile.visibleBars}</b>
         </div>
       </Setting>
       <Setting label="Вертикальний зум" desc="1× — природний діапазон; більше — свічки вищі, менше — компактніші.">
         <div className="flex items-center gap-2">
-          <input aria-label="Вертикальний зум" type="range" min="0.4" max="4" step="0.1"
+          <input aria-label="Вертикальний зум" type="range" className="visualProfileRange" min="0.4" max="4" step="0.1"
             value={selectedProfile.verticalZoom} onChange={event => onProfileChange({ verticalZoom: Number(event.target.value) })}/>
           <b className="valueBadge">{selectedProfile.verticalZoom.toFixed(1)}×</b>
         </div>
@@ -436,7 +436,7 @@ function VisualProfileEditor({
         value={selectedProfile.autoPriceScale} onChange={value => onProfileChange({ autoPriceScale: value })}/>
       <Setting label="Відступ праворуч" desc="Вільний простір праворуч від останньої свічки (у барах).">
         <div className="flex items-center gap-2">
-          <input aria-label="Відступ праворуч у барах" type="range" min="0" max="100" step="1"
+          <input aria-label="Відступ праворуч у барах" type="range" className="visualProfileRange" min="0" max="100" step="1"
             value={selectedProfile.rightGapBars} onChange={event => onProfileChange({ rightGapBars: Number(event.target.value) })}/>
           <b className="valueBadge">{selectedProfile.rightGapBars}</b>
         </div>
