@@ -1,6 +1,6 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Trash2, Star, Zap, FolderPlus, ArrowUpDown, ChevronDown, ChevronUp } from 'lucide-react';
+import { X, Trash2, Star, Zap, FolderPlus, ArrowUpDown, ChevronDown, ChevronUp, Check } from 'lucide-react';
 import type { ExchangeId, MarketType, ScannedCoin } from '../types';
 import {
   getCoinWatchlistKey, resolveWatchlistEntries, isWatchlistMarketQuote,
@@ -36,6 +36,13 @@ export const WatchlistDrawer: React.FC<WatchlistDrawerProps> = ({
   const [sortBy, setSortBy] = useState<'name' | 'price' | 'change' | 'volume'>('name');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [collapsedFolders, setCollapsedFolders] = useState<Record<string, boolean>>({});
+  // A single visual-only, dark menu replaces the browser's white native
+  // folder picker. Folder assignments still use the same moveCoin handler.
+  const [folderMenu, setFolderMenu] = useState<{
+    entryKey: string; left: number; top: number; width: number; maxHeight: number;
+  } | null>(null);
+  const folderMenuRef = useRef<HTMLDivElement>(null);
+  const folderTriggerRef = useRef<HTMLButtonElement>(null);
   const [marketQuotes, setMarketQuotes] = useState<ScannedCoin[]>([]);
   const [quoteSources, setQuoteSources] = useState<Array<{
     exchange: ExchangeId; marketType: MarketType;
@@ -121,7 +128,13 @@ export const WatchlistDrawer: React.FC<WatchlistDrawerProps> = ({
     document.body.style.overflow = 'hidden';
     document.documentElement.style.overflow = 'hidden';
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
+      if (event.key === 'Escape') {
+        if (folderMenu) {
+          setFolderMenu(null);
+        } else {
+          onClose();
+        }
+      }
     };
     document.addEventListener('keydown', onKeyDown);
     return () => {
@@ -129,7 +142,22 @@ export const WatchlistDrawer: React.FC<WatchlistDrawerProps> = ({
       document.body.style.overflow = oldBodyOverflow;
       document.documentElement.style.overflow = oldHtmlOverflow;
     };
-  }, [isOpen, onClose]);
+  }, [isOpen, onClose, folderMenu]);
+
+  // The floating list is measured relative to the viewport, not to a coin
+  // card with overflow:hidden. Close it on viewport changes / list scroll.
+  useEffect(() => {
+    if (!folderMenu) return;
+    const closeOnPositionChange = () => setFolderMenu(null);
+    document.addEventListener('scroll', closeOnPositionChange, true);
+    window.addEventListener('resize', closeOnPositionChange);
+    folderMenuRef.current?.querySelector<HTMLButtonElement>('[aria-selected="true"]')
+      ?.focus({ preventScroll: true });
+    return () => {
+      document.removeEventListener('scroll', closeOnPositionChange, true);
+      window.removeEventListener('resize', closeOnPositionChange);
+    };
+  }, [folderMenu]);
 
   if (!isOpen) return null;
 
@@ -176,6 +204,48 @@ export const WatchlistDrawer: React.FC<WatchlistDrawerProps> = ({
     if (!name || folders[name]) return;
     onFoldersChange({ ...folders, [name]: [] });
     setNewFolderName('');
+  };
+
+  const openFolderMenu = (entry: ResolvedWatchlistEntry, button: HTMLButtonElement) => {
+    if (folderMenu?.entryKey === entry.key) {
+      setFolderMenu(null);
+      return;
+    }
+    const rect = button.getBoundingClientRect();
+    const viewportWidth = document.documentElement.clientWidth;
+    const viewportHeight = window.innerHeight;
+    const width = Math.min(Math.max(rect.width, 250), Math.max(100, viewportWidth - 16));
+    const left = Math.max(8, Math.min(rect.right - width, viewportWidth - width - 8));
+    const desiredHeight = Math.min(320, (folderNames.length + 1) * 48 + 12);
+    const spaceBelow = Math.max(0, viewportHeight - rect.bottom - 12);
+    const spaceAbove = Math.max(0, rect.top - 12);
+    const openAbove = spaceAbove > spaceBelow && spaceBelow < desiredHeight;
+    const maxHeight = Math.max(48, Math.min(desiredHeight,
+      openAbove ? spaceAbove : spaceBelow, viewportHeight - 16));
+    const top = openAbove
+      ? Math.max(8, rect.top - maxHeight - 4)
+      : Math.max(8, Math.min(rect.bottom + 4, viewportHeight - maxHeight - 8));
+    folderTriggerRef.current = button;
+    setFolderMenu({ entryKey: entry.key, left, top, width, maxHeight });
+  };
+
+  const onFolderMenuKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      event.stopPropagation();
+      setFolderMenu(null);
+      folderTriggerRef.current?.focus({ preventScroll: true });
+      return;
+    }
+    if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
+    event.preventDefault();
+    const options = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="option"]'));
+    const active = options.indexOf(document.activeElement as HTMLButtonElement);
+    const target = event.key === 'Home' ? 0
+      : event.key === 'End' ? options.length - 1
+      : event.key === 'ArrowDown' ? (active + 1) % options.length
+      : (active + options.length - 1) % options.length;
+    options[target]?.focus({ preventScroll: true });
   };
 
   const moveCoin = (entry: ResolvedWatchlistEntry, folder: string) => {
@@ -330,16 +400,18 @@ export const WatchlistDrawer: React.FC<WatchlistDrawerProps> = ({
                         <Zap className="w-3.5 h-3.5" />
                       </button>
                     )}
-                    <select
-                      value={getFolderForEntry(entry)}
-                      onChange={(event) => moveCoin(entry, event.target.value)}
-                      className="block min-w-0 max-w-[165px] flex-1 rounded border border-slate-800 bg-slate-900 px-1.5 py-1 text-base text-slate-400 outline-none sm:max-w-[110px] sm:text-xs"
+                    <button
+                      type="button"
+                      onClick={(event) => openFolderMenu(entry, event.currentTarget)}
+                      className="flex min-w-0 max-w-[165px] flex-1 items-center justify-between gap-1 rounded border border-slate-800 bg-slate-900 px-1.5 py-1 text-left text-sm text-slate-400 transition-colors hover:border-slate-600 hover:bg-slate-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-500 sm:max-w-[110px]"
                       title="Перемістити в папку"
                       aria-label={'Папка для ' + entry.symbol + ' (' + entry.exchange + ')'}
+                      aria-haspopup="listbox"
+                      aria-expanded={folderMenu?.entryKey === entry.key}
                     >
-                      <option value="">Загальний список</option>
-                      {folderNames.map((folder) => <option key={folder} value={folder}>{folder}</option>)}
-                    </select>
+                      <span className="min-w-0 truncate">{getFolderForEntry(entry) || 'Загальний список'}</span>
+                      <ChevronDown className="h-3.5 w-3.5 shrink-0" />
+                    </button>
                     <button
                       onClick={() => removeCoin(entry)}
                       title="Видалити з обраного"
@@ -362,6 +434,53 @@ export const WatchlistDrawer: React.FC<WatchlistDrawerProps> = ({
           )}
         </div>
       </div>
+      {folderMenu && (
+        <>
+          <div
+            className="fixed inset-0 z-[10]"
+            aria-hidden="true"
+            onMouseDown={() => setFolderMenu(null)}
+          />
+          <div
+            ref={folderMenuRef}
+            role="listbox"
+            aria-label="Виберіть папку для монети"
+            data-watchlist-folder-menu
+            onKeyDown={onFolderMenuKeyDown}
+            className="fixed z-[11] min-w-0 overflow-y-auto overscroll-contain rounded-xl border border-slate-700/80 bg-[#070c20] p-1.5 shadow-2xl shadow-black/60"
+            style={{ left: folderMenu.left, top: folderMenu.top, width: folderMenu.width, maxHeight: folderMenu.maxHeight }}
+          >
+            {(() => {
+              const entry = entries.find((item) => item.key === folderMenu.entryKey);
+              if (!entry) return null;
+              const selectedFolder = getFolderForEntry(entry);
+              return ['', ...folderNames].map((folder) => (
+                <button
+                  key={folder || 'general'}
+                  type="button"
+                  role="option"
+                  aria-selected={selectedFolder === folder}
+                  onClick={() => {
+                    moveCoin(entry, folder);
+                    setFolderMenu(null);
+                    folderTriggerRef.current?.focus({ preventScroll: true });
+                  }}
+                  className={`flex w-full min-w-0 items-center gap-2 rounded-lg px-3 py-3 text-left text-base transition-colors ${
+                    selectedFolder === folder
+                      ? 'bg-slate-800 text-cyan-300'
+                      : 'text-slate-300 hover:bg-slate-800/70 hover:text-white'
+                  }`}
+                >
+                  <span className="flex h-4 w-4 shrink-0 items-center justify-center">
+                    {selectedFolder === folder && <Check className="h-4 w-4" />}
+                  </span>
+                  <span className="min-w-0 flex-1 break-words">{folder || 'Загальний список'}</span>
+                </button>
+              ));
+            })()}
+          </div>
+        </>
+      )}
     </div>,
     document.body
   );

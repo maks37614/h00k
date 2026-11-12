@@ -35,6 +35,7 @@ test('All favorite-folder form controls use 16px mobile font to avoid iPhone Saf
   assert.match(drawer, /placeholder="Нова папка"[\s\S]*?className="[^"]*text-base/);
   assert.match(drawer, /aria-label="Сортувати обрані монети"[\s\S]*?className="[^"]*text-base/);
   assert.match(drawer, /aria-label=\{'Папка для ' \+ entry\.symbol/);
+  assert.match(drawer, /aria-haspopup="listbox"/);
   assert.doesNotMatch(main, /user-scalable=no|maximum-scale=1/);
 });
 
@@ -45,7 +46,7 @@ test('Narrow favorite cards wrap exchange, price and controls while keeping beha
   assert.match(drawer, /min-w-0 truncate/);
   assert.match(drawer, /max-w-\[165px\] flex-1/);
   assert.match(drawer, /onClick=\{createFolder\}/);
-  assert.match(drawer, /onChange=\{\(event\) => moveCoin\(entry, event\.target\.value\)\}/);
+  assert.match(drawer, /onClick=\{\(event\) => openFolderMenu\(entry, event\.currentTarget\)\}/);
   assert.match(drawer, /onClick=\{\(\) => removeCoin\(entry\)\}/);
   assert.match(drawer, /watchlistSymbols\.map\(getCoinWatchlistKey\)/);
   assert.match(drawer, /fetch\('\/api\/market\/favorite-quotes'/);

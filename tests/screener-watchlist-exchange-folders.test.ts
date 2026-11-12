@@ -98,6 +98,6 @@ test('Screener grid and table send the full coin identity, while new favorites a
   assert.doesNotMatch(screener, /onToggleWatchlist\(coin\.symbol\)/);
   assert.match(drawer, /const groups = \[\{/);
   assert.match(drawer, /group\.name \|\| 'Загальний список'/);
-  assert.match(drawer, /<option value="">Загальний список<\/option>/);
-  assert.match(drawer, /onChange=\{\(event\) => moveCoin\(entry, event\.target\.value\)\}/);
+  assert.match(drawer, /folder \|\| 'Загальний список'/);
+  assert.match(drawer, /moveCoin\(entry, folder\)/);
 });
