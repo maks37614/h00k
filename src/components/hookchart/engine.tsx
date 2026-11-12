@@ -509,9 +509,10 @@ export function Chart({candles,symbol,tf,tool,drawings,setDrawings,alerts,setAle
    paintPointer?.(context);
    if(magnifierVisible){
      magnifierSample.current??=document.createElement('canvas');
-     // Sample the clean scene, then add pointer guides to the small lens buffer.
-     // Never sample this layer: doing so would magnify the lens itself.
-     drawTouchMagnifier(source,context,magnifierSample.current,w,h,mouse!,backgroundColor,paintPointer,magnifierZoom.current);
+     // Magnify the actual scene underneath the floating lens, not the
+     // crosshair underneath the finger. Keep cursor guides on the base layer.
+     // Never sample the interaction layer: it would magnify the lens itself.
+     drawTouchMagnifier(source,context,magnifierSample.current,w,h,mouse!,backgroundColor,undefined,magnifierZoom.current);
    }
  };
  interactionDrawRef.current=drawInteraction;
