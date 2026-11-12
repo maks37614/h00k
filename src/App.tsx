@@ -832,6 +832,131 @@ export default function App() {
     [coins, metaScalpSettings, handleSendToMetaScalp, openChartPage]
   );
 
+  // Browser Back/Forward switches between real Screener and chart pages.
+  // The old Screener DOM is unmounted while chartPageActive is true.
+  useEffect(() => {
+    const syncChartLocation = () => {
+      const next = readChartPageHash(window.location.hash);
+      setChartRoute(previous => sameChartPageRoute(previous, next) ? previous : next);
+      if (!next) {
+        setSelectedPair(null);
+        setSelectedEarly(null);
+        setSelectedArchivedItem(null);
+        setChartRouteError(null);
+        setChartRouteLoading(false);
+        if (chartNavigation.current.enteredFromApp) {
+          const savedScroll = chartNavigation.current.scrollY;
+          chartNavigation.current.enteredFromApp = false;
+          // The list remounts and resumes its refresh. Avoid losing the user's
+          // former scroll position when the browser returns from a chart.
+          requestAnimationFrame(() => window.scrollTo({ top: savedScroll, behavior: 'auto' }));
+        }
+      }
+    };
+    window.addEventListener('hashchange', syncChartLocation);
+    window.addEventListener('popstate', syncChartLocation);
+    return () => {
+      window.removeEventListener('hashchange', syncChartLocation);
+      window.removeEventListener('popstate', syncChartLocation);
+    };
+  }, []);
+
+  const chartRouteKey = chartRoute ? chartPageHash(chartRoute) : null;
+  // Restore from the exact account-scoped selection first. When a user opens
+  // a copied chart URL in a new browser, resolve just the instrument quotes;
+  // do NOT run the entire formation screener to display the chart.
+  useEffect(() => {
+    if (!chartRoute || !user || authLoading) return;
+    const route = chartRoute;
+    let stored: ChartPageSnapshot | null = null;
+    try { stored = readChartPageSnapshot(window.sessionStorage, user.uid, route); } catch {}
+    if (route.kind === 'archive' && !stored) {
+      const archived = archivedFormations.find(item => item.formation.id === route.formationId
+        && item.symbol.toUpperCase() === route.symbol && item.exchange === route.exchange
+        && item.marketType === route.marketType);
+      if (archived) {
+        const currentCoin = coins.find(item => item.symbol === route.symbol &&
+          item.exchange === route.exchange && item.marketType === route.marketType);
+        const fallback: ScannedCoin = currentCoin ?? {
+          symbol: archived.symbol, baseAsset: archived.baseAsset, quoteAsset: archived.quoteAsset,
+          exchange: archived.exchange, marketType: archived.marketType,
+          timeframe: archived.timeframe, currentPrice: archived.savedPrice,
+          priceChange24h: 0, volume24hUsd: 0, highPrice24h: archived.savedPrice,
+          lowPrice24h: archived.savedPrice, lastUpdated: archived.savedAtTimestamp,
+          formations: [archived.formation], exchangeUrl: '',
+        };
+        stored = { coin: fallback, formation: archived.formation, archived };
+      }
+    }
+    if (stored) {
+      if (route.kind === 'early' && stored.earlyCandidate) {
+        setSelectedEarly({ coin: stored.coin, candidate: stored.earlyCandidate });
+        setSelectedPair(null);
+        setSelectedArchivedItem(null);
+      } else {
+        setSelectedPair({ coin: stored.coin, formation: stored.formation ?? undefined });
+        setSelectedArchivedItem(stored.archived ?? null);
+        setSelectedEarly(null);
+      }
+      setChartRouteError(null);
+      setChartRouteLoading(false);
+      return;
+    }
+    const controller = new AbortController();
+    setChartRouteLoading(true);
+    setChartRouteError(null);
+    void (async () => {
+      let quoteCoin: ScannedCoin | null = null;
+      try {
+        const snapshot = await loadMarketCoins({
+          exchange: route.exchange, marketType: route.marketType,
+        }, controller.signal);
+        const quote = snapshot.coins.find(row => row.symbol.toUpperCase() === route.symbol
+          && row.exchange === route.exchange && row.marketType === route.marketType);
+        if (quote) quoteCoin = marketQuoteToChartCoin(quote, route.timeframe);
+      } catch { /* Offline fallback still opens the chart and uses /api/klines. */ }
+      if (controller.signal.aborted) return;
+      if (!quoteCoin) {
+        const baseAsset = route.symbol.replace(/(USDT|USDC|BUSD|BTC|ETH)$/,'');
+        const quoteAsset = route.symbol.slice(baseAsset.length) || 'USDT';
+        quoteCoin = {
+          symbol: route.symbol, baseAsset, quoteAsset, exchange: route.exchange,
+          marketType: route.marketType, timeframe: route.timeframe,
+          currentPrice: 0, priceChange24h: 0, volume24hUsd: 0,
+          highPrice24h: 0, lowPrice24h: 0,
+          formations: [], lastUpdated: Date.now(), exchangeUrl: '',
+        };
+      }
+      // A cross-device link cannot contain a private archived/early snapshot.
+      // Fall back to its functional live chart rather than showing stale data.
+      setSelectedPair({ coin: quoteCoin });
+      setSelectedEarly(null);
+      setSelectedArchivedItem(null);
+      if (route.formationId || route.kind !== 'coin') {
+        setChartRouteError('Дані вибраної формації недоступні в цій вкладці. Показано живий графік монети без непідтверджених рівнів.');
+      }
+      setChartRouteLoading(false);
+    })();
+    return () => controller.abort();
+  }, [chartRouteKey, user?.uid, authLoading, archivedFormations]);
+
+  const closeChartPage = useCallback(() => {
+    setSelectedPair(null);
+    setSelectedArchivedItem(null);
+    setSelectedEarly(null);
+    setChartRoute(null);
+    setChartRouteError(null);
+    setChartRouteLoading(false);
+    if (chartNavigation.current.enteredFromApp) {
+      window.history.back();
+    } else {
+      let saved = '#screener';
+      try { saved = readChartReturnHash(window.sessionStorage, user?.uid || 'guest'); } catch {}
+      window.history.replaceState(null, '', saved);
+      setActivePage(saved.slice(1) as ActivePageType);
+    }
+  }, [user?.uid]);
+
   // Play a gentle alert tone using Web Audio API
   const playAlertSound = useCallback(() => {
     if (!soundEnabled) return;
