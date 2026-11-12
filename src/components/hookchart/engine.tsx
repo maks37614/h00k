@@ -466,7 +466,7 @@ export function Chart({candles,symbol,tf,tool,drawings,setDrawings,alerts,setAle
     lo=range.low;hi=range.high;
   }else{
     const pad=(hi-lo||Math.abs(hi)*.01||1)*(terminalMode ? .16 : .08);lo-=pad;hi+=pad;
-    if(vp.autoY&&vp.yZoom&&vp.yZoom!==1){const mid=(hi+lo)/2,half=(hi-lo)/(2*Math.max(.4,Math.min(4,vp.yZoom)));lo=mid-half;hi=mid+half}
+    if(vp.autoY&&vp.yZoom&&vp.yZoom!==1){const mid=(hi+lo)/2,half=(hi-lo)/(2*Math.max(.01,Math.min(100,vp.yZoom)));lo=mid-half;hi=mid+half}
     if(!vp.autoY&&vp.manualCenter!=null&&vp.manualRange!=null){lo=vp.manualCenter-vp.manualRange/2;hi=vp.manualCenter+vp.manualRange/2}
   }
   const y=(p:number)=>plotH-(p-lo)/(hi-lo)*plotH,p=(yy:number)=>lo+(plotH-yy)/plotH*(hi-lo);
