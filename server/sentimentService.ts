@@ -128,7 +128,8 @@ export async function calculateMarketSentiment(providedCoins?: MarketCoin[]): Pr
   const freshSources = sources.filter(s => s.status === 'live').length;
   const availableSources = sources.filter(s => s.status !== 'unavailable').length;
   const bybitLive = sources.some(s => s.exchange === 'bybit' && s.marketType === 'futures' && s.status === 'live');
-  const binanceLive = sources.some(s => s.exchange === 'binance' && s.marketType === 'futures' && s.status === 'live');
+  const binanceLive = sources.some(s => s.exchange === 'binance' &&
+    (s.marketType === 'futures' || s.marketType === 'spot') && s.status === 'live');
   // OI and funding are already supplied by Bybit's cached full-ticker feed.
   const derivativesOverview = bybitLive ? aggregateBybitDerivatives(coins) : aggregateBybitDerivatives([]);
   // Bounded 8-symbol snapshot, shared by all users and cached for five minutes.
@@ -182,8 +183,8 @@ export async function calculateMarketSentiment(providedCoins?: MarketCoin[]): Pr
       netInflow24hUsd: null,
       direction: null,
       label: taker
-        ? `Дельта тейкерів Binance Futures · ${taker.sampledPairs}/${taker.requestedPairs} пар · UTC сьогодні`
-        : 'Дельта тейкерів: дані вибірки тимчасово недоступні',
+        ? `Дельта тейкерів Binance ${taker.marketType === 'spot' ? 'Spot' : 'Futures'} · ${taker.sampledPairs}/${taker.requestedPairs} пар · UTC сьогодні`
+        : 'Дельта тейкерів: Binance Futures/Spot тимчасово недоступні',
       takerDeltaUsd: taker?.deltaUsd ?? null,
       sampledPairs: taker?.sampledPairs ?? 0,
       sampleCoverage: taker ? `${taker.sampledPairs}/${taker.requestedPairs}` : undefined,
