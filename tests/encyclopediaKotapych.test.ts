@@ -5,6 +5,7 @@ import React from 'react';
 import { renderToString } from 'react-dom/server';
 import { FormationGuideModal } from '../src/components/FormationGuideModal';
 import { KotapychGuide } from '../src/components/encyclopedia/KotapychGuide';
+import { OpenInterestGuide, OI_PRICE_CASES, OI_MARKET_SCENARIOS } from '../src/components/encyclopedia/OpenInterestGuide';
 import { KOTAPYCH_SETUPS, KOTAPYCH_TOPICS } from '../src/components/encyclopedia/kotapychGuideData';
 import { KOTAPYCH_SOURCE_PAGES } from '../src/components/encyclopedia/kotapychArchive';
 
@@ -13,6 +14,7 @@ test('main encyclopedia exposes both general categories and the Kotapych subcate
   assert.match(html, /Скальпінг/);
   assert.match(html, /Формації-Патерни/);
   assert.match(html, /Котапич/);
+  assert.match(html, /Індикатори/);
 });
 
 test('Kotapych has exactly four distinct setups and all structured detail sections', () => {
@@ -114,4 +116,44 @@ test('four corrected-source clarifications and the ambiguous 25-30% volume rule 
   assert.match(byId['base-secondary'].points.join(' '), /неоднозначні приклади/);
   assert.match(byId['base-secondary'].points.join(' '), /не надійний числовий поріг/);
   assert.equal(KOTAPYCH_TOPICS.length, 19);
+});
+
+test('encyclopedia includes the Indicators > Open Interest category without affecting existing categories', () => {
+  const component = readFileSync(new URL('../src/components/FormationGuideModal.tsx', import.meta.url), 'utf8');
+  assert.match(component, /mainCategory === 'indicators'/);
+  assert.match(component, /Open Interest \(OI\)/);
+  assert.match(component, /<OpenInterestGuide \/>/);
+  assert.match(component, /<KotapychGuide \/>/);
+  assert.match(component, /GUIDE_ITEMS\.map/);
+});
+
+test('Open Interest guide contains all seven Ukrainian sections and essential limitations', () => {
+  const html = renderToString(React.createElement(OpenInterestGuide));
+  for (const title of [
+    'Основи: як читати OI разом із ціною',
+    'Що OI показує насправді',
+    'Як застосовують OI в криптотрейдингу',
+    'Поширена помилка',
+    'Практика для скальпінгу',
+    'Де дивитися Open Interest',
+    'Коротка формула',
+  ]) {
+    assert.ok(html.includes(title), title + ' must be present');
+  }
+  assert.match(html, /відкритих контрактів/);
+  assert.match(html, /OI — це контекст, а не точка входу/);
+  assert.match(html, /TradingView/);
+  assert.match(html, /Coinglass/);
+  assert.match(html, /CryptoQuant/);
+  assert.match(html, /funding rate/);
+  assert.match(html, /ліквідаціями/);
+});
+
+test('Open Interest covers four price/OI combinations and three practical market scenarios', () => {
+  assert.deepEqual(OI_PRICE_CASES.map(item => [item.price, item.oi]), [
+    ['up', 'up'], ['up', 'down'], ['down', 'up'], ['down', 'down'],
+  ]);
+  assert.deepEqual(OI_MARKET_SCENARIOS.map(item => item.id), ['accumulation','trap','flush']);
+  assert.ok(OI_PRICE_CASES.every(item => item.interpretation.length >= 2 && item.practice.length >= 50));
+  assert.ok(OI_MARKET_SCENARIOS.every(item => item.conditions.length >= 2 && item.action.length >= 40));
 });
