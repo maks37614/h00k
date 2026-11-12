@@ -759,7 +759,7 @@ const HookChartCanvas = forwardRef<HookChartHandle, HookChartCanvasProps>(functi
   const captureCurrentVisual = (key: VisualProfileKey) => {
     if (replay || key !== activeVisualKey) return;
     const plotWidth = hookChartPlotWidth(rootRef.current?.clientWidth || 800);
-    const count = Math.max(1,Math.ceil(plotWidth/Math.max(.12,viewport.barWidth)));
+    const count = Math.max(1,Math.ceil(plotWidth/Math.max(.12,viewport.barWidth) - rightPaddingBars));
     const right = Math.max(0,Math.floor(viewport.rightOffset));
     const end = Math.max(0,candles.length-right);
     const visible = candles.slice(Math.max(0,end-count),end);
