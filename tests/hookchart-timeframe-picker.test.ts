@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import React from 'react';
+import { readFileSync } from 'node:fs';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { HookChartTimeframePicker, timeframeMenuPosition } from '../src/components/hookchart/HookChartTimeframePicker';
 
@@ -15,6 +16,31 @@ test('custom timeframe picker uses buttons, not a native iOS select popup', () =
   assert.match(html, /aria-label="Вибрати таймфрейм"/);
   assert.match(html, /aria-pressed="true"/);
   assert.doesNotMatch(html, /<select|<option/);
+});
+
+test('collapsed tools show only the primary timeframe buttons and reserve the chevron for tools', () => {
+  const html = renderToStaticMarkup(React.createElement(HookChartTimeframePicker, {
+    timeframes: ['1m', '5m', '15m', '1h', '4h', '1d'],
+    timeframe: '15m',
+    compactAvailable: false,
+    onChange: () => {},
+  }));
+  assert.match(html, /hookchart-timeframes-buttons/);
+  assert.match(html, /aria-label="Таймфрейм 15m"/);
+  assert.doesNotMatch(html, /hookchart-timeframes-compact/);
+  assert.doesNotMatch(html, /aria-label="Вибрати таймфрейм"/);
+});
+
+test('expanded tools may reveal their own compact timeframe menu', () => {
+  const html = renderToStaticMarkup(React.createElement(HookChartTimeframePicker, {
+    timeframes: ['1m', '5m', '15m', '1h', '4h', '1d'],
+    timeframe: '15m',
+    compactAvailable: true,
+    onChange: () => {},
+  }));
+  assert.match(html, /hookchart-timeframes-compact/);
+  assert.match(html, /aria-label="Вибрати таймфрейм"/);
+  assert.match(html, /aria-haspopup="listbox"/);
 });
 
 test('timeframe popover stays within a phone viewport at top, middle and bottom', () => {
@@ -45,4 +71,16 @@ test('popover supports narrow visual viewports and near-right-edge timeframes', 
     assert.ok(menu.top >= viewport.top + 8);
     assert.ok(menu.top + menu.maxHeight <= viewport.top + viewport.height - 8);
   }
+});
+
+test('HookChart connects the second timeframe icon to actual tools expansion', () => {
+  const canvas = readFileSync(new URL('../src/components/hookchart/HookChartCanvas.tsx', import.meta.url), 'utf8');
+  const styles = readFileSync(new URL('../src/components/hookchart/integration.css', import.meta.url), 'utf8');
+  const defaults = readFileSync(new URL('../src/components/hookchart/OriginalHookChartSettings.tsx', import.meta.url), 'utf8');
+  assert.match(canvas, /compactAvailable=\{topToolbarOpen\}/);
+  assert.match(canvas, /className="topToolbarToggle"/);
+  assert.match(canvas, /aria-expanded=\{topToolbarOpen\}/);
+  assert.match(styles, /\[data-extra-tools-open="true"\] \.hookchart-timeframes-compact \{/);
+  assert.match(styles, /\.hookchart-toolbar > \.topToolbarToggle \{/);
+  assert.match(defaults, /showTopToolbarIcons: false,/);
 });

@@ -48,7 +48,8 @@ export const ORIGINAL_HOOKCHART_DEFAULTS: HookChartPreferences = {
   rightPaddingEnabled: true,
   rightPaddingVersion: 2,
   chartToolbar: true,
-  showTopToolbarIcons: true,
+  // Show the expand chevron first; extra tools and their compact TF menu open on demand.
+  showTopToolbarIcons: false,
   notificationDialog: true,
   singleWindowSize: 85,
   pagingButtons: true,
