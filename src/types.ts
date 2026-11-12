@@ -279,6 +279,7 @@ export interface ScreenerFilterState {
   status: 'all' | PatternStatus;
   minVolumeUsd: number; // in USD
   densityConfirmedOnly: boolean; // require confirmed order-book liquidity at the formation level
+  roundNumberOnly: boolean; // show formations near a round-price level (same ROUND badge as cards)
   searchQuery: string;
   sortBy: 'confidence' | 'volume' | 'priceChange' | 'profitPotential';
   sortOrder: 'asc' | 'desc';
