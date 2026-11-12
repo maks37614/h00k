@@ -41,8 +41,12 @@ export function demoPinchProfile(
   initialVertical: number, currentVertical: number,
 ): VisualChartProfile {
   return adjusted(start, {
-    visibleBars: start.visibleBars * clamp(initialHorizontal / Math.max(8, currentHorizontal), .05, 20),
-    verticalZoom: start.verticalZoom * clamp(currentVertical / Math.max(8, initialVertical), .05, 20),
+    visibleBars: initialHorizontal >= 18
+      ? start.visibleBars * clamp(initialHorizontal / Math.max(8, currentHorizontal), .05, 20)
+      : start.visibleBars,
+    verticalZoom: initialVertical >= 18
+      ? start.verticalZoom * clamp(currentVertical / Math.max(8, initialVertical), .05, 20)
+      : start.verticalZoom,
   });
 }
 
