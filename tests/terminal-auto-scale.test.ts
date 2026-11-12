@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { terminalCandlePriceRange } from '../src/components/hookchart/terminalAutoScale';
+import { readFileSync } from 'node:fs';
+import { hookChartHorizontalRange } from '../src/utils/hookchartData';
 
 test('terminal auto-scale keeps the lowest visible wick above volume histogram', () => {
   for (const height of [80, 100, 160, 220, 380, 700]) {
@@ -26,4 +28,18 @@ test('auto-scale does not change chart history or require a candle feed', () => 
   const first = terminalCandlePriceRange(100, 100, 280, true);
   assert.ok(first.high > first.low);
   assert.ok(Number.isFinite(first.low));
+});
+
+test('terminal auto-scale honors the saved right gap and aligns chart with the time axis', () => {
+  const chart = readFileSync(new URL('../src/components/hookchart/HookChartCanvas.tsx', import.meta.url), 'utf8');
+  assert.match(chart, /terminalMode && terminalAutoScale\s*\? \(activeVisualProfile\?\.rightGapBars \?\? 8\)/);
+  assert.match(chart, /<ChartTimeAxis[^>]*rightPaddingBars=\{rightPaddingBars\}/);
+  assert.match(chart, /<IndicatorDock[^>]*rightPaddingBars=\{rightPaddingBars\}/);
+  const width = 300, count = 120, barWidth = 5;
+  for (const savedGapBars of [5, 10, 15, 30]) {
+    const range = hookChartHorizontalRange(count, width, { barWidth, rightOffset: 0 }, savedGapBars);
+    const latestCandleX = (count - .5 - range.virtualStart) * range.step;
+    assert.ok(latestCandleX < width - savedGapBars * barWidth,
+      'latest candle must stay left of the right price scale with the configured margin');
+  }
 });
