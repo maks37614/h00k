@@ -204,7 +204,9 @@ const HookChartCanvas = forwardRef<HookChartHandle, HookChartCanvasProps>(functi
   }, [terminalMode, replay]);
   const activeVisualContext = terminalMode ? terminalVisualContext : (visualContext || 'screenerQuick');
   const activeVisualKey = makeVisualProfileKey(activeVisualContext, visualDevice);
-  const activeVisualProfile = replay ? undefined : getVisualProfile(settings, activeVisualContext, visualDevice);
+  // No saved profile means legacy HookChart defaults stay unchanged.
+  const activeVisualProfile = replay || !settings.visualProfiles?.[activeVisualKey]
+    ? undefined : getVisualProfile(settings, activeVisualContext, visualDevice);
   const toolbarRef = useRef<HTMLDivElement | null>(null);
   const extraToolsRef = useRef<HTMLDivElement | null>(null);
   const statsBarRef = useRef<HTMLDivElement | null>(null);
@@ -757,7 +759,7 @@ const HookChartCanvas = forwardRef<HookChartHandle, HookChartCanvasProps>(functi
     });
   };
   const captureCurrentVisual = (key: VisualProfileKey) => {
-    if (replay || key !== activeVisualKey || !activeVisualProfile) return;
+    if (replay || key !== activeVisualKey) return;
     const plotWidth = hookChartPlotWidth(rootRef.current?.clientWidth || 800);
     const count = Math.max(1,Math.ceil(plotWidth/Math.max(.12,viewport.barWidth)));
     const right = Math.max(0,Math.floor(viewport.rightOffset));
@@ -767,7 +769,7 @@ const HookChartCanvas = forwardRef<HookChartHandle, HookChartCanvasProps>(functi
     for (const item of visible){low=Math.min(low,item.l);high=Math.max(high,item.h)}
     const autoRange=Number.isFinite(high)&&Number.isFinite(low)
       ? Math.max(high-low,Math.abs(high)*.01,1e-10)*(terminalMode?1.32:1.16) : undefined;
-    const profile = captureVisualProfile(activeVisualProfile,plotWidth,viewport,autoRange);
+    const profile = captureVisualProfile(getVisualProfile(settings,activeVisualContext,visualDevice),plotWidth,viewport,autoRange);
     changeSettings({ visualProfiles: patchVisualProfile(settings.visualProfiles,key,profile) });
   };
   const toggleIndicator = (id: IndicatorId) => {
@@ -1215,6 +1217,7 @@ const HookChartCanvas = forwardRef<HookChartHandle, HookChartCanvasProps>(functi
           currentViewport={viewport}
           currentPlotWidth={hookChartPlotWidth(rootRef.current?.clientWidth || 800)}
           onCaptureVisual={captureCurrentVisual}
+          onResetVisual={key => { if (key === activeVisualKey) engineRef.current?.zoomToLatest(); }}
           onClose={closeSettings}
         />
       </div>,
