@@ -32,6 +32,7 @@ interface HookChartVisualPreviewProps {
   visualDevice: VisualDevice;
   profile: VisualChartProfile;
   onChange: (profile: VisualChartProfile) => void;
+  saveStatus?: 'idle' | 'saving' | 'saved' | 'error';
 }
 
 function profilePreviewWidth(context: VisualContextId, device: VisualDevice): number {
@@ -61,11 +62,13 @@ export function HookChartVisualPreview({
   visualDevice,
   profile,
   onChange,
+  saveStatus = 'idle',
 }: HookChartVisualPreviewProps) {
   const [sample, setSample] = useState<Candle[]>(EMPTY_CANDLES);
   const [sampleLoading, setSampleLoading] = useState(false);
   const [sampleError, setSampleError] = useState(false);
   const [visualProfileCaptureVersion, setVisualProfileCaptureVersion] = useState(0);
+  const [saveRequested, setSaveRequested] = useState(false);
   const [viewport, setViewport] = useState<Viewport>({
     barWidth: 9, rightOffset: 0, autoY: true,
     manualCenter: null, manualRange: null, fitAll: false,
@@ -104,6 +107,7 @@ export function HookChartVisualPreview({
     ? `${exchange === 'bybit' ? 'Bybit' : 'Binance'} · ${marketType === 'spot' ? 'Spot' : 'Futures'}`
     : 'Binance · Spot';
   const previewKey = makeVisualProfileKey(visualContext, visualDevice);
+  useEffect(() => { setSaveRequested(false); }, [visualContext, visualDevice]);
 
   const saveChartScale = useCallback(() => {
     const plotWidth = hookChartPlotWidth(previewRef.current?.getBoundingClientRect().width || 500);
@@ -120,6 +124,7 @@ export function HookChartVisualPreview({
     const captured = captureVisualProfile(profile, plotWidth, viewport, naturalRange);
     // Save the actual gesture-adjusted viewport without forcing this preview
     // to jump back to the profile's reconstructed initial position.
+    setSaveRequested(true);
     onChange(captured);
     setVisualProfileCaptureVersion(version => version + 1);
   }, [activeCandles, viewport, profile, visualContext, onChange]);
@@ -185,6 +190,12 @@ export function HookChartVisualPreview({
             <span>Масштабуй свічки мишею або двома пальцями та збережи вигляд.</span>
             <button type="button" onClick={saveChartScale}>Зберегти масштаб із цього графіка</button>
           </div>
+          {saveRequested && <div role="status" aria-live="polite" className="settingsHint">
+            {saveStatus === 'saved' ? 'Масштаб збережено у профілі користувача.'
+              : saveStatus === 'error' ? 'Не вдалося зберегти масштаб. Скористайтеся повторним збереженням.'
+              : saveStatus === 'saving' ? 'Зберігаємо масштаб у профілі…'
+              : 'Масштаб застосовано до поточного профілю. Для синхронізації потрібен вхід в акаунт.'}
+          </div>}
         </>
       ) : (
         <div className="hookchart-visual-preview-empty" role="status">
