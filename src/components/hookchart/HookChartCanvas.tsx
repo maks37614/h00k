@@ -20,6 +20,7 @@ import { createChartCrosshairStore } from './crosshairState';
 import { Chart, ChartTimeAxis, IndicatorDock, buildStructuralChannel, type Alert, type Candle, type Drawing, type HookChartHandle, type Viewport } from './engine';
 import { INDICATOR_META, type IndicatorId, type OIPoint } from './indicatorEngine';
 import { FibIcon, IndicatorIcon, OverlayIcon } from './ToolbarIcons';
+import { HookChartTimeframePicker } from './HookChartTimeframePicker';
 import { DEFAULT_HOOKCHART_HOTKEYS, OriginalHookChartSettings, hotkeyMatches, normalizeOriginalHookChartPreferences } from './OriginalHookChartSettings';
 import { evaluateStrategy, strategyPreset, strategyPreferencePatch } from './strategyEngine';
 import { atr, deriveAutoLevels, formatUsd, normalizeDensityDistance, type LevelTf } from './marketAnalytics';
@@ -883,25 +884,16 @@ const HookChartCanvas = forwardRef<HookChartHandle, HookChartCanvasProps>(functi
     if (externalData) externalData.onTimeframeChange(tf);
     else onTimeframeChange?.(tf as Timeframe);
   };
-  const timeframePicker = <div className="hookchart-timeframes" role="group" aria-label="Таймфрейм">
-    {canChangeTimeframe ? <>
-      <div className="hookchart-timeframes-buttons">
-        {availableTimeframes.map(tf => <button key={tf} type="button" aria-label={`Таймфрейм ${tf}`} aria-pressed={timeframe === tf}
-          disabled={replay && timeframeDisabled}
-          className={timeframe === tf ? 'active' : ''} onClick={() => selectTimeframe(tf)}>{tf}</button>)}
-      </div>
-      <select
-        className="hookchart-timeframes-compact"
-        aria-label="Вибрати таймфрейм"
-        title="Змінити таймфрейм"
-        value={timeframe}
+  const timeframePicker = canChangeTimeframe
+    ? <HookChartTimeframePicker
+        timeframes={availableTimeframes}
+        timeframe={timeframe}
         disabled={replay && timeframeDisabled}
-        onChange={event => selectTimeframe(event.target.value)}
-      >
-        {availableTimeframes.map(tf => <option key={tf} value={tf}>{tf}</option>)}
-      </select>
-    </> : <span>{timeframe}</span>}
-  </div>;
+        onChange={selectTimeframe}
+      />
+    : <div className="hookchart-timeframes" role="group" aria-label="Таймфрейм">
+        <span>{timeframe}</span>
+      </div>;
 
   return <div ref={rootRef} className={'hookchart-root' + (terminalMode ? ' hookchart-terminal' : '')} data-chart-provider="hookchart" data-extra-tools-open={topToolbarOpen ? 'true' : 'false'} data-hookchart-language={chartLanguage} lang={chartLanguage}>
     <div ref={toolbarRef} className={'hookchart-toolbar' + (integratedToolbar ? ' hookchart-terminal-toolbar' : '')} role="toolbar" aria-label="Верхня панель hookchart" aria-orientation="horizontal">
