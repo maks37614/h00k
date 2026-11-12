@@ -13,7 +13,7 @@ test('crosshair price is a plain numeric value suitable for <input type=number>'
 });
 
 test('microcoin crosshair values retain usable precision', () => {
-  assert.equal(chartCrosshairAlertPrice(0.00000001234), '0.000000012340');
+  assert.equal(chartCrosshairAlertPrice(0.00000001234), '0.00000001234');
   assert.equal(chartCrosshairAlertPrice(0), null);
   assert.equal(chartCrosshairAlertPrice(-1), null);
   assert.equal(chartCrosshairAlertPrice(NaN), null);
