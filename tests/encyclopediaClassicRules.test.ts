@@ -13,11 +13,13 @@ import {
 
 test('encyclopedia adds Rules and Classic without losing three existing categories', () => {
   const html = renderToString(React.createElement(FormationGuideModal, { isOpen: true, onClose: () => {} }));
-  for (const name of ['Скальпінг', 'Формації-Патерни', 'Індикатори', 'Правила', 'Класика']) {
+  for (const name of ['Скальпінг', 'Формації-Патерни', 'Індикатори', 'Правила']) {
     assert.ok(html.includes(name), name + ' missing from main encyclopedia');
   }
   const source = readFileSync(new URL('../src/components/FormationGuideModal.tsx', import.meta.url), 'utf8');
   assert.match(source, /mainCategory === 'rules'/);
+  // The Classic subcategory renders only after the Rules main tab is selected.
+  assert.match(source, /<strong className="block text-xs">Класика<\/strong>/);
   assert.match(source, /<ClassicRulesGuide \/>/);
   assert.match(source, /<KotapychGuide \/>/);
   assert.match(source, /<OpenInterestGuide \/>/);
