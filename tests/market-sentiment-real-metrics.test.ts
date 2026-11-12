@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import type { MarketCoin } from '../src/types';
-import { aggregateBybitDerivatives, parseBinanceDailyTakerDelta } from '../server/sentimentMarketMetrics';
+import { aggregateBybitDerivatives, parseBinanceDailyTakerDelta, getSampledTakerDelta } from '../server/sentimentMarketMetrics';
 import { MarketTickerFeed } from '../server/marketTickerFeed';
 
 const coin = (exchange: 'bybit' | 'binance', oi?: number, funding?: number): MarketCoin => ({
@@ -69,7 +69,9 @@ test('Binance sample is rate-limited globally and clearly scoped to UTC day', ()
   assert.match(src, /const CACHE_MS = 5 \* 60_000/);
   assert.match(src, /if \(inflight\) return inflight/);
   assert.match(src, /interval=1d&limit=1/);
-  assert.match(src, /completed >= 3/);
+  assert.match(src, /futures.count >= 3/);
+  assert.match(src, /spot.count >= 3/);
+  assert.match(src, /FUTURES_GEO_COOLDOWN_MS = 30 \* 60_000/);
 });
 
 test('Bybit shared ticker feed parses genuine USD OI and percentage funding', async () => {
@@ -86,4 +88,37 @@ test('Bybit shared ticker feed parses genuine USD OI and percentage funding', as
   assert.equal(tickers[0].openInterestUsd, 740_000_000);
   assert.equal(tickers[0].fundingRatePct, 0.01);
   assert.equal(tickers[0].volumeUsd, 30_000_000);
+});
+
+test('geo-blocked Binance Futures switches to real Binance Spot klines and caches for all visitors', async () => {
+  const now = Date.UTC(2026, 10, 12, 15, 0);
+  const symbols = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'XRPUSDT'];
+  const instruments: MarketCoin[] = symbols.flatMap(symbol => [
+    { ...coin('binance'), symbol, marketType: 'futures' },
+    { ...coin('binance'), symbol, marketType: 'spot' },
+  ]);
+  let futuresRequests = 0;
+  let spotRequests = 0;
+  const fetcher: typeof fetch = async (input) => {
+    const url = String(input);
+    if (url.includes('fapi.binance.com')) {
+      futuresRequests++;
+      return new Response('restricted', { status: 451 });
+    }
+    if (!url.includes('data-api.binance.vision')) throw new Error('Unexpected exchange host');
+    spotRequests++;
+    const candle = [Date.UTC(2026, 10, 12), '1', '1', '1', '1', '1', now, '1000',
+      100, '1', '600', '0'];
+    return new Response(JSON.stringify([candle]), { status: 200 });
+  };
+  const snapshot = await getSampledTakerDelta(instruments, now, fetcher);
+  assert.equal(snapshot?.marketType, 'spot');
+  assert.equal(snapshot?.sampledPairs, 4);
+  assert.equal(snapshot?.deltaUsd, 800);
+  assert.ok(futuresRequests >= 1);
+  assert.equal(spotRequests, 4);
+
+  const repeat = await getSampledTakerDelta(instruments, now + 30_000, fetcher);
+  assert.deepEqual(repeat, snapshot);
+  assert.equal(spotRequests, 4, 'cached sample must not issue a request per visitor');
 });
