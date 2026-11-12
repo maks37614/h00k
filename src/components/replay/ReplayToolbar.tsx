@@ -1,4 +1,5 @@
-import React, { useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Play,
   Pause,
@@ -65,6 +66,26 @@ export const ReplayToolbar: React.FC<ReplayToolbarProps> = ({
 }) => {
   const [isCoinModalOpen, setIsCoinModalOpen] = useState(false);
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
+
+  // The date picker is rendered in document.body, above the chart. Keep the
+  // underlying page still while allowing the dialog content to scroll.
+  useEffect(() => {
+    if (!isDatePickerOpen) return;
+    const bodyOverflow = document.body.style.overflow;
+    const htmlOverflow = document.documentElement.style.overflow;
+    document.body.style.overflow = 'hidden';
+    document.documentElement.style.overflow = 'hidden';
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setIsDatePickerOpen(false);
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      document.body.style.overflow = bodyOverflow;
+      document.documentElement.style.overflow = htmlOverflow;
+    };
+  }, [isDatePickerOpen]);
   const [coinSearchQuery, setCoinSearchQuery] = useState('');
   const [coinExchangeFilter, setCoinExchangeFilter] = useState<'all' | 'binance' | 'bybit'>('all');
   const [coinMarketFilter, setCoinMarketFilter] = useState<'all' | 'futures' | 'spot'>('all');
@@ -301,98 +322,119 @@ export const ReplayToolbar: React.FC<ReplayToolbarProps> = ({
         </div>
       </div>
 
-      {/* Date Picker Modal / Popover */}
-      {isDatePickerOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-150">
-          <div className="w-full max-w-md p-5 rounded-2xl bg-slate-900 border border-slate-700 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-              <div className="flex items-center gap-2">
-                <Calendar className="w-5 h-5 text-amber-400" />
-                <h3 className="font-bold text-white text-base">Вибір історичної дати відтворення</h3>
+      {/* Date picker must escape the toolbar/chart stacking and clipping contexts. */}
+      {isDatePickerOpen && typeof document !== 'undefined' && createPortal(
+        <div
+          className="fixed inset-0 z-[250] flex items-center justify-center bg-slate-950/85 p-2 backdrop-blur-sm sm:p-4"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setIsDatePickerOpen(false);
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="replay-date-picker-title"
+            className="flex w-full max-w-md max-h-[calc(100dvh-16px)] min-h-0 flex-col overflow-hidden rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl sm:max-h-[calc(100dvh-32px)]"
+          >
+            {/* The title and close button stay visible even on short iPhone screens. */}
+            <div className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-800 px-4 py-3 sm:px-5 sm:py-4">
+              <div className="flex min-w-0 items-center gap-2">
+                <Calendar className="h-5 w-5 shrink-0 text-amber-400" />
+                <h3 id="replay-date-picker-title" className="text-sm font-bold text-white sm:text-base">
+                  Вибір історичної дати відтворення
+                </h3>
               </div>
               <button
+                type="button"
                 onClick={() => setIsDatePickerOpen(false)}
-                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+                aria-label="Закрити вибір дати"
+                className="shrink-0 rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-800 hover:text-white"
               >
-                <X className="w-4 h-4" />
+                <X className="h-4 w-4" />
               </button>
             </div>
 
-            <p className="text-xs text-slate-400 leading-relaxed">
-              Виберіть момент у минулому. Графік миттєво переміститься туди, автоматично сфокусується на свічках, а всі наступні свічки будуть приховані для реалістичної торгівлі!
-            </p>
-            <div className="flex items-center gap-1.5 p-2 rounded-xl bg-cyan-950/40 border border-cyan-800/40 text-cyan-300 text-[11px] font-mono">
-              <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-ping shrink-0" />
-              <span>Автоматичне масштабування та центрування свічок увімкнено.</span>
-            </div>
+            {/* Only this area scrolls; the chart stays behind the overlay. */}
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-4 py-4 sm:px-5">
+              <p className="text-xs leading-relaxed text-slate-400">
+                Виберіть момент у минулому. Графік миттєво переміститься туди, автоматично сфокусується на свічках, а всі наступні свічки будуть приховані для реалістичної торгівлі!
+              </p>
+              <div className="flex items-center gap-1.5 rounded-xl border border-cyan-800/40 bg-cyan-950/40 p-2 font-mono text-[11px] text-cyan-300">
+                <span className="h-1.5 w-1.5 shrink-0 animate-ping rounded-full bg-cyan-400" />
+                <span>Автоматичне масштабування та центрування свічок увімкнено.</span>
+              </div>
 
-            {/* Quick Random Date */}
-            <button
-              onClick={() => {
-                onRandomHistoricalDate();
-                setIsDatePickerOpen(false);
-              }}
-              className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-bold text-xs shadow-lg shadow-indigo-950/50 transition-all cursor-pointer"
-            >
-              <Shuffle className="w-4 h-4" />
-              <span>🎲 Згенерувати випадкову дату (Сюрприз)</span>
-            </button>
+              <button
+                type="button"
+                onClick={() => {
+                  onRandomHistoricalDate();
+                  setIsDatePickerOpen(false);
+                }}
+                className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 px-4 py-2.5 text-xs font-bold text-white shadow-lg shadow-indigo-950/50 transition-all hover:from-indigo-500 hover:to-purple-500"
+              >
+                <Shuffle className="h-4 w-4" />
+                <span>🎲 Згенерувати випадкову дату (Сюрприз)</span>
+              </button>
 
-            {/* Quick Presets */}
-            <div className="space-y-1.5">
-              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                Швидкі переходи:
-              </span>
-              <div className="grid grid-cols-3 gap-2">
-                {[
-                  { label: '14 днів тому', days: 14 },
-                  { label: '30 днів тому', days: 30 },
-                  { label: '60 днів тому', days: 60 },
-                  { label: '90 днів тому', days: 90 },
-                  { label: '180 днів тому', days: 180 },
-                  { label: '1 рік тому', days: 365 },
-                ].map((item) => (
-                  <button
-                    key={item.days}
-                    onClick={() => handleApplyPresetDaysAgo(item.days)}
-                    className="py-1.5 px-2 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-200 text-xs font-mono font-semibold border border-slate-700/60 transition-colors"
-                  >
-                    {item.label}
-                  </button>
-                ))}
+              <div className="space-y-1.5">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                  Швидкі переходи:
+                </span>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { label: '14 днів тому', days: 14 },
+                    { label: '30 днів тому', days: 30 },
+                    { label: '60 днів тому', days: 60 },
+                    { label: '90 днів тому', days: 90 },
+                    { label: '180 днів тому', days: 180 },
+                    { label: '1 рік тому', days: 365 },
+                  ].map((item) => (
+                    <button
+                      key={item.days}
+                      type="button"
+                      onClick={() => handleApplyPresetDaysAgo(item.days)}
+                      className="rounded-lg border border-slate-700/60 bg-slate-800/80 px-2 py-1.5 font-mono text-xs font-semibold text-slate-200 transition-colors hover:bg-slate-700"
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-2 border-t border-slate-800 pt-2">
+                <label htmlFor="replay-history-date" className="block text-[11px] font-bold uppercase tracking-wider text-slate-300">
+                  Або точна дата і час:
+                </label>
+                <input
+                  id="replay-history-date"
+                  type="datetime-local"
+                  value={customDateTime}
+                  onChange={(event) => setCustomDateTime(event.target.value)}
+                  className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 font-mono text-xs text-white focus:border-cyan-500 focus:outline-none"
+                />
               </div>
             </div>
 
-            {/* Custom Datetime Input */}
-            <div className="space-y-2 pt-2 border-t border-slate-800">
-              <label className="block text-[11px] font-bold text-slate-300 uppercase tracking-wider">
-                Або точна дата і час:
-              </label>
-              <input
-                type="datetime-local"
-                value={customDateTime}
-                onChange={(e) => setCustomDateTime(e.target.value)}
-                className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs font-mono focus:outline-none focus:border-cyan-500"
-              />
-            </div>
-
-            {/* Action buttons */}
-            <div className="flex items-center justify-end gap-2 pt-2">
+            {/* Buttons remain reachable without scrolling below the graph. */}
+            <div className="flex shrink-0 items-center justify-end gap-2 border-t border-slate-800 bg-slate-900 px-4 py-3 sm:px-5">
               <button
+                type="button"
                 onClick={() => setIsDatePickerOpen(false)}
-                className="px-3 py-2 rounded-xl bg-slate-800 text-slate-300 text-xs font-semibold hover:bg-slate-700 transition-colors"
+                className="rounded-xl bg-slate-800 px-3 py-2 text-xs font-semibold text-slate-300 transition-colors hover:bg-slate-700"
               >
                 Скасувати
               </button>
               <button
+                type="button"
                 onClick={handleApplyCustomDate}
-                className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-extrabold shadow-md transition-colors"
+                className="rounded-xl bg-amber-500 px-4 py-2 text-xs font-extrabold text-slate-950 shadow-md transition-colors hover:bg-amber-400"
               >
                 Почати відтворення 🚀
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Coin Selection Modal */}
