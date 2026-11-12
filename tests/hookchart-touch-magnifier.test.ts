@@ -2,13 +2,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { touchMagnifierLayout, drawTouchMagnifier } from '../src/components/hookchart/touchMagnifier';
 
-test('touch magnifier stays centred on the crosshair on phone, tablet and desktop, including edges', () => {
+test('touch magnifier floats inside chart bounds while sampling the selected candle on every screen size', () => {
   for (const [width, height] of [[240, 160], [390, 700], [768, 500], [1366, 800]]) {
     for (const point of [{x:0,y:0}, {x:width,y:height}, {x:width/2,y:height/2}, {x:-30,y:height+40}]) {
       const lens = touchMagnifierLayout(width, height, point)!;
-      assert.equal(lens.x, Math.max(0, Math.min(width, point.x)));
-      assert.equal(lens.y, Math.max(0, Math.min(height, point.y)));
       assert.ok(lens.radius > 0 && lens.radius <= 58);
+      assert.ok(lens.x - lens.radius >= 0 && lens.x + lens.radius <= width);
+      assert.ok(lens.y - lens.radius >= 0 && lens.y + lens.radius <= height);
       assert.equal(lens.sourceX + lens.sourceSize / 2, Math.max(0, Math.min(width, point.x)));
       assert.equal(lens.sourceY + lens.sourceSize / 2, Math.max(0, Math.min(height, point.y)));
       assert.equal(lens.size / lens.sourceSize, 2);
@@ -16,14 +16,18 @@ test('touch magnifier stays centred on the crosshair on phone, tablet and deskto
   }
 });
 
-test('lens has no vertical offset at the intersection, even near the top; invalid/tiny charts are skipped', () => {
-  const point = {x:180,y:400};
-  const lens = touchMagnifierLayout(390, 700, point)!;
-  assert.equal(lens.x, point.x);
-  assert.equal(lens.y, point.y);
+test('lens clears the finger above the crosshair, and moves sideways near the upper edge', () => {
+  for (const point of [{x:180,y:400}, {x:180,y:690}, {x:12,y:400}, {x:380,y:400}]) {
+    const lens = touchMagnifierLayout(390, 700, point)!;
+    assert.ok(lens.y + lens.radius <= point.y - 24, JSON.stringify({point,lens}));
+  }
   const nearTop = touchMagnifierLayout(390, 700, {x:180,y:10})!;
-  assert.equal(nearTop.y, 10);
-  assert.equal(touchMagnifierLayout(40, 40, point), null);
+  assert.ok(nearTop.y - nearTop.radius >= 0);
+  assert.ok(Math.abs(nearTop.x - 180) >= nearTop.radius + 24);
+  // Sample remains at the touched crosshair even though the lens moves away.
+  assert.equal(nearTop.sourceX + nearTop.sourceSize / 2, 180);
+  assert.equal(nearTop.sourceY + nearTop.sourceSize / 2, 10);
+  assert.equal(touchMagnifierLayout(40, 40, {x:180,y:400}), null);
   assert.equal(touchMagnifierLayout(390, 700, {x:NaN,y:10}), null);
 });
 
