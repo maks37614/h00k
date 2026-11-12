@@ -11,7 +11,7 @@ export const VISUAL_CONTEXTS = [
 ] as const;
 export type VisualContextId = typeof VISUAL_CONTEXTS[number]['id'];
 export type VisualDevice = 'mobile' | 'desktop';
-export type VisualProfileKey = \`\${VisualContextId}:\${VisualDevice}\`;
+export type VisualProfileKey = `${VisualContextId}:${VisualDevice}`;
 
 export interface VisualChartProfile {
   visibleBars: number;
@@ -43,7 +43,7 @@ export function visualContextForTerminalWidth(chartWidth: number): VisualContext
 }
 
 export function makeVisualProfileKey(context: VisualContextId, device: VisualDevice): VisualProfileKey {
-  return \`\${context}:\${device}\`;
+  return `${context}:${device}`;
 }
 
 function clamp(value: unknown, min: number, max: number, fallback: number): number {
