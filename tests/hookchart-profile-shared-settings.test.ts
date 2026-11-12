@@ -23,6 +23,10 @@ test('one shared chart editor can render inside the profile without a nested dia
   assert.match(html, /role="region"/);
   assert.doesNotMatch(html, /aria-modal="true"/);
   assert.match(html, /Налаштування графіка/);
+  assert.match(html, /aria-label="Про налаштування графіка"/);
+  assert.match(html, /aria-expanded="false"/);
+  assert.doesNotMatch(html, /Параметри зберігаються автоматично/);
+  assert.doesNotMatch(html, /Усі налаштування зберігаються автоматично/);
   assert.match(html, /Стратегії/);
   assert.match(html, /Гарячі клавіші/);
   assert.match(html, /Фактична кількість свічок залежить від біржі/);
@@ -40,6 +44,22 @@ test('profile Graph tab mounts the same settings editor and saves profile deltas
   assert.match(shared, /hookChartPreferences: delta/);
   assert.match(shared, /setTimeout\(flush, 500\)/);
   assert.match(shared, /siteLanguageAtSelection/);
+});
+
+test('chart help text lives in a touch-friendly profile-only popup', () => {
+  const editor = source('../src/components/hookchart/OriginalHookChartSettings.tsx');
+  const profile = source('../src/components/profile/ProfileHookChartSettings.tsx');
+  const css = source('../src/components/hookchart/integration.css');
+  assert.match(editor, /className="profileSettingsHelpButton"/);
+  assert.match(editor, /role="tooltip" className="profileSettingsHelpPopover"/);
+  assert.match(editor, /Налаштування HookChart для Скрінера, Формацій і Термінала/);
+  assert.match(editor, /Усі налаштування зберігаються автоматично/);
+  assert.match(editor, /onClick=\{\(\) => setHeaderHelpOpen\(value => !value\)\}/);
+  assert.match(editor, /document\.addEventListener\('pointerdown', onPointerDown\)/);
+  assert.match(editor, /event\.key === 'Escape'/);
+  assert.doesNotMatch(profile, /<p>Налаштування HookChart для Скрінера/);
+  assert.match(css, /\.hookchart-root\.profile-hookchart-settings \.profileSettingsHelpPopover/);
+  assert.match(css, /width:min\(350px,calc\(100% - 20px\)\)/);
 });
 
 test('strategy selection sends exactly the same settings patch from profile and chart', () => {
