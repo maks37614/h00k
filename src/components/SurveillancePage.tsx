@@ -39,6 +39,7 @@ import {
   Filter,
 } from 'lucide-react';
 import { MonitoringIcon } from './MonitoringIcon';
+import { SurveillanceFieldDropdown } from './SurveillanceFieldDropdown';
 import { useSurveillance } from '../context/SurveillanceContext';
 import { ManualDensityThresholdField } from './ManualDensityThresholdField';
 import { SurveillanceRemoveButton } from './SurveillanceRemoveButton';
@@ -89,6 +90,15 @@ function formatTimeAgo(timestamp?: number): string {
   const diffDays = Math.floor(diffHours / 24);
   return `${diffDays} д тому`;
 }
+
+const SURVEILLANCE_EXCHANGES: ReadonlyArray<{ value: ExchangeId; label: string }> = [
+  { value: 'binance', label: 'Binance' },
+  { value: 'bybit', label: 'Bybit' },
+];
+const SURVEILLANCE_MARKETS: ReadonlyArray<{ value: MarketType; label: string }> = [
+  { value: 'futures', label: 'Futures / Linear' },
+  { value: 'spot', label: 'Spot' },
+];
 
 const TRIGGER_MODE_OPTIONS: { id: TriggerModeType; label: string; desc: string }[] = [
   { id: 'bar_close', label: 'Закриття 4H', desc: 'За закриттям 4h свічки' },
@@ -1488,27 +1498,25 @@ export const SurveillancePage: React.FC<SurveillancePageProps> = ({
                 <>
                   {/* Exchange and Market selectors */}
                   <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1">
-                      <label className="text-[11px] text-slate-400">Біржа</label>
-                      <select
+                    <div className="min-w-0 space-y-1">
+                      <label id="surveillance-exchange-label" htmlFor="surveillance-exchange" className="block text-[11px] text-slate-400">Біржа</label>
+                      <SurveillanceFieldDropdown
+                        id="surveillance-exchange"
+                        labelId="surveillance-exchange-label"
                         value={selectedExchange}
-                        onChange={(e) => setSelectedExchange(e.target.value as ExchangeId)}
-                        className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-white focus:outline-none focus:border-cyan-500 cursor-pointer"
-                      >
-                        <option value="binance">Binance</option>
-                        <option value="bybit">Bybit</option>
-                      </select>
+                        options={SURVEILLANCE_EXCHANGES}
+                        onChange={setSelectedExchange}
+                      />
                     </div>
-                    <div className="space-y-1">
-                      <label className="text-[11px] text-slate-400">Ринок</label>
-                      <select
+                    <div className="min-w-0 space-y-1">
+                      <label id="surveillance-market-label" htmlFor="surveillance-market" className="block text-[11px] text-slate-400">Ринок</label>
+                      <SurveillanceFieldDropdown
+                        id="surveillance-market"
+                        labelId="surveillance-market-label"
                         value={selectedMarketType}
-                        onChange={(e) => setSelectedMarketType(e.target.value as MarketType)}
-                        className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-white focus:outline-none focus:border-cyan-500 cursor-pointer"
-                      >
-                        <option value="futures">Futures / Linear</option>
-                        <option value="spot">Spot</option>
-                      </select>
+                        options={SURVEILLANCE_MARKETS}
+                        onChange={setSelectedMarketType}
+                      />
                     </div>
                   </div>
 
