@@ -52,3 +52,12 @@ test('existing chart actions remain right-aligned and retain their handlers', ()
   assert.match(standard, /min-w-0 truncate font-medium tracking-tight/);
   assert.match(early, /className="truncate">Можлива формація/);
 });
+
+
+test('formation header badge omits only redundant support suffix without changing the formation itself', () => {
+  const header = regularHeader();
+  assert.match(header, /formation\.name\.replace\(\/\\s\*\\\(Підтримка\\\)\\s\*\$\/iu, ''\)/);
+  assert.match(header, /title=\{\`Формація: \$\{formation\.name\} \(\$\{formation\.statusLabel\}\)\`\}/);
+  assert.equal('Тестування мінімуму 24h (Підтримка)'.replace(/\s*\(Підтримка\)\s*$/iu, ''),
+    'Тестування мінімуму 24h');
+});
