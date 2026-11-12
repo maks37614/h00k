@@ -1018,7 +1018,7 @@ export const FormationDetailsModal: React.FC<FormationDetailsModalProps> = ({
 
               {/* Custom Price Alert Section Below Chart */}
               <div className={telegramAlertPanelCollapsed
-                ? 'inline-flex w-fit max-w-full flex-col gap-2 rounded-xl border border-slate-800 bg-slate-950/90 p-2.5 sm:p-3'
+                ? 'flex w-full min-w-0 flex-col gap-2 rounded-xl border border-slate-800 bg-slate-950/90 p-2.5 sm:p-3'
                 : 'w-full space-y-4 rounded-2xl border border-slate-800 bg-slate-950/90 p-4 sm:p-5'}>
                 <div className={telegramAlertPanelCollapsed
                   ? 'flex min-w-0 items-center gap-2'
