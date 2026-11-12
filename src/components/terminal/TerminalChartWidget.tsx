@@ -51,6 +51,8 @@ interface TerminalChartWidgetProps {
   onDragLeave?: (e: React.DragEvent) => void;
   onDrop?: (e: React.DragEvent) => void;
   heightStyle?: string;
+  /** Terminal-wide candle auto-scale; does not start any extra feed. */
+  terminalAutoScale?: boolean;
 }
 
 
@@ -152,6 +154,7 @@ export const TerminalChartWidget: React.FC<TerminalChartWidgetProps> = ({
   onDragLeave,
   onDrop,
   heightStyle,
+  terminalAutoScale = false,
 }) => {
   const chartProvider = useChartProvider();
   const useIntegratedHookChartToolbar = chartProvider === 'hookchart';
@@ -873,6 +876,7 @@ export const TerminalChartWidget: React.FC<TerminalChartWidgetProps> = ({
               </>
             ) : (
               <ExchangeCandlestickChart
+                terminalAutoScale={terminalAutoScale && useIntegratedHookChartToolbar}
                 terminalMode={useIntegratedHookChartToolbar}
                 terminalToolbarVisibility={useIntegratedHookChartToolbar ? terminalToolbarVisibility : undefined}
                 onTimeframeChange={useIntegratedHookChartToolbar ? (nextTimeframe) => onUpdateBlock({ timeframe: nextTimeframe }) : undefined}

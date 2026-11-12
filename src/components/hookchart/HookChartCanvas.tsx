@@ -63,6 +63,8 @@ export interface HookChartCanvasProps {
   replay?: boolean;
   focusTrigger?: number;
   terminalMode?: boolean;
+  /** Terminal-only global auto-scale; reuses live candles and the current canvas. */
+  terminalAutoScale?: boolean;
   /** Live placement; Replay ignores all user visual presets. */
   visualContext?: VisualContextId;
   terminalToolbarVisibility?: TerminalToolbarVisibility;
@@ -131,7 +133,7 @@ function enabledIndicators(preferences?: HookChartPreferences, replay = false, m
 }
 
 const HookChartCanvas = forwardRef<HookChartHandle, HookChartCanvasProps>(function HookChartCanvas({
-  externalData, klines, symbol, timeframe, exchange, marketType, markers = [], expandPriceScaleToMarkers = false, savedChartParams, replay = false, focusTrigger, terminalMode = false, visualContext, terminalToolbarVisibility, focusFormation, onTimeframeChange, onCrosshairPriceChange, timeframeDisabled = false, replayPlaybackSpeed, onReplayPlaybackSpeedChange, chartActions, toolbarActions, toolbarOverlays, tradeLevelToggle, footerActions,
+  externalData, klines, symbol, timeframe, exchange, marketType, markers = [], expandPriceScaleToMarkers = false, savedChartParams, replay = false, focusTrigger, terminalMode = false, terminalAutoScale = false, visualContext, terminalToolbarVisibility, focusFormation, onTimeframeChange, onCrosshairPriceChange, timeframeDisabled = false, replayPlaybackSpeed, onReplayPlaybackSpeedChange, chartActions, toolbarActions, toolbarOverlays, tradeLevelToggle, footerActions,
 }, forwardedRef) {
   const { user, profile, updateProfileData } = useAuth();
   const { alerts: priceAlerts, addAlert, deleteAlert } = useAlerts();
@@ -1320,6 +1322,7 @@ const HookChartCanvas = forwardRef<HookChartHandle, HookChartCanvasProps>(functi
       <Chart
         candles={candles}
         terminalMode={terminalMode}
+        terminalAutoScale={terminalAutoScale}
         visualProfile={activeVisualProfile}
         visualProfileKey={replay ? undefined : activeVisualKey}
         focusFormation={focusFormation}
