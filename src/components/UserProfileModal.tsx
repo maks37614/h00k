@@ -204,7 +204,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
               <Target size={19} className="text-cyan-400"/>
               <span>
                 <span className="block font-bold text-sm text-slate-100">Конструктор TP/SL</span>
-                <span className="text-[11px] text-slate-400">Особисті правила формацій, дотики High/Low, візуальний графік</span>
+                <span className="text-[11px] text-slate-400">Особисті правила формацій, дотики максимумів/мінімумів свічок, візуальний графік</span>
               </span>
             </span>
             <span className="text-[11px] font-bold text-cyan-300">
@@ -332,7 +332,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
 
                 <div>
                   <label className="block text-xs font-medium text-slate-300 mb-1">
-                    Email
+                    Електронна пошта
                   </label>
                   <input
                     type="text"
@@ -384,8 +384,8 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                     className="w-full bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-2 text-xs text-white focus:outline-none focus:border-cyan-500"
                   >
                     <option value="all">Всі ринки</option>
-                    <option value="futures">Ф'ючерси (Futures)</option>
-                    <option value="spot">Спот (Spot)</option>
+                    <option value="futures">Ф'ючерси</option>
+                    <option value="spot">Спот</option>
                   </select>
                 </div>
 

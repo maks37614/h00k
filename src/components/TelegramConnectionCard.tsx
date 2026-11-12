@@ -8,6 +8,12 @@ export const TelegramConnectionCard: React.FC = () => {
   const { status, loading, busy, linkUrl, errorCode, feedback, connect, disconnect, sendTest, refresh } = useTelegram();
   const connected = Boolean(status?.isConfigured);
   const waiting = Boolean(status?.linkPending && linkUrl);
+  const telegramErrorText = (code: string) => {
+    const key = `telegram.errors.${code}`;
+    const translated = t(key);
+    // Unknown server errors must not leak untranslated localization keys.
+    return translated === key ? t('telegram.errors.request_failed') : translated;
+  };
 
   return (
     <section className="rounded-xl border border-slate-700/80 bg-slate-900/60 p-4 space-y-4" aria-live="polite">
@@ -28,7 +34,7 @@ export const TelegramConnectionCard: React.FC = () => {
       {status?.pollingError && (
         <div className="flex gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-amber-200">
           <AlertCircle className="h-4 w-4 shrink-0" />
-          <span>{t(`telegram.errors.${status.pollingError}`)}</span>
+          <span>{telegramErrorText(status.pollingError)}</span>
         </div>
       )}
 
@@ -51,13 +57,13 @@ export const TelegramConnectionCard: React.FC = () => {
       {errorCode && (
         <div className="flex gap-2 rounded-lg border border-rose-500/30 bg-rose-500/5 p-3 text-xs text-rose-200">
           <AlertCircle className="h-4 w-4 shrink-0" />
-          <span>{t(`telegram.errors.${errorCode}`)}</span>
+          <span>{telegramErrorText(errorCode)}</span>
         </div>
       )}
       {status?.linkError && (
         <div className="flex gap-2 rounded-lg border border-rose-500/30 bg-rose-500/5 p-3 text-xs text-rose-200">
           <AlertCircle className="h-4 w-4 shrink-0" />
-          <span>{t(`telegram.errors.${status.linkError}`)}</span>
+          <span>{telegramErrorText(status.linkError)}</span>
         </div>
       )}
       {feedback && (
