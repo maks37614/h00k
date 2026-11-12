@@ -1500,7 +1500,7 @@ export const SurveillancePage: React.FC<SurveillancePageProps> = ({
                   <div className="grid grid-cols-2 gap-3">
                     <div className="min-w-0 space-y-1">
                       <label id="surveillance-exchange-label" htmlFor="surveillance-exchange" className="block text-[11px] text-slate-400">Біржа</label>
-                      <SurveillanceFieldDropdown
+                      <SurveillanceFieldDropdown<ExchangeId>
                         id="surveillance-exchange"
                         labelId="surveillance-exchange-label"
                         value={selectedExchange}
@@ -1510,7 +1510,7 @@ export const SurveillancePage: React.FC<SurveillancePageProps> = ({
                     </div>
                     <div className="min-w-0 space-y-1">
                       <label id="surveillance-market-label" htmlFor="surveillance-market" className="block text-[11px] text-slate-400">Ринок</label>
-                      <SurveillanceFieldDropdown
+                      <SurveillanceFieldDropdown<MarketType>
                         id="surveillance-market"
                         labelId="surveillance-market-label"
                         value={selectedMarketType}
