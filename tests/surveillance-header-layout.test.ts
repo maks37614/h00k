@@ -64,7 +64,7 @@ const eventsHeader = source.slice(
 );
 
 test('coin watching heading is emphasized without changing monitoring controls', () => {
-  assert.match(topBar, /border-b border-cyan-400\/60/);
+  assert.doesNotMatch(topBar, /border-b border-cyan-400\/60/);
   assert.match(topBar, /bg-gradient-to-r from-white via-cyan-100 to-sky-300/);
   assert.match(topBar, /<MonitoringIcon className="w-14 h-14" \/>/);
   assert.match(topBar, /title="Оновити дані"/);
