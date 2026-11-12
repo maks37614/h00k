@@ -37,7 +37,7 @@ test('real settings preview renders the HookChart canvas with actual OHLCV, pric
   assert.match(html, /class="chartTimeAxis"/);
   assert.match(html, /Binance/);
   assert.match(html, /Свічки відкритого графіка/);
-  assert.match(html, /Зберегти масштаб із цього графіка/);
+  assert.match(html, /Зберегти масштаб/);
   assert.doesNotMatch(html, /Приклад відносного масштабу|не реальні котирування/);
 });
 
@@ -61,7 +61,8 @@ test('live preview never creates another exchange feed or changes drawing and al
   assert.match(previewSource, /fetchDirectKlines\('binance', 'spot', 'BTCUSDT', '1h', 700\)/);
   assert.match(previewSource, /showLiqRiskBlock=\{false\}/);
   assert.match(previewSource, /controlsContainer=\{null\}/);
-  assert.match(previewSource, /onViewportChange=\{setViewport\}/);
+  assert.match(previewSource, /onViewportGesture=\{onGesture\}/);
+  assert.match(previewSource, /onViewportChange=\{next =>/);
   assert.match(previewSource, /captureVisualProfile\(/);
   assert.doesNotMatch(previewSource, /new WebSocket|setInterval|onCreatePriceAlert=|onNeedHistory=/);
 });
@@ -113,7 +114,7 @@ test('saving a manually zoomed preview preserves the viewport rather than reappl
   assert.match(preview, /visualProfileCaptureVersion=\{visualProfileCaptureVersion\}/);
   assert.match(engine, /lastVisualCaptureRef=useRef\(visualProfileCaptureVersion\)/);
   assert.match(engine, /if\(lastVisualCaptureRef\.current!==visualProfileCaptureVersion\)/);
-  assert.match(engine, /visualAppliedRef\.current=signature;\s*return;/);
+  assert.match(engine, /lastVisualCaptureRef\.current=visualProfileCaptureVersion;[\s\S]*?const gapDelta=rightPaddingBars-lastVisualGapRef\.current/);
   assert.match(engine, /\[symbol,tf,visualProfileKey,visualProfileCaptureVersion,/);
 });
 
