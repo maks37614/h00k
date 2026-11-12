@@ -37,12 +37,22 @@ test('grouping shows one coin per exchange/market/timeframe but preserves distin
   assert.deepEqual(groups.find(g => g.coin.exchange === 'binance')?.formations.map(f => f.id), ['triangle', 'double-bottom']);
 });
 
-test('regular Formation filters show Щільність and Круглі числа next to each other', () => {
+test('regular Formation density and ROUND filters use compact icons in original toolbar position', () => {
   const source = readFileSync(new URL('../src/components/ScreenerFilters.tsx', import.meta.url), 'utf8');
-  assert.match(source, /checked=\{filters\.densityConfirmedOnly\}/);
-  assert.match(source, /checked=\{filters\.roundNumberOnly\}/);
-  assert.match(source, /onFilterChange\(\{ roundNumberOnly: e\.target\.checked \}\)/);
-  assert.match(source, /Щільність\s*<\/label>\s*<label[\s\S]*?Круглі числа/);
+  const start = source.indexOf('role="group" aria-label="Фільтри рівнів"');
+  const end = source.indexOf('Статус', start);
+  assert.ok(start > 0 && end > start, 'icon group remains immediately before original status select');
+  const group = source.slice(start, end);
+  assert.match(group, /<Layers className="h-4 w-4"/);
+  assert.match(group, /<CircleDot className="h-4 w-4"/);
+  assert.match(group, /aria-pressed=\{filters\.densityConfirmedOnly\}/);
+  assert.match(group, /aria-pressed=\{filters\.roundNumberOnly\}/);
+  assert.match(group, /aria-label="Щільність"/);
+  assert.match(group, /aria-label="Круглі числа \(ROUND\)"/);
+  assert.match(group, /onFilterChange\(\{ densityConfirmedOnly: !filters\.densityConfirmedOnly \}\)/);
+  assert.match(group, /onFilterChange\(\{ roundNumberOnly: !filters\.roundNumberOnly \}\)/);
+  assert.match(group, /inline-flex h-8 w-8 shrink-0/);
+  assert.doesNotMatch(group, /type="checkbox"|<label/);
   assert.doesNotMatch(source, /Щільність підтверджена/);
 });
 
