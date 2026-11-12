@@ -1119,7 +1119,7 @@ export const FormationDetailsModal: React.FC<FormationDetailsModalProps> = ({
               <div className={telegramAlertPanelCollapsed
                 ? 'flex w-full min-w-0 flex-col gap-2 rounded-xl border border-slate-800 bg-slate-950/90 p-2.5 sm:p-3'
                 : 'w-full space-y-4 rounded-2xl border border-slate-800 bg-slate-950/90 p-4 sm:p-5'}>
-                <div className="flex min-w-0 items-start gap-2 sm:gap-3">
+                <div className="relative flex w-full min-w-0 items-start gap-2 sm:gap-3">
                   <div className={telegramAlertPanelCollapsed
                     ? 'shrink-0 rounded-lg border border-cyan-500/30 bg-cyan-500/10 p-1.5 text-cyan-400'
                     : 'shrink-0 rounded-xl border border-cyan-500/30 bg-cyan-500/10 p-2 text-cyan-400'}>
@@ -1135,22 +1135,22 @@ export const FormationDetailsModal: React.FC<FormationDetailsModalProps> = ({
                       </p>
                     )}
                   </div>
-                  <div className="ml-auto inline-flex shrink-0 items-center gap-1.5">
+                  <div className="ml-auto mr-9 inline-flex shrink-0 items-center gap-1.5">
                     <span className="rounded-full border border-cyan-800/60 bg-cyan-950/80 px-2 py-0.5 font-mono text-[10px] text-cyan-300">
                       {coin.symbol}
                     </span>
-                    <button
+                  </div>
+                  <button
                       type="button"
                       onClick={toggleTelegramAlertPanel}
                       aria-expanded={!telegramAlertPanelCollapsed}
                       aria-controls="telegram-price-alert-panel-details"
                       aria-label={telegramAlertPanelCollapsed ? 'Розгорнути сповіщення Telegram' : 'Згорнути сповіщення Telegram'}
                       title={telegramAlertPanelCollapsed ? 'Розгорнути' : 'Згорнути'}
-                      className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-slate-700 bg-slate-900 text-slate-300 transition-colors hover:border-cyan-600 hover:text-cyan-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400"
+                      className="absolute right-0 top-0 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-slate-700 bg-slate-900 text-slate-300 transition-colors hover:border-cyan-600 hover:text-cyan-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400"
                     >
                       {telegramAlertPanelCollapsed ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
                     </button>
-                  </div>
                 </div>
                 {/* Telegram status badge: keep it below the header so the coin and
                     collapse control stay anchored at the top right on mobile. */}
@@ -1487,8 +1487,52 @@ export const FormationDetailsModal: React.FC<FormationDetailsModalProps> = ({
             </div>
           )}
 
-          {/* Smart Analysis Block ("Розумний Аналіз") */}
-          <SmartAnalysisBlock coin={coin} formation={formation} klines={klines} timeframe={timeframe} tradeSetup={tradeSetupPanel} />
+          {/* Global, persistent Smart Analysis accordion. Only its UI is hidden;
+              no Telegram alert or trading setting is changed. */}
+          <div className="relative w-full min-w-0">
+            {smartAnalysisCollapsed ? (
+              <div className="flex w-full min-w-0 items-center gap-2 rounded-xl border border-indigo-500/30 bg-slate-950/90 p-3 sm:p-4">
+                <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-indigo-500/40 bg-indigo-500/20 text-indigo-400">
+                  <Zap className="h-4 w-4 fill-current" />
+                </span>
+                <h4 className="min-w-0 text-xs font-bold uppercase tracking-wide text-white sm:text-sm">
+                  РОЗУМНИЙ АНАЛІЗ
+                </h4>
+                <span className="shrink-0 rounded-full border border-indigo-500/40 bg-indigo-500/20 px-2 py-0.5 font-mono text-[10px] font-bold text-indigo-300">
+                  AI + Quant
+                </span>
+                <button
+                  type="button"
+                  onClick={toggleSmartAnalysis}
+                  aria-expanded={false}
+                  aria-label="Розгорнути Розумний аналіз AI + Quant"
+                  title="Розгорнути Розумний аналіз"
+                  className="ml-auto inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-indigo-500/40 bg-slate-900 text-slate-300 transition-colors hover:text-indigo-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-400"
+                >
+                  <ChevronDown className="h-4 w-4" />
+                </button>
+              </div>
+            ) : (
+              <>
+                <SmartAnalysisBlock coin={coin} formation={formation} klines={klines} timeframe={timeframe} tradeSetup={tradeSetupPanel} />
+                <button
+                  type="button"
+                  onClick={toggleSmartAnalysis}
+                  aria-expanded={true}
+                  aria-label="Згорнути Розумний аналіз AI + Quant"
+                  title="Згорнути Розумний аналіз"
+                  className="absolute right-4 top-4 z-10 inline-flex h-8 w-8 items-center justify-center rounded-lg border border-indigo-500/40 bg-slate-900 text-slate-300 transition-colors hover:text-indigo-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-400 sm:right-6 sm:top-6"
+                >
+                  <ChevronUp className="h-4 w-4" />
+                </button>
+              </>
+            )}
+            {smartAnalysisSaveError && (
+              <p role="status" className="mt-2 text-xs text-amber-300">
+                Не вдалося синхронізувати згортання аналізу з профілем. Вибір збережено в цьому браузері.
+              </p>
+            )}
+          </div>
         </div>
       </div>
 
