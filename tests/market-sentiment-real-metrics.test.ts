@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import type { MarketCoin } from '../src/types';
 import { aggregateBybitDerivatives, parseBinanceDailyTakerDelta } from '../server/sentimentMarketMetrics';
+import { MarketTickerFeed } from '../server/marketTickerFeed';
 
 const coin = (exchange: 'bybit' | 'binance', oi?: number, funding?: number): MarketCoin => ({
   symbol: 'BTCUSDT', baseAsset: 'BTC', quoteAsset: 'USDT', exchange, marketType: 'futures',
@@ -69,4 +70,20 @@ test('Binance sample is rate-limited globally and clearly scoped to UTC day', ()
   assert.match(src, /if \(inflight\) return inflight/);
   assert.match(src, /interval=1d&limit=1/);
   assert.match(src, /completed >= 3/);
+});
+
+test('Bybit shared ticker feed parses genuine USD OI and percentage funding', async () => {
+  const feed = new MarketTickerFeed(async () => new Response(JSON.stringify({
+    retCode: 0,
+    result: { list: [{
+      symbol: 'BTCUSDT', lastPrice: '95000', price24hPcnt: '0.01', turnover24h: '30000000',
+      highPrice24h: '96000', lowPrice24h: '90000', openInterestValue: '740000000',
+      fundingRate: '0.0001',
+    }] },
+  }), { status: 200 }), () => 1_700_000_000_000);
+  const tickers = await feed.get('bybit', 'futures');
+  assert.equal(tickers.length, 1);
+  assert.equal(tickers[0].openInterestUsd, 740_000_000);
+  assert.equal(tickers[0].fundingRatePct, 0.01);
+  assert.equal(tickers[0].volumeUsd, 30_000_000);
 });
