@@ -507,26 +507,34 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             <InstallAppButton />
           </div>
 
-          {/* Benefits pill & Isolation Guarantee */}
-          <div className="p-3 rounded-xl bg-slate-950 border border-slate-800/80 space-y-1.5 text-xs text-slate-300">
-            <div className="text-[11px] font-bold text-cyan-400 uppercase tracking-wider flex items-center gap-1">
-              <ShieldCheck className="w-3.5 h-3.5" />
-              <span>Повна ізоляція профілю</span>
+          {/* A concise explanation of the full platform, not a claim of absolute data security. */}
+          <div className="p-3.5 rounded-xl bg-slate-950 border border-cyan-500/20 space-y-3 text-xs">
+            <div className="font-extrabold text-cyan-300 flex items-center gap-2">
+              <Sparkles className="w-4 h-4" />
+              <span>Можливості h00k після входу</span>
             </div>
-            <ul className="space-y-1 text-[11px] text-slate-400 pl-1">
-              <li className="flex items-center gap-1.5">
-                <CheckCircle2 className="w-3 h-3 text-emerald-400 shrink-0" />
-                <span>Особистий список обраних монет для кожного акаунта</span>
-              </li>
-              <li className="flex items-center gap-1.5">
-                <Send className="w-3 h-3 text-sky-400 shrink-0" />
-                <span>Індивідуальні Telegram сповіщення та бот</span>
-              </li>
-              <li className="flex items-center gap-1.5">
-                <Sliders className="w-3 h-3 text-amber-400 shrink-0" />
-                <span>Індивідуальна лінковка та група MetaScalp</span>
-              </li>
+            <p className="text-[11px] leading-relaxed text-slate-400">
+              Усі головні інструменти для пошуку, аналізу та відстеження торгових сценаріїв в одному місці.
+              Обране й налаштування зберігаються для вашого акаунта.
+            </p>
+            <ul className="space-y-2.5 text-[11px] text-slate-300">
+              {[
+                ['Скрінер і формації', 'Пошук монет, фільтри, ранні W/M-сценарії та оцінка якості сигналу 0–100.'],
+                ['HookChart', 'Власний графік, рівні, щільності BID/ASK, ліквідації та персональні параметри.'],
+                ['Термінал і конструктор TP/SL', 'Кілька графіків на одному екрані та власні сценарії входу, стопа й цілей.'],
+                ['Моніторинг і Telegram', 'Налаштування спостереження за монетами та індивідуальних сповіщень.'],
+                ['Обране й архів', 'Ваші списки монет, папки та збережені формації.'],
+                ['Відтворення ринку', 'Симуляція торгових рішень на історичних ринкових даних без реальних ордерів.'],
+                ['MetaScalp', 'Персональна лінковка монет і налаштування інтеграції зі стаканом.'],
+              ].map(([title, description]) => (
+                <li key={title} className="flex gap-2">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
+                  <span><strong className="text-slate-100">{title}.</strong> {description}</span>
+                </li>
+              ))}
             </ul>
+            <a className="inline-flex items-center gap-1.5 font-bold text-cyan-300 hover:text-white"
+              href="/welcome">Усі переваги та демонстрація інтерфейсу <ExternalLink className="w-3 h-3" /></a>
           </div>
 
           {/* Footer toggle prompt */}
