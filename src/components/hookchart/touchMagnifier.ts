@@ -10,11 +10,25 @@ export function touchMagnifierLayout(width: number, height: number, point: Magni
   const size = radius * 2, sourceSize = size / 2;
   const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
   const selectedX = clamp(point.x, 0, width), selectedY = clamp(point.y, 0, height);
+  // The touch stays on the selected candle/crosshair, but the magnifier
+  // floats ABOVE the finger. Keep the full lens inside the chart canvas.
+  const edgeInset = radius + 6;
+  const fingerGap = 24;
+  let x = clamp(selectedX, edgeInset, width - edgeInset);
+  const y = clamp(selectedY - radius - fingerGap, edgeInset, height - edgeInset);
+
+  // Near the top there is not enough room for a lens entirely above the
+  // touch. Shift it toward the roomier side so it doesn't cover the finger.
+  if (y + radius + fingerGap > selectedY) {
+    const sideOffset = size + fingerGap;
+    const left = clamp(selectedX - sideOffset, edgeInset, width - edgeInset);
+    const right = clamp(selectedX + sideOffset, edgeInset, width - edgeInset);
+    x = selectedX - left > right - selectedX ? left : right;
+  }
+
   return {
-    // Keep the lens on the crosshair intersection. At chart edges the canvas
-    // clips the circle instead of shifting its centre away from the selection.
-    x: selectedX,
-    y: selectedY,
+    x,
+    y,
     radius, size, sourceSize,
     // Keep the selected pixel in the lens centre even at an edge. Clipping the
     // source window itself would move that pixel to (or outside) the round rim.
