@@ -103,7 +103,7 @@ const GUIDE_ITEMS: GuideItem[] = [
     id: 'candlestick_pa',
     name: 'Свічкові формації (Пін-бар, Поглинання)',
     nameEn: 'Price Action Candlesticks',
-    category: 'Свічковий Price Action',
+    category: 'Свічковий аналіз ціни',
     bias: 'bullish',
     description: 'Відображають миттєву боротьбу попиту та пропозиції на ключових рівнях: Молот/Пін-бар (хибний пробій і різкий викуп) та Поглинання (зміна контролю).',
     entryRule: 'Вхід на закритті свічки або на 50% відкаті довгої тіні пін-бара.',
@@ -113,20 +113,24 @@ const GUIDE_ITEMS: GuideItem[] = [
   },
 ];
 
+const KotapychGuide = React.lazy(() => import('./encyclopedia/KotapychGuide').then(module => ({ default: module.KotapychGuide })));
+
 interface FormationGuideModalProps {
   isOpen: boolean;
   onClose: () => void;
 }
 
 export const FormationGuideModal: React.FC<FormationGuideModalProps> = ({ isOpen, onClose }) => {
-  if (!isOpen) return null;
-
+  // Hooks must run on every render, including when the modal is closed.
   const [selectedId, setSelectedId] = useState<string>(GUIDE_ITEMS[0].id);
+  const [mainCategory, setMainCategory] = useState<'scalping' | 'patterns'>('scalping');
   const activeItem = GUIDE_ITEMS.find((item) => item.id === selectedId) || GUIDE_ITEMS[0];
+
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-6 bg-black/80 backdrop-blur-sm overflow-y-auto touch-scroll">
-      <div className="relative w-full max-w-4xl bg-slate-900 border border-slate-800 rounded-2xl sm:rounded-3xl shadow-2xl overflow-hidden my-auto max-h-[92vh] flex flex-col">
+      <div className="relative w-full max-w-6xl bg-slate-900 border border-slate-800 rounded-2xl sm:rounded-3xl shadow-2xl overflow-hidden my-auto max-h-[92vh] flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between px-4 sm:px-6 py-3.5 sm:py-4 border-b border-slate-800 bg-slate-950/70">
           <div className="flex items-center gap-2 sm:gap-2.5">
@@ -147,11 +151,33 @@ export const FormationGuideModal: React.FC<FormationGuideModalProps> = ({ isOpen
           </button>
         </div>
 
-        {/* Content Body: Sidebar list + Detail panel */}
-        <div className="flex-1 grid grid-cols-1 md:grid-cols-3 overflow-y-auto md:overflow-hidden divide-y md:divide-y-0">
+        {/* Main encyclopedia categories */}
+        <div role="tablist" aria-label="Загальні категорії енциклопедії" className="flex flex-wrap items-center gap-2 px-3 sm:px-6 py-2.5 border-b border-slate-800 bg-slate-950/30">
+          <button type="button" role="tab" aria-selected={mainCategory === 'scalping'} onClick={() => setMainCategory('scalping')}
+            className={'rounded-xl border px-3.5 py-2 text-xs font-bold transition-colors ' + (mainCategory === 'scalping'
+              ? 'bg-cyan-500/15 border-cyan-500/40 text-cyan-200'
+              : 'bg-slate-900 border-slate-700 text-slate-400 hover:text-white')}>
+            Скальпінг
+          </button>
+          <button type="button" role="tab" aria-selected={mainCategory === 'patterns'} onClick={() => setMainCategory('patterns')}
+            className={'rounded-xl border px-3.5 py-2 text-xs font-bold transition-colors ' + (mainCategory === 'patterns'
+              ? 'bg-indigo-500/15 border-indigo-500/40 text-indigo-200'
+              : 'bg-slate-900 border-slate-700 text-slate-400 hover:text-white')}>
+            Формації-Патерни
+          </button>
+        </div>
+
+        {/* Sidebar: nested category and its entries */}
+        <div className="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-3 overflow-y-auto md:overflow-hidden divide-y md:divide-y-0">
           {/* List */}
-          <div className="md:border-r border-slate-800 bg-slate-950/40 p-2 sm:p-3 space-y-1 overflow-y-auto max-h-[160px] md:max-h-[550px] touch-scroll">
-            {GUIDE_ITEMS.map((item) => (
+          <div className="md:border-r border-slate-800 bg-slate-950/40 p-2 sm:p-3 space-y-1 overflow-y-auto max-h-[92px] md:max-h-full touch-scroll">
+            {mainCategory === 'scalping' ? (
+              <button type="button" aria-current="page" onClick={() => setMainCategory('scalping')}
+                className="w-full text-left px-3 py-2.5 rounded-xl bg-slate-800 text-white font-bold flex items-center justify-between text-xs border border-cyan-500/20">
+                <span><strong className="block text-xs">Котапич</strong><small className="block text-[10px] text-slate-400 mt-1">4 сетапи · повні нотатки</small></span>
+                <ChevronRight className="w-3.5 h-3.5 text-cyan-400" />
+              </button>
+            ) : GUIDE_ITEMS.map((item) => (
               <button
                 key={item.id}
                 onClick={() => setSelectedId(item.id)}
@@ -171,7 +197,12 @@ export const FormationGuideModal: React.FC<FormationGuideModalProps> = ({ isOpen
           </div>
 
           {/* Details */}
-          <div className="md:col-span-2 p-4 sm:p-6 overflow-y-auto max-h-[420px] md:max-h-[550px] space-y-4 touch-scroll">
+          <div className="md:col-span-2 p-4 sm:p-6 overflow-y-auto min-h-0 max-h-[min(70vh,700px)] md:max-h-full space-y-4 touch-scroll">
+            {mainCategory === 'scalping' ? (
+              <React.Suspense fallback={<div role="status" className="text-xs text-slate-400">Завантажуємо матеріали Котапича…</div>}>
+                <KotapychGuide />
+              </React.Suspense>
+            ) : (<>
             <div className="flex items-center justify-between">
               <div>
                 <span className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold">
@@ -229,6 +260,7 @@ export const FormationGuideModal: React.FC<FormationGuideModalProps> = ({ isOpen
                 <p className="text-slate-300 leading-relaxed pl-5">{activeItem.volumeRule}</p>
               </div>
             </div>
+            </>)}
           </div>
         </div>
       </div>
