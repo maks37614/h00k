@@ -16,6 +16,7 @@ test('Save scale preview writes through editor and profile persistence path', ()
   assert.match(preview, /const captured = captureVisualProfile\(profile, plotWidth, viewport, naturalRange\)/);
   assert.match(preview, /onChange\(captured\)/);
   assert.match(preview, /onClick=\{saveChartScale\}/);
+  assert.match(preview, /onViewportGesture=\{onGesture\}/);
   assert.match(editor, /onChange=\{onProfileChange\}/);
   assert.match(editor, /set\('visualProfiles', patchVisualProfile\(/);
   assert.match(profile, /writerRef\.current\(\{ hookChartPreferences: delta \}\)/);
