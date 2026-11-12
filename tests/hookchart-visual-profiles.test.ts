@@ -101,7 +101,8 @@ test('Screener, Formations, Terminal carry visual contexts, Replay passes none',
   assert.match(canvas,/onResetVisual=\{key =>/);
   assert.match(canvas,/visualProfileKey=\{replay \? undefined : activeVisualKey\}/);
   assert.match(canvas,/visualContextForTerminalWidth/);
-  assert.match(engine,/if\(!visualProfile\|\|!visualProfileKey\|\|initialLogicalRange\|\|!candles\.length\)return/);
+  assert.match(engine,/if\(!visualProfile\|\|!visualProfileKey\|\|!candles\.length\)return/);
+  assert.match(engine,/if\(visualProfile\|\|rangeRestored\.current\|\|!candles\.length\|\|!initialLogicalRange\)return/);
   assert.match(engine,/visualAppliedRef\.current===signature/);
   assert.match(engine,/if\(!terminalMode\|\|visualProfile\|\|!candles\.length/);
   assert.match(formation,/visualContext="formationsQuick"/);
