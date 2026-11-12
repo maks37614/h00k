@@ -1,25 +1,15 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { ExchangeId, MarketType, Timeframe } from '../../types';
-import { fetchDirectKlines } from '../../utils/directExchangeClient';
-import { toHookCandles } from '../../utils/hookchartData';
+import React, { useEffect, useId, useMemo, useRef, useState } from 'react';
+import type { ExchangeId, MarketType } from '../../types';
+import type { Candle } from './engine';
+import type { VisualChartProfile, VisualContextId, VisualDevice } from './visualProfiles';
 import {
-  Chart, ChartTimeAxis,
-  type Alert, type Candle, type CascadeRisk, type Drawing, type Viewport,
-} from './engine';
-import { hookChartPlotWidth } from './priceScale';
-import { captureVisualProfile, makeVisualProfileKey, type VisualChartProfile, type VisualContextId, type VisualDevice } from './visualProfiles';
-
-const EMPTY_RISK: CascadeRisk = {
-  score: 0, level: 'LOW', total5: 0, count5: 0, longUsd: 0, shortUsd: 0,
-};
-const EMPTY_CANDLES: Candle[] = [];
-const EMPTY_DENSITIES: [] = [];
-const EMPTY_MARKET_PRINTS: [] = [];
-const EMPTY_LIQUIDATIONS: [] = [];
-const EMPTY_AUTO_LEVELS: [] = [];
+  DEMO_WIDTH, DEMO_HEIGHT, DEMO_PLOT_LEFT, DEMO_PLOT_WIDTH,
+  DEMO_PLOT_TOP, DEMO_CANDLE_BOTTOM, demoDragProfile, demoPinchProfile,
+  demoWheelProfile, demoZoomBars, syntheticBar,
+} from './syntheticPreviewModel';
 
 interface HookChartVisualPreviewProps {
-  /** Reuse the parent HookChart OHLCV; absolutely no second market feed or socket. */
+  /** Kept for caller compatibility. The demo deliberately ignores real market data. */
   candles?: Candle[];
   symbol?: string;
   timeframe?: string;
@@ -35,7 +25,7 @@ interface HookChartVisualPreviewProps {
   saveStatus?: 'idle' | 'saving' | 'saved' | 'error';
 }
 
-function profilePreviewWidth(context: VisualContextId, device: VisualDevice): number {
+export function profilePreviewWidth(context: VisualContextId, device: VisualDevice): number {
   if (device === 'mobile') return 354;
   if (context === 'terminalCompact') return 370;
   if (context === 'terminalMedium') return 570;
@@ -43,174 +33,282 @@ function profilePreviewWidth(context: VisualContextId, device: VisualDevice): nu
   return 760;
 }
 
+type Point = { x: number; y: number };
+type DragStart = { point: Point; profile: VisualChartProfile };
+type PinchStart = { horizontal: number; vertical: number; profile: VisualChartProfile };
+
 /**
- * Identical HookChart canvas engine to the live graph. It is mounted only when
- * the Graph tab is active and uses existing candles. In the account editor,
- * where there is no selected market, load real BTCUSDT spot candles once and
- * never start an exchange websocket or polling loop.
+ * Lightweight synthetic candlestick editor. Every gesture immediately edits
+ * the exact profile object rendered by the settings sliders and saved by the
+ * parent. No live HookChart engine, exchange requests, or extra timers.
  */
 export function HookChartVisualPreview({
-  candles,
-  symbol,
-  timeframe,
-  exchange,
-  marketType,
-  timezone = 'Europe/Warsaw',
-  longColor = '#0ECB81',
-  shortColor = '#F6465D',
-  visualContext,
-  visualDevice,
-  profile,
-  onChange,
-  saveStatus = 'idle',
+  visualContext, visualDevice, profile, onChange, saveStatus = 'idle',
+  longColor = '#0ECB81', shortColor = '#F6465D',
 }: HookChartVisualPreviewProps) {
-  const [sample, setSample] = useState<Candle[]>(EMPTY_CANDLES);
-  const [sampleLoading, setSampleLoading] = useState(false);
-  const [sampleError, setSampleError] = useState(false);
-  const [visualProfileCaptureVersion, setVisualProfileCaptureVersion] = useState(0);
+  const svgRef = useRef<SVGSVGElement>(null);
+  const profileRef = useRef(profile);
+  const changeRef = useRef(onChange);
+  profileRef.current = profile;
+  changeRef.current = onChange;
+  const pointers = useRef(new Map<number, Point>());
+  const dragStart = useRef<DragStart | null>(null);
+  const pinchStart = useRef<PinchStart | null>(null);
+  const [edited, setEdited] = useState(false);
   const [saveRequested, setSaveRequested] = useState(false);
-  const [viewport, setViewport] = useState<Viewport>({
-    barWidth: 9, rightOffset: 0, autoY: true,
-    manualCenter: null, manualRange: null, fitAll: false,
-  });
-  const [drawings, setDrawings] = useState<Drawing[]>([]);
-  const [alerts, setAlerts] = useState<Alert[]>([]);
-  const previewRef = useRef<HTMLDivElement>(null);
-  // An attached live chart may still be waiting for its first candle. In that
-  // case don't make a redundant REST call just to fill the preview.
-  const useParentCandles = candles !== undefined;
+  const clipId = useId();
 
   useEffect(() => {
-    if (useParentCandles) return;
-    let active = true;
-    setSampleLoading(true);
-    setSampleError(false);
-    void fetchDirectKlines('binance', 'spot', 'BTCUSDT', '1h', 700)
-      .then(rows => {
-        if (!active) return;
-        const converted = toHookCandles(rows);
-        setSample(converted);
-        setSampleError(converted.length === 0);
-      })
-      .catch(() => { if (active) setSampleError(true); })
-      .finally(() => { if (active) setSampleLoading(false); });
-    return () => { active = false; };
-  }, [useParentCandles]);
+    pointers.current.clear();
+    dragStart.current = null;
+    pinchStart.current = null;
+    setEdited(false);
+    setSaveRequested(false);
+  }, [visualContext, visualDevice]);
 
-  const activeCandles = useMemo(
-    () => (useParentCandles ? candles! : sample).slice(-700),
-    [useParentCandles, candles, sample],
-  );
-  const activeSymbol = useParentCandles ? (symbol || '—') : 'BTCUSDT';
-  const activeTimeframe = useParentCandles ? (timeframe || '1h') : '1h';
-  const marketDescription = useParentCandles
-    ? `${exchange === 'bybit' ? 'Bybit' : 'Binance'} · ${marketType === 'spot' ? 'Spot' : 'Futures'}`
-    : 'Binance · Spot';
-  const previewKey = makeVisualProfileKey(visualContext, visualDevice);
-  useEffect(() => { setSaveRequested(false); }, [visualContext, visualDevice]);
+  const apply = (next: VisualChartProfile) => {
+    const current = profileRef.current;
+    if (current.visibleBars === next.visibleBars
+      && current.verticalZoom === next.verticalZoom
+      && current.rightGapBars === next.rightGapBars
+      && current.autoPriceScale === next.autoPriceScale) return;
+    // Keep gestures cumulative even when React renders are batched.
+    profileRef.current = next;
+    setEdited(true);
+    changeRef.current(next);
+  };
 
-  const saveChartScale = useCallback(() => {
-    const plotWidth = hookChartPlotWidth(previewRef.current?.getBoundingClientRect().width || 500);
-    if (!activeCandles.length) return;
-    // Only actual candle slots count; free space on the right is not history.
-    const count = Math.max(1, Math.ceil(plotWidth / Math.max(.12, viewport.barWidth) - profile.rightGapBars));
-    const end = Math.min(activeCandles.length, Math.max(0, activeCandles.length - Math.round(viewport.rightOffset)));
-    const visible = activeCandles.slice(Math.max(0, end - count), end);
-    let lo = Infinity, hi = -Infinity;
-    for (const candle of visible) { lo = Math.min(lo, candle.l); hi = Math.max(hi, candle.h); }
-    const naturalRange = Number.isFinite(lo) && Number.isFinite(hi)
-      ? Math.max(hi - lo, Math.abs(hi) * .01, 1e-10) * (visualContext.startsWith('terminal') ? 1.32 : 1.16)
-      : undefined;
-    const captured = captureVisualProfile(profile, plotWidth, viewport, naturalRange);
-    // Save the actual gesture-adjusted viewport without forcing this preview
-    // to jump back to the profile's reconstructed initial position.
-    setSaveRequested(true);
-    onChange(captured);
-    setVisualProfileCaptureVersion(version => version + 1);
-  }, [activeCandles, viewport, profile, visualContext, onChange]);
+  useEffect(() => {
+    const element = svgRef.current;
+    if (!element) return;
+    // Native non-passive wheel listener prevents page scrolling only while the
+    // cursor is over this interactive chart.
+    const onWheel = (event: WheelEvent) => {
+      event.preventDefault();
+      const next = demoWheelProfile(profileRef.current, event.deltaY);
+      if (next.visibleBars !== profileRef.current.visibleBars) {
+        profileRef.current = next;
+        setEdited(true);
+        changeRef.current(next);
+      }
+    };
+    element.addEventListener('wheel', onWheel, { passive: false });
+    return () => element.removeEventListener('wheel', onWheel);
+  }, []);
+
+  const pointerPoint = (event: React.PointerEvent<SVGSVGElement>): Point => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    return {
+      x: (event.clientX - rect.left) * DEMO_WIDTH / Math.max(1, rect.width),
+      y: (event.clientY - rect.top) * DEMO_HEIGHT / Math.max(1, rect.height),
+    };
+  };
+
+  const startPinch = () => {
+    const [a, b] = [...pointers.current.values()];
+    if (!a || !b) return;
+    pinchStart.current = {
+      horizontal: Math.abs(a.x - b.x),
+      vertical: Math.abs(a.y - b.y),
+      profile: profileRef.current,
+    };
+    dragStart.current = null;
+  };
+
+  const onPointerDown = (event: React.PointerEvent<SVGSVGElement>) => {
+    if (event.pointerType === 'mouse' && event.button !== 0) return;
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    const point = pointerPoint(event);
+    pointers.current.set(event.pointerId, point);
+    if (pointers.current.size === 1) {
+      dragStart.current = { point, profile: profileRef.current };
+    } else if (pointers.current.size === 2) startPinch();
+  };
+
+  const onPointerMove = (event: React.PointerEvent<SVGSVGElement>) => {
+    if (!pointers.current.has(event.pointerId)) return;
+    const point = pointerPoint(event);
+    pointers.current.set(event.pointerId, point);
+    if (pointers.current.size === 2 && pinchStart.current) {
+      const [a, b] = [...pointers.current.values()];
+      apply(demoPinchProfile(
+        pinchStart.current.profile,
+        pinchStart.current.horizontal, Math.abs(a.x - b.x),
+        pinchStart.current.vertical, Math.abs(a.y - b.y),
+      ));
+      return;
+    }
+    const initial = dragStart.current;
+    if (pointers.current.size === 1 && initial) {
+      apply(demoDragProfile(initial.profile, point.x - initial.point.x, point.y - initial.point.y));
+    }
+  };
+
+  const onPointerEnd = (event: React.PointerEvent<SVGSVGElement>) => {
+    pointers.current.delete(event.pointerId);
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    pinchStart.current = null;
+    const single = [...pointers.current.values()][0];
+    dragStart.current = single ? { point: single, profile: profileRef.current } : null;
+  };
+
+  const onKeyDown = (event: React.KeyboardEvent<SVGSVGElement>) => {
+    const p = profileRef.current;
+    let next: VisualChartProfile | null = null;
+    switch (event.key) {
+      case 'ArrowLeft': next = demoDragProfile(p, -12, 0); break;
+      case 'ArrowRight': next = demoDragProfile(p, 12, 0); break;
+      case 'ArrowUp': next = demoDragProfile(p, 0, -12); break;
+      case 'ArrowDown': next = demoDragProfile(p, 0, 12); break;
+      case '+': case '=': next = demoZoomBars(p, .85); break;
+      case '-': next = demoZoomBars(p, 1.15); break;
+      default: break;
+    }
+    if (next) { event.preventDefault(); apply(next); }
+  };
+
+  const samples = useMemo(() => {
+    const number = Math.min(155, Math.max(15, profile.visibleBars));
+    return Array.from({ length: number }, (_, i) => {
+      const barIndex = Math.round(i * (profile.visibleBars - 1) / Math.max(1, number - 1));
+      return { index: barIndex, ...syntheticBar(barIndex + 22) };
+    });
+  }, [profile.visibleBars]);
+  const limits = useMemo(() => {
+    const lows = samples.map(row => row.low);
+    const highs = samples.map(row => row.high);
+    const low = Math.min(...lows);
+    const high = Math.max(...highs);
+    const center = profile.autoPriceScale ? (high + low) / 2 : 105;
+    const naturalRange = profile.autoPriceScale ? Math.max(8, high - low) * 1.32 : 40;
+    const span = naturalRange / Math.max(.01, profile.verticalZoom);
+    return { center, span };
+  }, [samples, profile.autoPriceScale, profile.verticalZoom]);
+
+  const priceY = (price: number) =>
+    DEMO_CANDLE_BOTTOM - (price - (limits.center - limits.span / 2))
+      / limits.span * (DEMO_CANDLE_BOTTOM - DEMO_PLOT_TOP);
+  const step = DEMO_PLOT_WIDTH / Math.max(1, profile.visibleBars + profile.rightGapBars);
+  const barSize = Math.min(9, Math.max(.7, step * .67));
+  const lastBarX = DEMO_PLOT_LEFT + profile.visibleBars * step;
 
   return (
     <div className="hookchart-visual-preview">
       <div className="hookchart-visual-preview-caption">
-        <strong>{activeSymbol}</strong>
-        <span>{activeTimeframe}</span>
-        <span>{marketDescription}</span>
-        <span className="hookchart-visual-preview-live">
-          {useParentCandles ? 'Свічки відкритого графіка' : 'Реальні свічки для прикладу'}
-        </span>
+        <strong>DEMO · OHLCV</strong>
+        <span>{visualDevice === 'mobile' ? 'Телефон' : 'Комп’ютер'}</span>
+        <span className="hookchart-visual-preview-live">Штучні дані · без підключення до біржі</span>
       </div>
-      {activeCandles.length ? (
-        <>
-          <div
-            className="hookchart-visual-preview-frame"
-            style={{ maxWidth: profilePreviewWidth(visualContext, visualDevice) }}
-          >
-            <div ref={previewRef} className="hookchart-visual-preview-chart">
-              <Chart
-                key={`${activeSymbol}:${activeTimeframe}`}
-                candles={activeCandles}
-                symbol={activeSymbol}
-                tf={activeTimeframe}
-                tool="cursor"
-                drawings={drawings}
-                setDrawings={setDrawings}
-                alerts={alerts}
-                setAlerts={setAlerts}
-                densities={EMPTY_DENSITIES}
-                marketPrints={EMPTY_MARKET_PRINTS}
-                liquidations={EMPTY_LIQUIDATIONS}
-                autoLevels={EMPTY_AUTO_LEVELS}
-                cascadeRisk={EMPTY_RISK}
-                levelLabelMode="off"
-                showLiqRiskBlock={false}
-                showLiquidations={false}
-                hideTimeJump
-                hideBarCountdown
-                controlsContainer={null}
-                timezone={timezone}
-                candleLongColor={longColor}
-                candleShortColor={shortColor}
-                visualProfile={profile}
-                rightPaddingBars={profile.rightGapBars}
-                visualProfileKey={previewKey}
-                visualProfileCaptureVersion={visualProfileCaptureVersion}
-                terminalMode={visualContext.startsWith('terminal')}
-                onViewportChange={setViewport}
-              />
-            </div>
-            <ChartTimeAxis
-              candles={activeCandles}
-              tf={activeTimeframe}
-              timezone={timezone}
-              viewport={viewport}
-              rightPaddingBars={profile.rightGapBars}
-            />
-          </div>
-          <div className="hookchart-visual-preview-actions">
-            <span>Масштабуй свічки мишею або двома пальцями та збережи вигляд.</span>
-            <button type="button" onClick={saveChartScale}>Зберегти масштаб із цього графіка</button>
-          </div>
-          {saveRequested && <div role="status" aria-live="polite" className="settingsHint">
-            {saveStatus === 'saved' ? 'Масштаб збережено у профілі користувача.'
-              : saveStatus === 'error' ? 'Не вдалося зберегти масштаб. Скористайтеся повторним збереженням.'
-              : saveStatus === 'saving' ? 'Зберігаємо масштаб у профілі…'
-              : 'Масштаб застосовано до поточного профілю. Для синхронізації потрібен вхід в акаунт.'}
-          </div>}
-        </>
-      ) : (
-        <div className="hookchart-visual-preview-empty" role="status">
-          {sampleLoading
-            ? 'Завантажуємо реальні свічки BTCUSDT…'
-            : sampleError
-              ? 'Немає доступу до котирувань BTCUSDT. Відкрий графік монети на Скрінері, Формаціях або в Терміналі.'
-              : useParentCandles
-                ? 'Очікуємо реальні свічки поточної монети…'
-                : 'Очікування біржових свічок для графіка…'}
+
+      <div className="hookchart-visual-preview-frame"
+        style={{ maxWidth: profilePreviewWidth(visualContext, visualDevice) }}>
+        <svg
+          ref={svgRef}
+          viewBox={`0 0 ${DEMO_WIDTH} ${DEMO_HEIGHT}`}
+          className="hookchart-synthetic-preview"
+          role="application"
+          tabIndex={0}
+          aria-label="Демонстраційний свічковий графік. Перетягування вліво чи вправо змінює відступ, вгору чи вниз — вертикальний зум. Колесо миші або рух двох пальців змінює кількість свічок."
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerEnd}
+          onPointerCancel={onPointerEnd}
+          onKeyDown={onKeyDown}
+        >
+          <defs>
+            <clipPath id={clipId}>
+              <rect x={DEMO_PLOT_LEFT} y={DEMO_PLOT_TOP}
+                width={DEMO_PLOT_WIDTH} height={DEMO_CANDLE_BOTTOM - DEMO_PLOT_TOP}/>
+            </clipPath>
+          </defs>
+          <rect width={DEMO_WIDTH} height={DEMO_HEIGHT} fill="#111925"/>
+          {Array.from({ length: 5 }, (_, i) => {
+            const y = DEMO_PLOT_TOP + i * (DEMO_CANDLE_BOTTOM - DEMO_PLOT_TOP) / 4;
+            return <g key={'grid' + i}>
+              <line x1={DEMO_PLOT_LEFT} x2={DEMO_PLOT_LEFT + DEMO_PLOT_WIDTH}
+                y1={y} y2={y} stroke="#283346" strokeWidth=".8"/>
+              <text x={DEMO_PLOT_LEFT + DEMO_PLOT_WIDTH + 6} y={y + 4}
+                fill="#91a4bb" fontSize="11">{(limits.center + limits.span * (.5 - i / 4)).toFixed(2)}</text>
+            </g>;
+          })}
+          {Array.from({ length: 6 }, (_, i) =>
+            <line key={'vert' + i}
+              x1={DEMO_PLOT_LEFT + DEMO_PLOT_WIDTH * i / 5}
+              x2={DEMO_PLOT_LEFT + DEMO_PLOT_WIDTH * i / 5}
+              y1={DEMO_PLOT_TOP} y2="229" stroke="#253044" strokeWidth=".7"/>)}
+          <rect x={DEMO_PLOT_LEFT} y="185" width={DEMO_PLOT_WIDTH}
+            height="47" fill="#0d1420" opacity=".85"/>
+          <line x1={DEMO_PLOT_LEFT} y1="184" x2={DEMO_PLOT_LEFT + DEMO_PLOT_WIDTH}
+            y2="184" stroke="#304159" strokeWidth="1"/>
+          <g clipPath={`url(#${clipId})`}>
+            {samples.map((row, i) => {
+              const x = DEMO_PLOT_LEFT + (row.index + .5) * step;
+              const upper = Math.min(priceY(row.open), priceY(row.close));
+              const lower = Math.max(priceY(row.open), priceY(row.close));
+              const color = row.close >= row.open ? longColor : shortColor;
+              return <g key={'candle' + i}>
+                <line x1={x} x2={x} y1={priceY(row.high)} y2={priceY(row.low)}
+                  stroke={color} strokeWidth={Math.max(.7, Math.min(1.4, barSize / 3))}/>
+                <rect x={x - barSize / 2} y={upper} width={barSize}
+                  height={Math.max(.9, lower - upper)} fill={color}/>
+              </g>;
+            })}
+          </g>
+          <g>
+            {samples.map((row, i) => {
+              const x = DEMO_PLOT_LEFT + (row.index + .5) * step;
+              return <rect key={'volume' + i} x={x - barSize / 2}
+                y={230 - row.volume * .8} width={barSize}
+                height={row.volume * .8}
+                fill={row.close >= row.open ? longColor : shortColor} opacity=".42"/>;
+            })}
+          </g>
+          <line x1={DEMO_PLOT_LEFT + DEMO_PLOT_WIDTH} y1="0"
+            x2={DEMO_PLOT_LEFT + DEMO_PLOT_WIDTH} y2={DEMO_HEIGHT}
+            stroke="#43526a" strokeWidth="1.3"/>
+          <rect x={Math.min(lastBarX, DEMO_PLOT_LEFT + DEMO_PLOT_WIDTH)}
+            y="236" width={Math.max(0, DEMO_PLOT_LEFT + DEMO_PLOT_WIDTH - lastBarX)} height="10"
+            fill="#1a7299" opacity=".35"/>
+          <text x="22" y="245" fill="#8297ad" fontSize="10">
+            {profile.visibleBars} свічок · зум {profile.verticalZoom.toFixed(2)}×
+          </text>
+          <text x="620" y="245" fill="#72c9ee" fontSize="10" textAnchor="end">
+            Відступ: {profile.rightGapBars}
+          </text>
+        </svg>
+      </div>
+
+      <div className="hookchart-visual-preview-actions">
+        <span>Тягни свічки ←→ — відступ, ↑↓ — зум. Колесо миші / два пальці — кількість свічок.</span>
+        <div className="hookchart-demo-controls">
+          <button type="button" onClick={() => apply(demoZoomBars(profileRef.current, .8))}
+            aria-label="Збільшити свічки по горизонталі">− свічок</button>
+          <button type="button" onClick={() => apply(demoZoomBars(profileRef.current, 1.25))}
+            aria-label="Зменшити свічки по горизонталі">+ свічок</button>
+          <button type="button" onClick={() => apply({
+            ...profileRef.current, autoPriceScale: !profileRef.current.autoPriceScale,
+          })} aria-pressed={profile.autoPriceScale}>
+            Автоціна: {profile.autoPriceScale ? 'увімк.' : 'вимк.'}
+          </button>
         </div>
-      )}
+        <button type="button" onClick={() => {
+          setSaveRequested(true);
+          setEdited(true);
+          changeRef.current({ ...profileRef.current });
+        }}>Зберегти масштаб із цього графіка</button>
+      </div>
+      {(edited || saveRequested) && <div role="status" aria-live="polite" className="settingsHint">
+        {saveStatus === 'saved' ? 'Масштаб збережено у профілі користувача.'
+          : saveStatus === 'error' ? 'Не вдалося зберегти масштаб. Повтори збереження.'
+          : saveStatus === 'saving' ? 'Зберігаємо налаштування у профілі…'
+          : 'Зміни одразу передані в налаштування під графіком.'}
+      </div>}
       <p className="hookchart-visual-preview-info">
-        Це справжній HookChart із реальними біржовими свічками. Редактор не створює окремих WebSocket-з’єднань.
-        Повзунки застосовуються до попереднього перегляду одразу.
+        Це легкий демонстраційний графік зі штучними свічками, а не біржові котирування.
+        Зміни тут одразу оновлюють повзунки та відповідний профіль HookChart для реальних графіків.
       </p>
     </div>
   );
