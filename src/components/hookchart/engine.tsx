@@ -1038,7 +1038,7 @@ export function Chart({candles,symbol,tf,tool,drawings,setDrawings,alerts,setAle
   {controlsContainer?createPortal(scaleControls,controlsContainer):controlsContainer===undefined?scaleControls:null}
   {countdownContainer&&createPortal(barCountdown,countdownContainer)}
   <div className="chartCanvasSurface">
-  <canvas ref={ref} style={{WebkitTouchCallout:'none'}} tabIndex={0} aria-label={`Графік ${symbol}`} aria-description="Рух пальцем — перетягнути графік. Утримуйте палець для перехрестя й лупи в області свічок, обсягів або шкали ціни. Лупа рухається за пальцем і зникає після відпускання. Унизу — дата й час вибраної точки. Два пальці — масштаб." onMouseEnter={focusChart} onPointerEnter={focusChart}/>
+  <canvas ref={ref} style={{WebkitTouchCallout:'none'}} tabIndex={0} aria-label={`Графік ${symbol}`} aria-description="Рух пальцем — перетягнути графік. Утримуйте палець для перехрестя й лупи в області свічок, обсягів або шкали ціни. Лупа показується вище пальця і зникає після відпускання. Унизу — дата й час вибраної точки. Два пальці — масштаб." onMouseEnter={focusChart} onPointerEnter={focusChart}/>
    <canvas ref={interactionRef} className="chartInteractionCanvas" width={1} height={1} aria-hidden="true"/>
   </div>
  </div>
