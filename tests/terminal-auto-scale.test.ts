@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { terminalCandlePriceRange } from '../src/components/hookchart/terminalAutoScale';
 
 test('terminal auto-scale keeps the lowest visible wick above volume histogram', () => {
-  for (const height of [100, 160, 220, 380, 700]) {
+  for (const height of [80, 100, 160, 220, 380, 700]) {
     const range = terminalCandlePriceRange(95, 110, height, true);
     const wickY = height - (95 - range.low) / (range.high - range.low) * height;
     const volumeTop = height - 3 - Math.max(56, Math.min(108, height * .14));
