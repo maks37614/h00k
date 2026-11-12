@@ -53,46 +53,51 @@ export const MarketSentimentWidget: React.FC<MarketSentimentWidgetProps> = ({ co
 
   return (
     <div className="rounded-2xl bg-gradient-to-r from-slate-900 via-slate-900/85 to-indigo-950/40 border border-slate-800/90 shadow-lg backdrop-blur-md overflow-hidden lg:mx-auto lg:max-w-5xl">
-      {/* Header Bar */}
-      <div className="p-3 sm:p-4 flex items-center justify-between gap-3 border-b border-slate-800/70">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-indigo-500/20 to-cyan-500/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400 shadow-inner">
-            <Gauge className="w-4 h-4" />
+      {/* Compact heading and sentiment segments share a row when space allows. */}
+      <div className="flex min-w-0 flex-wrap items-center gap-x-2 border-b border-slate-800/70">
+        <div className="flex w-full shrink-0 items-center justify-between gap-3 px-3 pt-3 sm:px-4 md:w-auto md:py-3 md:pl-4 md:pr-0">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-indigo-500/30 bg-gradient-to-br from-indigo-500/20 to-cyan-500/20 text-indigo-400 shadow-inner">
+              <Gauge className="h-4 w-4" />
+            </div>
+            <div>
+              <h3 className="whitespace-nowrap text-xs font-bold uppercase tracking-wide text-white sm:text-sm">
+                Настрій Ринку
+              </h3>
+              <p className="sr-only">
+                Комплексний індекс: динаміка тренду, обсяги, волатильність, ширина ринку, припливи капіталу та фандинг
+              </p>
+            </div>
           </div>
 
-          <div>
-            <h3 className="text-sm sm:text-base font-bold text-white uppercase tracking-wider">
-              Настрій Ринку
-            </h3>
-            <p className="text-[11px] text-slate-400 hidden xs:block">
-              Комплексний індекс: динаміка тренду, обсяги, волатильність, ширина ринку, припливи капіталу та фандинг
-            </p>
+          <div className="flex shrink-0 items-center gap-1.5">
+            <button
+              onClick={fetchSentiment}
+              disabled={loading}
+              className="cursor-pointer rounded-lg border border-slate-700/60 bg-slate-800/80 p-1.5 text-slate-400 transition-colors hover:bg-slate-800 hover:text-white"
+              title="Оновити дані"
+              aria-label="Оновити дані"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
+            </button>
+
+            <button
+              onClick={() => setExpanded(!expanded)}
+              className="cursor-pointer rounded-lg border border-slate-700/60 bg-slate-800/80 p-1.5 text-slate-400 transition-colors hover:bg-slate-800 hover:text-white"
+              title={expanded ? 'Згорнути' : 'Розгорнути'}
+              aria-label={expanded ? 'Згорнути' : 'Розгорнути'}
+              aria-expanded={expanded}
+            >
+              {expanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+            </button>
           </div>
         </div>
 
-        <div className="flex items-center gap-1.5">
-          <button
-            onClick={fetchSentiment}
-            disabled={loading}
-            className="p-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-800 text-slate-400 hover:text-white border border-slate-700/60 transition-colors cursor-pointer"
-            title="Оновити дані"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
-          </button>
-
-          <button
-            onClick={() => setExpanded(!expanded)}
-            className="p-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-800 text-slate-400 hover:text-white border border-slate-700/60 transition-colors cursor-pointer"
-            title={expanded ? 'Згорнути' : 'Розгорнути'}
-            aria-expanded={expanded}
-          >
-            {expanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-          </button>
+        {/* Live 0–100 API reading; only its visual presentation changes. */}
+        <div className="min-w-[220px] flex-[1_1_240px]">
+          <MarketSentimentScale score={data.compositeScore} sentimentLabel={data.sentimentLabel} />
         </div>
       </div>
-
-      {/* Always-visible animated 0–100 fear/greed scale. */}
-      <MarketSentimentScale score={data.compositeScore} sentimentLabel={data.sentimentLabel} />
 
       {/* Main Content Body */}
       {expanded && (
