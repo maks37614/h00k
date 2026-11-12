@@ -28,6 +28,9 @@ interface FullscreenChartModalProps {
   onClose: () => void;
   /** Standalone coin / early-chart route (avoids background screener overlay). */
   pageMode?: boolean;
+  /** Keep a standalone route in sync when a favorite or timeframe is selected. */
+  onPageCoinChange?: (coin: ScannedCoin) => void;
+  onPageTimeframeChange?: (timeframe: Timeframe) => void;
   coin: {
     symbol: string;
     baseAsset: string;
@@ -64,6 +67,8 @@ export const FullscreenChartModal: React.FC<FullscreenChartModalProps> = ({
   isOpen,
   onClose,
   pageMode = false,
+  onPageCoinChange,
+  onPageTimeframeChange,
   coin,
   formation,
   earlyCandidate,
@@ -120,7 +125,7 @@ export const FullscreenChartModal: React.FC<FullscreenChartModalProps> = ({
   // Sync activeCoin with parent coin prop when symbol changes
   useEffect(() => {
     setActiveCoin(coin);
-  }, [coin.symbol]);
+  }, [coin.symbol, coin.exchange, coin.marketType]);
 
   const [activeKlines, setActiveKlines] = useState<Kline[]>(klines);
 
@@ -225,6 +230,8 @@ export const FullscreenChartModal: React.FC<FullscreenChartModalProps> = ({
 
   // Handle clicking a favorite coin to switch chart
   const handleSelectFavoriteCoin = (favCoin: ScannedCoin) => {
+    setActiveKlines([]);
+    if (pageMode) onPageCoinChange?.(favCoin);
     setActiveCoin({
       symbol: favCoin.symbol,
       baseAsset: favCoin.baseAsset,
@@ -276,6 +283,7 @@ export const FullscreenChartModal: React.FC<FullscreenChartModalProps> = ({
   const handleTimeframeSelect = (tf: Timeframe) => {
     setTimeframe(tf);
     onTimeframeChange?.(tf);
+    if (pageMode) onPageTimeframeChange?.(tf);
   };
 
   const showEarlyLevels = !!earlyCandidate
