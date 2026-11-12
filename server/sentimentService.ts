@@ -1,171 +1,132 @@
-import { MarketSentimentData, MarketCoin } from '../src/types';
+import type { MarketSentimentData, MarketCoin } from '../src/types';
+import { sentimentStateForScore } from '../src/utils/marketSentiment';
 import { fetchMarketCoins } from './marketService';
+import { getMarketSourceStatuses } from './marketTickerFeed';
 
 let sentimentCache: { timestamp: number; data: MarketSentimentData } | null = null;
-const CACHE_TTL_MS = 25 * 1000; // 25s cache
+const CACHE_TTL_MS = 25_000;
+const SMALL_MOVE_PCT = 0.1;
+const MIN_LIVE_PAIRS = 25;
+const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 
+export class SentimentDataUnavailableError extends Error {
+  constructor() {
+    super('Недостатньо достовірних ринкових даних для індексу настрою');
+    this.name = 'SentimentDataUnavailableError';
+  }
+}
+
+/**
+ * Directional heuristic based only on observed 24h price changes, 24h traded
+ * volume and valid long-term price-location history (when available).
+ *
+ * This is NOT an exchange-wide fund-flow, EMA, open-interest or funding-rate
+ * index. No derivatives figures or capital movements are inferred from volume.
+ */
 export async function calculateMarketSentiment(providedCoins?: MarketCoin[]): Promise<MarketSentimentData> {
-  if (sentimentCache && Date.now() - sentimentCache.timestamp < CACHE_TTL_MS) {
+  const isLiveRequest = providedCoins === undefined;
+  const now = Date.now();
+  if (isLiveRequest && sentimentCache && now - sentimentCache.timestamp < CACHE_TTL_MS) {
     return sentimentCache.data;
   }
 
-  let coins = providedCoins;
-  if (!coins || coins.length === 0) {
-    coins = await fetchMarketCoins({ exchange: 'all', marketType: 'all', minVolumeUsd: 0 });
+  const fetchedCoins = isLiveRequest
+    ? await fetchMarketCoins({ exchange: 'all', marketType: 'all', minVolumeUsd: 0 })
+    : providedCoins;
+  const coins = (fetchedCoins ?? []).filter(c =>
+    Number.isFinite(c.price) && c.price > 0 &&
+    Number.isFinite(c.change24h) && Number.isFinite(c.volumeUsd) && c.volumeUsd >= 0 &&
+    Number.isFinite(c.volatility24hPct) && c.volatility24hPct >= 0,
+  );
+  if (!coins.length || (isLiveRequest && coins.length < MIN_LIVE_PAIRS)) {
+    throw new SentimentDataUnavailableError();
   }
 
-  if (!coins || coins.length === 0) {
-    // Return standard baseline
-    return {
-      compositeScore: 62,
-      sentimentState: 'greed',
-      sentimentLabel: 'Помірний оптимізм / Позитивний настрій',
-      summary: 'Ринок перебуває у фазі помірного зростання. Більшість ліквідних пар утримують висхідну динаміку з контрольованим фандингом.',
-      priceTrendDynamics: {
-        advancingCount: 140,
-        decliningCount: 75,
-        advancingPct: 65.1,
-        trendBias: 'bullish',
-        avgChange24h: 2.8,
-      },
-      tradingVolume: {
-        total24hUsd: 48500000000,
-        volumeVelocity: 'high',
-        volumeChangePct: 14.2,
-      },
-      marketVolatility: {
-        index: 54,
-        label: 'Помірна робоча волатильність',
-        avgDailyRangePct: 6.4,
-      },
-      marketBreadth: {
-        aboveEma20Pct: 68,
-        nearHighsPct: 22,
-        nearLowsPct: 8,
-        breadthScore: 71,
-        verdict: 'Широкий ринковий імпульс: зростання підтримано фронтальним рухом альткоїнів',
-      },
-      capitalFlow: {
-        netInflow24hUsd: 1420000000,
-        direction: 'inflow',
-        label: 'Чистий приплив капіталу (+$1.42B за 24г)',
-      },
-      derivativesOverview: {
-        aggregatedOIUsd: 32400000000,
-        oiChange24hPct: 4.8,
-        avgFundingRate: 0.0085,
-        fundingBias: 'balanced',
-      },
-      lastUpdated: Date.now(),
-    };
-  }
-
-  // Calculate from real coin population
+  const total = coins.length;
   let advancingCount = 0;
   let decliningCount = 0;
   let totalVolume24h = 0;
   let totalChange = 0;
   let totalVolatility = 0;
+  let directionalStrengthSum = 0;
+  let volumeWeightedDirectionSum = 0;
+  let locationCount = 0;
   let nearHighCount = 0;
   let nearLowCount = 0;
-  let netCapitalFlowUsd = 0;
 
-  coins.forEach((c) => {
+  for (const c of coins) {
+    const change = c.change24h;
+    if (change > SMALL_MOVE_PCT) advancingCount++;
+    else if (change < -SMALL_MOVE_PCT) decliningCount++;
+
+    const direction = clamp(change / 2, -1, 1);
+    directionalStrengthSum += direction;
+    volumeWeightedDirectionSum += direction * c.volumeUsd;
     totalVolume24h += c.volumeUsd;
-    totalChange += c.change24h;
+    totalChange += change;
     totalVolatility += c.volatility24hPct;
 
-    if (c.change24h >= 0) {
-      advancingCount++;
-      // Inflow approximation: volume * positive fraction
-      netCapitalFlowUsd += c.volumeUsd * (Math.min(c.change24h, 15) / 100);
-    } else {
-      decliningCount++;
-      // Outflow approximation: volume * negative fraction
-      netCapitalFlowUsd += c.volumeUsd * (Math.max(c.change24h, -15) / 100);
+    // Missing/unfinished history is unknown, NOT zero near-high/low coins.
+    if (c.location?.status === 'ready') {
+      locationCount++;
+      if (c.isNearHigh) nearHighCount++;
+      if (c.isNearLow) nearLowCount++;
     }
-
-    if (c.isNearHigh) nearHighCount++;
-    if (c.isNearLow) nearLowCount++;
-  });
-
-  const total = coins.length;
-  const advancingPct = total > 0 ? parseFloat(((advancingCount / total) * 100).toFixed(1)) : 50;
-  const avgChange24h = total > 0 ? parseFloat((totalChange / total).toFixed(2)) : 0;
-  const avgVolatility = total > 0 ? parseFloat((totalVolatility / total).toFixed(2)) : 5.0;
-
-  const trendBias: 'bullish' | 'bearish' | 'neutral' =
-    advancingPct > 58 ? 'bullish' : advancingPct < 42 ? 'bearish' : 'neutral';
-
-  const nearHighsPct = total > 0 ? Math.round((nearHighCount / total) * 100) : 15;
-  const nearLowsPct = total > 0 ? Math.round((nearLowCount / total) * 100) : 10;
-  const aboveEma20Pct = Math.min(Math.max(Math.round(advancingPct * 1.05), 10), 95);
-
-  const breadthScore = Math.round(advancingPct * 0.6 + nearHighsPct * 1.5 - nearLowsPct * 0.8);
-  const breadthVerdict =
-    breadthScore >= 65
-      ? 'Широкий ринковий імпульс: зростання підтримано більшістю активів'
-      : breadthScore <= 35
-      ? 'Вузький ринок / Домінування тиску продавців'
-      : 'Збалансований ринок: вибірковий ріст окремих сетапів';
-
-  // Capital Flow
-  const flowDirection: 'inflow' | 'outflow' | 'neutral' =
-    netCapitalFlowUsd > 10000000 ? 'inflow' : netCapitalFlowUsd < -10000000 ? 'outflow' : 'neutral';
-
-  const flowFormatted =
-    Math.abs(netCapitalFlowUsd) >= 1e9
-      ? `$${(netCapitalFlowUsd / 1e9).toFixed(2)}B`
-      : `$${(netCapitalFlowUsd / 1e6).toFixed(1)}M`;
-
-  const capitalFlowLabel =
-    flowDirection === 'inflow'
-      ? `Чистий приплив капіталу (+${flowFormatted})`
-      : flowDirection === 'outflow'
-      ? `Чистий відтік ліквідності (-${flowFormatted.replace('-', '')})`
-      : 'Нейтральний рух капіталу (Баланс ордерів)';
-
-  // Volatility Index 0 - 100
-  const volIndex = Math.min(Math.max(Math.round(avgVolatility * 9), 15), 98);
-  const volLabel =
-    volIndex > 75
-      ? 'Екстремально висока волатильність (Високий ризик ліквідацій)'
-      : volIndex > 45
-      ? 'Помірна робоча волатильність (Оптимально для свінг/скальпінгу)'
-      : 'Низька компресійна волатильність (Очікується вихід з діапазону)';
-
-  // Composite Sentiment Score (0 to 100)
-  // Combining: advancingPct (30%), avgChange (25%), nearHighs (15%), flow (15%), volume (15%)
-  let compositeScore = 50;
-  compositeScore += (advancingPct - 50) * 0.6;
-  compositeScore += Math.min(Math.max(avgChange24h * 4, -20), 20);
-  compositeScore += (nearHighsPct - nearLowsPct) * 0.8;
-  if (flowDirection === 'inflow') compositeScore += 8;
-  else if (flowDirection === 'outflow') compositeScore -= 8;
-
-  compositeScore = Math.min(Math.max(Math.round(compositeScore), 5), 95);
-
-  let sentimentState: MarketSentimentData['sentimentState'] = 'neutral';
-  let sentimentLabel = 'Нейтральний стан ринку (Баланс сил)';
-
-  if (compositeScore >= 78) {
-    sentimentState = 'extreme_greed';
-    sentimentLabel = 'Екстремальна жадібність / Перегрітий ринок';
-  } else if (compositeScore >= 60) {
-    sentimentState = 'greed';
-    sentimentLabel = 'Оптимізм та Бичачий настрій (Жадібність)';
-  } else if (compositeScore <= 25) {
-    sentimentState = 'extreme_fear';
-    sentimentLabel = 'Екстремальний страх / Паніка та перепроданість';
-  } else if (compositeScore <= 42) {
-    sentimentState = 'fear';
-    sentimentLabel = 'Обережність та тиск ведмедів (Страх)';
   }
 
-  const summary = `Загальний настрій ринку: ${sentimentLabel} (${compositeScore}/100). ` +
-    `Зростає ${advancingCount} з ${total} пар (${advancingPct}%), середній добовий рух ${avgChange24h >= 0 ? '+' : ''}${avgChange24h}%. ` +
-    `${capitalFlowLabel}. Волатильність становить ${avgVolatility}% (${volLabel}). ` +
-    `Ширина ринку вказує на ${breadthVerdict.toLowerCase()}.`;
+  const advancingPct = Number((advancingCount / total * 100).toFixed(1));
+  const avgChange24h = Number((totalChange / total).toFixed(2));
+  const avgVolatility = Number((totalVolatility / total).toFixed(2));
+  const directionStrength = directionalStrengthSum / total;
+  const volumeDirection = totalVolume24h > 0 ? volumeWeightedDirectionSum / totalVolume24h : 0;
+  const locationCoverage = locationCount / total;
+  const locationDirection = locationCount > 0 ? (nearHighCount - nearLowCount) / locationCount : 0;
+  const trendBias: MarketSentimentData['priceTrendDynamics']['trendBias'] =
+    directionStrength > 0.15 ? 'bullish' : directionStrength < -0.15 ? 'bearish' : 'neutral';
+
+  // All 0% changes => exactly 50. Tiny price moves cannot flip the whole index.
+  // Each continuous contribution has a bounded, documented maximum:
+  // 20 breadth, 15 mean movement, 10 volume-weighted direction, 5 location.
+  const rawScore = 50
+    + 20 * directionStrength
+    + 15 * clamp(avgChange24h / 5, -1, 1)
+    + 10 * volumeDirection
+    + 5 * locationDirection * locationCoverage;
+  const compositeScore = Math.round(clamp(rawScore, 0, 100));
+  const sentimentState = sentimentStateForScore(compositeScore);
+  const sentimentLabels: Record<MarketSentimentData['sentimentState'], string> = {
+    extreme_fear: 'Екстремальний страх / Сильний тиск продавців',
+    fear: 'Страх / Переважають продавці',
+    neutral: 'Нейтральний стан ринку (Баланс сил)',
+    greed: 'Жадібність / Переважають покупці',
+    extreme_greed: 'Екстремальна жадібність / Сильний попит',
+  };
+  const sentimentLabel = sentimentLabels[sentimentState];
+
+  const nearHighsPct = locationCount > 0 ? Math.round(nearHighCount / locationCount * 100) : 0;
+  const nearLowsPct = locationCount > 0 ? Math.round(nearLowCount / locationCount * 100) : 0;
+  const breadthScore = Math.round(clamp(50 + directionStrength * 50, 0, 100));
+  const breadthVerdict = breadthScore >= 65
+    ? 'Переважає зростання цін серед торгових пар'
+    : breadthScore <= 35
+      ? 'Переважає падіння цін серед торгових пар'
+      : 'Збалансований або малорухомий ринок';
+  const volatilityIndex = Math.round(clamp(avgVolatility * 9, 0, 100));
+  const volLabel = volatilityIndex > 75
+    ? 'Висока добова волатильність'
+    : volatilityIndex > 45 ? 'Помірна добова волатильність' : 'Низька добова волатильність';
+
+  const sources = isLiveRequest ? getMarketSourceStatuses({ exchange: 'all', marketType: 'all' }) : [];
+  const freshSources = sources.filter(s => s.status === 'live').length;
+  const availableSources = sources.filter(s => s.status !== 'unavailable').length;
+  const latestSourceTime = Math.max(0, ...sources.map(s => s.updatedAt ?? 0));
+  const updatedAt = latestSourceTime > 0 ? latestSourceTime : now;
+
+  const summary = `Настрій ринку: ${sentimentLabel} (${compositeScore}/100). ` +
+    `Зростають ${advancingCount} із ${total} пар (${advancingPct}%), падають ${decliningCount}; ` +
+    `середня зміна ціни за 24 год: ${avgChange24h >= 0 ? '+' : ''}${avgChange24h}%. ` +
+    `Середній добовий діапазон: ${avgVolatility}%. ` +
+    'Індекс є орієнтовною оцінкою цінової динаміки, не вимірюванням грошових потоків.';
 
   const data: MarketSentimentData = {
     compositeScore,
@@ -181,35 +142,47 @@ export async function calculateMarketSentiment(providedCoins?: MarketCoin[]): Pr
     },
     tradingVolume: {
       total24hUsd: totalVolume24h,
-      volumeVelocity: totalVolume24h > 40e9 ? 'high' : totalVolume24h > 15e9 ? 'normal' : 'low',
-      volumeChangePct: 8.5,
+      // A single 24h snapshot does not provide volume velocity or its change.
+      volumeVelocity: null,
+      volumeChangePct: null,
     },
     marketVolatility: {
-      index: volIndex,
+      index: volatilityIndex,
       label: volLabel,
       avgDailyRangePct: avgVolatility,
     },
     marketBreadth: {
-      aboveEma20Pct,
+      // EMA20 requires actual historical closing prices per instrument.
+      aboveEma20Pct: null,
       nearHighsPct,
       nearLowsPct,
-      breadthScore: Math.min(Math.max(breadthScore, 0), 100),
+      breadthScore,
       verdict: breadthVerdict,
     },
     capitalFlow: {
-      netInflow24hUsd: Math.round(netCapitalFlowUsd),
-      direction: flowDirection,
-      label: capitalFlowLabel,
+      // Turnover times price change is NOT a net capital inflow.
+      netInflow24hUsd: null,
+      direction: null,
+      label: 'Дані про фактичні потоки капіталу недоступні',
     },
     derivativesOverview: {
-      aggregatedOIUsd: Math.round(totalVolume24h * 0.45),
-      oiChange24hPct: 3.6,
-      avgFundingRate: 0.0092,
-      fundingBias: 'balanced',
+      // Never infer open interest or funding from turnover.
+      aggregatedOIUsd: null,
+      oiChange24hPct: null,
+      avgFundingRate: null,
+      fundingBias: null,
     },
-    lastUpdated: Date.now(),
+    dataQuality: {
+      analyzedPairs: total,
+      locationCoveragePct: Math.round(locationCoverage * 100),
+      freshSources,
+      availableSources,
+      totalSources: sources.length,
+    },
+    lastUpdated: updatedAt,
   };
 
-  sentimentCache = { timestamp: Date.now(), data };
+  // Synthetic/provided samples must not poison the shared live cache.
+  if (isLiveRequest) sentimentCache = { timestamp: Date.now(), data };
   return data;
 }

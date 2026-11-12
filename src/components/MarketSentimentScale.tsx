@@ -1,45 +1,32 @@
 import React, { useEffect, useState } from 'react';
+import {
+  clampSentimentScore,
+  SENTIMENT_SEGMENTS,
+  sentimentColorForScore,
+} from '../utils/marketSentiment';
 
 interface MarketSentimentScaleProps {
   score: number;
   sentimentLabel: string;
 }
 
-/** Display only the score returned by /api/market/sentiment. */
-export const clampSentimentScore = (score: number): number =>
-  Number.isFinite(score) ? Math.min(100, Math.max(0, score)) : 0;
+export { clampSentimentScore } from '../utils/marketSentiment';
 
-// Visual-only segments: the market score still comes from the existing API.
-const SEGMENT_COLORS = [
-  '#ff294e',
-  '#f43f5e',
-  '#fb5263',
-  '#ffb02e',
-  '#ffdf40',
-  '#6be785',
-  '#1ad6a8',
-  '#0f946e',
-] as const;
-
-/**
- * Always-visible, accessible fear → greed gauge. The neon score marker moves
- * with live API readings; the colored blocks are presentation only.
- */
+/** Read-only market sentiment meter; the number is always supplied by the API. */
 export const MarketSentimentScale: React.FC<MarketSentimentScaleProps> = ({ score, sentimentLabel }) => {
   const actualScore = clampSentimentScore(score);
-  const [displayScore, setDisplayScore] = useState(50);
+  // Start at the real score; never briefly paint a misleading 50/100.
+  const [displayScore, setDisplayScore] = useState(actualScore);
 
   useEffect(() => {
     setDisplayScore(actualScore);
   }, [actualScore]);
 
-  const markerPosition = Math.min(100, Math.max(0, displayScore));
-  const activeSegment = Math.min(
-    SEGMENT_COLORS.length - 1,
-    Math.floor(displayScore / (100 / SEGMENT_COLORS.length)),
+  const markerPosition = clampSentimentScore(displayScore);
+  const markerAccent = sentimentColorForScore(displayScore);
+  const activeSegment = SENTIMENT_SEGMENTS.findIndex(s =>
+    markerPosition >= s.start && (markerPosition < s.end || s.end === 100),
   );
-  // Keep the marker's border, glow, and score color in sync with the current zone.
-  const markerAccent = SEGMENT_COLORS[activeSegment];
 
   return (
     <div
@@ -53,16 +40,28 @@ export const MarketSentimentScale: React.FC<MarketSentimentScaleProps> = ({ scor
       aria-valuetext={`${actualScore} зі 100 — ${sentimentLabel}`}
     >
       <div className="relative py-1.5">
-        <div className="grid grid-cols-8 gap-[4px] sm:gap-[5px]" aria-hidden="true">
-          {SEGMENT_COLORS.map((color, index) => (
+        <div className="flex gap-[4px] sm:gap-[5px]" aria-hidden="true">
+          {SENTIMENT_SEGMENTS.map((segment, index) => (
             <span
-              key={color}
+              key={segment.start}
               data-market-sentiment-segment
               className={`h-[19px] min-w-0 rounded-[5px] shadow-[inset_0_1px_1px_rgba(255,255,255,0.15)] transition-[filter,box-shadow] duration-300 ${index === activeSegment ? 'brightness-110 ring-1 ring-white/40' : ''}`}
-              style={{ backgroundColor: color }}
+              style={{
+                backgroundColor: segment.color,
+                flexGrow: segment.end - segment.start,
+                flexBasis: 0,
+              }}
             />
           ))}
         </div>
+
+        {/* The small line always denotes the exact score, even at 0 and 100. */}
+        <span
+          data-market-sentiment-position
+          className="pointer-events-none absolute top-1/2 z-[5] h-7 w-[2px] -translate-x-1/2 -translate-y-1/2 motion-safe:transition-[left,background-color] motion-safe:duration-1000 motion-safe:ease-out"
+          style={{ left: `${markerPosition}%`, backgroundColor: markerAccent }}
+          aria-hidden="true"
+        />
         <div
           data-market-sentiment-marker
           className="pointer-events-none absolute top-1/2 z-10 flex h-[29px] min-w-[72px] -translate-x-1/2 -translate-y-1/2 items-center justify-center gap-0.5 rounded-[7px] border bg-[#091c24] px-2 font-mono text-[12px] font-bold motion-safe:transition-[left,border-color,color,box-shadow] motion-safe:duration-1000 motion-safe:ease-out sm:text-[13px]"

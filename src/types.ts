@@ -909,8 +909,8 @@ export interface MarketSentimentData {
 
   tradingVolume: {
     total24hUsd: number;
-    volumeVelocity: 'high' | 'normal' | 'low';
-    volumeChangePct: number;
+    volumeVelocity: 'high' | 'normal' | 'low' | null;
+    volumeChangePct: number | null;
   };
 
   marketVolatility: {
@@ -920,7 +920,7 @@ export interface MarketSentimentData {
   };
 
   marketBreadth: {
-    aboveEma20Pct: number;
+    aboveEma20Pct: number | null;
     nearHighsPct: number;
     nearLowsPct: number;
     breadthScore: number;
@@ -928,18 +928,26 @@ export interface MarketSentimentData {
   };
 
   capitalFlow: {
-    netInflow24hUsd: number;
-    direction: 'inflow' | 'outflow' | 'neutral';
+    netInflow24hUsd: number | null;
+    direction: 'inflow' | 'outflow' | 'neutral' | null;
     label: string;
   };
 
   derivativesOverview: {
-    aggregatedOIUsd: number;
-    oiChange24hPct: number;
-    avgFundingRate: number;
-    fundingBias: 'long_heavy' | 'short_heavy' | 'balanced';
+    aggregatedOIUsd: number | null;
+    oiChange24hPct: number | null;
+    avgFundingRate: number | null;
+    fundingBias: 'long_heavy' | 'short_heavy' | 'balanced' | null;
   };
 
+  /** Actual snapshot quality, no extra exchange requests. */
+  dataQuality?: {
+    analyzedPairs: number;
+    locationCoveragePct: number;
+    freshSources: number;
+    availableSources: number;
+    totalSources: number;
+  };
   lastUpdated: number;
 }
 
