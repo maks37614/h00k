@@ -30,6 +30,8 @@ test('the screener writes expansion changes to its account profile', () => {
   assert.match(widget, /aria-expanded=\{expanded\}/);
   assert.match(widget, /\{expanded && \(/);
   assert.match(auth, /marketSentimentExpanded: true/);
+  const rules = readFileSync(new URL('../firestore.rules', import.meta.url), 'utf8');
+  assert.match(rules, /marketSentimentExpanded is bool/);
 });
 
 test('refreshing and polling sentiment does not save or reset expansion settings', () => {
