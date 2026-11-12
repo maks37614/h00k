@@ -108,7 +108,8 @@ export function HookChartVisualPreview({
   const saveChartScale = useCallback(() => {
     const plotWidth = hookChartPlotWidth(previewRef.current?.getBoundingClientRect().width || 500);
     if (!activeCandles.length) return;
-    const count = Math.max(1, Math.ceil(plotWidth / Math.max(.12, viewport.barWidth)));
+    // Only actual candle slots count; free space on the right is not history.
+    const count = Math.max(1, Math.ceil(plotWidth / Math.max(.12, viewport.barWidth) - profile.rightGapBars));
     const end = Math.min(activeCandles.length, Math.max(0, activeCandles.length - Math.round(viewport.rightOffset)));
     const visible = activeCandles.slice(Math.max(0, end - count), end);
     let lo = Infinity, hi = -Infinity;
