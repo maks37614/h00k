@@ -25,19 +25,23 @@ interface MarketSentimentWidgetProps {
 export const MarketSentimentWidget: React.FC<MarketSentimentWidgetProps> = ({ coins }) => {
   const [data, setData] = useState<MarketSentimentData | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<boolean>(false);
 
   const fetchSentiment = async () => {
     setLoading(true);
     try {
       const res = await fetch('/api/market/sentiment');
-      if (!res.ok) throw new Error('Failed to fetch sentiment');
       const json = await res.json();
-      if (json.success && json.data) {
-        setData(json.data);
+      if (!res.ok || json.success !== true || !json.data ||
+          !Number.isFinite(json.data.compositeScore) ||
+          json.data.compositeScore < 0 || json.data.compositeScore > 100) {
+        throw new Error('Ринкові дані тимчасово недоступні');
       }
+      setData(json.data);
+      setError(null);
     } catch (err) {
-      console.error('Market sentiment fetch error:', err);
+      setError('Не вдалося оновити індекс. Перевірте з’єднання або стан бірж.');
     } finally {
       setLoading(false);
     }
@@ -49,7 +53,20 @@ export const MarketSentimentWidget: React.FC<MarketSentimentWidgetProps> = ({ co
     return () => clearInterval(interval);
   }, []);
 
-  if (!data) return null;
+  if (!data) {
+    return (
+      <div className="rounded-2xl border border-slate-800/90 bg-slate-900/90 p-4 text-sm text-slate-300" role="status">
+        <div className="flex items-center justify-between gap-3">
+          <span>Настрій ринку: {loading ? 'Завантаження даних…' : 'Немає достовірних даних'}</span>
+          <button type="button" onClick={fetchSentiment} disabled={loading}
+            className="rounded-lg border border-slate-700 px-2.5 py-1 text-xs text-cyan-300 disabled:opacity-50">
+            Оновити
+          </button>
+        </div>
+        {error && <p className="mt-2 text-xs text-amber-300">{error}</p>}
+      </div>
+    );
+  }
 
   return (
     <div className="rounded-2xl bg-gradient-to-r from-slate-900 via-slate-900/85 to-indigo-950/40 border border-slate-800/90 shadow-lg backdrop-blur-md overflow-hidden lg:mx-auto lg:max-w-5xl">
@@ -65,7 +82,7 @@ export const MarketSentimentWidget: React.FC<MarketSentimentWidgetProps> = ({ co
                 Настрій Ринку
               </h3>
               <p className="sr-only">
-                Комплексний індекс: динаміка тренду, обсяги, волатильність, ширина ринку, припливи капіталу та фандинг
+                Орієнтовний індекс із перевіреної цінової динаміки, обсягів та доступних історичних рівнів
               </p>
             </div>
           </div>
@@ -98,6 +115,14 @@ export const MarketSentimentWidget: React.FC<MarketSentimentWidgetProps> = ({ co
           <MarketSentimentScale score={data.compositeScore} sentimentLabel={data.sentimentLabel} />
         </div>
       </div>
+
+      {(error || (data.dataQuality && data.dataQuality.totalSources > 0 &&
+        data.dataQuality.freshSources < data.dataQuality.totalSources)) && (
+        <p role="status" className="border-b border-amber-500/20 px-3 py-2 text-[11px] text-amber-300 sm:px-4">
+          {error ? 'Оновлення не вдалося — показані останні отримані дані.' :
+            `Частина джерел ринку недоступна або застаріла (${data.dataQuality?.freshSources}/${data.dataQuality?.totalSources} актуальних).`}
+        </p>
+      )}
 
       {/* Main Content Body */}
       {expanded && (
@@ -142,7 +167,7 @@ export const MarketSentimentWidget: React.FC<MarketSentimentWidgetProps> = ({ co
                   {formatVolume(data.tradingVolume.total24hUsd)}
                 </span>
                 <span className="text-[10px] text-emerald-400 font-sans block">
-                  Темп: {data.tradingVolume.volumeVelocity === 'high' ? 'Високий актив' : 'Стабільний'}
+                  Сумарний оборот за 24 год
                 </span>
               </div>
             </div>
@@ -176,7 +201,7 @@ export const MarketSentimentWidget: React.FC<MarketSentimentWidgetProps> = ({ co
                   {data.marketBreadth.breadthScore} / 100
                 </span>
                 <span className="text-[10px] text-slate-400 font-sans block truncate">
-                  {data.marketBreadth.aboveEma20Pct}% вище EMA20
+                  EMA20: {data.marketBreadth.aboveEma20Pct === null ? 'н/д' : `${data.marketBreadth.aboveEma20Pct}% вище`}
                 </span>
               </div>
             </div>
@@ -189,14 +214,12 @@ export const MarketSentimentWidget: React.FC<MarketSentimentWidgetProps> = ({ co
               </div>
 
               <div>
-                <span className={`text-base sm:text-lg font-bold block ${data.capitalFlow.direction === 'inflow' ? 'text-emerald-400' : 'text-rose-400'}`}>
-                  {data.capitalFlow.direction === 'inflow' ? '+' : ''}
-                  {Math.abs(data.capitalFlow.netInflow24hUsd) >= 1e9
-                    ? `$${(data.capitalFlow.netInflow24hUsd / 1e9).toFixed(1)}B`
-                    : `$${(data.capitalFlow.netInflow24hUsd / 1e6).toFixed(0)}M`}
+                <span className="block text-base font-bold text-slate-400 sm:text-lg">
+                  {data.capitalFlow.netInflow24hUsd === null ? 'н/д' :
+                    formatVolume(Math.abs(data.capitalFlow.netInflow24hUsd))}
                 </span>
-                <span className="text-[10px] text-slate-400 font-sans block truncate">
-                  {data.capitalFlow.direction === 'inflow' ? 'Чистий приплив' : 'Чистий відтік'}
+                <span className="block truncate font-sans text-[10px] text-slate-400" title={data.capitalFlow.label}>
+                  {data.capitalFlow.label}
                 </span>
               </div>
             </div>
@@ -210,10 +233,10 @@ export const MarketSentimentWidget: React.FC<MarketSentimentWidgetProps> = ({ co
 
               <div>
                 <span className="text-base sm:text-lg font-bold text-cyan-300 block">
-                  {formatVolume(data.derivativesOverview.aggregatedOIUsd)}
+                  {data.derivativesOverview.aggregatedOIUsd === null ? 'н/д' : formatVolume(data.derivativesOverview.aggregatedOIUsd)}
                 </span>
                 <span className="text-[10px] text-slate-400 font-sans block truncate">
-                  Фандинг: {data.derivativesOverview.avgFundingRate}%
+                  Фандинг: {data.derivativesOverview.avgFundingRate === null ? 'н/д' : `${data.derivativesOverview.avgFundingRate}%`}
                 </span>
               </div>
             </div>
