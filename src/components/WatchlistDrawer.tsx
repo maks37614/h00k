@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Trash2, Star, Zap, FolderPlus, ArrowUpDown, ChevronDown, ChevronUp } from 'lucide-react';
 import type { ExchangeId, MarketType, ScannedCoin } from '../types';
 import {
@@ -111,6 +112,25 @@ export const WatchlistDrawer: React.FC<WatchlistDrawerProps> = ({
     };
   }, [isOpen, missingKeySignature]);
 
+  // Prevent background scrolling, but allow normal zoom and text input.
+  // A portal also avoids clipping caused by the chart/page stacking context.
+  useEffect(() => {
+    if (!isOpen) return;
+    const oldBodyOverflow = document.body.style.overflow;
+    const oldHtmlOverflow = document.documentElement.style.overflow;
+    document.body.style.overflow = 'hidden';
+    document.documentElement.style.overflow = 'hidden';
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      document.body.style.overflow = oldBodyOverflow;
+      document.documentElement.style.overflow = oldHtmlOverflow;
+    };
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
   // Prefer a full scanned coin when available, then the lightweight exact
@@ -176,52 +196,67 @@ export const WatchlistDrawer: React.FC<WatchlistDrawerProps> = ({
 
   const formatPrice = (price: number) => formatCryptoPrice(price);
 
-  return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-black/60 backdrop-blur-sm">
-      <div className="w-full max-w-md bg-slate-900 border-l border-slate-800 h-full flex flex-col shadow-2xl animate-in slide-in-from-right duration-200">
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[270] flex justify-end overflow-hidden bg-black/60 backdrop-blur-sm"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="watchlist-drawer-title"
+        className="watchlist-drawer flex min-h-0 min-w-0 w-full max-w-md flex-col overflow-hidden border-l border-slate-800 bg-slate-900 shadow-2xl animate-in slide-in-from-right duration-200"
+      >
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-800 bg-slate-950/80">
-          <div className="flex items-center gap-2">
-            <Star className="w-4 h-4 text-amber-400 fill-amber-400" />
-            <h3 className="font-bold text-white text-sm">Обрані монети</h3>
-            <span className="px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 text-xs font-mono">
+        <div className="flex min-w-0 shrink-0 items-center justify-between gap-2 border-b border-slate-800 bg-slate-950/80 px-3 py-3 sm:px-5 sm:py-4">
+          <div className="flex min-w-0 items-center gap-2">
+            <Star className="h-4 w-4 shrink-0 fill-amber-400 text-amber-400" />
+            <h3 id="watchlist-drawer-title" className="min-w-0 text-sm font-bold text-white sm:text-base">Обрані монети</h3>
+            <span className="shrink-0 rounded-full bg-slate-800 px-2 py-0.5 font-mono text-xs text-slate-300">
               {entries.length}
             </span>
           </div>
 
           <button
+            type="button"
+            aria-label="Закрити обрані монети"
             onClick={onClose}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+            className="shrink-0 rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-800 hover:text-white"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        <div className="px-4 py-3 border-b border-slate-800 bg-slate-900/80 space-y-2">
-          <div className="flex items-center gap-2">
-            <div className="flex-1 flex items-center gap-1.5 bg-slate-950 border border-slate-800 rounded-lg px-2 py-1">
+        <div className="min-w-0 shrink-0 space-y-2 border-b border-slate-800 bg-slate-900/80 px-3 py-3 sm:px-4">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <div className="flex min-w-0 flex-1 basis-[165px] items-center gap-1.5 rounded-lg border border-slate-800 bg-slate-950 px-2 py-1">
               <FolderPlus className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
               <input
                 value={newFolderName}
                 onChange={(event) => setNewFolderName(event.target.value)}
                 onKeyDown={(event) => event.key === 'Enter' && createFolder()}
                 placeholder="Нова папка"
-                className="min-w-0 flex-1 bg-transparent text-xs text-slate-200 outline-none placeholder:text-slate-600"
+                aria-label="Назва нової папки"
+                className="w-full min-w-0 flex-1 bg-transparent text-base text-slate-200 outline-none placeholder:text-slate-600 sm:text-xs"
               />
             </div>
             <button
+              type="button"
               onClick={createFolder}
-              className="px-2.5 py-1.5 rounded-lg bg-cyan-500/15 text-cyan-300 text-xs font-semibold hover:bg-cyan-500/25 transition-colors"
+              className="shrink-0 rounded-lg bg-cyan-500/15 px-2.5 py-2 text-xs font-semibold text-cyan-300 transition-colors hover:bg-cyan-500/25"
             >
               Додати
             </button>
           </div>
-          <div className="flex items-center gap-2 text-xs">
-            <ArrowUpDown className="w-3.5 h-3.5 text-slate-500" />
+          <div className="flex min-w-0 items-center gap-2 text-xs">
+            <ArrowUpDown className="h-3.5 w-3.5 shrink-0 text-slate-500" />
             <select
               value={sortBy}
               onChange={(event) => setSortBy(event.target.value as typeof sortBy)}
-              className="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-2 py-1 text-slate-300 outline-none"
+              aria-label="Сортувати обрані монети"
+              className="block w-full min-w-0 flex-1 rounded-lg border border-slate-800 bg-slate-950 px-2 py-1 text-base text-slate-300 outline-none sm:text-xs"
             >
               <option value="name">За назвою</option>
               <option value="price">За ціною</option>
@@ -230,7 +265,7 @@ export const WatchlistDrawer: React.FC<WatchlistDrawerProps> = ({
             </select>
             <button
               onClick={() => setSortDirection((direction) => direction === 'asc' ? 'desc' : 'asc')}
-              className="px-2 py-1 rounded-lg bg-slate-950 border border-slate-800 text-slate-300 hover:text-white transition-colors"
+              className="shrink-0 rounded-lg border border-slate-800 bg-slate-950 px-2 py-1 text-slate-300 transition-colors hover:text-white"
               title="Змінити напрямок сортування"
             >
               {sortDirection === 'asc' ? '↑' : '↓'}
@@ -239,7 +274,7 @@ export const WatchlistDrawer: React.FC<WatchlistDrawerProps> = ({
         </div>
 
         {/* List */}
-        <div className="flex-1 overflow-y-auto touch-scroll p-4 space-y-3">
+        <div className="watchlist-drawer-list min-h-0 min-w-0 flex-1 space-y-3 overflow-x-hidden overflow-y-auto overscroll-contain p-3 touch-scroll sm:p-4">
           {entries.length === 0 ? (
             <div className="text-center py-12 text-slate-500 text-xs space-y-2">
               <Star className="w-8 h-8 text-slate-700 mx-auto" />
@@ -256,11 +291,11 @@ export const WatchlistDrawer: React.FC<WatchlistDrawerProps> = ({
                     ...current,
                     [group.name || 'unfiled']: !current[group.name || 'unfiled'],
                   }))}
-                  className="w-full flex items-center gap-2 text-[11px] font-semibold text-slate-400 hover:text-slate-200 transition-colors"
+                  className="flex w-full min-w-0 items-center gap-2 overflow-hidden text-left text-xs font-semibold text-slate-400 transition-colors hover:text-slate-200"
                 >
                   <Star className="w-3.5 h-3.5 text-amber-400" />
-                  {group.name || 'Загальний список'}
-                  <span className="text-slate-600 font-mono">{group.entries.length}</span>
+                  <span className="min-w-0 truncate">{group.name || 'Загальний список'}</span>
+                  <span className="shrink-0 font-mono text-slate-600">{group.entries.length}</span>
                   <span className="ml-auto">
                     {collapsedFolders[group.name || 'unfiled'] ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
                   </span>
@@ -268,11 +303,11 @@ export const WatchlistDrawer: React.FC<WatchlistDrawerProps> = ({
                 {!collapsedFolders[group.name || 'unfiled'] && group.entries.map((entry, index) => (
               <div
                 key={`${entry.key}-${index}`}
-                className="bg-slate-950/70 border border-slate-800 hover:border-slate-700 rounded-xl p-3 space-y-2.5 transition-colors"
+                className="min-w-0 space-y-2.5 overflow-hidden rounded-xl border border-slate-800 bg-slate-950/70 p-2.5 transition-colors hover:border-slate-700 sm:p-3"
               >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="font-mono font-bold text-sm text-white">
+                <div className="flex min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-2">
+                  <div className="flex min-w-0 flex-1 basis-[120px] flex-wrap items-center gap-2">
+                    <span className="min-w-0 break-all font-mono text-sm font-bold text-white">
                       {entry.coin?.baseAsset || entry.symbol.replace(/(USDT|USDC|BUSD)$/, '') || entry.symbol}
                     </span>
                     <span className="text-[10px] px-1.5 py-0.2 rounded font-semibold uppercase bg-slate-800 text-slate-400">
@@ -280,9 +315,9 @@ export const WatchlistDrawer: React.FC<WatchlistDrawerProps> = ({
                     </span>
                   </div>
 
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex min-w-0 flex-1 basis-[185px] flex-wrap items-center justify-end gap-1.5">
                     {entry.coin ? (
-                      <span className="font-mono font-bold text-xs text-white">${formatPrice(entry.coin.currentPrice)}</span>
+                      <span className="min-w-0 break-all font-mono text-xs font-bold text-white sm:whitespace-nowrap">${formatPrice(entry.coin.currentPrice)}</span>
                     ) : (
                       <span className="text-[10px] font-medium text-amber-300" title={unavailableText(entry)}>{quotesLoading ? 'Завантаження…' : 'Немає котирувань'}</span>
                     )}
@@ -298,8 +333,9 @@ export const WatchlistDrawer: React.FC<WatchlistDrawerProps> = ({
                     <select
                       value={getFolderForEntry(entry)}
                       onChange={(event) => moveCoin(entry, event.target.value)}
-                      className="max-w-[90px] bg-slate-900 border border-slate-800 rounded px-1 py-0.5 text-[10px] text-slate-400 outline-none"
+                      className="block min-w-0 max-w-[165px] flex-1 rounded border border-slate-800 bg-slate-900 px-1.5 py-1 text-base text-slate-400 outline-none sm:max-w-[110px] sm:text-xs"
                       title="Перемістити в папку"
+                      aria-label={'Папка для ' + entry.symbol + ' (' + entry.exchange + ')'}
                     >
                       <option value="">Загальний список</option>
                       {folderNames.map((folder) => <option key={folder} value={folder}>{folder}</option>)}
@@ -307,7 +343,7 @@ export const WatchlistDrawer: React.FC<WatchlistDrawerProps> = ({
                     <button
                       onClick={() => removeCoin(entry)}
                       title="Видалити з обраного"
-                      className="text-slate-500 hover:text-rose-400 p-1 rounded hover:bg-slate-800 transition-colors"
+                      className="shrink-0 rounded p-1.5 text-slate-500 transition-colors hover:bg-slate-800 hover:text-rose-400"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
@@ -326,6 +362,7 @@ export const WatchlistDrawer: React.FC<WatchlistDrawerProps> = ({
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
