@@ -445,8 +445,18 @@ export interface HookChartAlert {
   fired?: boolean;
 }
 
+/** Normalized, account-wide live HookChart viewport preset (never an absolute coin price). */
+export interface HookChartVisualProfile {
+  visibleBars: number;
+  verticalZoom: number;
+  autoPriceScale: boolean;
+  rightGapBars: number;
+}
+
 /** User-scoped display, indicator, alert, drawing, and language settings for HookChart. */
 export interface HookChartPreferences {
+  /** Per-context and per-device display presets. Replay intentionally ignores these. */
+  visualProfiles?: Partial<Record<string, HookChartVisualProfile>>;
   drawingToolbarOpen?: boolean;
   terminalExtraToolsOpen?: boolean;
   indicators?: string[];
