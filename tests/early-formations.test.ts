@@ -81,7 +81,7 @@ test('early results respect exchange, timeframe, direction, search, volume and c
   } as ScannedCoin;
   const filters = {
     exchange: 'all', marketType: 'all', timeframe: '15m', category: 'all',
-    bias: 'all', status: 'all', minVolumeUsd: 0, densityConfirmedOnly: false,
+    bias: 'all', status: 'all', minVolumeUsd: 0, densityConfirmedOnly: false, roundNumberOnly: false,
     searchQuery: '', sortBy: 'confidence', sortOrder: 'desc',
   } as ScreenerFilterState;
   assert.equal(getVisibleEarlyFormations([coin], filters).length, 1);
@@ -89,6 +89,7 @@ test('early results respect exchange, timeframe, direction, search, volume and c
   assert.equal(getVisibleEarlyFormations([coin], { ...filters, timeframe: '1h' }).length, 0);
   assert.equal(getVisibleEarlyFormations([coin], { ...filters, category: 'candlestick' }).length, 0);
   assert.equal(getVisibleEarlyFormations([coin], { ...filters, densityConfirmedOnly: true }).length, 0);
+  assert.equal(getVisibleEarlyFormations([coin], { ...filters, roundNumberOnly: true }).length, 0);
 });
 
 test('Risk/reward is computed separately from early-zone worst fill and breakout-specific stop', () => {
@@ -212,7 +213,7 @@ test('forming-only filter hides potential early scenarios', () => {
   } as ScannedCoin;
   const filters = {
     exchange: 'all', marketType: 'all', timeframe: '5m', category: 'all',
-    bias: 'all', status: 'forming', minVolumeUsd: 0, densityConfirmedOnly: false,
+    bias: 'all', status: 'forming', minVolumeUsd: 0, densityConfirmedOnly: false, roundNumberOnly: false,
     searchQuery: '', sortBy: 'confidence', sortOrder: 'desc',
   } as ScreenerFilterState;
   assert.deepEqual(getVisibleEarlyFormations([coin], filters).map(x => x.candidate.id), [forming.id]);
@@ -253,7 +254,7 @@ test('early W/M filters are independent and remove hidden regular-only blockers'
   const regular: ScreenerFilterState = {
     exchange: 'bybit', marketType: 'spot', timeframe: '1h',
     category: 'candlestick', bias: 'bearish', status: 'breakout',
-    densityConfirmedOnly: true, minVolumeUsd: 100_000,
+    densityConfirmedOnly: true, roundNumberOnly: true, minVolumeUsd: 100_000,
     searchQuery: 'ETH', sortBy: 'volume', sortOrder: 'asc',
   };
   const snapshot = JSON.stringify(regular);
@@ -263,6 +264,7 @@ test('early W/M filters are independent and remove hidden regular-only blockers'
   assert.equal(early.category, 'all');
   assert.equal(early.status, 'all');
   assert.equal(early.densityConfirmedOnly, false);
+  assert.equal(early.roundNumberOnly, false);
   assert.equal(early.exchange, 'bybit');
   assert.equal(early.marketType, 'spot');
   assert.equal(early.timeframe, '1h');
@@ -293,7 +295,7 @@ test('dedicated W/M stage selects potential, forming or both without restarting 
   const settings: ScreenerFilterState = {
     exchange: 'all', marketType: 'all', timeframe: '5m',
     category: 'all', bias: 'all', status: 'all', minVolumeUsd: 0,
-    densityConfirmedOnly: false, searchQuery: '',
+    densityConfirmedOnly: false, roundNumberOnly: false, searchQuery: '',
     sortBy: 'confidence', sortOrder: 'desc',
   };
   const pool = [btc, eth];
