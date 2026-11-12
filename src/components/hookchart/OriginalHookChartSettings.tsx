@@ -2,6 +2,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import type { HookChartPreferences } from '../../types';
 import { clampHookChartHistory } from '../../utils/hookChartHistory';
 import { normalizeDensityDistance } from './marketAnalytics';
+import { VISUAL_CONTEXTS, getVisualProfile, makeVisualProfileKey, normalizedVisualProfiles, patchVisualProfile, visualDeviceForWidth, type VisualContextId, type VisualDevice, type VisualProfileKey } from './visualProfiles';
+import type { Viewport } from './engine';
 import { DEFAULT_CROSSHAIR_LINE_WIDTH, normalizeCrosshairLineWidth } from './chartCursor';
 import { STRATEGY_FUTURES_NOTE, STRATEGY_PRESETS } from './strategyEngine';
 
@@ -148,6 +150,7 @@ export const ORIGINAL_HOOKCHART_DEFAULTS: HookChartPreferences = {
 
 export function normalizeOriginalHookChartPreferences(source?: HookChartPreferences): HookChartPreferences {
   const next: HookChartPreferences = { ...ORIGINAL_HOOKCHART_DEFAULTS, ...(source || {}) };
+  next.visualProfiles = normalizedVisualProfiles(source?.visualProfiles);
   if (source?.maxChartCandles !== undefined) next.maxChartCandles = clampHookChartHistory(source.maxChartCandles);
   next.densityDiffPct = normalizeDensityDistance(source?.densityDiffPct);
   next.crosshairLineWidth = normalizeCrosshairLineWidth(source?.crosshairLineWidth);
@@ -365,6 +368,10 @@ export function OriginalHookChartSettings({
   onApplyStrategy,
   onClose,
   embedded = false,
+  activeVisualContext,
+  currentViewport,
+  currentPlotWidth,
+  onCaptureVisual,
 }: {
   open: boolean;
   prefs: HookChartPreferences;
@@ -378,8 +385,19 @@ export function OriginalHookChartSettings({
   onClose: () => void;
   /** Reuse the same settings form inside the user profile without a nested modal/focus trap. */
   embedded?: boolean;
+  /** Context for the currently edited live chart; absent in profile editor. */
+  activeVisualContext?: VisualContextId;
+  currentViewport?: Viewport;
+  currentPlotWidth?: number;
+  onCaptureVisual?: (key: VisualProfileKey) => void;
 }) {
-  const [tab, setTab] = useState<'main' | 'strategies' | 'hotkeys'>('main');
+  const [tab, setTab] = useState<'main' | 'chart' | 'strategies' | 'hotkeys'>('main');
+  const [visualContext, setVisualContext] = useState<VisualContextId>(activeVisualContext || 'screenerQuick');
+  const [visualDevice, setVisualDevice] = useState<VisualDevice>(() =>
+    typeof window === 'undefined' ? 'desktop' : visualDeviceForWidth(window.innerWidth));
+  useEffect(() => {
+    if (activeVisualContext) setVisualContext(activeVisualContext);
+  }, [activeVisualContext]);
   const dialogRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!open || embedded) return;
@@ -448,6 +466,7 @@ export function OriginalHookChartSettings({
       </div>
       <div className="settingsTabs">
         <button type="button" className={tab === 'main' ? 'active' : ''} onClick={() => setTab('main')}>Основні</button>
+        <button type="button" className={tab === 'chart' ? 'active' : ''} onClick={() => setTab('chart')}>Графік</button>
         <button type="button" className={tab === 'strategies' ? 'active' : ''} onClick={() => setTab('strategies')}>Стратегії</button>
         <button type="button" className={tab === 'hotkeys' ? 'active' : ''} onClick={() => setTab('hotkeys')}>Гарячі клавіші</button>
       </div>
@@ -646,7 +665,20 @@ export function OriginalHookChartSettings({
             <SwitchRow label="Різниця із середньою кількістю угод (колонка TR)" value={prefs.tradesTR !== false} onChange={value => set('tradesTR', value)} />
             <Setting label="Кількість свічок"><Num value={prefs.tradesCandles ?? 100} min={2} max={1500} set={value => set('tradesCandles', value)} /></Setting>
           </Section>
-        </> : tab === 'strategies' ? (
+        </> : tab === 'chart' ? (
+          <VisualProfileEditor
+            visualContext={visualContext}
+            visualDevice={visualDevice}
+            selectedProfile={getVisualProfile(prefs, visualContext, visualDevice)}
+            onContextChange={setVisualContext}
+            onDeviceChange={setVisualDevice}
+            onProfileChange={delta => set('visualProfiles', patchVisualProfile(prefs.visualProfiles, makeVisualProfileKey(visualContext, visualDevice), delta))}
+            onReset={() => set('visualProfiles', patchVisualProfile(prefs.visualProfiles, makeVisualProfileKey(visualContext, visualDevice), null))}
+            onCapture={onCaptureVisual && activeVisualContext === visualContext && visualDevice === (typeof window === 'undefined' ? 'desktop' : visualDeviceForWidth(window.innerWidth)) && currentViewport && (currentPlotWidth || 0) > 100
+              ? () => onCaptureVisual(makeVisualProfileKey(visualContext, visualDevice)) : undefined}
+            live={!!currentViewport}
+          />
+        ) : tab === 'strategies' ? (
           <StrategySettings activeId={prefs.strategyId || ''} onSelect={onApplyStrategy} />
         ) : (
           <HotkeySettings
