@@ -1,15 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createChartTouchHold, isChartControlTarget } from '../src/components/hookchart/touchHold';
+import {
+  createChartTouchHold, isChartControlTarget,
+  TOUCH_CURSOR_HOLD_MS, TOUCH_MAGNIFIER_HOLD_MS,
+} from '../src/components/hookchart/touchHold';
 
 function clock() {
   let nextId = 0;
-  const callbacks = new Map<number, () => void>();
+  const callbacks = new Map<number, { callback: () => void; delay: number }>();
   const cancelled: number[] = [];
   return {
     schedule(callback: () => void, delay: number) {
-      assert.equal(delay, 350);
-      callbacks.set(++nextId, callback);
+      callbacks.set(++nextId, { callback, delay });
       return nextId;
     },
     cancel(handle: unknown) {
@@ -19,72 +21,97 @@ function clock() {
     fire() {
       const pending = [...callbacks.values()];
       callbacks.clear();
-      pending.forEach(callback => callback());
+      pending.forEach(({ callback }) => callback());
     },
     get count() { return callbacks.size; },
+    get delays() { return [...callbacks.values()].map(x => x.delay); },
     callbacks, cancelled,
   };
 }
 
-test('a hold activates at chart corners, price-scale coordinates and the volume area', () => {
-  for (const point of [{x:1,y:1}, {x:389,y:1}, {x:389,y:699}, {x:1,y:699}, {x:365,y:250}, {x:200,y:650}]) {
-    const time = clock(), hold = createChartTouchHold(time);
-    let selected: {x:number;y:number} | null = null;
-    hold.start(1, point, position => { selected = position; });
-    assert.equal(hold.pending(), true);
-    time.fire();
+test('short hold reveals only the cursor, longer still hold enables the magnifier', () => {
+  const t = clock(), hold = createChartTouchHold(t);
+  const modes: string[] = [];
+  hold.start(1, {x:100,y:200}, () => modes.push('cursor'), () => modes.push('magnifier'));
+  assert.deepEqual(t.delays, [TOUCH_CURSOR_HOLD_MS]);
+  assert.equal(hold.pending(), true);
+  t.fire();
+  assert.deepEqual(modes, ['cursor']);
+  assert.deepEqual(t.delays, [TOUCH_MAGNIFIER_HOLD_MS - TOUCH_CURSOR_HOLD_MS]);
+  assert.equal(hold.pending(), false);
+  t.fire();
+  assert.deepEqual(modes, ['cursor', 'magnifier']);
+  assert.equal(t.count, 0);
+});
+
+test('short cursor mode works at the chart boundaries, volume and price scale', () => {
+  for (const point of [{x:1,y:1},{x:389,y:1},{x:389,y:699},{x:1,y:699},{x:365,y:250},{x:200,y:650}]) {
+    const t = clock(), hold = createChartTouchHold(t);
+    let selected: {x:number;y:number}|null = null;
+    hold.start(1, point, p => { selected = p; });
+    t.fire();
     assert.deepEqual(selected, point);
     assert.equal(hold.pending(), false);
-    assert.equal(time.count, 0);
+    assert.equal(t.count, 0);
   }
 });
 
-test('small finger tremor still activates at the latest position without starting a drag', () => {
-  const time = clock(), hold = createChartTouchHold(time);
-  let selected: {x:number;y:number} | null = null;
-  hold.start(1, {x:100,y:200}, position => { selected = position; });
+test('small initial finger tremor still activates cursor at the latest point', () => {
+  const t = clock(), hold = createChartTouchHold(t);
+  let selected: {x:number;y:number}|null = null;
+  hold.start(1, {x:100,y:200}, p => { selected = p; });
   assert.equal(hold.move(1, {x:106,y:205}), true);
   assert.equal(hold.move(1, {x:108,y:206}), true);
-  time.fire();
+  t.fire();
   assert.deepEqual(selected, {x:108,y:206});
+  assert.equal(hold.move(1, {x:125,y:225}), false);
 });
 
-test('a deliberate swipe cancels inspection so panning/scaling can proceed', () => {
-  const time = clock(), hold = createChartTouchHold(time);
-  let activations = 0;
-  hold.start(1, {x:100,y:200}, () => { activations++; });
-  assert.equal(hold.move(1, {x:111,y:200}), false);
+test('a swipe before the short hold cancels inspection and preserves panning', () => {
+  const t = clock(), hold = createChartTouchHold(t);
+  const modes: string[] = [];
+  hold.start(1, {x:100,y:200}, () => modes.push('cursor'), () => modes.push('magnifier'));
+  assert.equal(hold.move(1, {x:115,y:200}), false);
   assert.equal(hold.pending(), false);
-  time.fire();
-  assert.equal(activations, 0);
+  t.fire();
+  assert.deepEqual(modes, []);
 });
 
-test('lifting, cancellation, or a second finger cannot leave a delayed activation behind', () => {
-  const time = clock(), hold = createChartTouchHold(time);
-  let activations = 0;
-  hold.start(1, {x:100,y:200}, () => { activations++; });
-  const stale = [...time.callbacks.values()][0];
+test('moving the freely selected cursor cancels the longer lens timer', () => {
+  const t = clock(), hold = createChartTouchHold(t);
+  const modes: string[] = [];
+  hold.start(1, {x:100,y:200}, () => modes.push('cursor'), () => modes.push('magnifier'));
+  t.fire();
+  assert.equal(hold.move(1, {x:125,y:230}), false);
+  t.fire();
+  assert.deepEqual(modes, ['cursor']);
+  assert.equal(t.count, 0);
+});
+
+test('release and a second pointer cancel delayed magnification', () => {
+  const t = clock(), hold = createChartTouchHold(t);
+  const modes: string[] = [];
+  hold.start(1, {x:100,y:200}, () => modes.push('cursor'), () => modes.push('magnifier'));
+  t.fire();
+  const stale = [...t.callbacks.values()][0]?.callback;
   hold.cancel();
-  stale();
-  time.fire();
-  assert.equal(activations, 0);
-  hold.start(2, {x:150,y:250}, () => { activations++; });
-  time.fire();
-  assert.equal(activations, 1);
-  for (let x = 0; x < 100; x++) assert.equal(hold.move(2, {x,y:250}), false);
-  assert.equal(activations, 1);
-  assert.equal(time.count, 0);
+  stale?.();
+  assert.deepEqual(modes, ['cursor']);
+  hold.start(2, {x:150,y:250}, () => modes.push('cursor2'), () => modes.push('magnifier2'));
+  hold.start(3, {x:175,y:275}, () => modes.push('cursor3'), () => modes.push('magnifier3'));
+  t.fire();t.fire();
+  assert.deepEqual(modes, ['cursor','cursor3','magnifier3']);
 });
 
-test('only the pending pointer controls its hold; replacing a hold cancels the old one', () => {
-  const time = clock(), hold = createChartTouchHold(time);
-  const selected: number[] = [];
-  hold.start(1, {x:100,y:200}, () => selected.push(1));
-  assert.equal(hold.move(99, {x:300,y:400}), false);
-  assert.equal(hold.pending(), true);
-  hold.start(2, {x:110,y:210}, () => selected.push(2));
-  time.fire();
-  assert.deepEqual(selected, [2]);
+test('only the original pointer is allowed to move or trigger its long hold', () => {
+  const t = clock(), hold = createChartTouchHold(t);
+  const modes: string[] = [];
+  hold.start(1, {x:100,y:200}, () => modes.push('cursor'), () => modes.push('lens'));
+  assert.equal(hold.move(2, {x:220,y:300}), false);
+  t.fire();
+  assert.equal(hold.move(2, {x:220,y:300}), false);
+  t.fire();
+  assert.deepEqual(modes, ['cursor','lens']);
 });
 
 test('real controls are excluded while passive HUD descendants and the canvas are not', () => {
