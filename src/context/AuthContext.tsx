@@ -95,6 +95,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           displayName: firebaseUser.displayName || (firebaseUser.email ? firebaseUser.email.split('@')[0] : 'Користувач'),
           photoURL: firebaseUser.photoURL || '',
           soundAlertsEnabled: storedPrefs.soundAlertsEnabled,
+          marketSentimentExpanded: true,
           defaultExchange: storedPrefs.defaultExchange,
           defaultMarketType: storedPrefs.defaultMarketType,
           defaultTimeframe: storedPrefs.defaultTimeframe,

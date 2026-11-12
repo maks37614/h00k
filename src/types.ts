@@ -415,6 +415,8 @@ export interface UserProfile {
   telegramPriceAlertCollapsed?: boolean;
   /** Shared across all coin pages; only affects the Smart Analysis UI. */
   smartAnalysisCollapsed?: boolean;
+  /** The Screener market-sentiment details are expanded unless explicitly disabled. */
+  marketSentimentExpanded?: boolean;
   watchlist?: string[];
   watchlistFolders?: Record<string, string[]>;
   metaScalpSettings?: MetaScalpSettings;
