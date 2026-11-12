@@ -1,10 +1,8 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, BookOpen, ChevronRight, Layers, Search, ShieldCheck } from 'lucide-react';
+import React, { useState } from 'react';
+import { AlertTriangle, ChevronRight, Layers, ShieldCheck } from 'lucide-react';
 import { KOTAPYCH_SETUPS, KOTAPYCH_TOPICS, type KotapychSetup } from './kotapychGuideData';
-import type { KotapychSourcePage } from './kotapychArchive';
 
-type Screen = 'overview' | 'setup1' | 'setup2' | 'setup3' | 'setup4' | 'topics' | 'archive';
-type SourceName = KotapychSourcePage['source'];
+type Screen = 'overview' | 'setup1' | 'setup2' | 'setup3' | 'setup4' | 'topics';
 
 const NAV: Array<{ id: Screen; label: string }> = [
   { id: 'overview', label: 'Огляд' },
@@ -13,7 +11,6 @@ const NAV: Array<{ id: Screen; label: string }> = [
   { id: 'setup3', label: 'Сетап №3' },
   { id: 'setup4', label: 'Сетап №4' },
   { id: 'topics', label: 'Поглиблений аналіз' },
-  { id: 'archive', label: 'Повні нотатки' },
 ];
 
 function Diagram({ setup }: { setup: KotapychSetup['id'] }) {
@@ -74,27 +71,6 @@ function SetupDetails({ setup }: { setup: KotapychSetup }) {
 export function KotapychGuide() {
   const [screen, setScreen] = useState<Screen>('overview');
   const [topicId, setTopicId] = useState(KOTAPYCH_TOPICS[0].id);
-  const [archive, setArchive] = useState<KotapychSourcePage[] | null>(null);
-  const [archiveError, setArchiveError] = useState(false);
-  const [sourceName, setSourceName] = useState<SourceName>('Копатыч.docx');
-  const [page, setPage] = useState(1);
-  const [query, setQuery] = useState('');
-
-  useEffect(() => {
-    if (screen !== 'archive' || archive || archiveError) return;
-    let cancelled = false;
-    import('./kotapychArchive')
-      .then(module => { if (!cancelled) setArchive(module.KOTAPYCH_SOURCE_PAGES); })
-      .catch(() => { if (!cancelled) setArchiveError(true); });
-    return () => { cancelled = true; };
-  }, [screen, archive, archiveError]);
-
-  const sourcePages = useMemo(() => (archive || []).filter(entry => entry.source === sourceName), [archive, sourceName]);
-  const matchingPages = useMemo(() => {
-    const normalized = query.toLocaleLowerCase('ru').trim();
-    return !normalized ? sourcePages : sourcePages.filter(item => item.text.toLocaleLowerCase('ru').includes(normalized));
-  }, [sourcePages, query]);
-  const selectedPage = matchingPages.find(item => item.page === page) || matchingPages[0];
   const setup = KOTAPYCH_SETUPS.find(item => item.id === screen);
   const topic = KOTAPYCH_TOPICS.find(item => item.id === topicId) || KOTAPYCH_TOPICS[0];
 
@@ -102,7 +78,7 @@ export function KotapychGuide() {
     <div className="rounded-2xl border border-cyan-500/20 bg-gradient-to-r from-cyan-950/50 via-slate-900 to-slate-900 p-3 sm:p-4">
       <div className="flex items-center gap-2 text-cyan-300 text-[11px] font-bold uppercase tracking-wider"><Layers className="w-3.5 h-3.5" /> Скальпінг / Котапич</div>
       <h3 className="text-lg sm:text-xl font-extrabold text-white mt-1">Торгова методика «Котапич»</h3>
-      <p className="mt-1 text-xs text-slate-300 leading-relaxed">Чотири сетапи, читання контексту й ліквідності, ризик-менеджмент і повні записи з двох наданих документів.</p>
+      <p className="mt-1 text-xs text-slate-300 leading-relaxed">Чотири сетапи та поглиблений систематизований аналіз контексту, ліквідності, обсягів, ризику й прикладів із двох документів.</p>
     </div>
     <div role="tablist" aria-label="Розділи методики Котапич" className="flex flex-wrap gap-1.5">
       {NAV.map(item => <button key={item.id} type="button" role="tab" aria-selected={screen===item.id}
@@ -139,61 +115,18 @@ export function KotapychGuide() {
     {setup && <SetupDetails setup={setup} />}
 
     {screen==='topics' && <div className="space-y-3">
-      <p className="text-xs text-slate-400 leading-relaxed">Додаткові пояснення з великого документа, згруповані за темами без зміни авторської логіки.</p>
-      <div className="flex flex-wrap gap-1.5">{KOTAPYCH_TOPICS.map(item=>
+      <p className="text-xs text-slate-400 leading-relaxed">Ключові ідеї з обох документів (79 і 8 сторінок), згруповані за темами: від структури ринку й варіантів сетапів до виконання угод, фандингу та ризику. Авторські оцінки ймовірностей не є перевіреною статистикою.</p>
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 max-h-48 overflow-y-auto rounded-xl border border-slate-800/70 p-2 touch-scroll">{KOTAPYCH_TOPICS.map(item=>
         <button type="button" key={item.id} onClick={()=>setTopicId(item.id)}
-          className={'rounded-md border px-2.5 py-1.5 text-[11px] ' + (topicId===item.id?'border-indigo-400/50 text-indigo-200 bg-indigo-500/20':'border-slate-700 text-slate-400 hover:text-white')}>
+          className={'rounded-md border px-2.5 py-1.5 text-[11px] leading-snug text-left min-h-10 ' + (topicId===item.id?'border-indigo-400/50 text-indigo-200 bg-indigo-500/20':'border-slate-700 text-slate-400 hover:text-white')}>
           {item.title}
         </button>)}</div>
       <h4 className="text-base text-white font-extrabold">{topic.title}</h4>
       <p className="text-xs text-slate-400">{topic.summary}</p>
       <Lines label="Основні висновки з нотаток" lines={topic.points} />
-      <div className="flex flex-wrap gap-1.5 items-center"><span className="text-[11px] text-slate-500 mr-1">Сторінки нотаток:</span>
-        {topic.notePages.map(n=><button key={n} type="button" onClick={()=>{setSourceName('Копатыч.docx');setPage(n);setQuery('');setScreen('archive');}}
-          className="text-[11px] px-2 py-1 border border-slate-700 rounded-md hover:border-cyan-600 text-slate-300">{n}</button>)}
+      <div className="rounded-lg border border-slate-800 bg-slate-950/50 px-3 py-2.5 text-[11px] leading-relaxed text-slate-400">
+        Джерело теми: «Копатыч.docx», стор. {topic.notePages.join(', ')}. Основні чотири сетапи додатково звірено з «4 set.docx» (8 стор.). Текст першоджерел збережений в архіві репозиторію, без окремої вкладки в енциклопедії.
       </div>
-    </div>}
-
-    {screen==='archive' && <div className="space-y-3">
-      <div className="flex items-center gap-2 text-slate-200"><BookOpen className="w-4 h-4" /><h4 className="font-bold text-sm">Повний текст наданих матеріалів</h4></div>
-      <p className="text-[11px] text-slate-400 leading-relaxed">Оригінальний російськомовний текст збережено за сторінками, без редагування формулювань. Два документи мають також фотографії графіків; тут подано їхній текстовий вміст і окремі умовні схеми сетапів, а не копії всіх зображень.</p>
-      <div className="flex flex-wrap gap-2">
-        {(['Копатыч.docx','4 set.docx'] as SourceName[]).map(name=>
-          <button key={name} type="button" onClick={()=>{setSourceName(name);setPage(1);setQuery('');}}
-            className={'px-3 py-2 rounded-lg border text-xs ' + (name===sourceName?'bg-cyan-500/20 border-cyan-500/40 text-cyan-200':'border-slate-700 bg-slate-950 text-slate-300')}>
-            {name} <span className="text-slate-500">· {name==='Копатыч.docx'?'79':'8'} с.</span>
-          </button>)}
-      </div>
-      <label className="relative block">
-        <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-500" />
-        <input type="search" value={query} onChange={e=>setQuery(e.target.value)} placeholder="Пошук у вибраному документі…" className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 pl-9 py-2 text-sm text-slate-200 outline-none focus:border-cyan-500" />
-      </label>
-      {archiveError && <div role="alert" className="text-rose-300 text-xs">Не вдалося завантажити архів. Перевір підключення та перезавантаж сторінку.</div>}
-      {!archive && !archiveError && <div role="status" className="text-slate-400 text-xs">Завантажуємо повні нотатки…</div>}
-      {archive && <>
-        <p className="text-[11px] text-slate-500">Знайдено сторінок: {matchingPages.length} із {sourcePages.length}. Вибери сторінку для читання.</p>
-        <div className="flex flex-wrap gap-1 max-h-36 overflow-y-auto rounded-lg border border-slate-800 p-2">
-          {matchingPages.map(item=><button type="button" key={item.page} onClick={()=>setPage(item.page)}
-            aria-pressed={selectedPage?.page===item.page}
-            className={'min-w-8 h-8 px-1 rounded-md text-[11px] font-semibold ' + (page===item.page?'bg-cyan-500/20 text-cyan-200 border border-cyan-500/50':'bg-slate-900 text-slate-400 border border-slate-800 hover:text-white')}>
-            {item.page}
-          </button>)}
-        </div>
-        {!matchingPages.length && <p className="text-xs text-slate-400">Збігів не знайдено. Спробуй інший запит.</p>}
-        {selectedPage && <article className="bg-slate-950/80 border border-slate-800 rounded-xl p-3 sm:p-4">
-          <div className="flex items-center justify-between gap-2 border-b border-slate-800 pb-2 mb-3">
-            <h5 className="text-xs font-bold text-white">{sourceName} · сторінка {selectedPage.page}</h5>
-            <span className="text-[10px] text-slate-500">Оригінал</span>
-          </div>
-          {selectedPage.text
-            ? <p lang="ru" className="whitespace-pre-wrap break-words text-xs leading-6 text-slate-300">{selectedPage.text}</p>
-            : <p className="text-xs text-slate-400">На сторінці графічний приклад без окремого тексту. Дивись оригінальний документ.</p>}
-          <div className="flex justify-between gap-2 mt-4">
-            <button type="button" disabled={matchingPages.findIndex(item=>item.page===selectedPage.page)<=0} onClick={()=>setPage(matchingPages[Math.max(0,matchingPages.findIndex(item=>item.page===selectedPage.page)-1)].page)} className="disabled:opacity-30 text-xs px-2.5 py-1.5 border border-slate-700 rounded-lg">Попередня</button>
-            <button type="button" disabled={matchingPages.findIndex(item=>item.page===selectedPage.page)>=matchingPages.length-1} onClick={()=>setPage(matchingPages[Math.min(matchingPages.length-1,matchingPages.findIndex(item=>item.page===selectedPage.page)+1)].page)} className="disabled:opacity-30 text-xs px-2.5 py-1.5 border border-slate-700 rounded-lg">Наступна</button>
-          </div>
-        </article>}
-      </>}
     </div>}
 
     <div className="flex items-center gap-2 pt-3 border-t border-slate-800 text-[11px] text-slate-500">
