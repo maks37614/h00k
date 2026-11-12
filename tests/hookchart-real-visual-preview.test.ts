@@ -81,3 +81,25 @@ test('Replay chart is unaffected by the new chart-only settings preview', () => 
   const replay = source('../src/components/replay/ReplayChart.tsx');
   assert.doesNotMatch(replay, /HookChartVisualPreview|previewCandles|visualProfileEditor/);
 });
+
+
+test('preview accepts mouse-wheel zoom inside the settings dialog, but ignores other dialog controls', () => {
+  const engine = source('../src/components/hookchart/engine.tsx');
+  assert.match(engine, /const surface=target\.closest\('\.chartStage,\.chartWrap,\.chartTimeAxis'\)/);
+  assert.match(engine, /target\.closest\('\.originalSettingsBackdrop'\)&&!target\.closest\('\.hookchart-visual-preview'\)/);
+  assert.doesNotMatch(engine, /timeJumpPopover,\.originalSettingsBackdrop,\.densityQuickPopup/);
+  assert.match(engine, /host\.addEventListener\('wheel',onWheel,\{capture:true,passive:false\}\)/);
+  assert.match(engine, /wheelHandlerRef\.current\(event\)/);
+});
+
+test('saved visual profiles reinitialize on coin and timeframe changes but not on every candle tick', () => {
+  const engine = source('../src/components/hookchart/engine.tsx');
+  assert.match(engine, /const signature=\[symbol,tf,visualProfileKey,visualProfile\.visibleBars/);
+  assert.match(engine, /\},\[symbol,tf,visualProfileKey,visualProfile\?\.visibleBars/);
+  assert.match(engine, /if\(visualAppliedRef\.current===signature\)return/);
+  // A stored wide overview must not be capped at three-pixel bars.
+  assert.match(engine, /const minBar=\.12/);
+  const horizontal = source('../src/utils/hookchartData.ts');
+  assert.match(horizontal, /Math\.max\(\.12, viewport\.barWidth\)/);
+  assert.match(engine, /const denseBars=g\.step\*scaleX<1\.15/);
+});
