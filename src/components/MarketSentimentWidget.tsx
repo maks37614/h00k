@@ -197,7 +197,10 @@ export const MarketSentimentWidget: React.FC<MarketSentimentWidgetProps> = ({ co
                   {data.priceTrendDynamics.advancingPct}%
                 </span>
                 <span className="text-[10px] text-slate-400 font-sans block">
-                  {data.priceTrendDynamics.advancingCount} ростуть / {data.priceTrendDynamics.decliningCount} падають
+                  {data.priceTrendDynamics.advancingCount} зростають / {data.priceTrendDynamics.decliningCount} падають
+                </span>
+                <span className="block text-[10px] text-slate-500">
+                  Без суттєвого руху: {data.priceTrendDynamics.unchangedCount ?? 'н/д'}
                 </span>
               </div>
             </div>
