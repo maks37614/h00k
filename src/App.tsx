@@ -684,6 +684,31 @@ export default function App() {
     [user, metaScalpSettings, handleOpenAuthModal]
   );
 
+  // Enter a dedicated chart URL without losing the originating Screener tab.
+  // A small per-user session snapshot restores the exact formation/archive
+  // when reloading the chart, without launching a second full-market scan.
+  const openChartPage = useCallback((
+    route: ChartPageRoute,
+    snapshot: ChartPageSnapshot,
+    replaceCurrent = false,
+  ) => {
+    const uid = user?.uid;
+    if (!uid) return;
+    const currentHash = window.location.hash;
+    if (!readChartPageHash(currentHash)) {
+      chartNavigation.current = { enteredFromApp: true, scrollY: window.scrollY };
+      saveChartReturnHash(window.sessionStorage, uid, safeReturnHash(currentHash));
+    }
+    saveChartPageSnapshot(window.sessionStorage, uid, route, snapshot);
+    setChartRoute(route);
+    setChartRouteError(null);
+    setChartRouteLoading(false);
+    const nextHash = chartPageHash(route);
+    if (replaceCurrent) window.history.replaceState(null, '', nextHash);
+    else if (currentHash !== nextHash) window.location.hash = nextHash;
+    window.scrollTo({ top: 0, behavior: 'auto' });
+  }, [user?.uid]);
+
   // Handler when selecting pair for details modal
   const handleSelectPair = useCallback(
     (coin: ScannedCoin, formation?: DetectedFormation) => {
@@ -699,7 +724,13 @@ export default function App() {
       const chosen = formation || coin.formations[0];
       const rawFormation = rawCoin?.formations.find(item => item.id === chosen?.id) ?? chosen;
       setSelectedArchivedItem(null);
-      setSelectedPair({ coin: rawCoin ?? coin, formation: rawFormation });
+      const selected = { coin: rawCoin ?? coin, formation: rawFormation };
+      setSelectedPair(selected);
+      openChartPage({
+        exchange: selected.coin.exchange, marketType: selected.coin.marketType,
+        symbol: selected.coin.symbol.toUpperCase(), timeframe: selected.coin.timeframe || preferences.defaultTimeframe,
+        kind: 'coin', formationId: rawFormation?.id,
+      }, selected);
       const shouldAutoSwitch =
         metaScalpSettings.enabled && metaScalpSettings.autoSwitchOnClick;
 
@@ -707,7 +738,7 @@ export default function App() {
         handleSendToMetaScalp(coin);
       }
     },
-    [user, coins, metaScalpSettings, handleSendToMetaScalp, handleOpenAuthModal]
+    [user, coins, metaScalpSettings, handleSendToMetaScalp, handleOpenAuthModal, openChartPage, preferences.defaultTimeframe]
   );
 
   const [selectedEarly, setSelectedEarly] = useState<{ coin: ScannedCoin; candidate: EarlyFormationCandidate } | null>(null);
@@ -743,7 +774,12 @@ export default function App() {
     if (!raw) return; // Stale candidate: do not reopen an invalidated scenario.
     setSelectedPair(null);
     setSelectedEarly(raw);
-  }, [user, handleOpenAuthModal, fullEarlyScan?.data]);
+    openChartPage({
+      exchange: raw.coin.exchange, marketType: raw.coin.marketType,
+      symbol: raw.coin.symbol.toUpperCase(), timeframe: raw.coin.timeframe,
+      kind: 'early', formationId: raw.candidate.id,
+    }, { coin: raw.coin, earlyCandidate: raw.candidate });
+  }, [user, handleOpenAuthModal, fullEarlyScan?.data, openChartPage]);
 
   // Handler when selecting archived formation to restore
   const handleSelectArchivedFormation = useCallback(
@@ -780,6 +816,11 @@ export default function App() {
         coin: matchingCoin,
         formation: archived.formation,
       });
+      openChartPage({
+        exchange: matchingCoin.exchange, marketType: matchingCoin.marketType,
+        symbol: matchingCoin.symbol.toUpperCase(), timeframe: archived.timeframe,
+        kind: 'archive', formationId: archived.formation.id,
+      }, { coin: matchingCoin, formation: archived.formation, archived });
       setIsArchiveModalOpen(false);
       const shouldAutoSwitch =
         metaScalpSettings.enabled && metaScalpSettings.autoSwitchOnClick;
@@ -788,7 +829,7 @@ export default function App() {
         handleSendToMetaScalp(matchingCoin);
       }
     },
-    [coins, metaScalpSettings, handleSendToMetaScalp]
+    [coins, metaScalpSettings, handleSendToMetaScalp, openChartPage]
   );
 
   // Play a gentle alert tone using Web Audio API
