@@ -357,6 +357,104 @@ function StrategySettings({ activeId, onSelect }: { activeId: string; onSelect: 
   </div>;
 }
 
+
+/** Pure SVG viewport preview. No websocket, no data polling and no live chart engine. */
+function VisualProfileEditor({
+  visualContext, visualDevice, selectedProfile, onContextChange, onDeviceChange,
+  onProfileChange, onReset, onCapture, live,
+}: {
+  visualContext: VisualContextId;
+  visualDevice: VisualDevice;
+  selectedProfile: import('./visualProfiles').VisualChartProfile;
+  onContextChange: (id: VisualContextId) => void;
+  onDeviceChange: (device: VisualDevice) => void;
+  onProfileChange: (delta: Partial<import('./visualProfiles').VisualChartProfile>) => void;
+  onReset: () => void;
+  onCapture?: () => void;
+  live: boolean;
+}) {
+  const bars = Math.max(14, Math.min(72, Math.round(selectedProfile.visibleBars / 2)));
+  const gap = 286 / bars;
+  const preview = Array.from({ length: bars }, (_, i) => {
+    const value = 55 + Math.sin(i * .32) * 12 + Math.cos(i * .17) * 8 + i * .30;
+    const previous = 55 + Math.sin((i - 1) * .32) * 12 + Math.cos((i - 1) * .17) * 8 + (i - 1) * .30;
+    const y = (v: number) => 65 - (v - 60) * selectedProfile.verticalZoom * 1.6;
+    return {
+      x: 7 + gap * i,
+      top: Math.min(y(value), y(previous)),
+      bottom: Math.max(y(value), y(previous)),
+      rising: value >= previous,
+    };
+  });
+  return <div className="space-y-4">
+    <Section title="Візуальні налаштування">
+      <div className="settingsHint">
+        Окремі профілі для Скрінера, Формацій і Термінала, а також для телефона й комп’ютера.
+        Зміна повзунків відразу застосовується до відкритого графіка відповідного типу та зберігається в профілі користувача.
+        «Відтворення» не використовує ці налаштування.
+      </div>
+      <Setting label="Тип графіка">
+        <select aria-label="Тип графіка для візуальних налаштувань" className="numInput"
+          value={visualContext} onChange={event => onContextChange(event.target.value as VisualContextId)}>
+          {VISUAL_CONTEXTS.map(profile => <option key={profile.id} value={profile.id}>{profile.label}</option>)}
+        </select>
+      </Setting>
+      <Choice label="Пристрій" values={['mobile', 'desktop']} labels={['Телефон', 'Комп’ютер']}
+        value={visualDevice} set={value => onDeviceChange(value as VisualDevice)} />
+      <div className="rounded-xl border border-slate-700 bg-slate-950/70 px-2 py-3">
+        <svg viewBox="0 0 300 126" role="img" aria-label="Попередній перегляд масштабу свічок" className="block w-full h-auto">
+          <rect width="300" height="126" rx="7" fill="#101825" />
+          {[27,56,85,114].map(y => <line key={y} x1="6" x2="294" y1={y} y2={y} stroke="#35445a" strokeOpacity=".38" strokeWidth=".7"/>)}
+          {preview.map((bar, i) => {
+            const color = bar.rising ? '#15caab' : '#fa6580';
+            return <g key={i}>
+              <line x1={bar.x + gap * .32} x2={bar.x + gap * .32} y1={Math.max(5, bar.top - 4)}
+                y2={Math.min(119, bar.bottom + 5)} stroke={color} strokeWidth="1" />
+              <rect x={bar.x} y={Math.max(4, bar.top)} width={Math.max(1.3,gap*.65)} height={Math.max(2,Math.min(116,bar.bottom)-Math.max(4,bar.top))}
+                fill={color} rx=".4" />
+            </g>;
+          })}
+          <rect x="294" y="0" width="6" height="126" fill="#202e44" />
+        </svg>
+        <p className="mt-2 text-center text-[11px] text-slate-400">Приклад відносного масштабу · не реальні котирування</p>
+      </div>
+      <Setting label="Кількість видимих свічок" desc="Кількість на ширину графіка; на вузькому екрані обмежується мінімальною шириною свічки.">
+        <div className="flex items-center gap-2">
+          <input aria-label="Кількість видимих свічок" type="range" min="15" max="500" step="5"
+            value={selectedProfile.visibleBars} onChange={event => onProfileChange({ visibleBars: Number(event.target.value) })}/>
+          <b className="valueBadge">{selectedProfile.visibleBars}</b>
+        </div>
+      </Setting>
+      <Setting label="Вертикальний зум" desc="1× — природний діапазон; більше — свічки вищі, менше — компактніші.">
+        <div className="flex items-center gap-2">
+          <input aria-label="Вертикальний зум" type="range" min="0.4" max="4" step="0.1"
+            value={selectedProfile.verticalZoom} onChange={event => onProfileChange({ verticalZoom: Number(event.target.value) })}/>
+          <b className="valueBadge">{selectedProfile.verticalZoom.toFixed(1)}×</b>
+        </div>
+      </Setting>
+      <SwitchRow label="Автоматичний масштаб ціни" desc="Автоматично підлаштовувати висоту свічок до поточного видимого діапазону."
+        value={selectedProfile.autoPriceScale} onChange={value => onProfileChange({ autoPriceScale: value })}/>
+      <Setting label="Відступ праворуч" desc="Вільний простір праворуч від останньої свічки (у барах).">
+        <div className="flex items-center gap-2">
+          <input aria-label="Відступ праворуч у барах" type="range" min="0" max="100" step="1"
+            value={selectedProfile.rightGapBars} onChange={event => onProfileChange({ rightGapBars: Number(event.target.value) })}/>
+          <b className="valueBadge">{selectedProfile.rightGapBars}</b>
+        </div>
+      </Setting>
+      <div className="flex flex-wrap gap-2">
+        {onCapture && <button type="button" className="hotkeyResetOne" onClick={onCapture}>
+          Зберегти поточний вигляд графіка
+        </button>}
+        <button type="button" className="hotkeyResetOne" onClick={onReset}>Скинути цей профіль</button>
+      </div>
+      {live && <div className="settingsHint">
+        Для збереження зуму, налаштованого безпосередньо пальцями/мишкою, натисни «Зберегти поточний вигляд графіка».
+        Кнопка доступна, коли обрано поточний тип графіка та пристрій.
+      </div>}
+    </Section>
+  </div>;
+}
+
 export function OriginalHookChartSettings({
   open,
   prefs,
