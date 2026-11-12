@@ -459,11 +459,11 @@ export const SurveillancePage: React.FC<SurveillancePageProps> = ({
               </div>
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
-                  <h1 className="text-xl font-black text-white tracking-tight">Моніторинг</h1>
+                  <h1 className="inline-block border-b border-cyan-400/60 pb-0.5 text-lg sm:text-xl font-black tracking-tight bg-gradient-to-r from-white via-cyan-100 to-sky-300 bg-clip-text text-transparent">Стеження за монетами</h1>
                   <div className="relative inline-flex shrink-0 items-center" onMouseLeave={() => setIsMonitoringHelpOpen(false)}>
                     <button
                       type="button"
-                      aria-label="Інформація про моніторинг"
+                      aria-label="Інформація про стеження за монетами"
                       aria-expanded={isMonitoringHelpOpen}
                       aria-describedby={isMonitoringHelpOpen ? 'surveillance-monitoring-help' : undefined}
                       onMouseEnter={() => setIsMonitoringHelpOpen(true)}
@@ -536,52 +536,41 @@ export const SurveillancePage: React.FC<SurveillancePageProps> = ({
 
       {/* SECTION: Останні події нагляду (Recent Surveillance Events Feed) */}
       <div className="rounded-2xl bg-gradient-to-r from-slate-900 via-slate-900/90 to-slate-950 border border-slate-800 shadow-xl overflow-hidden">
-        {/* Panel Header */}
-        <div className="p-4 border-b border-slate-800/80 bg-slate-950/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400">
-              <Activity className="w-5 h-5 animate-pulse" />
-            </div>
-            <div>
-              <div className="flex items-center gap-2 flex-wrap">
-                <h2 className="text-base font-extrabold text-white tracking-tight flex items-center gap-2">
-                  <span>Останні події нагляду</span>
-                  <span className="px-2 py-0.5 rounded-full text-[11px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
-                    {allEvents.length} {allEvents.length === 1 ? 'подія' : allEvents.length >= 2 && allEvents.length <= 4 ? 'події' : 'подій'}
-                  </span>
-                </h2>
-                <span className="hidden sm:inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/25 text-[10px] font-mono">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
-                  LIVE СТРІЧКА 24/7
-                </span>
-              </div>
-              <p className="text-[11px] text-slate-400">
-                Хронологічний лог тестів рівнів, щільностей стакану, пробоїв, змін структури та сигналів сетапів
-              </p>
-            </div>
+        {/* Unified events header: title, event count, description and collapse control. */}
+        <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-x-3 gap-y-2 border-b border-slate-800/80 bg-slate-950/60 px-4 py-3 sm:py-4">
+          <div className="w-9 h-9 shrink-0 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400">
+            <Activity className="w-5 h-5 animate-pulse" />
           </div>
-
-          <div className="flex items-center gap-2 self-end sm:self-auto">
-            <button
-              onClick={() => refresh()}
-              title="Оновити події"
-              className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors cursor-pointer"
-            >
-              <RefreshCw className="w-3.5 h-3.5" />
-            </button>
-            <button
-              onClick={() => setIsEventsExpanded((prev) => !prev)}
-              className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-colors cursor-pointer flex items-center gap-1.5"
-            >
-              <span>{isEventsExpanded ? 'Згорнути' : 'Розгорнути'}</span>
-              {isEventsExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-            </button>
+          <div className="min-w-0 flex flex-wrap items-center gap-x-2 gap-y-1 self-center">
+            <h2 className="text-sm sm:text-base font-extrabold text-white tracking-tight">
+              Останні події нагляду
+            </h2>
+            <span className="shrink-0 px-2 py-0.5 rounded-full text-[11px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+              {allEvents.length} {allEvents.length === 1 ? 'подія' : allEvents.length >= 2 && allEvents.length <= 4 ? 'події' : 'подій'}
+            </span>
+            <span className="hidden sm:inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/25 text-[10px] font-mono">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+              LIVE СТРІЧКА 24/7
+            </span>
           </div>
+          <button
+            type="button"
+            onClick={() => setIsEventsExpanded((prev) => !prev)}
+            aria-expanded={isEventsExpanded}
+            aria-controls="surveillance-events-panel"
+            className="shrink-0 self-center px-2.5 sm:px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold transition-colors cursor-pointer flex items-center gap-1.5"
+          >
+            <span>{isEventsExpanded ? 'Згорнути' : 'Розгорнути'}</span>
+            {isEventsExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+          </button>
+          <p className="col-start-2 col-span-2 text-[11px] leading-relaxed text-slate-400">
+            Хронологічний лог тестів рівнів, щільностей стакану, пробоїв, змін структури та сигналів сетапів
+          </p>
         </div>
 
         {/* Panel Content (Expandable) */}
         {isEventsExpanded && (
-          <div className="p-4 space-y-4">
+          <div id="surveillance-events-panel" className="p-4 space-y-4">
             {/* Filter Chips Bar */}
             <div className="flex flex-wrap items-center justify-between gap-2.5 pb-1 border-b border-slate-800/60">
               {/* Category Filters */}

@@ -12,9 +12,9 @@ const topBar = source.slice(
 );
 
 test('surveillance header uses the requested short title and status label', () => {
-  assert.match(topBar, />Моніторинг<\/h1>/);
+  assert.match(topBar, />Стеження за монетами<\/h1>/);
   assert.match(topBar, /\bLive\s*<\/span>/);
-  assert.doesNotMatch(topBar, />24\/7 Моніторинг<\/h1>|LIVE ENGINE/);
+  assert.doesNotMatch(topBar, />24\/7 Моніторинг<\/h1>|>Моніторинг<\/h1>|LIVE ENGINE/);
 });
 
 test('watched count is immediately after the refresh control in the header action group', () => {
@@ -27,7 +27,7 @@ test('monitoring question-mark tooltip shows the full description on hover, focu
   const description = 'Комплексний моніторинг ринку на серверах h00k.top: Local Order Book, Multi-Timeframe структура, рівні, щільності та Telegram алерти';
   assert.equal(topBar.split(description).length - 1, 1, 'description must live only in the tooltip');
   assert.match(topBar, /<HelpCircle className="h-4 w-4" aria-hidden="true" \/>/);
-  assert.match(topBar, /aria-label="Інформація про моніторинг"/);
+  assert.match(topBar, /aria-label="Інформація про стеження за монетами"/);
   assert.match(topBar, /onMouseEnter=\{\(\) => setIsMonitoringHelpOpen\(true\)\}/);
   assert.match(topBar, /onFocus=\{\(\) => setIsMonitoringHelpOpen\(true\)\}/);
   assert.match(topBar, /onClick=\{\(\) => setIsMonitoringHelpOpen\(true\)\}/);
@@ -55,4 +55,30 @@ test('monitoring menu icon remains unchanged and renders independently', () => {
   const markup = renderToStaticMarkup(React.createElement(MonitoringMenuIcon));
   assert.match(markup, /viewBox="0 0 24 24"/);
   assert.match(markup, /<svg/);
+});
+
+
+const eventsHeader = source.slice(
+  source.indexOf('{/* Unified events header:'),
+  source.indexOf('{/* Panel Content (Expandable) */}'),
+);
+
+test('coin watching heading is emphasized without changing monitoring controls', () => {
+  assert.match(topBar, /border-b border-cyan-400\/60/);
+  assert.match(topBar, /bg-gradient-to-r from-white via-cyan-100 to-sky-300/);
+  assert.match(topBar, /<MonitoringIcon className="w-14 h-14" \/>/);
+  assert.match(topBar, /title="Оновити дані"/);
+});
+
+test('event feed combines title, count, description and collapse into one header', () => {
+  assert.ok(eventsHeader.length > 0);
+  assert.match(eventsHeader, /grid grid-cols-\[auto_minmax\(0,1fr\)_auto\]/);
+  assert.match(eventsHeader, /Останні події нагляду/);
+  assert.match(eventsHeader, /\{allEvents\.length\} \{allEvents\.length === 1/);
+  assert.match(eventsHeader, /Хронологічний лог тестів рівнів, щільностей стакану, пробоїв, змін структури та сигналів сетапів/);
+  assert.match(eventsHeader, /aria-expanded=\{isEventsExpanded\}/);
+  assert.match(eventsHeader, /aria-controls="surveillance-events-panel"/);
+  assert.match(eventsHeader, /'Згорнути' : 'Розгорнути'/);
+  assert.doesNotMatch(eventsHeader, /<RefreshCw|title="Оновити події"|onClick=\{\(\) => refresh\(\)\}/);
+  assert.match(source, /<div id="surveillance-events-panel" className="p-4 space-y-4">/);
 });
