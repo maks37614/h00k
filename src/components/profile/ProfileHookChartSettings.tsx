@@ -119,12 +119,11 @@ export function ProfileHookChartSettings() {
   }
 
   return <section className="hookchart-root profile-hookchart-settings" data-hookchart-language={siteLanguage} lang={siteLanguage} aria-label="Налаштування HookChart у профілі">
-    <div className="mb-3 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-300">
-      <p>Налаштування HookChart для Скрінера, Формацій і Термінала. Візуальні профілі телефона, комп’ютера й різних розмірів графіка зберігаються окремо; «Відтворення» не змінюється.</p>
-      <span role="status" aria-live="polite" className={error ? 'text-rose-300' : saving ? 'text-cyan-300' : 'text-emerald-300'}>
-        {error ? 'Помилка збереження' : saving ? 'Зберігаємо…' : 'Автозбереження'}
+    {(saving || error) && <div className="mb-3 text-xs" role="status" aria-live="polite">
+      <span className={error ? 'text-rose-300' : 'text-cyan-300'}>
+        {error ? 'Помилка збереження' : 'Зберігаємо…'}
       </span>
-    </div>
+    </div>}
     {error && <button type="button" onClick={flush} className="mb-3 rounded-lg border border-rose-500/40 bg-rose-950/30 px-3 py-2 text-xs text-rose-200">
       {error}. Натисніть, щоб повторити.
     </button>}
