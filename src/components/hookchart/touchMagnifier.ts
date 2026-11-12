@@ -41,10 +41,11 @@ export function touchMagnifierLayout(width: number, height: number, point: Magni
     x,
     y,
     radius, size, sourceSize,
-    // Keep the selected pixel in the lens centre even at an edge. Clipping the
-    // source window itself would move that pixel to (or outside) the round rim.
-    sourceX: selectedX - sourceSize / 2,
-    sourceY: selectedY - sourceSize / 2,
+    // Magnify the chart directly underneath the *visible lens*, not the
+    // crosshair under the controlling finger. The lens may be displaced above
+    // or sideways near chart edges, but its sampled region follows its centre.
+    sourceX: x - sourceSize / 2,
+    sourceY: y - sourceSize / 2,
   };
 }
 
