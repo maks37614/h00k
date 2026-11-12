@@ -125,7 +125,8 @@ interface FormationGuideModalProps {
 export const FormationGuideModal: React.FC<FormationGuideModalProps> = ({ isOpen, onClose }) => {
   // Hooks must run on every render, including when the modal is closed.
   const [selectedId, setSelectedId] = useState<string>(GUIDE_ITEMS[0].id);
-  const [mainCategory, setMainCategory] = useState<'scalping' | 'patterns' | 'indicators' | 'rules'>('scalping');
+  const [mainCategory, setMainCategory] = useState<'scalping' | 'patterns' | 'indicators'>('scalping');
+  const [scalpingSubcategory, setScalpingSubcategory] = useState<'kotapych' | 'classic'>('kotapych');
   const activeItem = GUIDE_ITEMS.find((item) => item.id === selectedId) || GUIDE_ITEMS[0];
 
   if (!isOpen) return null;
@@ -173,12 +174,6 @@ export const FormationGuideModal: React.FC<FormationGuideModalProps> = ({ isOpen
               : 'bg-slate-900 border-slate-700 text-slate-400 hover:text-white')}>
             Індикатори
           </button>
-          <button type="button" role="tab" aria-selected={mainCategory === 'rules'} onClick={() => setMainCategory('rules')}
-            className={'rounded-xl border px-3.5 py-2 text-xs font-bold transition-colors ' + (mainCategory === 'rules'
-              ? 'bg-cyan-500/15 border-cyan-500/40 text-cyan-200'
-              : 'bg-slate-900 border-slate-700 text-slate-400 hover:text-white')}>
-            Правила
-          </button>
         </div>
 
         {/* Sidebar: nested category and its entries */}
@@ -186,22 +181,25 @@ export const FormationGuideModal: React.FC<FormationGuideModalProps> = ({ isOpen
           {/* List */}
           <div className="md:border-r border-slate-800 bg-slate-950/40 p-2 sm:p-3 space-y-1 overflow-y-auto max-h-[92px] md:max-h-full touch-scroll">
             {mainCategory === 'scalping' ? (
-              <button type="button" aria-current="page" onClick={() => setMainCategory('scalping')}
-                className="w-full text-left px-3 py-2.5 rounded-xl bg-slate-800 text-white font-bold flex items-center justify-between text-xs border border-cyan-500/20">
-                <span><strong className="block text-xs">Котапич</strong><small className="block text-[10px] text-slate-400 mt-1">4 сетапи · 19 тематичних розділів</small></span>
-                <ChevronRight className="w-3.5 h-3.5 text-cyan-400" />
-              </button>
+              <div className="space-y-1" role="group" aria-label="Підкатегорії скальпінгу">
+                <button type="button" aria-pressed={scalpingSubcategory === 'kotapych'} onClick={() => setScalpingSubcategory('kotapych')}
+                  className={'w-full text-left px-3 py-2.5 rounded-xl font-bold flex items-center justify-between text-xs border transition-colors ' +
+                    (scalpingSubcategory === 'kotapych' ? 'bg-slate-800 text-white border-cyan-500/30' : 'bg-transparent text-slate-400 border-transparent hover:bg-slate-900/60 hover:text-white')}>
+                  <span><strong className="block text-xs">Котапич</strong><small className="block text-[10px] text-slate-400 mt-1">4 сетапи · 19 тематичних розділів</small></span>
+                  <ChevronRight className={'w-3.5 h-3.5 ' + (scalpingSubcategory === 'kotapych' ? 'text-cyan-400' : 'text-slate-600')} />
+                </button>
+                <button type="button" aria-pressed={scalpingSubcategory === 'classic'} onClick={() => setScalpingSubcategory('classic')}
+                  className={'w-full text-left px-3 py-2.5 rounded-xl font-bold flex items-center justify-between text-xs border transition-colors ' +
+                    (scalpingSubcategory === 'classic' ? 'bg-slate-800 text-white border-cyan-500/30' : 'bg-transparent text-slate-400 border-transparent hover:bg-slate-900/60 hover:text-white')}>
+                  <span><strong className="block text-xs">Правила</strong><small className="block text-[10px] text-slate-400 mt-1">6 тематичних розділів · графічні приклади</small></span>
+                  <ChevronRight className={'w-3.5 h-3.5 ' + (scalpingSubcategory === 'classic' ? 'text-cyan-400' : 'text-slate-600')} />
+                </button>
+              </div>
             ) : mainCategory === 'indicators' ? (
               <button type="button" aria-current="page" onClick={() => setMainCategory('indicators')}
                 className="w-full text-left px-3 py-2.5 rounded-xl bg-slate-800 text-white font-bold flex items-center justify-between text-xs border border-sky-500/20">
                 <span><strong className="block text-xs">Open Interest (OI)</strong><small className="block text-[10px] text-slate-400 mt-1">Відкритий інтерес · 7 розділів</small></span>
                 <ChevronRight className="w-3.5 h-3.5 text-sky-400" />
-              </button>
-            ) : mainCategory === 'rules' ? (
-              <button type="button" aria-current="page" onClick={() => setMainCategory('rules')}
-                className="w-full text-left px-3 py-2.5 rounded-xl bg-slate-800 text-white font-bold flex items-center justify-between text-xs border border-cyan-500/20">
-                <span><strong className="block text-xs">Класика</strong><small className="block text-[10px] text-slate-400 mt-1">6 тематичних розділів · графічні приклади</small></span>
-                <ChevronRight className="w-3.5 h-3.5 text-cyan-400" />
               </button>
             ) : GUIDE_ITEMS.map((item) => (
               <button
@@ -225,16 +223,18 @@ export const FormationGuideModal: React.FC<FormationGuideModalProps> = ({ isOpen
           {/* Details */}
           <div className="md:col-span-2 p-4 sm:p-6 overflow-y-auto min-h-0 max-h-[min(70vh,700px)] md:max-h-full space-y-4 touch-scroll">
             {mainCategory === 'scalping' ? (
-              <React.Suspense fallback={<div role="status" className="text-xs text-slate-400">Завантажуємо матеріали Котапича…</div>}>
-                <KotapychGuide />
-              </React.Suspense>
+              scalpingSubcategory === 'kotapych' ? (
+                <React.Suspense fallback={<div role="status" className="text-xs text-slate-400">Завантажуємо матеріали Котапича…</div>}>
+                  <KotapychGuide />
+                </React.Suspense>
+              ) : (
+                <React.Suspense fallback={<div role="status" className="text-xs text-slate-400">Завантажуємо правила…</div>}>
+                  <ClassicRulesGuide />
+                </React.Suspense>
+              )
             ) : mainCategory === 'indicators' ? (
               <React.Suspense fallback={<div role="status" className="text-xs text-slate-400">Завантажуємо матеріали про Open Interest…</div>}>
                 <OpenInterestGuide />
-              </React.Suspense>
-            ) : mainCategory === 'rules' ? (
-              <React.Suspense fallback={<div role="status" className="text-xs text-slate-400">Завантажуємо правила «Класика»…</div>}>
-                <ClassicRulesGuide />
               </React.Suspense>
             ) : (<>
             <div className="flex items-center justify-between">
