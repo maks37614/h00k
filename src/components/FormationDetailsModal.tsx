@@ -22,6 +22,7 @@ import {
   Lock,
   LogIn,
   ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import { ScannedCoin, DetectedFormation, Kline, FormationAIAnalysis, Timeframe, ArchivedFormation } from '../types';
 import { TradingViewChart } from './TradingViewChart';
@@ -33,6 +34,11 @@ import { useAlerts } from '../context/AlertsContext';
 import { useArchive } from '../context/ArchiveContext';
 import { SmartAnalysisBlock } from './SmartAnalysisBlock';
 import { ChartTopAnalysisText } from './ChartTopAnalysisText';
+import {
+  readTelegramAlertPanelCollapsed,
+  saveTelegramAlertPanelCollapsed,
+  telegramAlertPanelStorageKey,
+} from '../utils/telegramAlertPanelPreference';
 
 interface FormationDetailsModalProps {
   coin: ScannedCoin | null;
@@ -74,7 +80,7 @@ export const FormationDetailsModal: React.FC<FormationDetailsModalProps> = ({
     [formation, ...coin.formations].map((item): [string, DetectedFormation] => [item.id, item])
   ).values());
 
-  const { user, profile } = useAuth();
+  const { user, profile, updateProfileData } = useAuth();
   const { alerts, addAlert, addAlertsBatch, deleteAlert, toggleAlert } = useAlerts();
   const { isArchived, saveToArchive } = useArchive();
 
@@ -157,6 +163,52 @@ export const FormationDetailsModal: React.FC<FormationDetailsModalProps> = ({
     } finally {
       setIsSavingArchive(false);
     }
+  };
+
+  // One visibility preference for all coins and formation detail pages.
+  // The user profile also syncs it across devices; local storage is an
+  // immediate per-account fallback across page reloads and browser tabs.
+  const alertPanelStorage = () => {
+    try { return window.localStorage; } catch { return null; }
+  };
+  const alertPanelKey = telegramAlertPanelStorageKey(user?.uid);
+  const [telegramAlertPanelCollapsed, setTelegramAlertPanelCollapsed] = useState<boolean>(
+    () => readTelegramAlertPanelCollapsed(alertPanelStorage(), user?.uid)
+  );
+  const [telegramAlertPanelSaveError, setTelegramAlertPanelSaveError] = useState(false);
+  const pendingTelegramAlertPreferenceWrites = useRef(0);
+
+  useEffect(() => {
+    if (pendingTelegramAlertPreferenceWrites.current > 0) return;
+    const profilePreference = profile?.uid === user?.uid
+      ? profile?.telegramPriceAlertCollapsed : undefined;
+    const collapsed = typeof profilePreference === 'boolean'
+      ? profilePreference : readTelegramAlertPanelCollapsed(alertPanelStorage(), user?.uid);
+    setTelegramAlertPanelCollapsed(collapsed);
+    saveTelegramAlertPanelCollapsed(alertPanelStorage(), collapsed, user?.uid);
+  }, [user?.uid, profile?.uid, profile?.telegramPriceAlertCollapsed]);
+
+  useEffect(() => {
+    const onStorageChange = (event: StorageEvent) => {
+      if (event.key === alertPanelKey) {
+        setTelegramAlertPanelCollapsed(event.newValue === 'true');
+      }
+    };
+    window.addEventListener('storage', onStorageChange);
+    return () => window.removeEventListener('storage', onStorageChange);
+  }, [alertPanelKey]);
+
+  const toggleTelegramAlertPanel = () => {
+    const collapsed = !telegramAlertPanelCollapsed;
+    setTelegramAlertPanelCollapsed(collapsed);
+    setTelegramAlertPanelSaveError(false);
+    saveTelegramAlertPanelCollapsed(alertPanelStorage(), collapsed, user?.uid);
+    if (!user) return;
+
+    pendingTelegramAlertPreferenceWrites.current += 1;
+    void updateProfileData({ telegramPriceAlertCollapsed: collapsed })
+      .catch(() => setTelegramAlertPanelSaveError(true))
+      .finally(() => { pendingTelegramAlertPreferenceWrites.current -= 1; });
   };
 
   // Custom price alert under chart state
@@ -969,14 +1021,16 @@ export const FormationDetailsModal: React.FC<FormationDetailsModalProps> = ({
                           {coin.symbol}
                         </span>
                       </h4>
-                      <p className="text-xs text-slate-400">
-                        Вкажіть будь-яку ціну, при досягненні якої бот надішле миттєвий сигнал
-                      </p>
+                      {!telegramAlertPanelCollapsed && (
+                        <p className="text-xs text-slate-400">
+                          Вкажіть будь-яку ціну, при досягненні якої бот надішле миттєвий сигнал
+                        </p>
+                      )}
                     </div>
                   </div>
 
                   {/* Telegram status badge */}
-                  {isTelegramConfigured === false && onOpenTelegramModal && (
+                  {!telegramAlertPanelCollapsed && isTelegramConfigured === false && onOpenTelegramModal && (
                     <button
                       type="button"
                       onClick={() => onOpenTelegramModal({ symbol: coin.symbol })}
@@ -986,14 +1040,31 @@ export const FormationDetailsModal: React.FC<FormationDetailsModalProps> = ({
                       <span>Підключити Telegram-бота</span>
                     </button>
                   )}
-                  {isTelegramConfigured && (
+                  {!telegramAlertPanelCollapsed && isTelegramConfigured && (
                     <div className="text-xs px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center gap-1.5">
                       <CheckCircle2 className="w-3.5 h-3.5" />
                       <span>Бот підключено</span>
                     </div>
                   )}
+                  <button
+                    type="button"
+                    onClick={toggleTelegramAlertPanel}
+                    aria-expanded={!telegramAlertPanelCollapsed}
+                    aria-controls="telegram-price-alert-panel-details"
+                    aria-label={telegramAlertPanelCollapsed ? 'Розгорнути власне сповіщення в Telegram' : 'Згорнути власне сповіщення в Telegram'}
+                    title={telegramAlertPanelCollapsed ? 'Розгорнути' : 'Згорнути'}
+                    className="ml-auto inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-slate-700 bg-slate-900 text-slate-300 transition-colors hover:border-cyan-600 hover:text-cyan-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400"
+                  >
+                    {telegramAlertPanelCollapsed ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
+                  </button>
                 </div>
+                {telegramAlertPanelSaveError && (
+                  <p role="status" className="text-xs text-amber-300">
+                    Не вдалося синхронізувати стан блоку з профілем. Налаштування залишиться локальним у цьому браузері.
+                  </p>
+                )}
 
+                <div id="telegram-price-alert-panel-details" className={telegramAlertPanelCollapsed ? 'hidden' : 'space-y-4'}>
                 {/* Form controls */}
                 <form onSubmit={handleCreateCustomAlert} className="space-y-3">
                   {/* Quick Delta Buttons */}
@@ -1236,6 +1307,7 @@ export const FormationDetailsModal: React.FC<FormationDetailsModalProps> = ({
                     </div>
                   </div>
                 )}
+                </div>
               </div>
             </div>
 
