@@ -891,7 +891,7 @@ const HookChartCanvas = forwardRef<HookChartHandle, HookChartCanvasProps>(functi
         timeframes={availableTimeframes}
         timeframe={timeframe}
         disabled={replay && timeframeDisabled}
-        compactAvailable={topToolbarOpen && !integratedToolbar}
+        compactAvailable={topToolbarOpen}
         onChange={selectTimeframe}
       />
     : <div className="hookchart-timeframes" role="group" aria-label="Таймфрейм">
