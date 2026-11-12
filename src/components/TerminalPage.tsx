@@ -1157,6 +1157,7 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
               </>
             ) : (
               <ExchangeCandlestickChart
+                visualContext="terminalLarge"
                 symbol={activeCoin.symbol}
                 exchange={activeCoin.exchange}
                 marketType={activeCoin.marketType}
