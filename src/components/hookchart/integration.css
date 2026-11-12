@@ -998,36 +998,47 @@
 .hookchart-root .hookchart-timeframes-compact {
   display:none;
 }
-@container (max-width: 620px) {
-  .hookchart-root:not(.hookchart-terminal)[data-extra-tools-open="true"] .hookchart-timeframes-buttons {
-    display:none;
-  }
-  .hookchart-root:not(.hookchart-terminal)[data-extra-tools-open="true"] .hookchart-timeframes-compact {
-    display:inline-flex;
-    flex:0 0 auto;
-    box-sizing:border-box;
-    align-items:center;
-    justify-content:space-between;
-    gap:4px;
-    width:59px;
-    min-width:59px;
-    max-width:66px;
-    height:25px;
-    padding:0 5px;
-    border:1px solid #34618b;
-    border-radius:4px;
-    color:#eef7ff;
-    background:#193c5b;
-    font:700 11px system-ui,sans-serif;
-    cursor:pointer;
-    touch-action:manipulation;
-  }
-  .hookchart-root .hookchart-timeframes-compact > svg { flex-shrink:0; }
-  .hookchart-root:not(.hookchart-terminal)[data-extra-tools-open="true"] .hookchart-timeframes {
-    flex:0 0 auto;
-    min-width:0;
-    margin-right:2px;
-  }
+/* At every screen width, the collapsed row has regular TF buttons followed
+ * immediately by the tools chevron. The secondary TF menu belongs ONLY to
+ * the expanded tools row; never show a duplicate timeframe control closed. */
+.hookchart-root:not(.hookchart-terminal)[data-extra-tools-open="true"] .hookchart-timeframes-buttons {
+  display:none;
+}
+.hookchart-root:not(.hookchart-terminal)[data-extra-tools-open="true"] .hookchart-timeframes-compact {
+  display:inline-flex;
+  flex:0 0 auto;
+  box-sizing:border-box;
+  align-items:center;
+  justify-content:space-between;
+  gap:4px;
+  width:59px;
+  min-width:59px;
+  max-width:66px;
+  height:25px;
+  padding:0 5px;
+  border:1px solid #34618b;
+  border-radius:4px;
+  color:#eef7ff;
+  background:#193c5b;
+  font:700 11px system-ui,sans-serif;
+  cursor:pointer;
+  touch-action:manipulation;
+}
+.hookchart-root .hookchart-timeframes-compact > svg { flex-shrink:0; }
+.hookchart-root:not(.hookchart-terminal)[data-extra-tools-open="true"] .hookchart-timeframes {
+  flex:0 0 auto;
+  min-width:0;
+  margin-right:2px;
+}
+/* The expand button must stay visible and tappable on small phone widths. */
+.hookchart-root:not(.hookchart-terminal) .hookchart-toolbar > .topToolbarToggle {
+  display:grid;
+  place-items:center;
+  position:relative;
+  z-index:4;
+  flex:0 0 22px;
+  min-width:22px;
+  touch-action:manipulation;
 }
 
 /* Portal menu must be global: HookChart's toolbar and chart canvas clip overflow. */
