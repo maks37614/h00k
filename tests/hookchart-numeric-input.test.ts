@@ -29,7 +29,9 @@ test('mobile numeric inputs are large enough to avoid iOS Safari focus zoom', ()
   assert.match(css, /font-size:16px !important/);
 });
 
-test('global right margin explains the Terminal-specific profile override', () => {
-  assert.match(settings, /Графік → Відступ праворуч/);
-  assert.match(settings, /Не змінює кількість завантажених свічок/);
+test('only the Graph tab presents the right margin setting', () => {
+  assert.equal((settings.match(/<Setting label="Відступ праворуч"/g) || []).length, 1);
+  assert.doesNotMatch(settings, /<SwitchRow label="Відступ праворуч"/);
+  assert.doesNotMatch(settings, /prefs\.rightPaddingEnabled !== false/);
+  assert.match(settings, /Вільний простір праворуч від останньої свічки \(у барах\)/);
 });
