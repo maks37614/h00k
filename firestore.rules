@@ -56,6 +56,7 @@ service cloud.firestore {
         (!('soundAlertsEnabled' in data) || data.soundAlertsEnabled is bool) &&
         (!('telegramPriceAlertCollapsed' in data) || data.telegramPriceAlertCollapsed is bool) &&
         (!('smartAnalysisCollapsed' in data) || data.smartAnalysisCollapsed is bool) &&
+        (!('marketSentimentExpanded' in data) || data.marketSentimentExpanded is bool) &&
         (!('watchlist' in data) || data.watchlist is list) &&
         (!('watchlistFolders' in data) || data.watchlistFolders is map) &&
         (!('metaScalpSettings' in data) || data.metaScalpSettings is map) &&

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Gauge,
   TrendingUp,
@@ -17,6 +17,8 @@ import {
 import { MarketSentimentData, MarketCoin } from '../types';
 import { formatVolume, formatPercent } from '../utils/formatters';
 import { MarketSentimentScale } from './MarketSentimentScale';
+import { useAuth } from '../context/AuthContext';
+import { getMarketSentimentExpanded } from '../utils/marketSentimentPreferences';
 
 interface MarketSentimentWidgetProps {
   coins?: MarketCoin[];
@@ -26,7 +28,46 @@ export const MarketSentimentWidget: React.FC<MarketSentimentWidgetProps> = ({ co
   const [data, setData] = useState<MarketSentimentData | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
-  const [expanded, setExpanded] = useState<boolean>(false);
+  const { user, profile, updateProfileData } = useAuth();
+  const accountUid = user?.uid ?? null;
+  const accountScope = accountUid ?? 'guest';
+  // Optimistic UI while Firestore persists the user's choice; newer clicks win.
+  const [localExpansion, setLocalExpansion] = useState<{
+    accountScope: string;
+    value: boolean;
+    revision: number;
+  } | null>(null);
+  const [preferenceError, setPreferenceError] = useState<{ accountScope: string; message: string } | null>(null);
+  const preferenceRevision = useRef(0);
+  const expanded = localExpansion?.accountScope === accountScope
+    ? localExpansion.value
+    : getMarketSentimentExpanded(accountUid, profile);
+
+  const toggleExpanded = () => {
+    const next = !expanded;
+    const revision = ++preferenceRevision.current;
+    const scope = accountScope;
+    setLocalExpansion({ accountScope: scope, value: next, revision });
+    setPreferenceError(null);
+
+    // Guests can open/close this session, but their choice is not saved to an
+    // unrelated signed-in profile. Signed-in users persist across devices.
+    if (!accountUid) return;
+
+    void updateProfileData({ marketSentimentExpanded: next }).then(() => {
+      setLocalExpansion(current =>
+        current?.accountScope === scope && current.revision === revision ? null : current,
+      );
+    }).catch(() => {
+      setLocalExpansion(current =>
+        current?.accountScope === scope && current.revision === revision ? null : current,
+      );
+      setPreferenceError({
+        accountScope: scope,
+        message: 'Не вдалося зберегти стан блока у вашому профілі.',
+      });
+    });
+  };
 
   const fetchSentiment = async () => {
     setLoading(true);
@@ -99,7 +140,7 @@ export const MarketSentimentWidget: React.FC<MarketSentimentWidgetProps> = ({ co
             </button>
 
             <button
-              onClick={() => setExpanded(!expanded)}
+              onClick={toggleExpanded}
               className="cursor-pointer rounded-lg border border-slate-700/60 bg-slate-800/80 p-1.5 text-slate-400 transition-colors hover:bg-slate-800 hover:text-white"
               title={expanded ? 'Згорнути' : 'Розгорнути'}
               aria-label={expanded ? 'Згорнути' : 'Розгорнути'}
@@ -121,6 +162,12 @@ export const MarketSentimentWidget: React.FC<MarketSentimentWidgetProps> = ({ co
         <p role="status" className="border-b border-amber-500/20 px-3 py-2 text-[11px] text-amber-300 sm:px-4">
           {error ? 'Оновлення не вдалося — показані останні отримані дані.' :
             `Частина джерел ринку недоступна або застаріла (${data.dataQuality?.freshSources}/${data.dataQuality?.totalSources} актуальних).`}
+        </p>
+      )}
+
+      {preferenceError?.accountScope === accountScope && (
+        <p role="alert" className="px-3 py-2 text-xs text-amber-300 sm:px-4">
+          {preferenceError.message}
         </p>
       )}
 

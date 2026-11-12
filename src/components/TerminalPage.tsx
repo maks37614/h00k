@@ -1186,6 +1186,7 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
             ) : (
               <ExchangeCandlestickChart
                 terminalAutoScale={autoScaleCharts && chartProvider === 'hookchart'}
+                visualContext="terminalLarge"
                 symbol={activeCoin.symbol}
                 exchange={activeCoin.exchange}
                 marketType={activeCoin.marketType}
