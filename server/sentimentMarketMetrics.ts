@@ -6,6 +6,7 @@ export function aggregateBybitDerivatives(coins: readonly MarketCoin[]): MarketS
   let openInterestUsd = 0;
   let fundingWeightedSum = 0;
   let fundingWeight = 0;
+  let fundingCount = 0;
   let count = 0;
   for (const coin of coins) {
     if (coin.exchange !== 'bybit' || coin.marketType !== 'futures' ||
@@ -16,6 +17,7 @@ export function aggregateBybitDerivatives(coins: readonly MarketCoin[]): MarketS
     if (Number.isFinite(coin.fundingRatePct)) {
       fundingWeightedSum += coin.fundingRatePct! * oi;
       fundingWeight += oi;
+      fundingCount++;
     }
   }
   const avgFundingRate = fundingWeight > 0 ? Number((fundingWeightedSum / fundingWeight).toFixed(5)) : null;
@@ -26,7 +28,8 @@ export function aggregateBybitDerivatives(coins: readonly MarketCoin[]): MarketS
     fundingBias: avgFundingRate === null ? null : avgFundingRate > 0.01 ? 'long_heavy'
       : avgFundingRate < -0.01 ? 'short_heavy' : 'balanced',
     instrumentCount: count,
-    sourceLabel: count > 0 ? `Bybit USDT Perpetual · ${count} контрактів` : undefined,
+    fundingInstrumentCount: fundingCount,
+    sourceLabel: count > 0 ? `Bybit USDT Linear · OI ${count} / Funding ${fundingCount} контрактів` : undefined,
   };
 }
 
