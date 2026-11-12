@@ -136,7 +136,7 @@ export const ArchiveModal: React.FC<ArchiveModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 md:p-6 bg-black/80 backdrop-blur-sm overflow-y-auto">
-      <div className="relative w-full max-w-5xl bg-slate-900 border border-slate-800 rounded-2xl sm:rounded-3xl shadow-2xl overflow-hidden my-auto max-h-[92vh] flex flex-col">
+      <div className="relative w-full max-w-5xl bg-slate-900 border border-slate-800 rounded-2xl sm:rounded-3xl shadow-2xl overflow-hidden my-auto max-h-[92dvh] flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between gap-3 px-4 sm:px-6 py-3.5 sm:py-4 border-b border-slate-800 bg-slate-950/80 sticky top-0 z-10">
           <div className="flex items-center gap-3 min-w-0">
@@ -254,7 +254,7 @@ export const ArchiveModal: React.FC<ArchiveModalProps> = ({
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Пошук за монетою (BTC, SOL...) чи патерном..."
-              className="w-full pl-9 pr-3 py-1.5 rounded-xl bg-slate-900 border border-slate-800 text-xs text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-purple-500/60 transition-colors"
+              className="w-full min-w-0 pl-9 pr-3 py-1.5 rounded-xl bg-slate-900 border border-slate-800 text-base sm:text-xs text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-purple-500/60 transition-colors touch-manipulation"
             />
           </div>
 
@@ -296,7 +296,7 @@ export const ArchiveModal: React.FC<ArchiveModalProps> = ({
         </div>
 
         {/* Formations List Container */}
-        <div className="p-4 sm:p-6 overflow-y-auto space-y-3 sm:space-y-4 min-h-[300px]">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 sm:p-6 space-y-3 sm:space-y-4 sm:min-h-[300px]">
           {loading ? (
             <div className="flex flex-col items-center justify-center py-16 text-slate-400 gap-3">
               <div className="w-8 h-8 rounded-full border-2 border-purple-500 border-t-transparent animate-spin" />
