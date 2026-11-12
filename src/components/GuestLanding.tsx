@@ -11,6 +11,13 @@ import { SiteFooter } from './SiteFooter';
 import './guestLanding.css';
 
 type DemoTab = 'screener' | 'formations' | 'chart' | 'terminal';
+type FeatureCategory = 'discover' | 'chart' | 'workspace' | 'all';
+const featureCategories: { id: FeatureCategory; label: string; indexes: number[] }[] = [
+  { id: 'discover', label: 'Пошук і сигнали', indexes: [0,1,2,3,11,12,19] },
+  { id: 'chart', label: 'Графіки й ліквідність', indexes: [4,5,6,7,8,20] },
+  { id: 'workspace', label: 'Інструменти трейдера', indexes: [9,10,13,14,15,16,17,18] },
+  { id: 'all', label: 'Усі можливості', indexes: [] },
+];
 type Feature = { icon: LucideIcon; title: string; body: string; value: string };
 const features: Feature[] = [
   { icon: Radar, title: 'Скрінер у реальному часі', body: 'Стежте за доступними парами Binance та Bybit: ціна, зміна за 24 години, обсяг, волатильність, локальні максимуми й мінімуми. Швидко відсіюйте зайве фільтрами.', value: 'Менше ручного пошуку' },
@@ -55,6 +62,7 @@ function DemoChart({ compact = false }: { compact?: boolean }) {
     {Array.from({length: 8}, (_, i) => <line key={'v'+i} y1="16" y2="320" x1={40+i*78} x2={40+i*78} stroke="#1c293e" strokeWidth="1"/>)}
     <path d="M18 168 H604" stroke="#eab308" strokeDasharray="7 5" strokeWidth="1.5" opacity=".85"/>
     <text x="510" y="161" fontSize="10" fill="#facc15" fontFamily="monospace">S/R · 1H</text>
+    <rect x="18" y="245" width="585" height="20" fill="#22d3ee" opacity=".055" rx="3"/>
     <path d="M18 253 H604" stroke="#22d3ee" strokeWidth="1.5" strokeDasharray="3 6" opacity=".8"/>
     <text x="510" y="244" fontSize="10" fill="#67e8f9" fontFamily="monospace">BID / ASK</text>
     {candles.map(([o,c,lo,hi],i) => {
@@ -63,6 +71,10 @@ function DemoChart({ compact = false }: { compact?: boolean }) {
       const color=up?'#22d3a0':'#fb7185';
       return <g key={i}><line x1={x} x2={x} y1={top} y2={bottom} stroke={color} strokeWidth="1.4"/><rect x={x-4.8} y={bTop} width="9.6" height={Math.max(2,bBottom-bTop)} rx="1.2" fill={color}/><rect x={x-5} y={308-(i%7+3)*3.6} width="10" height={(i%7+3)*3.6} fill={color} opacity=".23"/></g>;
     })}
+    <path d="M18 109 H603" stroke="#d16bff" strokeWidth="1" strokeDasharray="3 6" opacity=".6"/>
+    <text x="536" y="101" fontSize="9" fill="#d9a4ff" fontFamily="monospace">TP 1</text>
+    <rect x="534" y="215" width="70" height="19" rx="4" fill="#113d3e" stroke="#287e80" strokeWidth=".6"/>
+    <text x="541" y="228" fontSize="9" fill="#61e9c5" fontFamily="monospace">ENTRY</text>
     <circle cx="467" cy="132" r="4.5" fill="#f59e0b"/><circle cx="467" cy="132" r="10" fill="none" stroke="#f59e0b" opacity=".5"/>
     <text x="20" y="18" fontSize="11" fill="#94a3b8" fontFamily="monospace">BTC/USDT · 15m</text>
   </svg>;
@@ -92,7 +104,10 @@ function DemoWindow({ tab }: { tab: DemoTab }) {
   </div>;
 }
 export function GuestLanding() {
-  const [tab, setTab] = useState<DemoTab>('screener');
+  const [tab, setTab] = useState<DemoTab>('chart');
+  const [featureCategory, setFeatureCategory] = useState<FeatureCategory>('discover');
+  const selectedFeatureCategory = featureCategories.find(category => category.id === featureCategory)!;
+  const visibleFeatures = features.filter((_, index) => featureCategory === 'all' || selectedFeatureCategory.indexes.includes(index));
   const [authMode, setAuthMode] = useState<'signin' | 'signup' | null>(null);
   const [mobileMenu, setMobileMenu] = useState(false);
   const enterScreener = () => { window.location.assign('/#screener'); };
@@ -113,12 +128,18 @@ export function GuestLanding() {
       <section className="gl-hero gl-container">
         <div className="gl-hero-copy">
           <div className="gl-eyebrow"><span className="gl-pulse"/> BINANCE & BYBIT <span className="gl-eyebrow-dot">•</span> CRYPTO MARKET INTELLIGENCE</div>
-          <h1>Побачити можливість <span>раніше за натовп.</span></h1>
-          <p className="gl-lead">h00k об’єднує криптоскрінер, автоматичний пошук формацій, власний графік HookChart, аналіз ліквідності, сповіщення та тренажер торгових рішень.</p>
+          <h1>Знайди рух. <span>Побач причину.</span></h1>
+          <p className="gl-lead">Професійний криптоскрінер з автоматичним пошуком формацій, аналізом ліквідності та власним HookChart. Від першого сигналу до продуманого торгового сценарію — в одному просторі.</p>
+          <div className="gl-hero-pills" aria-label="Ключові інструменти"><span><Layers3 size={14}/> Формації W / M</span><span><BarChart3 size={14}/> BID / ASK</span><span><Activity size={14}/> Ліквідації</span></div>
           <div className="gl-hero-ctas"><button type="button" className="gl-btn gl-btn-main" onClick={()=>openAuth('signup')}>Почати користуватися <ArrowRight size={18}/></button><button type="button" className="gl-btn-outline" onClick={enterScreener}><Eye size={17}/> Переглянути скрінер без входу</button></div>
           <div className="gl-hero-foot"><Check size={15}/> Гостьовий перегляд списку монет <span>•</span> Особисті інструменти після входу</div>
         </div>
-        <div className="gl-hero-display"><DemoWindow tab={tab}/><div className="gl-floating-tag"><Zap size={15}/> Пошук · Аналіз · Сповіщення</div></div>
+        <div className="gl-hero-display">
+          <div className="gl-hero-terminal-head"><span><span className="gl-status-light"/> ІНТЕРФЕЙС ПЛАТФОРМИ</span><span>01 / 04 · {demoTabs.find(t => t.id === tab)?.label.toUpperCase()}</span></div>
+          <DemoWindow tab={tab}/>
+          <div className="gl-hero-switcher" role="group" aria-label="Показати інструмент у демонстрації">{demoTabs.map((item, index) => <button type="button" key={item.id} className={tab===item.id?'gl-hero-switch-active':''} onClick={() => setTab(item.id)} aria-pressed={tab===item.id}><span>0{index + 1}</span> {item.label}</button>)}</div>
+          <div className="gl-floating-tag"><Sparkles size={15}/> Ілюстративна демонстрація</div>
+        </div>
       </section>
       <section className="gl-benefits gl-container" aria-label="Переваги платформи">
         <div><Radar size={22}/><strong>Моніторинг ринку</strong><span>Спостереження за інструментами та важливими змінами</span></div>
@@ -127,16 +148,17 @@ export function GuestLanding() {
         <div><Bell size={22}/><strong>Персональні сповіщення</strong><span>Налаштовуйте події, які важливі саме вам</span></div>
       </section>
       <section id="gl-platform" className="gl-section gl-container">
-        <div className="gl-section-top"><div><span className="gl-kicker">ПЛАТФОРМА В ДІЇ</span><h2>Один простір. Різні сценарії роботи.</h2><p>Оберіть вкладку, щоб подивитися, як організовані головні робочі розділи.</p></div></div>
+        <div className="gl-section-top"><div><span className="gl-kicker">ПЛАТФОРМА В ДІЇ</span><h2>Одна платформа. <em>Повна картина ринку.</em></h2><p>Оберіть вкладку, щоб подивитися, як організовані головні робочі розділи.</p></div></div>
         <div className="gl-tabbar" role="tablist" aria-label="Демонстрація розділів">
           {demoTabs.map(t=><button type="button" role="tab" aria-selected={tab===t.id} onClick={()=>setTab(t.id)} key={t.id} className={tab===t.id?'gl-tab-active':''}>{t.label}</button>)}
         </div>
         <div className="gl-platform-preview"><DemoWindow tab={tab}/><div className="gl-platform-caption"><span><Sparkles size={16}/> Зрозумілий інтерфейс для практичного аналізу</span><button type="button" onClick={enterScreener}>Відкрити живий скрінер <ArrowRight size={16}/></button></div></div>
       </section>
-      <section className="gl-spotlight gl-container"><div className="gl-spotlight-copy"><span className="gl-kicker">HOOKCHART</span><h2>Графік, на якому видно більше.</h2><p>Не просто свічки. Додавайте рівні підтримки й опору, щільності заявок зі стакана, ліквідації та інші доступні підтвердження. Налаштовуйте відображення, масштаб, кольори й підписи під свою торгову систему.</p><div className="gl-tags"><span>Підтримка / опір</span><span>Щільності BID / ASK</span><span>Long / Short Liq</span><span>ROUND</span><span>TP / SL</span><span>Мультитаймфрейм</span></div></div><div className="gl-spotlight-visual"><DemoChart/><div className="gl-diagram-key"><span><i className="gl-key-amber"/> Рівні</span><span><i className="gl-key-cyan"/> Зони ліквідності</span><span><i className="gl-key-green"/> Свічки</span></div></div></section>
+      <section className="gl-spotlight gl-container"><div className="gl-spotlight-copy"><span className="gl-kicker">HOOKCHART</span><h2>Рух ціни — лише <em>частина історії.</em></h2><p>Не просто свічки. Додавайте рівні підтримки й опору, щільності заявок зі стакана, ліквідації та інші доступні підтвердження. Налаштовуйте відображення, масштаб, кольори й підписи під свою торгову систему.</p><div className="gl-tags"><span>Підтримка / опір</span><span>Щільності BID / ASK</span><span>Long / Short Liq</span><span>ROUND</span><span>TP / SL</span><span>Мультитаймфрейм</span></div></div><div className="gl-spotlight-visual"><DemoChart/><div className="gl-diagram-key"><span><i className="gl-key-amber"/> Рівні</span><span><i className="gl-key-cyan"/> Зони ліквідності</span><span><i className="gl-key-green"/> Свічки</span></div></div></section>
       <section id="gl-functions" className="gl-section gl-container">
-        <div className="gl-section-top"><div><span className="gl-kicker">МОЖЛИВОСТІ</span><h2>Від першого фільтра до готового сценарію.</h2><p>Кожен інструмент має конкретну задачу: знайти, перевірити, зафіксувати або відстежити можливість на ринку.</p></div><span className="gl-count">{features.length} напрямків роботи</span></div>
-        <div className="gl-features">{features.map(({icon:Icon,title,body,value})=><article className="gl-feature" key={title}><div className="gl-icon"><Icon size={20}/></div><h3>{title}</h3><p>{body}</p><div className="gl-feature-bottom"><Check size={14}/>{value}</div></article>)}</div>
+        <div className="gl-section-top"><div><span className="gl-kicker">МОЖЛИВОСТІ</span><h2>Не просто список функцій. <em>Ваша перевага в аналізі.</em></h2><p>Кожен інструмент має конкретну задачу: знайти, перевірити, зафіксувати або відстежити можливість на ринку.</p></div><span className="gl-count">{features.length} напрямків роботи</span></div>
+        <div className="gl-feature-filters" role="group" aria-label="Категорії функцій">{featureCategories.map(category => <button type="button" key={category.id} onClick={() => setFeatureCategory(category.id)} aria-pressed={featureCategory===category.id} className={featureCategory===category.id?'gl-filter-active':''}>{category.label} <span>{category.id==='all'?features.length:category.indexes.length}</span></button>)}</div>
+        <div className="gl-features">{visibleFeatures.map(({icon:Icon,title,body,value},i)=><article className={i===0?'gl-feature gl-feature-lead':'gl-feature'} key={title}><div className="gl-icon"><Icon size={20}/></div><h3>{title}</h3><p>{body}</p><div className="gl-feature-bottom"><Check size={14}/>{value}</div></article>)}</div>
       </section>
       <section className="gl-personal gl-container"><div><span className="gl-kicker">ВАШ РОБОЧИЙ ПРОСТІР</span><h2>Ваші монети, ваші правила.</h2><p>Обране, папки, параметри HookChart, Telegram-алерти та лінковка MetaScalp налаштовуються для окремого акаунта. Керуйте власними інструментами без необхідності щоразу починати з нуля.</p><div className="gl-personal-checks"><span><ShieldCheck size={16}/> Індивідуальні налаштування</span><span><Bookmark size={16}/> Списки й архів</span><span><Settings2 size={16}/> Збережені параметри графіка</span><span><Send size={16}/> Персональна лінковка</span></div></div><div className="gl-personal-card"><LockKeyhole size={31}/><strong>Профіль трейдера</strong><span>Мій список обраного</span><span>Мої Telegram-сповіщення</span><span>Мій HookChart</span><span>Мій MetaScalp</span></div></section>
       <section id="gl-workflow" className="gl-section gl-container"><span className="gl-kicker">ЯК ЦЕ ПРАЦЮЄ</span><h2>Знайшли → перевірили → відстежили.</h2><div className="gl-steps">
