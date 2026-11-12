@@ -38,6 +38,8 @@ import {
   readTelegramAlertPanelCollapsed,
   saveTelegramAlertPanelCollapsed,
   telegramAlertPanelStorageKey,
+  isTelegramAlertPanelSyncPending,
+  saveTelegramAlertPanelSyncPending,
 } from '../utils/telegramAlertPanelPreference';
 
 interface FormationDetailsModalProps {
@@ -182,7 +184,8 @@ export const FormationDetailsModal: React.FC<FormationDetailsModalProps> = ({
     if (pendingTelegramAlertPreferenceWrites.current > 0) return;
     const profilePreference = profile?.uid === user?.uid
       ? profile?.telegramPriceAlertCollapsed : undefined;
-    const collapsed = typeof profilePreference === 'boolean'
+    const syncPending = !!user?.uid && isTelegramAlertPanelSyncPending(alertPanelStorage(), user.uid);
+    const collapsed = !syncPending && typeof profilePreference === 'boolean'
       ? profilePreference : readTelegramAlertPanelCollapsed(alertPanelStorage(), user?.uid);
     setTelegramAlertPanelCollapsed(collapsed);
     saveTelegramAlertPanelCollapsed(alertPanelStorage(), collapsed, user?.uid);
@@ -205,8 +208,14 @@ export const FormationDetailsModal: React.FC<FormationDetailsModalProps> = ({
     saveTelegramAlertPanelCollapsed(alertPanelStorage(), collapsed, user?.uid);
     if (!user) return;
 
+    saveTelegramAlertPanelSyncPending(alertPanelStorage(), user.uid, true);
     pendingTelegramAlertPreferenceWrites.current += 1;
     void updateProfileData({ telegramPriceAlertCollapsed: collapsed })
+      .then(() => {
+        if (pendingTelegramAlertPreferenceWrites.current === 1) {
+          saveTelegramAlertPanelSyncPending(alertPanelStorage(), user.uid, false);
+        }
+      })
       .catch(() => setTelegramAlertPanelSaveError(true))
       .finally(() => { pendingTelegramAlertPreferenceWrites.current -= 1; });
   };
