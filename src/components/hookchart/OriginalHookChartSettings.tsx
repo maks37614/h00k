@@ -443,7 +443,7 @@ function VisualProfileEditor({
         value={selectedProfile.autoPriceScale} onChange={value => onProfileChange({ autoPriceScale: value })}/>
       <Setting label="Відступ праворуч" desc="Вільний простір праворуч від останньої свічки (у барах). Великий відступ може зменшити видиму область свічок на вузькому екрані.">
         <div className="flex items-center gap-2">
-          <input aria-label="Відступ праворуч у барах" type="range" className="visualProfileRange" min="0" max={Math.max(300, selectedProfile.rightGapBars)} step="1"
+          <input aria-label="Відступ праворуч у барах" type="range" className="visualProfileRange" min="0" max={VISUAL_GAP_MAX} step="1"
             value={selectedProfile.rightGapBars} onChange={event => onProfileChange({ rightGapBars: Number(event.target.value) })}/>
           <Num ariaLabel="Точний відступ праворуч у барах" value={selectedProfile.rightGapBars} min={0} max={VISUAL_GAP_MAX} step={1}
             set={value => onProfileChange({ rightGapBars: Math.round(value) })}/>
