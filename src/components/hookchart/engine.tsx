@@ -845,6 +845,22 @@ export function Chart({candles,symbol,tf,tool,drawings,setDrawings,alerts,setAle
      scheduleDraw();
      return;
    }
+   // Desktop: press and hold the middle mouse button for the same magnifier.
+   // The browser's native middle-click auto-scroll must not start.
+   if(e.pointerType==='mouse'&&e.button===1&&tool==='cursor'&&zone(z.x,z.y,z.g)==='plot'){
+     e.preventDefault();
+     cancelTouchHold();
+     magnifierPointer.current=e.pointerId;
+     magnifierZoom.current=TOUCH_MAGNIFIER_DEFAULT_ZOOM;
+     magnifierPriceDrag.current=null;
+     touchCursorVisible.current=true;
+     suppressTouchClick.current=true;
+     mouseRef.current={x:z.x,y:z.y};
+     pointers.current.set(e.pointerId,{x:z.x,y:z.y});
+     drag.current={kind:'touchCursor',x:z.x,y:z.y,vp:{...vp},g:z.g,panning:false,inspecting:true};
+     scheduleDraw();
+     return;
+   }
    cancelTouchHold();
    const previousCursor=mouseRef.current;
    const resumeCursor=tool==='cursor'&&zone(z.x,z.y,z.g)==='plot'&&(e.pointerType==='pen'||(e.pointerType==='touch'&&touchCursorVisible.current&&previousCursor&&(Math.abs(z.x-previousCursor.x)<=24||Math.abs(z.y-previousCursor.y)<=24)));
@@ -853,22 +869,32 @@ export function Chart({candles,symbol,tf,tool,drawings,setDrawings,alerts,setAle
    mouseRef.current={x:z.x,y:z.y};
    pointers.current.set(e.pointerId,{x:z.x,y:z.y});
    scheduleDraw();
-   if(transientRuler&&e.button===1){e.preventDefault();transient.current={t:z.g.timeAtX(z.x),p:z.g.p(z.y)};return}
    if(pointers.current.size>=2){
      magnifierPointer.current=null;transient.current=null;touchCursorVisible.current=false;suppressTouchClick.current=true;
      const a=[...pointers.current.values()];
      drag.current={kind:'pinch',distX:Math.max(1,Math.abs(a[0].x-a[1].x)),bar:vp.fitAll?Math.max(.001,z.g.step):vp.barWidth,anchor:z.g.virtualStart+(a[0].x+a[1].x)/2/z.g.step};
      return;
    }
-   // Arm before choosing a plot/price/drawing gesture: every non-control part of
-   // the main chart supports a hold, including the price scale and volume pane.
-   if(e.pointerType==='touch'||e.pointerType==='pen'){
+   // Two-stage touch/pen inspection: a short hold reveals the freely movable
+   // crosshair. Only a longer *stationary* hold adds the magnifier above it.
+   // A normal immediate swipe still pans; moving after the short hold keeps
+   // the cursor free and cancels the delayed magnifier activation.
+   if((e.pointerType==='touch'||e.pointerType==='pen')&&tool==='cursor'){
      touchHold.current?.start(e.pointerId,{x:z.x,y:z.y},position=>{
        if(pointers.current.size!==1||!pointers.current.has(e.pointerId))return;
        drag.current={kind:'touchCursor',x:position.x,y:position.y,vp:{...vp},g:z.g,panning:false,inspecting:true};
-       magnifierPointer.current=e.pointerId;
+       magnifierPointer.current=null;
        touchCursorVisible.current=true;suppressTouchClick.current=true;
+       mouseRef.current={x:position.x,y:position.y};
        if(transientRuler)transient.current={t:z.g.timeAtX(position.x),p:z.g.p(position.y)};
+       scheduleDraw();
+     },position=>{
+       if(pointers.current.size!==1||!pointers.current.has(e.pointerId)||
+          drag.current?.kind!=='touchCursor'||!drag.current.inspecting)return;
+       mouseRef.current={x:position.x,y:position.y};
+       magnifierPointer.current=e.pointerId;
+       magnifierZoom.current=TOUCH_MAGNIFIER_DEFAULT_ZOOM;
+       touchCursorVisible.current=true;
        scheduleDraw();
      });
    }
@@ -1071,6 +1097,7 @@ export function Chart({candles,symbol,tf,tool,drawings,setDrawings,alerts,setAle
   onClick={e=>{if(!isChartControlTarget(e.target))handleClick(e)}}
   onDoubleClick={e=>{if(!isChartControlTarget(e.target))handleDoubleClick(e)}}
   onPointerDown={handlePointerDown} onPointerMove={handlePointerMove}
+  onAuxClick={e=>{if(e.button===1&&!isChartControlTarget(e.target))e.preventDefault()}}
   onPointerUp={e=>{if(pointers.current.has(e.pointerId))handleTouchEnd(e)}}
   onPointerCancel={e=>{if(pointers.current.has(e.pointerId))handlePointerUp(e)}}
   onLostPointerCapture={e=>{if(pointers.current.has(e.pointerId))handlePointerUp(e)}}
@@ -1093,7 +1120,7 @@ export function Chart({candles,symbol,tf,tool,drawings,setDrawings,alerts,setAle
   {controlsContainer?createPortal(scaleControls,controlsContainer):controlsContainer===undefined?scaleControls:null}
   {countdownContainer&&createPortal(barCountdown,countdownContainer)}
   <div className="chartCanvasSurface">
-  <canvas ref={ref} style={{WebkitTouchCallout:'none'}} tabIndex={0} aria-label={`Графік ${symbol}`} aria-description="Рух пальцем — перетягнути графік. Утримуйте палець для перехрестя й лупи в області свічок, обсягів або шкали ціни. Лупа показується вище пальця; другим пальцем проведіть по правій шкалі цін, щоб змінити масштаб у лупі. Лупа зникає після відпускання. Унизу — дата й час вибраної точки. Два пальці — масштаб." onMouseEnter={focusChart} onPointerEnter={focusChart}/>
+  <canvas ref={ref} style={{WebkitTouchCallout:'none'}} tabIndex={0} aria-label={`Графік ${symbol}`} aria-description="Рух пальцем без утримання — перетягнути графік. Коротко утримуйте палець для вільного курсора; довше утримуйте нерухомо для лупи. Після появи лупи другим пальцем змінюйте її масштаб по правій шкалі цін. На комп’ютері утримуйте середню кнопку миші (колесо), щоб показати лупу. Два пальці без активної лупи — масштаб графіка." onMouseEnter={focusChart} onPointerEnter={focusChart}/>
    <canvas ref={interactionRef} className="chartInteractionCanvas" width={1} height={1} aria-hidden="true"/>
   </div>
  </div>
