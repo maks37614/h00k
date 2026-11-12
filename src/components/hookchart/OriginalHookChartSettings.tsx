@@ -1,9 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
-import type { HookChartPreferences } from '../../types';
+import type { ExchangeId, HookChartPreferences, MarketType } from '../../types';
 import { clampHookChartHistory } from '../../utils/hookChartHistory';
 import { normalizeDensityDistance } from './marketAnalytics';
 import { VISUAL_CONTEXTS, getVisualProfile, makeVisualProfileKey, normalizedVisualProfiles, patchVisualProfile, visualDeviceForWidth, type VisualContextId, type VisualDevice, type VisualProfileKey } from './visualProfiles';
-import type { Viewport } from './engine';
+import type { Candle, Viewport } from './engine';
+import { HookChartVisualPreview } from './HookChartVisualPreview';
 import { DEFAULT_CROSSHAIR_LINE_WIDTH, normalizeCrosshairLineWidth } from './chartCursor';
 import { STRATEGY_FUTURES_NOTE, STRATEGY_PRESETS } from './strategyEngine';
 
@@ -358,10 +359,11 @@ function StrategySettings({ activeId, onSelect }: { activeId: string; onSelect: 
 }
 
 
-/** Pure SVG viewport preview. No websocket, no data polling and no live chart engine. */
+/** Real HookChart preview uses the current chart's candles, with optional one-time sample in profile settings. */
 function VisualProfileEditor({
   visualContext, visualDevice, selectedProfile, onContextChange, onDeviceChange,
-  onProfileChange, onReset, onCapture, live,
+  onProfileChange, onReset, onCapture, live, previewCandles, previewSymbol,
+  previewTimeframe, previewExchange, previewMarketType, previewTimezone, previewLongColor, previewShortColor,
 }: {
   visualContext: VisualContextId;
   visualDevice: VisualDevice;
@@ -372,20 +374,15 @@ function VisualProfileEditor({
   onReset: () => void;
   onCapture?: () => void;
   live: boolean;
+  previewCandles?: Candle[];
+  previewSymbol?: string;
+  previewTimeframe?: string;
+  previewExchange?: ExchangeId;
+  previewMarketType?: MarketType;
+  previewTimezone?: string;
+  previewLongColor?: string;
+  previewShortColor?: string;
 }) {
-  const bars = Math.max(14, Math.min(72, Math.round(selectedProfile.visibleBars / 2)));
-  const gap = 286 / bars;
-  const preview = Array.from({ length: bars }, (_, i) => {
-    const value = 55 + Math.sin(i * .32) * 12 + Math.cos(i * .17) * 8 + i * .30;
-    const previous = 55 + Math.sin((i - 1) * .32) * 12 + Math.cos((i - 1) * .17) * 8 + (i - 1) * .30;
-    const y = (v: number) => 65 - (v - 60) * selectedProfile.verticalZoom * 1.6;
-    return {
-      x: 7 + gap * i,
-      top: Math.min(y(value), y(previous)),
-      bottom: Math.max(y(value), y(previous)),
-      rising: value >= previous,
-    };
-  });
   return <div className="visualProfileEditor space-y-4">
     <Section title="Візуальні налаштування">
       <div className="settingsHint">
@@ -401,23 +398,20 @@ function VisualProfileEditor({
       </Setting>
       <Choice label="Пристрій" values={['mobile', 'desktop']} labels={['Телефон', 'Комп’ютер']}
         value={visualDevice} set={value => onDeviceChange(value as VisualDevice)} />
-      <div className="rounded-xl border border-slate-700 bg-slate-950/70 px-2 py-3">
-        <svg viewBox="0 0 300 126" role="img" aria-label="Попередній перегляд масштабу свічок" className="block w-full h-auto">
-          <rect width="300" height="126" rx="7" fill="#101825" />
-          {[27,56,85,114].map(y => <line key={y} x1="6" x2="294" y1={y} y2={y} stroke="#35445a" strokeOpacity=".38" strokeWidth=".7"/>)}
-          {preview.map((bar, i) => {
-            const color = bar.rising ? '#15caab' : '#fa6580';
-            return <g key={i}>
-              <line x1={bar.x + gap * .32} x2={bar.x + gap * .32} y1={Math.max(5, bar.top - 4)}
-                y2={Math.min(119, bar.bottom + 5)} stroke={color} strokeWidth="1" />
-              <rect x={bar.x} y={Math.max(4, bar.top)} width={Math.max(1.3,gap*.65)} height={Math.max(2,Math.min(116,bar.bottom)-Math.max(4,bar.top))}
-                fill={color} rx=".4" />
-            </g>;
-          })}
-          <rect x="294" y="0" width="6" height="126" fill="#202e44" />
-        </svg>
-        <p className="mt-2 text-center text-[11px] text-slate-400">Приклад відносного масштабу · не реальні котирування</p>
-      </div>
+      <HookChartVisualPreview
+        candles={previewCandles}
+        symbol={previewSymbol}
+        timeframe={previewTimeframe}
+        exchange={previewExchange}
+        marketType={previewMarketType}
+        timezone={previewTimezone}
+        longColor={previewLongColor}
+        shortColor={previewShortColor}
+        visualContext={visualContext}
+        visualDevice={visualDevice}
+        profile={selectedProfile}
+        onChange={onProfileChange}
+      />
       <Setting label="Кількість видимих свічок" desc="Кількість на ширину графіка; на вузькому екрані обмежується мінімальною шириною свічки.">
         <div className="flex items-center gap-2">
           <input aria-label="Кількість видимих свічок" type="range" className="visualProfileRange" min="15" max="500" step="5"
@@ -471,6 +465,14 @@ export function OriginalHookChartSettings({
   currentPlotWidth,
   onCaptureVisual,
   onResetVisual,
+  previewCandles,
+  previewSymbol,
+  previewTimeframe,
+  previewExchange,
+  previewMarketType,
+  previewTimezone,
+  previewLongColor,
+  previewShortColor,
 }: {
   open: boolean;
   prefs: HookChartPreferences;
@@ -490,6 +492,15 @@ export function OriginalHookChartSettings({
   currentPlotWidth?: number;
   onCaptureVisual?: (key: VisualProfileKey) => void;
   onResetVisual?: (key: VisualProfileKey) => void;
+  /** Existing loaded HookChart candles; absent in standalone account editor. */
+  previewCandles?: Candle[];
+  previewSymbol?: string;
+  previewTimeframe?: string;
+  previewExchange?: ExchangeId;
+  previewMarketType?: MarketType;
+  previewTimezone?: string;
+  previewLongColor?: string;
+  previewShortColor?: string;
 }) {
   const [tab, setTab] = useState<'main' | 'chart' | 'strategies' | 'hotkeys'>('main');
   const [visualContext, setVisualContext] = useState<VisualContextId>(activeVisualContext || 'screenerQuick');
@@ -781,6 +792,14 @@ export function OriginalHookChartSettings({
             onCapture={onCaptureVisual && activeVisualContext === visualContext && visualDevice === (typeof window === 'undefined' ? 'desktop' : visualDeviceForWidth(window.innerWidth)) && currentViewport && (currentPlotWidth || 0) > 100
               ? () => onCaptureVisual(makeVisualProfileKey(visualContext, visualDevice)) : undefined}
             live={!!currentViewport}
+            previewCandles={previewCandles}
+            previewSymbol={previewSymbol}
+            previewTimeframe={previewTimeframe}
+            previewExchange={previewExchange}
+            previewMarketType={previewMarketType}
+            previewTimezone={previewTimezone}
+            previewLongColor={previewLongColor}
+            previewShortColor={previewShortColor}
           />
         ) : tab === 'strategies' ? (
           <StrategySettings activeId={prefs.strategyId || ''} onSelect={onApplyStrategy} />

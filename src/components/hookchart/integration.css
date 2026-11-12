@@ -1586,3 +1586,148 @@
     width: min(240px, 70vw);
   }
 }
+
+
+/* Interactive real HookChart preview in Visual Settings. The preview reuses
+   OHLCV from its parent chart and is mounted only while the Chart tab is open. */
+.hookchart-root .hookchart-visual-preview {
+  display:flex;
+  flex-direction:column;
+  align-items:stretch;
+  gap:9px;
+  min-width:0;
+  margin:10px 0 14px;
+}
+.hookchart-root .hookchart-visual-preview-caption {
+  display:flex;
+  flex-wrap:wrap;
+  align-items:center;
+  gap:6px;
+  color:#a3b3c6;
+  font:600 11px/1.4 system-ui;
+}
+.hookchart-root .hookchart-visual-preview-caption strong {
+  color:#e2f4ff;
+  font-weight:800;
+  font-size:13px;
+}
+.hookchart-root .hookchart-visual-preview-caption span {
+  padding:3px 6px;
+  border:1px solid #263747;
+  border-radius:5px;
+  background:#0e1a29;
+}
+.hookchart-root .hookchart-visual-preview-caption .hookchart-visual-preview-live {
+  margin-left:auto;
+  color:#71d9d3;
+  border-color:#1b564f;
+  background:#0b2628;
+  font-size:10px;
+}
+.hookchart-root .hookchart-visual-preview-frame {
+  box-sizing:border-box;
+  width:100%;
+  min-width:0;
+  margin:0 auto;
+  display:flex;
+  flex-direction:column;
+  overflow:hidden;
+  border-radius:9px;
+  border:1px solid #34475a;
+  background:#131722;
+  box-shadow:0 10px 24px #0005;
+}
+.hookchart-root .hookchart-visual-preview-chart {
+  position:relative;
+  display:flex;
+  flex-direction:column;
+  flex:0 0 265px;
+  height:265px;
+  min-width:0;
+  min-height:0;
+  overflow:hidden;
+}
+.hookchart-root .hookchart-visual-preview-chart > .chartWrap {
+  flex:1 1 0!important;
+  width:100%;
+  min-width:0;
+  min-height:0;
+  height:100%;
+  padding:0!important;
+  touch-action:none;
+}
+.hookchart-root .hookchart-visual-preview-chart .chartCanvasSurface {
+  position:relative;
+  width:100%;
+  height:100%;
+  min-width:0;
+  min-height:0;
+}
+.hookchart-root .hookchart-visual-preview-chart .chartCanvasSurface canvas {
+  touch-action:none;
+}
+.hookchart-root .hookchart-visual-preview-frame > .chartTimeAxis {
+  flex:0 0 26px;
+  height:26px;
+  min-height:26px;
+  width:100%;
+}
+.hookchart-root .hookchart-visual-preview-actions {
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  flex-wrap:wrap;
+  gap:8px;
+  font:400 11px/1.5 system-ui;
+  color:#9ca9b7;
+}
+.hookchart-root .hookchart-visual-preview-actions button {
+  min-height:35px;
+  border:1px solid #2478ac;
+  border-radius:7px;
+  padding:8px 12px;
+  background:#0e314d;
+  color:#90ddff;
+  font:700 12px/1.25 system-ui;
+  cursor:pointer;
+}
+.hookchart-root .hookchart-visual-preview-actions button:hover,
+.hookchart-root .hookchart-visual-preview-actions button:focus-visible {
+  border-color:#45bce5;
+  background:#154462;
+  outline:2px solid #1a768c;
+  outline-offset:1px;
+}
+.hookchart-root .hookchart-visual-preview-empty {
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  box-sizing:border-box;
+  min-height:150px;
+  border:1px dashed #315064;
+  border-radius:9px;
+  padding:20px;
+  background:#111b28;
+  color:#aab8c7;
+  text-align:center;
+  font:500 12px/1.6 system-ui;
+}
+.hookchart-root .hookchart-visual-preview-info {
+  margin:0;
+  font:400 10px/1.55 system-ui;
+  color:#778b9d;
+}
+@media(max-width:600px) {
+  .hookchart-root .hookchart-visual-preview-chart {
+    flex-basis:220px;
+    height:220px;
+  }
+  .hookchart-root .hookchart-visual-preview-actions button {
+    width:100%;
+    min-height:42px;
+    font-size:13px;
+  }
+  .hookchart-root .hookchart-visual-preview-caption .hookchart-visual-preview-live {
+    margin-left:0;
+  }
+}

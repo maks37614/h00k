@@ -1218,6 +1218,14 @@ const HookChartCanvas = forwardRef<HookChartHandle, HookChartCanvasProps>(functi
           currentPlotWidth={hookChartPlotWidth(rootRef.current?.clientWidth || 800)}
           onCaptureVisual={captureCurrentVisual}
           onResetVisual={key => { if (key === activeVisualKey) engineRef.current?.zoomToLatest(); }}
+          previewCandles={candles}
+          previewSymbol={symbol}
+          previewTimeframe={timeframe}
+          previewExchange={exchange}
+          previewMarketType={marketType}
+          previewTimezone={timezone}
+          previewLongColor={externalData?.appearance.upColor || settings.candleLongColor || '#0ECB81'}
+          previewShortColor={externalData?.appearance.downColor || settings.candleShortColor || '#F6465D'}
           onClose={closeSettings}
         />
       </div>,
