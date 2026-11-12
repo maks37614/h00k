@@ -82,3 +82,15 @@ test('event feed combines title, count, description and collapse into one header
   assert.doesNotMatch(eventsHeader, /<RefreshCw|title="Оновити події"|onClick=\{\(\) => refresh\(\)\}/);
   assert.match(source, /<div id="surveillance-events-panel" className="p-4 space-y-4">/);
 });
+
+
+test('monitoring tooltip stays within the available title area on narrow phones', () => {
+  // The icon's center is not a safe anchor: its centered 22rem popup can
+  // extend beyond the viewport. Instead the popup must be bounded by the
+  // flex-shrinking header text container on mobile and desktop.
+  assert.match(topBar, /className="relative min-w-0 flex-1" onMouseLeave=/);
+  assert.match(topBar, /className="absolute left-0 top-full z-50 mt-2 box-border w-full max-w-\[22rem\] min-w-0/);
+  assert.doesNotMatch(topBar, /left-1\/2 top-full|w-\[min\(78vw,22rem\)\]|-translate-x-1\/2/);
+  assert.equal((topBar.match(/id="surveillance-monitoring-help"/g) || []).length, 1);
+  assert.equal((topBar.match(/Комплексний моніторинг ринку на серверах h00k\.top:/g) || []).length, 1);
+});
