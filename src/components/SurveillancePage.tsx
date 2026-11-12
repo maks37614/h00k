@@ -138,6 +138,7 @@ export const SurveillancePage: React.FC<SurveillancePageProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [exchangeFilter, setExchangeFilter] = useState<'all' | ExchangeId>(prefs.defaultExchange);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [addModalViewport, setAddModalViewport] = useState<{ top: number; left: number; width: number; height: number } | null>(null);
   const [editingCoin, setEditingCoin] = useState<SurveillanceCoin | null>(null);
   const [isCheckingMap, setIsCheckingMap] = useState<Record<string, boolean>>({});
   const [isRunningAll, setIsRunningAll] = useState(false);
@@ -172,6 +173,43 @@ export const SurveillancePage: React.FC<SurveillancePageProps> = ({
       setIsAddModalOpen(false);
     }
   }, [coins, detailedCoin?.id, editingCoin?.id]);
+
+  // iOS Safari's on-screen keyboard changes the *visual* viewport without
+  // necessarily shrinking CSS vh. Keep the add/edit modal inside the visible
+  // region so its symbol input and footer stay accessible on phone keyboards.
+  useEffect(() => {
+    if (!isAddModalOpen || typeof window === 'undefined') {
+      setAddModalViewport(null);
+      return;
+    }
+    const updateViewport = () => {
+      const view = window.visualViewport;
+      const next = {
+        top: Math.max(0, view?.offsetTop ?? 0),
+        left: Math.max(0, view?.offsetLeft ?? 0),
+        width: Math.max(0, view?.width ?? window.innerWidth),
+        height: Math.max(0, view?.height ?? window.innerHeight),
+      };
+      setAddModalViewport((prev) => (
+        prev
+        && Math.abs(prev.top - next.top) < 1
+        && Math.abs(prev.left - next.left) < 1
+        && Math.abs(prev.width - next.width) < 1
+        && Math.abs(prev.height - next.height) < 1
+      ) ? prev : next);
+    };
+    updateViewport();
+    window.addEventListener('resize', updateViewport);
+    window.addEventListener('orientationchange', updateViewport);
+    window.visualViewport?.addEventListener('resize', updateViewport);
+    window.visualViewport?.addEventListener('scroll', updateViewport);
+    return () => {
+      window.removeEventListener('resize', updateViewport);
+      window.removeEventListener('orientationchange', updateViewport);
+      window.visualViewport?.removeEventListener('resize', updateViewport);
+      window.visualViewport?.removeEventListener('scroll', updateViewport);
+    };
+  }, [isAddModalOpen]);
 
   // Screener coins list for selection
   const screenerCoinsList = availableCoins || [];
@@ -1471,8 +1509,21 @@ export const SurveillancePage: React.FC<SurveillancePageProps> = ({
 
       {/* MODAL: Add / Edit Coin Configuration Modal (#93 - #97) */}
       {isAddModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in">
-          <div className="relative w-full max-w-lg rounded-2xl bg-slate-900 border border-slate-800 shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in"
+          style={addModalViewport ? {
+            top: addModalViewport.top,
+            left: addModalViewport.left,
+            right: 'auto',
+            bottom: 'auto',
+            width: addModalViewport.width,
+            height: addModalViewport.height,
+          } : undefined}
+        >
+          <div
+            className="relative flex min-h-0 w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl max-h-[92dvh]"
+            style={addModalViewport ? { maxHeight: Math.max(0, Math.min(addModalViewport.height * 0.92, addModalViewport.height - 16)) } : undefined}
+          >
             <div className="p-4 border-b border-slate-800 bg-slate-950/80 flex items-center justify-between">
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-xl bg-cyan-500/20 text-cyan-400 flex items-center justify-center">
@@ -1493,11 +1544,11 @@ export const SurveillancePage: React.FC<SurveillancePageProps> = ({
               </button>
             </div>
 
-            <div className="p-5 space-y-4 overflow-y-auto flex-1 font-mono text-xs">
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain p-3 sm:p-5 font-mono text-xs" style={{ WebkitOverflowScrolling: 'touch' }}>
               {!editingCoin && (
                 <>
                   {/* Exchange and Market selectors */}
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 min-[380px]:grid-cols-2 gap-3">
                     <div className="min-w-0 space-y-1">
                       <label id="surveillance-exchange-label" htmlFor="surveillance-exchange" className="block text-[11px] text-slate-400">Біржа</label>
                       <SurveillanceFieldDropdown<ExchangeId>
@@ -1522,13 +1573,17 @@ export const SurveillancePage: React.FC<SurveillancePageProps> = ({
 
                   {/* Coin Input / Select */}
                   <div className="space-y-1">
-                    <label className="text-[11px] text-slate-400">Символ (Тікер)</label>
+                    <label htmlFor="surveillance-symbol-input" className="block text-[11px] text-slate-400">Символ (Тікер)</label>
                     <input
+                      id="surveillance-symbol-input"
                       type="text"
+                      autoComplete="off"
+                      autoCapitalize="characters"
+                      spellCheck={false}
                       value={selectedSymbolInput}
                       onChange={(e) => setSelectedSymbolInput(e.target.value.toUpperCase().trim())}
                       placeholder="BTCUSDT, ETHUSDT, SOLUSDT..."
-                      className="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-white font-bold placeholder-slate-500 focus:outline-none focus:border-cyan-500"
+                      className="min-h-11 w-full min-w-0 rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-base sm:text-sm text-white font-bold placeholder-slate-500 focus:outline-none focus:border-cyan-500"
                     />
                   </div>
                 </>
@@ -1672,7 +1727,7 @@ export const SurveillancePage: React.FC<SurveillancePageProps> = ({
             </div>
 
             {/* Modal Actions */}
-            <div className="p-4 border-t border-slate-800 bg-slate-950 flex items-center justify-end gap-2">
+            <div className="shrink-0 p-3 sm:p-4 border-t border-slate-800 bg-slate-950 flex items-center justify-end gap-2">
               <button
                 type="button"
                 onClick={() => setIsAddModalOpen(false)}
