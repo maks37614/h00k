@@ -40,7 +40,13 @@ import { runDirectClientScan, getFallbackScannedCoins, hydrateMissingRegularOIFr
 import { getVisibleFormations, groupVisibleFormations } from './utils/formationList';
 import { getTpSlRule, normalizeTpSlSettings, projectUserCoins, resolveEarlyTpSl, resolveFormationTpSl } from './utils/tpSlConstructor';
 import { countActiveRegularIndicatorFilters, DEFAULT_REGULAR_INDICATOR_FILTERS, type RegularIndicatorFilters } from './utils/regularFormationIndicators';
-import { resolveWatchlistEntries } from './utils/watchlistUtils';
+import {
+  getCoinWatchlistKey,
+  resolveWatchlistEntries,
+  toggleCoinWatchlist,
+  removeCoinFromWatchlistFolders,
+  type CoinIdentifier,
+} from './utils/watchlistUtils';
 import {
   AlertCircle,
   RefreshCw,
@@ -874,64 +880,43 @@ export default function App() {
     return () => clearInterval(interval);
   }, [earlyMode, activePage, fetchScreenerData]);
 
-  // Toggle watchlist (isolated per user profile or local guest storage)
-  const handleToggleWatchlist = (symbol: string) => {
+  // Favorites preserve exchange + market type. A plain symbol from legacy
+  // callers is treated as Binance Futures, never guessed from current filters.
+  const handleToggleWatchlist = (coin: CoinIdentifier | string) => {
+    const key = getCoinWatchlistKey(coin);
     if (!user) {
-      setWatchlist((prev) => {
-        const uniquePrev = Array.from(new Set(prev));
-        const isAdding = !uniquePrev.includes(symbol);
-        const next = isAdding
-          ? [...uniquePrev, symbol]
-          : uniquePrev.filter((s) => s !== symbol);
-        const cleanNext = Array.from(new Set(next));
+      setWatchlist((previous) => {
+        const next = toggleCoinWatchlist(previous, coin);
         try {
-          localStorage.setItem('crypto_screener_watchlist_guest', JSON.stringify(cleanNext));
-        } catch (e) {}
-        return cleanNext;
+          localStorage.setItem('crypto_screener_watchlist_guest', JSON.stringify(next));
+        } catch {}
+        return next;
       });
       return;
     }
-    setWatchlist((prev) => {
-      const uniquePrev = Array.from(new Set(prev));
-      const isAdding = !uniquePrev.includes(symbol);
-      const next = isAdding
-        ? [...uniquePrev, symbol]
-        : uniquePrev.filter((s) => s !== symbol);
-      const cleanNext = Array.from(new Set(next));
+    setWatchlist((previous) => {
+      const next = toggleCoinWatchlist(previous, coin);
+      const wasRemoved = previous.some((saved) => getCoinWatchlistKey(saved) === key);
       try {
-        localStorage.setItem(`crypto_screener_watchlist_${user.uid}`, JSON.stringify(cleanNext));
-      } catch (e) {}
+        localStorage.setItem(`crypto_screener_watchlist_${user.uid}`, JSON.stringify(next));
+      } catch {}
 
-      setWatchlistFolders((prevFolders) => {
-        const entries = Object.entries(prevFolders);
-        if (entries.length === 0) return prevFolders;
+      // New favorites always start in the general list. Only the user can
+      // assign a folder using the WatchlistDrawer selector.
+      if (wasRemoved) {
+        setWatchlistFolders((current) => {
+          const cleaned = removeCoinFromWatchlistFolders(current, coin);
+          if (JSON.stringify(cleaned) === JSON.stringify(current)) return current;
+          try {
+            localStorage.setItem(`crypto_screener_watchlist_folders_${user.uid}`, JSON.stringify(cleaned));
+          } catch {}
+          updateProfileData({ watchlistFolders: cleaned }).catch(() => {});
+          return cleaned;
+        });
+      }
 
-        const nextFolders: Record<string, string[]> = {};
-        if (isAdding) {
-          const alreadyAssigned = entries.some(([_, syms]) => Array.isArray(syms) && syms.includes(symbol));
-          entries.forEach(([name, syms], idx) => {
-            const list = Array.isArray(syms) ? [...syms] : [];
-            if (!alreadyAssigned && idx === 0) {
-              if (!list.includes(symbol)) list.push(symbol);
-            }
-            nextFolders[name] = list;
-          });
-        } else {
-          entries.forEach(([name, syms]) => {
-            nextFolders[name] = Array.isArray(syms) ? syms.filter((s) => s !== symbol) : [];
-          });
-        }
-
-        try {
-          localStorage.setItem(`crypto_screener_watchlist_folders_${user.uid}`, JSON.stringify(nextFolders));
-        } catch {}
-        updateProfileData({ watchlistFolders: nextFolders }).catch(() => {});
-
-        return nextFolders;
-      });
-
-      updateProfileData({ watchlist: cleanNext }).catch(() => {});
-      return cleanNext;
+      updateProfileData({ watchlist: next }).catch(() => {});
+      return next;
     });
   };
 

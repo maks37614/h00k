@@ -71,7 +71,10 @@ export function isCoinInWatchlist(
   if (!watchlist || !Array.isArray(watchlist) || watchlist.length === 0) return false;
 
   const targetKey = getCoinWatchlistKey(coin);
-  if (watchlist.includes(targetKey)) return true;
+  // Legacy plain-symbol entries are treated as historical Binance Futures
+  // entries. Never mark a Bybit (or Spot) coin as saved merely because
+  // another exchange has the same ticker.
+  if (watchlist.some((item) => getCoinWatchlistKey(item) === targetKey)) return true;
 
   if (typeof coin !== 'string') {
     const ex = (coin.exchange || '').toLowerCase().trim();
@@ -106,6 +109,35 @@ export function normalizeWatchlist(list: string[] | undefined): string[] {
   return Array.from(new Set(normalized));
 }
 
+/** Toggle a single exact exchange+market+symbol pair without losing old entries. */
+export function toggleCoinWatchlist(
+  watchlist: string[],
+  coin: CoinIdentifier | string
+): string[] {
+  const key = getCoinWatchlistKey(coin);
+  const existing = watchlist.some((item) => getCoinWatchlistKey(item) === key);
+  return existing
+    ? watchlist.filter((item) => getCoinWatchlistKey(item) !== key)
+    : [...watchlist, key];
+}
+
+/** Clear old folder assignments only when a favorite is explicitly removed.
+ * Adding a favorite must NEVER auto-place it in an existing folder.
+ */
+export function removeCoinFromWatchlistFolders(
+  folders: Record<string, string[]>,
+  coin: CoinIdentifier | string
+): Record<string, string[]> {
+  const key = getCoinWatchlistKey(coin);
+  const result: Record<string, string[]> = {};
+  for (const [name, entries] of Object.entries(folders)) {
+    result[name] = Array.isArray(entries)
+      ? entries.filter((entry) => getCoinWatchlistKey(entry) !== key)
+      : [];
+  }
+  return result;
+}
+
 /** A saved favorite can outlive the current scan. Keep it visible and removable. */
 export interface ResolvedWatchlistEntry {
   key: string;
@@ -126,11 +158,9 @@ export function resolveWatchlistEntries(
   scannedCoins: ScannedCoin[]
 ): ResolvedWatchlistEntry[] {
   const available = new Map<string, ScannedCoin>();
-  const bySymbol = new Map<string, ScannedCoin>();
   for (const coin of scannedCoins) {
     const key = getCoinWatchlistKey(coin);
     if (!available.has(key)) available.set(key, coin);
-    if (!bySymbol.has(coin.symbol.toUpperCase())) bySymbol.set(coin.symbol.toUpperCase(), coin);
   }
   const resolved = new Map<string, ResolvedWatchlistEntry>();
   for (const raw of Array.isArray(watchlist) ? watchlist : []) {
@@ -139,10 +169,10 @@ export function resolveWatchlistEntries(
     const normalized = getCoinWatchlistKey(sourceKey);
     const parsed = parseWatchlistKey(normalized);
     if (!parsed.symbol.trim()) continue;
-    // Legacy entries were saved as plain symbols, without a specific exchange.
-    // Prefer the historical Binance Futures default, then any matching quote.
-    const coin = available.get(normalized) ??
-      (!sourceKey.includes(':') ? bySymbol.get(parsed.symbol) : undefined) ?? null;
+    // Legacy plain symbols had no exchange recorded. Treat them as the
+    // historical Binance Futures default; do not substitute a Bybit quote
+    // merely because it shares the same symbol.
+    const coin = available.get(normalized) ?? null;
     const existing = resolved.get(normalized);
     if (existing) {
       if (!existing.sourceKeys.includes(raw)) existing.sourceKeys.push(raw);

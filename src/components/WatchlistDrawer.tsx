@@ -50,14 +50,15 @@ export const WatchlistDrawer: React.FC<WatchlistDrawerProps> = ({
     if (sortBy === 'volume') result = (a.coin?.volume24hUsd ?? 0) - (b.coin?.volume24hUsd ?? 0);
     return sortDirection === 'asc' ? result : -result;
   });
-  const groups = folderNames.map((folder) => ({
-    name: folder,
-    entries: sortEntries(entries.filter((entry) => getFolderForEntry(entry) === folder)),
-  }));
-  groups.push({
+  // Show unassigned favorites first. Folders are optional and never
+  // automatically receive newly bookmarked coins.
+  const groups = [{
     name: '',
     entries: sortEntries(entries.filter((entry) => !getFolderForEntry(entry))),
-  });
+  }, ...folderNames.map((folder) => ({
+    name: folder,
+    entries: sortEntries(entries.filter((entry) => getFolderForEntry(entry) === folder)),
+  }))];
 
   const createFolder = () => {
     const name = newFolderName.trim();
@@ -167,7 +168,7 @@ export const WatchlistDrawer: React.FC<WatchlistDrawerProps> = ({
                   className="w-full flex items-center gap-2 text-[11px] font-semibold text-slate-400 hover:text-slate-200 transition-colors"
                 >
                   <Star className="w-3.5 h-3.5 text-amber-400" />
-                  {group.name || 'Без папки'}
+                  {group.name || 'Загальний список'}
                   <span className="text-slate-600 font-mono">{group.entries.length}</span>
                   <span className="ml-auto">
                     {collapsedFolders[group.name || 'unfiled'] ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
@@ -209,7 +210,7 @@ export const WatchlistDrawer: React.FC<WatchlistDrawerProps> = ({
                       className="max-w-[90px] bg-slate-900 border border-slate-800 rounded px-1 py-0.5 text-[10px] text-slate-400 outline-none"
                       title="Перемістити в папку"
                     >
-                      <option value="">Без папки</option>
+                      <option value="">Загальний список</option>
                       {folderNames.map((folder) => <option key={folder} value={folder}>{folder}</option>)}
                     </select>
                     <button

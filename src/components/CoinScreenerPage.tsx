@@ -53,13 +53,14 @@ import { matchesExchangeInstrumentSearch } from '../utils/marketSymbols';
 import { isVolumeWithinCap } from '../utils/screenerVolume';
 import { ScreenerVolumeDropdown } from './ScreenerVolumeDropdown';
 import { ScreenerSortDropdown } from './ScreenerSortDropdown';
+import { isCoinInWatchlist, type CoinIdentifier } from '../utils/watchlistUtils';
 
 interface CoinScreenerPageProps {
   onSelectCoin: (coin: ScannedCoin, formation?: DetectedFormation) => void;
   onSendMetaScalp?: (coin: ScannedCoin) => void;
   metaScalpBinding?: string;
   watchlist: string[];
-  onToggleWatchlist: (symbol: string) => void;
+  onToggleWatchlist: (coin: CoinIdentifier) => void;
   onOpenTelegramAlerts: (prefill?: any) => void;
   onOpenWatchlist: () => void;
   formationsCoins?: ScannedCoin[];
@@ -932,7 +933,7 @@ export const CoinScreenerPage: React.FC<CoinScreenerPageProps> = ({
             </thead>
             <tbody className="divide-y divide-slate-800/50 font-mono">
               {filteredCoins.slice(0, displayLimit).map((coin, index) => {
-                const isWatchlisted = watchlist.includes(coin.symbol);
+                const isWatchlisted = isCoinInWatchlist(watchlist, coin);
                 const isPositive = coin.change24h >= 0;
                 const vol5m = getCoinVol5m(coin);
 
@@ -964,7 +965,7 @@ export const CoinScreenerPage: React.FC<CoinScreenerPageProps> = ({
                               onOpenAuthModal?.('signin', 'general');
                               return;
                             }
-                            onToggleWatchlist(coin.symbol);
+                            onToggleWatchlist(coin);
                           }}
                           className={`p-1 rounded transition-colors ${
                             isWatchlisted
@@ -1171,7 +1172,7 @@ export const CoinScreenerPage: React.FC<CoinScreenerPageProps> = ({
         /* CARDS / GRID VIEW */
         <div className="grid grid-cols-1 xs:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 min-[2200px]:grid-cols-7 min-[3000px]:grid-cols-8 gap-3 sm:gap-4">
           {filteredCoins.slice(0, displayLimit).map((coin, index) => {
-            const isWatchlisted = watchlist.includes(coin.symbol);
+            const isWatchlisted = isCoinInWatchlist(watchlist, coin);
             const isPositive = coin.change24h >= 0;
             const vol5m = getCoinVol5m(coin);
             const distHigh = getCoinDistanceToHigh(coin);
@@ -1239,7 +1240,7 @@ export const CoinScreenerPage: React.FC<CoinScreenerPageProps> = ({
                           onOpenAuthModal?.('signin', 'general');
                           return;
                         }
-                        onToggleWatchlist(coin.symbol);
+                        onToggleWatchlist(coin);
                       }}
                       className={`p-1.5 rounded-lg transition-colors ${
                         isWatchlisted
