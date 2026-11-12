@@ -139,6 +139,7 @@ export function ProfileHookChartSettings() {
       prefs={draft}
       onChange={changeSettings}
       onApplyStrategy={applyStrategy}
+      saveStatus={error ? 'error' : saving ? 'saving' : saved ? 'saved' : 'idle'}
       onClose={() => {}}
     />
   </section>;
