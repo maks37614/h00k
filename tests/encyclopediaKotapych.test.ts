@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import React from 'react';
 import { renderToString } from 'react-dom/server';
 import { FormationGuideModal } from '../src/components/FormationGuideModal';
@@ -74,4 +75,15 @@ test('all key concepts from both documents are covered before hiding raw-notes n
 test('raw document transcripts are retained in the repository for future verification', () => {
   const count = KOTAPYCH_SOURCE_PAGES.length;
   assert.equal(count, 87);
+});
+
+
+test('Kotapych source notes are not rendered as footers on any setup or topic', () => {
+  const ui = readFileSync(new URL('../src/components/encyclopedia/KotapychGuide.tsx', import.meta.url), 'utf8');
+  assert.doesNotMatch(ui, /Джерело:\s*\{setup\.source\}/);
+  assert.doesNotMatch(ui, /Джерело теми:/);
+  assert.doesNotMatch(ui, /topic\.notePages\.join/);
+  // Preserve the underlying content and editorial provenance as data, not on-screen footers.
+  assert.equal(KOTAPYCH_SETUPS.length, 4);
+  assert.equal(KOTAPYCH_TOPICS.length, 19);
 });
