@@ -6,7 +6,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { OriginalHookChartSettings, normalizeOriginalHookChartPreferences } from '../src/components/hookchart/OriginalHookChartSettings';
 import {
   VISUAL_CONTEXTS, captureVisualProfile, getVisualProfile, makeVisualProfileKey,
-  normalizedVisualProfiles, patchVisualProfile, visualContextForTerminalWidth,
+  normalizeVisualProfile, normalizedVisualProfiles, patchVisualProfile, visualContextForTerminalWidth,
   visualDeviceForWidth,
 } from '../src/components/hookchart/visualProfiles';
 
@@ -129,4 +129,19 @@ test('Screener, Formations, Terminal carry visual contexts, Replay passes none',
   assert.match(src('../src/components/ExchangeCandlestickChart.tsx'),/visualContext=\{visualContext\}/);
   assert.match(src('../src/components/TradingViewChart.tsx'),/visualContext=\{visualContext\}/);
   assert.doesNotMatch(replay,/visualContext=|visualProfiles/);
+});
+
+test('visual zoom and right-side padding accept expanded finite ranges', () => {
+  const base = getVisualProfile(undefined, 'terminalCompact', 'mobile');
+  const small = normalizeVisualProfile({ ...base, verticalZoom: 0.02, rightGapBars: 900 }, 'terminalCompact');
+  assert.equal(small.verticalZoom, 0.02);
+  assert.equal(small.rightGapBars, 900);
+  const large = normalizeVisualProfile({ ...base, verticalZoom: 75, rightGapBars: 1800 }, 'terminalCompact');
+  assert.equal(large.verticalZoom, 75);
+  assert.equal(large.rightGapBars, 1800);
+  const invalid = normalizeVisualProfile({ ...base, verticalZoom: Number.POSITIVE_INFINITY, rightGapBars: Number.NaN }, 'terminalCompact');
+  assert.equal(invalid.verticalZoom, base.verticalZoom);
+  assert.equal(invalid.rightGapBars, base.rightGapBars);
+  assert.equal(normalizeVisualProfile({ ...base, verticalZoom: 100000, rightGapBars: 999999 }, 'terminalCompact').verticalZoom, 100);
+  assert.equal(normalizeVisualProfile({ ...base, verticalZoom: 100000, rightGapBars: 999999 }, 'terminalCompact').rightGapBars, 2000);
 });

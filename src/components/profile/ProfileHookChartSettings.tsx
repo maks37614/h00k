@@ -23,6 +23,7 @@ export function ProfileHookChartSettings() {
   const { language: siteLanguage } = useLanguage();
   const [draft, setDraft] = useState<HookChartPreferences>(() => normalizeOriginalHookChartPreferences(profile?.hookChartPreferences));
   const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const draftRef = useRef(draft);
   draftRef.current = draft;
@@ -50,7 +51,10 @@ export function ProfileHookChartSettings() {
 
     void writerRef.current({ hookChartPreferences: delta })
       .then(() => {
-        if (mountedRef.current && uidRef.current === uid) setError(null);
+        if (mountedRef.current && uidRef.current === uid) {
+          setError(null);
+          if (!pendingRef.current && writingRef.current === 1) setSaved(true);
+        }
       })
       .catch((reason: unknown) => {
         if (uidRef.current !== uid) return;
@@ -72,6 +76,7 @@ export function ProfileHookChartSettings() {
     pendingRef.current = null;
     setError(null);
     setSaving(false);
+    setSaved(false);
     setDraft(normalizeOriginalHookChartPreferences(profile?.uid === user?.uid ? profile?.hookChartPreferences : undefined));
   }, [user?.uid, profile?.uid]);
 
@@ -102,6 +107,7 @@ export function ProfileHookChartSettings() {
     setDraft(next);
     pendingRef.current = mergeSettings(pendingRef.current || {}, update);
     setSaving(true);
+    setSaved(false);
     setError(null);
     if (timerRef.current) clearTimeout(timerRef.current);
     timerRef.current = setTimeout(flush, 500);
@@ -119,9 +125,9 @@ export function ProfileHookChartSettings() {
   }
 
   return <section className="hookchart-root profile-hookchart-settings" data-hookchart-language={siteLanguage} lang={siteLanguage} aria-label="Налаштування HookChart у профілі">
-    {(saving || error) && <div className="mb-3 text-xs" role="status" aria-live="polite">
+    {(saving || error || saved) && <div className="mb-3 text-xs" role="status" aria-live="polite">
       <span className={error ? 'text-rose-300' : 'text-cyan-300'}>
-        {error ? 'Помилка збереження' : 'Зберігаємо…'}
+        {error ? 'Помилка збереження' : saving ? 'Зберігаємо…' : 'Збережено у профілі'}
       </span>
     </div>}
     {error && <button type="button" onClick={flush} className="mb-3 rounded-lg border border-rose-500/40 bg-rose-950/30 px-3 py-2 text-xs text-rose-200">
@@ -133,6 +139,7 @@ export function ProfileHookChartSettings() {
       prefs={draft}
       onChange={changeSettings}
       onApplyStrategy={applyStrategy}
+      saveStatus={error ? 'error' : saving ? 'saving' : saved ? 'saved' : 'idle'}
       onClose={() => {}}
     />
   </section>;
