@@ -179,7 +179,7 @@ export const FormationGuideModal: React.FC<FormationGuideModalProps> = ({ isOpen
         {/* Sidebar: nested category and its entries */}
         <div className="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-3 overflow-y-auto md:overflow-hidden divide-y md:divide-y-0">
           {/* List */}
-          <div className="md:border-r border-slate-800 bg-slate-950/40 p-2 sm:p-3 space-y-1 overflow-y-auto max-h-[92px] md:max-h-full touch-scroll">
+          <div className="md:border-r border-slate-800 bg-slate-950/40 p-2 sm:p-3 space-y-1 overflow-y-auto max-h-[165px] md:max-h-full touch-scroll">
             {mainCategory === 'scalping' ? (
               <div className="space-y-1" role="group" aria-label="Підкатегорії скальпінгу">
                 <button type="button" aria-pressed={scalpingSubcategory === 'kotapych'} onClick={() => setScalpingSubcategory('kotapych')}
