@@ -458,10 +458,10 @@ export const SurveillancePage: React.FC<SurveillancePageProps> = ({
               </div>
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
-                  <h1 className="text-xl font-black text-white tracking-tight">24/7 Моніторинг</h1>
+                  <h1 className="text-xl font-black text-white tracking-tight">Моніторинг</h1>
                   <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1 font-mono">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                    LIVE ENGINE
+                    Live
                   </span>
                 </div>
                 <p className="text-xs text-slate-400">
@@ -486,22 +486,21 @@ export const SurveillancePage: React.FC<SurveillancePageProps> = ({
                 <Send className="w-3.5 h-3.5 text-sky-400" />
               </button>
             )}
-            <button
-              onClick={() => refresh()}
-              className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition-colors cursor-pointer"
-              title="Оновити дані"
-            >
-              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-cyan-400' : ''}`} />
-            </button>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2 pt-3 border-t border-slate-800/80 font-mono text-[11px]">
-          <div className="p-2 rounded-xl bg-slate-950/80 border border-slate-800 flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-cyan-400 animate-pulse" />
-            <div>
-              <div className="text-[9px] text-slate-500 uppercase">Стеження</div>
-              <div className="font-bold text-cyan-300">{activeCount} МОНЕТ</div>
+            <div className="flex shrink-0 items-center gap-2">
+              <button
+                onClick={() => refresh()}
+                className="p-2 shrink-0 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition-colors cursor-pointer"
+                title="Оновити дані"
+              >
+                <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-cyan-400' : ''}`} />
+              </button>
+              <div aria-label={`Стеження: ${activeCount} монет`} className="px-2.5 py-1.5 shrink-0 rounded-xl bg-slate-950/80 border border-slate-800 flex items-center gap-2 font-mono text-[11px]">
+                <span className="w-2 h-2 shrink-0 rounded-full bg-cyan-400 animate-pulse" />
+                <div>
+                  <div className="text-[9px] text-slate-500 uppercase">Стеження</div>
+                  <div className="font-bold text-cyan-300">{activeCount} МОНЕТ</div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
