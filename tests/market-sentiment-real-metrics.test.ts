@@ -21,9 +21,10 @@ test('real Bybit ticker OI sums across observed contracts, never guessed from tu
   ]);
   assert.equal(metrics.aggregatedOIUsd, 300_000_000);
   assert.equal(metrics.instrumentCount, 2);
+  assert.equal(metrics.fundingInstrumentCount, 2);
   assert.equal(metrics.avgFundingRate, 0.01);
   assert.equal(metrics.oiChange24hPct, null);
-  assert.match(metrics.sourceLabel ?? '', /Bybit/);
+  assert.match(metrics.sourceLabel ?? '', /Bybit USDT Linear/);
 });
 
 test('no observed OI/funding returns nulls, including malformed amounts', () => {
