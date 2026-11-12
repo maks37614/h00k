@@ -11,15 +11,22 @@ import {
   CLASSIC_RULE_GROUPS, CLASSIC_GLOSSARY,
 } from '../src/components/encyclopedia/classicRulesData';
 
-test('encyclopedia adds Rules and Classic without losing three existing categories', () => {
+test('Scalping contains Kotapych and Rules, with no top-level Rules category', () => {
   const html = renderToString(React.createElement(FormationGuideModal, { isOpen: true, onClose: () => {} }));
-  for (const name of ['Скальпінг', 'Формації-Патерни', 'Індикатори', 'Правила']) {
-    assert.ok(html.includes(name), name + ' missing from main encyclopedia');
+  for (const name of ['Скальпінг', 'Формації-Патерни', 'Індикатори', 'Котапич', 'Правила']) {
+    assert.ok(html.includes(name), name + ' missing from the encyclopedia');
   }
+  const topLevelTabs = html.match(/role="tab" aria-selected=/g) || [];
+  assert.equal(topLevelTabs.length, 3, 'only Scalping, Patterns and Indicators remain as primary categories');
+  assert.match(html, /aria-label="Підкатегорії скальпінгу"/);
+  assert.match(html, /Котапич/);
+  assert.match(html, /Правила/);
+
   const source = readFileSync(new URL('../src/components/FormationGuideModal.tsx', import.meta.url), 'utf8');
-  assert.match(source, /mainCategory === 'rules'/);
-  // The Classic subcategory renders only after the Rules main tab is selected.
-  assert.match(source, /<strong className="block text-xs">Класика<\/strong>/);
+  assert.doesNotMatch(source, /mainCategory === 'rules'/);
+  assert.doesNotMatch(source, /setMainCategory\('rules'\)/);
+  assert.match(source, /scalpingSubcategory === 'classic'/);
+  assert.match(source, /setScalpingSubcategory\('classic'\)/);
   assert.match(source, /<ClassicRulesGuide \/>/);
   assert.match(source, /<KotapychGuide \/>/);
   assert.match(source, /<OpenInterestGuide \/>/);
