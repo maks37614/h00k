@@ -432,6 +432,11 @@ function VisualProfileEditor({
           <b className="valueBadge">{selectedProfile.visibleBars}</b>
         </div>
       </Setting>
+      {visualContext.startsWith('terminal') && <div className="settingsHint">
+        Коли в Терміналі ввімкнено глобальний автомасштаб свічок, він має пріоритет над вертикальним зумом
+        та перемикачем автоматичного масштабу ціни з цього профілю. Щоб використовувати їх вручну,
+        вимкніть глобальний автомасштаб у панелі Термінала.
+      </div>}
       <Setting label="Вертикальний зум" desc="1× — природний діапазон. Розширений зум від 0,01× до 100×; значення можна вписати вручну.">
         <div className="flex items-center gap-2">
           <input aria-label="Вертикальний зум" type="range" className="visualProfileRange" min="-2" max="2" step="0.01"
