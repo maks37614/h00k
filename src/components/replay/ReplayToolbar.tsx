@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
+import './replayCoinPicker.css';
 import {
   Play,
   Pause,
@@ -448,7 +449,7 @@ export const ReplayToolbar: React.FC<ReplayToolbarProps> = ({
       {/* Coin Selection Modal */}
       {isCoinModalOpen && typeof document !== 'undefined' && createPortal(
         <div
-          className="fixed inset-0 z-[250] flex items-center justify-center bg-slate-950/85 p-2 backdrop-blur-md sm:p-4"
+          className="fixed inset-0 z-[250] flex items-center justify-center overflow-x-hidden bg-slate-950/85 p-2 backdrop-blur-md sm:p-4"
           onMouseDown={(event) => {
             if (event.target === event.currentTarget) setIsCoinModalOpen(false);
           }}
@@ -457,7 +458,7 @@ export const ReplayToolbar: React.FC<ReplayToolbarProps> = ({
             role="dialog"
             aria-modal="true"
             aria-labelledby="replay-coin-picker-title"
-            className="flex h-[90dvh] max-h-[calc(100dvh-16px)] w-full min-w-0 max-w-4xl flex-col overflow-hidden rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl sm:max-h-[calc(100dvh-32px)]"
+            className="replay-coin-modal flex w-full min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl"
           >
             {/* Modal Header */}
             <div className="flex shrink-0 items-start justify-between gap-2 border-b border-slate-800 bg-slate-950/50 p-3 sm:p-4">
@@ -489,8 +490,11 @@ export const ReplayToolbar: React.FC<ReplayToolbarProps> = ({
               </button>
             </div>
 
-            {/* Search & Comprehensive Filters */}
-            <div className="max-h-[42dvh] min-h-0 min-w-0 shrink-0 space-y-3 overflow-x-hidden overflow-y-auto overscroll-contain border-b border-slate-800/80 bg-slate-950/40 p-3 sm:p-4">
+            {/* Keep filters and results in one bounded area. On short
+                landscape screens they share a single vertical scroller. */}
+            <div className="replay-coin-body flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+              {/* Search & Comprehensive Filters */}
+              <div className="replay-coin-filters min-h-0 min-w-0 shrink-0 space-y-3 overflow-x-hidden overflow-y-auto overscroll-contain border-b border-slate-800/80 bg-slate-950/40 p-3 sm:p-4">
               <div className="flex min-w-0 flex-col gap-2.5 sm:flex-row sm:flex-wrap sm:items-center">
                 {/* Search */}
                 <div className="relative w-full min-w-0 flex-1">
@@ -605,9 +609,9 @@ export const ReplayToolbar: React.FC<ReplayToolbarProps> = ({
               </div>
             </div>
 
-            {/* Coins Grid / List */}
-            <div className="min-h-0 min-w-0 flex-1 space-y-3 overflow-x-hidden overflow-y-auto overscroll-contain p-3 sm:p-4">
-              <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {/* The columns depend on the dialog width, not the viewport. */}
+              <div className="replay-coin-list min-h-0 min-w-0 flex-1 space-y-3 overflow-x-hidden overflow-y-auto overscroll-contain p-3 sm:p-4">
+                <div className="replay-coin-card-grid grid min-w-0 gap-2">
                 {filteredCoins.slice(0, displayCount).map((coin) => {
                   const isSelected =
                     coin.symbol === selectedSymbol && coin.exchange === selectedExchange;
@@ -701,8 +705,9 @@ export const ReplayToolbar: React.FC<ReplayToolbarProps> = ({
               )}
             </div>
 
+            </div>
             {/* Modal Footer */}
-            <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-slate-800 bg-slate-950/90 p-3 text-xs text-slate-400">
+            <div className="replay-coin-footer flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-slate-800 bg-slate-950/90 p-3 text-xs text-slate-400">
               <div className="min-w-0 font-mono">
                 Показано <b className="text-white">{Math.min(displayCount, filteredCoins.length)}</b> з <b className="text-cyan-400">{filteredCoins.length}</b> монет на ринку ($100k – $10B)
               </div>

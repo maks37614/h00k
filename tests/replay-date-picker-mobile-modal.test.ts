@@ -95,10 +95,10 @@ test('Replay coin picker uses a body portal and scales across phone and desktop 
   assert.match(toolbar, /role="dialog"/);
   assert.match(toolbar, /aria-modal="true"/);
   assert.match(toolbar, /fixed inset-0 z-\[250\]/);
-  assert.match(toolbar, /h-\[90dvh\] max-h-\[calc\(100dvh-16px\)\]/);
-  assert.match(toolbar, /max-h-\[42dvh\].*overflow-x-hidden overflow-y-auto/);
-  assert.match(toolbar, /min-h-0 min-w-0 flex-1 space-y-3 overflow-x-hidden overflow-y-auto/);
-  assert.match(toolbar, /min-w-0 grid-cols-1 gap-2 sm:grid-cols-2/);
+  assert.match(toolbar, /replay-coin-modal flex w-full min-w-0 flex-col overflow-hidden/);
+  assert.match(toolbar, /replay-coin-filters min-h-0 min-w-0 shrink-0.*overflow-x-hidden overflow-y-auto/);
+  assert.match(toolbar, /replay-coin-list min-h-0 min-w-0 flex-1 space-y-3 overflow-x-hidden overflow-y-auto/);
+  assert.match(toolbar, /replay-coin-card-grid grid min-w-0 gap-2/);
   assert.match(toolbar, /document\.body\s*\n\s*\)\}/);
 });
 
@@ -123,4 +123,25 @@ test('Coin modal locks background scrolling and closes on Escape', () => {
   assert.match(toolbar, /\[isDatePickerOpen, isCoinModalOpen\]/);
   assert.match(toolbar, /document\.body\.style\.overflow = bodyOverflow/);
   assert.match(toolbar, /document\.documentElement\.style\.overflow = htmlOverflow/);
+});
+
+test('Replay coin picker fluidly fits phones, tablets, desktop and landscape heights', () => {
+  const css = readFileSync(new URL('../src/components/replay/replayCoinPicker.css', import.meta.url), 'utf8');
+  assert.match(toolbar, /import '\.\/replayCoinPicker\.css'/);
+  assert.match(toolbar, /className="replay-coin-modal flex w-full min-w-0 flex-col overflow-hidden/);
+  assert.match(toolbar, /replay-coin-body flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden/);
+  assert.match(toolbar, /replay-coin-filters min-h-0 min-w-0 shrink-0/);
+  assert.match(toolbar, /replay-coin-list min-h-0 min-w-0 flex-1/);
+  assert.match(toolbar, /replay-coin-card-grid grid min-w-0 gap-2/);
+  assert.match(css, /width: min\(100%, 70rem\)/);
+  assert.match(css, /height: min\(92dvh, 900px\)/);
+  assert.match(css, /max-height: calc\(100dvh - 16px\)/);
+  assert.match(css, /grid-template-columns: repeat\(auto-fit, minmax\(min\(100%, 220px\), 1fr\)\)/);
+  assert.match(css, /@media \(max-height: 540px\)/);
+  assert.match(css, /\.replay-coin-body \{\s*overflow-x: hidden;\s*overflow-y: auto;/);
+  assert.match(css, /\.replay-coin-list \{\s*flex: none;\s*overflow: visible;/);
+  assert.match(css, /@media \(max-width: 359px\)/);
+  assert.doesNotMatch(toolbar, /grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4/);
+  assert.match(toolbar, /onSelectCoin\(coin\.symbol, coin\.exchange, coin\.marketType\)/);
+  assert.match(toolbar, /onClick=\{\(\) => setDisplayCount\(filteredCoins\.length\)\}/);
 });
