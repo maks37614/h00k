@@ -1588,17 +1588,127 @@
 .liqSettingHelp:hover>span,.liqSettingHelp:focus-within>span{display:block}
 
 
-/* Live HookChart visual-profile editor: responsive controls, iOS-safe selectors.
-   Scoped to the new panel; all legacy settings retain their original sizing. */
-.hookchart-root .visualProfileEditor .settingControl select.visualProfileSelect {
-  width: min(100%, 320px);
-  min-width: 0;
-  max-width: 320px;
-  height: 40px;
-  font: 600 16px/1.25 system-ui;
-  text-align: left;
-  padding: 0 28px 0 10px;
-  touch-action: manipulation;
+/* Visual editor chart-type dropdown: unlike iOS native select, it is dark
+   everywhere. Only this picker changes; all other site selects stay intact. */
+.hookchart-root .visualProfileEditor .settingControl > .visualContextPicker {
+  display:block;
+  width:min(100%, 380px);
+  max-width:100%;
+  min-width:0;
+}
+.hookchart-root .visualProfileEditor .visualContextTrigger {
+  box-sizing:border-box;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  width:100%;
+  min-height:46px;
+  gap:12px;
+  padding:10px 14px;
+  border:1px solid #375473;
+  border-radius:11px;
+  background:linear-gradient(180deg,#13233a,#0c1729);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.04);
+  color:#e9f3ff;
+  font:600 15px/1.35 system-ui;
+  text-align:left;
+  cursor:pointer;
+  touch-action:manipulation;
+}
+.hookchart-root .visualProfileEditor .visualContextTrigger:hover,
+.hookchart-root .visualProfileEditor .visualContextTrigger[aria-expanded="true"] {
+  border-color:#4b95d0;
+  background:linear-gradient(180deg,#193451,#0e2036);
+}
+.hookchart-root .visualProfileEditor .visualContextTrigger:focus-visible {
+  outline:2px solid #63c4fa;
+  outline-offset:2px;
+}
+.hookchart-root .visualProfileEditor .visualContextTriggerLabel {
+  display:block;
+  min-width:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+.hookchart-root .visualProfileEditor .visualContextChevron {
+  flex:0 0 auto;
+  color:#87b9da;
+  font:700 21px/1 system-ui;
+  transition:transform .17s ease;
+}
+.hookchart-root .visualProfileEditor .visualContextChevron.open {transform:rotate(180deg)}
+
+/* This menu is portalled to document.body so settingsSection overflow:hidden
+   never cuts it off. Its z-index is above the fullscreen settings portal. */
+.hookchart-visual-context-menu {
+  box-sizing:border-box;
+  position:fixed;
+  z-index:2147483500;
+  display:block;
+  overflow-y:auto;
+  overscroll-behavior:contain;
+  -webkit-overflow-scrolling:touch;
+  padding:7px;
+  border:1px solid #334b65;
+  border-radius:15px;
+  background:#0d1726;
+  box-shadow:0 18px 52px rgba(0,0,0,.65),inset 0 1px 0 rgba(255,255,255,.04);
+  color:#dceafb;
+  font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+}
+.hookchart-visual-context-menu .visualContextGroup {
+  margin:5px 5px 3px;
+  padding:8px 8px 5px;
+  color:#83a9c8;
+  font:700 11px/1.2 system-ui;
+  letter-spacing:.07em;
+  text-transform:uppercase;
+}
+.hookchart-visual-context-menu .visualContextGroup:not(:first-child) {
+  margin-top:9px;
+  border-top:1px solid #28384d;
+}
+.hookchart-visual-context-menu .visualContextOption {
+  box-sizing:border-box;
+  display:flex;
+  align-items:center;
+  width:100%;
+  min-height:43px;
+  gap:11px;
+  padding:9px 11px;
+  border:1px solid transparent;
+  border-radius:9px;
+  background:transparent;
+  color:#dce7f3;
+  font:550 14px/1.35 system-ui;
+  text-align:left;
+  cursor:pointer;
+  touch-action:manipulation;
+}
+.hookchart-visual-context-menu .visualContextOption:hover,
+.hookchart-visual-context-menu .visualContextOption:focus-visible {
+  background:#172e45;
+  border-color:#335873;
+  outline:none;
+}
+.hookchart-visual-context-menu .visualContextOption[aria-selected="true"] {
+  background:#153751;
+  border-color:#2c658b;
+  color:#f4fbff;
+}
+.hookchart-visual-context-menu .visualContextCheck {
+  display:grid;
+  flex:0 0 19px;
+  width:19px;
+  place-items:center;
+  color:#5bc7ff;
+  font:750 17px/1 system-ui;
+}
+.hookchart-visual-context-menu .visualContextOptionLabel {
+  flex:1 1 auto;
+  min-width:0;
+  overflow-wrap:anywhere;
 }
 .hookchart-root .visualProfileEditor .visualProfileRange {
   flex: 1 1 130px;
@@ -1631,9 +1741,9 @@
     justify-content: flex-start;
     width: 100%;
   }
-  .hookchart-root .visualProfileEditor .settingControl select.visualProfileSelect {
-    min-height: 44px;
-    max-width: 100%;
+  .hookchart-root .visualProfileEditor .visualContextTrigger {
+    min-height:48px;
+    font-size:16px;
   }
   .hookchart-root .visualProfileEditor .visualProfileRange {
     min-width: 110px;

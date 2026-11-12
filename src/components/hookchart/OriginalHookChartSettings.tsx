@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { ExchangeId, HookChartPreferences, MarketType } from '../../types';
 import { clampHookChartHistory } from '../../utils/hookChartHistory';
 import { normalizeDensityDistance } from './marketAnalytics';
@@ -370,6 +371,136 @@ function StrategySettings({ activeId, onSelect }: { activeId: string; onSelect: 
 }
 
 
+/** Custom chart-context picker avoids Safari's bright native <select> popup.
+ * A body portal keeps the menu visible outside the clipped settings sections. */
+export function VisualContextPicker({ value, onChange }: {
+  value: VisualContextId;
+  onChange: (id: VisualContextId) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [placement, setPlacement] = useState<{
+    left: number; top: number; width: number; maxHeight: number;
+  } | null>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const focusedOnOpen = useRef(false);
+  const menuId = React.useId();
+  const chosen = VISUAL_CONTEXTS.find(context => context.id === value) ?? VISUAL_CONTEXTS[0];
+
+  useEffect(() => {
+    if (!open) {
+      focusedOnOpen.current = false;
+      return;
+    }
+    const place = () => {
+      const rect = triggerRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const viewportWidth = document.documentElement.clientWidth || window.innerWidth;
+      const viewportHeight = window.innerHeight;
+      const width = Math.min(Math.max(260, rect.width), Math.max(180, viewportWidth - 24));
+      const left = Math.max(12, Math.min(rect.left, viewportWidth - width - 12));
+      const below = viewportHeight - rect.bottom - 16;
+      const above = rect.top - 16;
+      const useAbove = below < 260 && above > below;
+      const maxHeight = Math.max(100, Math.min(410, useAbove ? above : below));
+      const top = useAbove ? Math.max(8, rect.top - maxHeight - 8) : rect.bottom + 8;
+      setPlacement(current =>
+        current && current.left === left && current.top === top
+          && current.width === width && current.maxHeight === maxHeight
+          ? current : { left, top, width, maxHeight });
+    };
+    const dismiss = (event: PointerEvent) => {
+      if (event.target instanceof Node
+        && !triggerRef.current?.contains(event.target)
+        && !menuRef.current?.contains(event.target)) setOpen(false);
+    };
+    const keydown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        event.stopPropagation();
+        setOpen(false);
+        triggerRef.current?.focus({ preventScroll: true });
+      } else if (event.key === 'Tab') {
+        setOpen(false);
+      }
+    };
+    place();
+    document.addEventListener('pointerdown', dismiss);
+    window.addEventListener('resize', place, { passive: true });
+    window.addEventListener('scroll', place, true);
+    window.addEventListener('keydown', keydown, true);
+    return () => {
+      document.removeEventListener('pointerdown', dismiss);
+      window.removeEventListener('resize', place);
+      window.removeEventListener('scroll', place, true);
+      window.removeEventListener('keydown', keydown, true);
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open || !placement || focusedOnOpen.current) return;
+    const selected = menuRef.current?.querySelector<HTMLButtonElement>('[role="option"][aria-selected="true"]');
+    if (selected) {
+      selected.focus({ preventScroll: true });
+      focusedOnOpen.current = true;
+    }
+  }, [open, placement]);
+
+  const moveFocus = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (!['ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) return;
+    const options = [...(menuRef.current?.querySelectorAll<HTMLButtonElement>('[role="option"]') ?? [])];
+    if (!options.length) return;
+    event.preventDefault();
+    const index = options.findIndex(option => option === document.activeElement);
+    const next = event.key === 'Home' ? 0
+      : event.key === 'End' ? options.length - 1
+      : event.key === 'ArrowDown' ? (index + 1) % options.length
+      : (index + options.length - 1) % options.length;
+    options[next].focus({ preventScroll: true });
+  };
+
+  return <div className="visualContextPicker">
+    <button ref={triggerRef} type="button" className="visualContextTrigger"
+      aria-label="Тип графіка для візуальних налаштувань"
+      aria-haspopup="listbox" aria-expanded={open} aria-controls={open ? menuId : undefined}
+      onClick={() => setOpen(previous => !previous)}
+      onKeyDown={event => {
+        if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+          event.preventDefault();
+          setOpen(true);
+        }
+      }}>
+      <span className="visualContextTriggerLabel">{chosen.label}</span>
+      <span className={'visualContextChevron' + (open ? ' open' : '')} aria-hidden="true">⌄</span>
+    </button>
+    {open && placement && typeof document !== 'undefined' && createPortal(
+      <div id={menuId} ref={menuRef} role="listbox"
+        aria-label="Оберіть тип графіка"
+        className="hookchart-visual-context-menu"
+        style={{ left: placement.left, top: placement.top, width: placement.width, maxHeight: placement.maxHeight }}
+        onKeyDown={moveFocus}>
+        {VISUAL_CONTEXTS.map((context, index) => {
+          const group = index === 0 ? 'Скрінер' : index === 2 ? 'Формації' : index === 4 ? 'Термінал' : null;
+          const active = context.id === value;
+          return <React.Fragment key={context.id}>
+            {group && <div className="visualContextGroup" role="presentation">{group}</div>}
+            <button type="button" role="option" aria-selected={active}
+              className={'visualContextOption' + (active ? ' selected' : '')}
+              onClick={() => {
+                onChange(context.id);
+                setOpen(false);
+                triggerRef.current?.focus({ preventScroll: true });
+              }}>
+              <span className="visualContextCheck" aria-hidden="true">{active ? '✓' : ''}</span>
+              <span className="visualContextOptionLabel">{context.label.split(' · ')[1] ?? context.label}</span>
+            </button>
+          </React.Fragment>;
+        })}
+      </div>, document.body,
+    )}
+  </div>;
+}
+
 /** Real HookChart preview uses the current chart's candles, with optional one-time sample in profile settings. */
 function VisualProfileEditor({
   visualContext, visualDevice, selectedProfile, onContextChange, onDeviceChange,
@@ -404,10 +535,7 @@ function VisualProfileEditor({
         «Відтворення» не використовує ці налаштування.
       </div>
       <Setting label="Тип графіка">
-        <select aria-label="Тип графіка для візуальних налаштувань" className="numInput visualProfileSelect"
-          value={visualContext} onChange={event => onContextChange(event.target.value as VisualContextId)}>
-          {VISUAL_CONTEXTS.map(profile => <option key={profile.id} value={profile.id}>{profile.label}</option>)}
-        </select>
+        <VisualContextPicker value={visualContext} onChange={onContextChange} />
       </Setting>
       <Choice label="Пристрій" values={['mobile', 'desktop']} labels={['Телефон', 'Комп’ютер']}
         value={visualDevice} set={value => onDeviceChange(value as VisualDevice)} />
@@ -570,6 +698,7 @@ export function OriginalHookChartSettings({
     document.body.style.overflow = 'hidden';
     dialogRef.current?.focus({ preventScroll: true });
     const onKeyDown = (event: KeyboardEvent) => {
+      if ((event.key === 'Escape' || event.key === 'Tab') && document.querySelector('.hookchart-visual-context-menu')) return;
       if (event.key === 'Escape') {
         event.preventDefault();
         onClose();
