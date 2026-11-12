@@ -936,40 +936,54 @@ export const FormationDetailsModal: React.FC<FormationDetailsModalProps> = ({
       <div className={pageMode
         ? 'relative mx-auto flex w-full max-w-6xl flex-col bg-slate-900 shadow-2xl sm:my-4 sm:rounded-3xl sm:border sm:border-slate-800 2xl:max-w-7xl'
         : 'relative w-full max-w-6xl 2xl:max-w-7xl bg-slate-900 border-0 sm:border border-slate-800 rounded-none sm:rounded-3xl shadow-2xl overflow-hidden my-auto min-h-screen sm:min-h-0 sm:max-h-[95vh] flex flex-col'}>
-        {/* Modal Header */}
-        <div className="flex items-center justify-between gap-2 sm:gap-3 px-3 sm:px-6 py-2.5 sm:py-4 border-b border-slate-800 bg-slate-950/80 sticky top-0 z-20">
-          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-            <div className="min-w-0">
-              <div className="flex items-center flex-wrap gap-1.5 sm:gap-2">
-                {/* Compact streaming indicator before the symbol. Status details remain accessible on hover. */}
-                <div
-                  role="status"
-                  aria-label={`Котирування: ${liveStatus.isConnected ? 'підключено' : 'немає підключення'} (${liveStatus.mode.toUpperCase()})`}
-                  title={`Котирування: ${liveStatus.isConnected ? 'підключено' : 'немає підключення'} (${liveStatus.mode.toUpperCase()})`}
-                  className={`flex shrink-0 items-center justify-center gap-1 rounded-full border px-1.5 py-1 transition-colors ${
-                    liveStatus.isConnected
-                      ? 'bg-emerald-950/70 border-emerald-700/60 text-emerald-300'
-                      : 'bg-slate-800/80 border-slate-700 text-slate-400'
+        {/* Compact chart header: title/price/exchange above, pattern and original actions beneath on phones. */}
+        <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1.5 border-b border-slate-800 bg-slate-950/80 px-3 py-2.5 sticky top-0 z-20 sm:flex sm:justify-between sm:gap-3 sm:px-6 sm:py-4">
+          <div className="contents sm:flex sm:min-w-0 sm:flex-1 sm:flex-wrap sm:items-center sm:gap-2">
+            <div className="col-span-2 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 sm:gap-2">
+              {/* Keep the live-quote status visible without using a separate header row. */}
+              <div
+                role="status"
+                aria-label={`Котирування: ${liveStatus.isConnected ? 'підключено' : 'немає підключення'} (${liveStatus.mode.toUpperCase()})`}
+                title={`Котирування: ${liveStatus.isConnected ? 'підключено' : 'немає підключення'} (${liveStatus.mode.toUpperCase()})`}
+                className={`flex shrink-0 items-center justify-center gap-1 rounded-full border px-1.5 py-1 transition-colors ${
+                  liveStatus.isConnected
+                    ? 'bg-emerald-950/70 border-emerald-700/60 text-emerald-300'
+                    : 'bg-slate-800/80 border-slate-700 text-slate-400'
+                }`}
+              >
+                <span className="relative flex h-2 w-2">
+                  {liveStatus.isConnected && (
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                  )}
+                  <span className={`relative inline-flex h-2 w-2 rounded-full ${
+                    liveStatus.isConnected ? 'bg-emerald-500' : 'bg-slate-500'
+                  }`} />
+                </span>
+                {liveStatus.mode === 'ws' && <span aria-hidden="true" className="text-[10px] leading-none">⚡</span>}
+              </div>
+              <h2 className="shrink-0 whitespace-nowrap text-base font-extrabold tracking-wide text-white font-mono sm:text-xl">
+                {coin.baseAsset}/{coin.quoteAsset}
+              </h2>
+              <div className="inline-flex shrink-0 items-baseline gap-1 whitespace-nowrap" aria-label="Поточна ціна та зміна за 24 години">
+                <span className="font-mono text-[11px] font-bold text-white sm:text-sm">${formatPrice(livePrice)}</span>
+                <span className={`text-[10px] font-semibold sm:text-xs ${coin.priceChange24h >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                  ({coin.priceChange24h >= 0 ? '+' : ''}{coin.priceChange24h.toFixed(2)}%)
+                </span>
+              </div>
+                <span
+                  className={`text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 rounded font-bold uppercase ${
+                    coin.exchange === 'binance'
+                      ? 'bg-amber-500/10 text-amber-300 border border-amber-500/30'
+                      : 'bg-orange-500/10 text-orange-300 border border-orange-500/30'
                   }`}
                 >
-                  <span className="relative flex h-2 w-2">
-                    {liveStatus.isConnected && (
-                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-                    )}
-                    <span className={`relative inline-flex h-2 w-2 rounded-full ${
-                      liveStatus.isConnected ? 'bg-emerald-500' : 'bg-slate-500'
-                    }`} />
-                  </span>
-                  {liveStatus.mode === 'ws' && <span aria-hidden="true" className="text-[10px] leading-none">⚡</span>}
-                </div>
-
-                <h2 className="text-base sm:text-xl font-extrabold text-white font-mono tracking-wide">
-                  {coin.baseAsset}/{coin.quoteAsset}
-                </h2>
-
+                  {coin.exchange}
+                </span>
+            </div>
+            <div className="col-start-1 row-start-2 min-w-0 max-w-full">
                 {/* Switching patterns in the detailed view updates chart, levels and analysis without reopening it. */}
                 {onFormationChange && formationOptions.length > 1 ? (
-                  <div className="relative min-w-0 max-w-[180px] sm:max-w-[280px]">
+                  <div className="relative min-w-0 w-full max-w-[200px] sm:w-auto sm:max-w-[280px]">
                     <select
                       value={formation.id}
                       onChange={(event) => {
@@ -1001,7 +1015,7 @@ export const FormationDetailsModal: React.FC<FormationDetailsModalProps> = ({
                       const el = document.getElementById('formation-trade-setup-card');
                       if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
                     }}
-                    className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-0.5 rounded-full border text-[10px] sm:text-[11px] font-semibold transition-all cursor-pointer shadow-sm ${
+                    className={`flex min-w-0 max-w-full items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-0.5 rounded-full border text-[10px] sm:text-[11px] font-semibold transition-all cursor-pointer shadow-sm ${
                       isBullish
                         ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 hover:bg-emerald-500/30'
                         : isBearish
@@ -1011,34 +1025,12 @@ export const FormationDetailsModal: React.FC<FormationDetailsModalProps> = ({
                     title={`Формація: ${formation.name} (${formation.statusLabel})`}
                   >
                     <span className="text-[9px] sm:text-[10px] font-black">{isBullish ? '▲' : isBearish ? '▼' : '◆'}</span>
-                    <span className="font-medium tracking-tight">{formation.name}</span>
+                    <span className="min-w-0 truncate font-medium tracking-tight">{formation.name}</span>
                   </button>
                 )}
-
-                <span
-                  className={`text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 rounded font-bold uppercase ${
-                    coin.exchange === 'binance'
-                      ? 'bg-amber-500/10 text-amber-300 border border-amber-500/30'
-                      : 'bg-orange-500/10 text-orange-300 border border-orange-500/30'
-                  }`}
-                >
-                  {coin.exchange}
-                </span>
-                <span className="text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 rounded bg-slate-800 text-slate-300">
-                  {coin.marketType === 'futures' ? 'USDT-M' : 'Spot'}
-                </span>
-              </div>
-              <p className="text-xs text-slate-400 mt-0.5 flex items-center flex-wrap gap-1">
-                <span className="hidden xs:inline">Поточна ціна:</span>
-                <span className="font-mono text-white font-bold">${formatPrice(livePrice)}</span>
-                <span className={`font-semibold ml-1 ${coin.priceChange24h >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                  ({coin.priceChange24h >= 0 ? '+' : ''}{coin.priceChange24h.toFixed(2)}%)
-                </span>
-              </p>
             </div>
           </div>
-
-          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+          <div className="col-start-2 row-start-2 flex shrink-0 items-center justify-self-end gap-1.5 sm:gap-2">
             {/* Telegram Alerts button */}
             <button
               onClick={() =>
