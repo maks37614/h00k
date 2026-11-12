@@ -375,7 +375,7 @@ export const ReplayToolbar: React.FC<ReplayToolbarProps> = ({
                 className="flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 px-4 py-2.5 text-xs font-bold text-white shadow-lg shadow-indigo-950/50 transition-all hover:from-indigo-500 hover:to-purple-500"
               >
                 <Shuffle className="h-4 w-4" />
-                <span>🎲 Згенерувати випадкову дату (Сюрприз)</span>
+                <span>🎲 Згенерувати випадкову дату</span>
               </button>
 
               <div className="space-y-1.5">
