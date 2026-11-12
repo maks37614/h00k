@@ -454,8 +454,8 @@ export const SurveillancePage: React.FC<SurveillancePageProps> = ({
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div className="space-y-1">
             <div className="flex items-center gap-2.5">
-              <div className="w-11 h-11 shrink-0 flex items-center justify-center">
-                <MonitoringIcon className="w-9 h-9 text-blue-900" />
+              <div className="w-14 h-14 shrink-0 flex items-center justify-center">
+                <MonitoringIcon className="w-14 h-14" />
               </div>
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
