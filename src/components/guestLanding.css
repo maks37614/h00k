@@ -168,7 +168,7 @@
   .gl-device{margin-top:90px}
 }
 @media(max-width:540px){
-  .gl-container{width:min(100% - 28px,1240px)}
+  .gl-container{width:min(calc(100% - 28px),1240px)}
   .gl-brand img{width:90px;height:39px}
   .gl-header-actions .gl-text-btn{padding:8px;font-size:11px}
   .gl-header-actions .gl-btn-sm{padding:9px 10px;font-size:11px;gap:4px}
