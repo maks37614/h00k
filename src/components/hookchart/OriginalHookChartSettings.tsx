@@ -855,10 +855,7 @@ export function OriginalHookChartSettings({
             }}
             onApplyToAll={() => {
               const selected = getVisualProfile(prefs, visualContext, visualDevice);
-              const profiles = VISUAL_CONTEXTS.reduce(
-                (acc, context) => patchVisualProfile(acc, makeVisualProfileKey(context.id, visualDevice), selected),
-                prefs.visualProfiles,
-              );
+              const profiles = applyVisualDefaultsForDevice(prefs.visualProfiles, visualDevice, selected);
               set('visualProfiles', profiles);
             }}
             onCapture={onCaptureVisual && activeVisualContext === visualContext && visualDevice === (typeof window === 'undefined' ? 'desktop' : visualDeviceForWidth(window.innerWidth)) && currentViewport && (currentPlotWidth || 0) > 100
