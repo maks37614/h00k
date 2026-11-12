@@ -58,3 +58,38 @@ test('opened popup matches screenshot, does not clip in a scrolling modal and su
   assert.match(dropdownSource, /event\.key === 'Enter'/);
   assert.match(dropdownSource, /document\.addEventListener\('pointerdown', onOutside\)/);
 });
+
+
+test('ticker input prevents iPhone Safari autofocus zoom while remaining accessible', () => {
+  const input = pageSource.slice(
+    pageSource.indexOf('id="surveillance-symbol-input"'),
+    pageSource.indexOf('{/* Breakout Confirmation Modes'),
+  );
+  assert.match(input, /type="text"/);
+  assert.match(input, /text-base sm:text-sm/);
+  assert.doesNotMatch(input, /className="[^"]*text-xs/);
+  assert.match(input, /autoCapitalize="characters"/);
+  assert.match(input, /autoComplete="off"/);
+  assert.match(input, /spellCheck=\{false\}/);
+  assert.match(input, /min-h-11 w-full min-w-0/);
+  assert.match(pageSource, /htmlFor="surveillance-symbol-input"/);
+  // Do not disable the user's browser pinch zoom to work around this issue.
+  const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  assert.match(html, /width=device-width, initial-scale=1.0/);
+  assert.doesNotMatch(html, /user-scalable=no|maximum-scale=1/);
+});
+
+test('add-coin modal stays scrollable and follows mobile visualViewport when keyboard opens', () => {
+  assert.match(pageSource, /const \[addModalViewport, setAddModalViewport\] = useState/);
+  assert.match(pageSource, /window\.visualViewport\?\.addEventListener\('resize', updateViewport\)/);
+  assert.match(pageSource, /window\.visualViewport\?\.addEventListener\('scroll', updateViewport\)/);
+  assert.match(pageSource, /window\.visualViewport\?\.removeEventListener\('resize', updateViewport\)/);
+  assert.match(pageSource, /width: addModalViewport\.width/);
+  assert.match(pageSource, /height: addModalViewport\.height/);
+  assert.match(pageSource, /Math\.min\(addModalViewport\.height \* 0\.92, addModalViewport\.height - 16\)/);
+  assert.match(pageSource, /min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain/);
+  assert.match(pageSource, /shrink-0 p-3 sm:p-4 border-t/);
+  assert.match(form, /grid grid-cols-1 min-\[380px\]:grid-cols-2/);
+  assert.match(form, /<SurveillanceFieldDropdown<ExchangeId>/);
+  assert.match(form, /<SurveillanceFieldDropdown<MarketType>/);
+});
