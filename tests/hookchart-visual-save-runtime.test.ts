@@ -170,11 +170,13 @@ test('144 visible candles, vertical zoom 0.4 and 81-bar gap update the preview i
   assert.equal(getViewport()!.autoY, false);
 });
 
-test('visual preview passes the same right margin to candles and time axis', () => {
+test('synthetic editor and sliders update the same profile immediately', () => {
   const preview = readFileSync(new URL('../src/components/hookchart/HookChartVisualPreview.tsx', import.meta.url), 'utf8');
   const editor = readFileSync(new URL('../src/components/hookchart/OriginalHookChartSettings.tsx', import.meta.url), 'utf8');
-  assert.match(preview, /visualProfile=\{profile\}/);
-  assert.equal((preview.match(/rightPaddingBars=\{profile\.rightGapBars\}/g) || []).length, 2);
+  assert.match(preview, /changeRef\.current\(next\)/);
+  assert.match(preview, /demoDragProfile\(initial\.profile,/);
+  assert.match(preview, /demoPinchProfile\(/);
+  assert.match(preview, /demoWheelProfile\(/);
   assert.match(editor, /profile=\{selectedProfile\}/);
   assert.match(editor, /onChange=\{onProfileChange\}/);
   for (const key of ['visibleBars', 'verticalZoom', 'autoPriceScale', 'rightGapBars']) {
