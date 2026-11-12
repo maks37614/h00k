@@ -64,6 +64,9 @@ test('capture records relative viewport properties, not fixed prices or ticker',
   assert.equal(auto.visibleBars,80);
   assert.ok(!('manualCenter' in captured));
   assert.ok(!('price' in captured));
+  const withGap = { ...base, rightGapBars: 26 };
+  assert.equal(captureVisualProfile(withGap, 800, { barWidth: 6, rightOffset: 0, autoY: true, manualRange: null }).rightGapBars, 26,
+    'saving a zoom/pan does not modify the independent right-gap slider');
 });
 
 test('Graph tab uses existing personal settings persistence and preview without market fetch', () => {
@@ -83,6 +86,9 @@ test('Graph tab uses existing personal settings persistence and preview without 
   assert.match(settings,/Кількість видимих свічок/);
   assert.match(settings,/Автоматичний масштаб ціни/);
   assert.match(settings,/Відступ праворуч/);
+  assert.equal((settings.match(/<Setting label="Відступ праворуч"/g) || []).length,1);
+  assert.doesNotMatch(settings,/<SwitchRow label="Відступ праворуч"/);
+  assert.doesNotMatch(settings,/prefs\.rightPadding \?\? 10/);
   assert.doesNotMatch(settings.slice(settings.indexOf('function VisualProfileEditor'),settings.indexOf('export function OriginalHookChartSettings')),/fetch\(|WebSocket|setInterval/);
 });
 
@@ -97,7 +103,8 @@ test('Screener, Formations, Terminal carry visual contexts, Replay passes none',
   const terminalPage = src('../src/components/TerminalPage.tsx');
   const replay = src('../src/components/replay/ReplayChart.tsx');
   assert.match(canvas,/const activeVisualProfile = replay \|\| !settings\.visualProfiles\?\.\[activeVisualKey\]/);
-  assert.match(canvas,/const rightPaddingBars = activeVisualProfile \? 0 : terminalMode/);
+  assert.match(canvas,/const rightPaddingBars = replay \? 10 : getVisualProfile\(settings, activeVisualContext, visualDevice\)\.rightGapBars/);
+  assert.doesNotMatch(canvas,/settings\.rightPaddingEnabled|settings\.rightPadding \?\?/);
   assert.match(canvas,/onResetVisual=\{key =>/);
   assert.match(canvas,/visualProfileKey=\{replay \? undefined : activeVisualKey\}/);
   assert.match(canvas,/visualContextForTerminalWidth/);
