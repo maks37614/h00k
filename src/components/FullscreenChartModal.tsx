@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { Kline, DetectedFormation, Timeframe, ExchangeId, MarketType, ChartMarkerInfo, ChartRestoreParams, ScannedCoin } from '../types';
 import { TradingViewChart } from './TradingViewChart';
+import { SiteFooter } from './SiteFooter';
 import { normalizeExchangeSymbol } from '../utils/marketSymbols';
 import { formatCryptoPrice } from '../utils/formatters';
 import { fetchDirectKlines } from '../utils/directExchangeClient';
@@ -25,6 +26,8 @@ import { applyClosedEarlyWickTouch, type TpSlRule } from '../utils/tpSlConstruct
 interface FullscreenChartModalProps {
   isOpen: boolean;
   onClose: () => void;
+  /** Standalone coin / early-chart route (avoids background screener overlay). */
+  pageMode?: boolean;
   coin: {
     symbol: string;
     baseAsset: string;
@@ -60,6 +63,7 @@ interface FullscreenChartModalProps {
 export const FullscreenChartModal: React.FC<FullscreenChartModalProps> = ({
   isOpen,
   onClose,
+  pageMode = false,
   coin,
   formation,
   earlyCandidate,
@@ -260,13 +264,14 @@ export const FullscreenChartModal: React.FC<FullscreenChartModalProps> = ({
   useEffect(() => {
     if (!isOpen) return;
 
+    if (pageMode) return;
     const originalOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
 
     return () => {
       document.body.style.overflow = originalOverflow;
     };
-  }, [isOpen]);
+  }, [isOpen, pageMode]);
 
   const handleTimeframeSelect = (tf: Timeframe) => {
     setTimeframe(tf);
@@ -303,9 +308,11 @@ export const FullscreenChartModal: React.FC<FullscreenChartModalProps> = ({
 
   const content = (
     <div
-      className="fixed inset-0 z-[100] w-screen h-[100dvh] max-h-[100dvh] min-h-[100dvh] bg-[#090d16] flex flex-col overflow-hidden animate-in fade-in duration-200"
-      role="dialog"
-      aria-modal="true"
+      className={pageMode
+        ? 'relative flex w-full min-h-[100dvh] flex-col bg-[#090d16]'
+        : 'fixed inset-0 z-[100] w-screen h-[100dvh] max-h-[100dvh] min-h-[100dvh] bg-[#090d16] flex flex-col overflow-hidden animate-in fade-in duration-200'}
+      role={pageMode ? 'region' : 'dialog'}
+      aria-modal={pageMode ? undefined : true}
       aria-label="Повноекранний графік HookChart"
     >
       {/* Top Fullscreen Header & Controls */}
@@ -528,7 +535,9 @@ export const FullscreenChartModal: React.FC<FullscreenChartModalProps> = ({
       )}
 
       {/* Fullscreen Chart Display Area (100% remaining viewport) */}
-      <main className="flex-1 min-h-0 w-full relative overflow-hidden bg-[#090d16]">
+      <main className={pageMode
+        ? 'relative h-[calc(100dvh-3.5rem)] min-h-[400px] w-full shrink-0 overflow-hidden bg-[#090d16]'
+        : 'flex-1 min-h-0 w-full relative overflow-hidden bg-[#090d16]'}>
         {/* Collapsible Left Drawer (Шторка зліва з обраними монетами) */}
         <div
           className={`absolute top-0 bottom-0 left-0 z-30 w-72 sm:w-80 bg-slate-950/95 border-r border-slate-800 backdrop-blur-md flex flex-col shadow-2xl transition-transform duration-300 ease-in-out ${
@@ -677,9 +686,11 @@ export const FullscreenChartModal: React.FC<FullscreenChartModalProps> = ({
           />
         </div>
       </main>
+      {pageMode && <SiteFooter />}
     </div>
   );
 
-  // Escape transformed, filtered and scrollable ancestors, including Safari modal containers.
-  return typeof document === 'undefined' ? content : createPortal(content, document.body);
+  // Only the nested fullscreen dialog needs the portal. Standalone charts are
+  // normal routed pages with their own scroll and no underlying Screener DOM.
+  return pageMode || typeof document === 'undefined' ? content : createPortal(content, document.body);
 };
