@@ -17,6 +17,31 @@ test('custom timeframe picker uses buttons, not a native iOS select popup', () =
   assert.doesNotMatch(html, /<select|<option/);
 });
 
+test('collapsed tools show only the primary timeframe buttons and reserve the chevron for tools', () => {
+  const html = renderToStaticMarkup(React.createElement(HookChartTimeframePicker, {
+    timeframes: ['1m', '5m', '15m', '1h', '4h', '1d'],
+    timeframe: '15m',
+    compactAvailable: false,
+    onChange: () => {},
+  }));
+  assert.match(html, /hookchart-timeframes-buttons/);
+  assert.match(html, /aria-label="Таймфрейм 15m"/);
+  assert.doesNotMatch(html, /hookchart-timeframes-compact/);
+  assert.doesNotMatch(html, /aria-label="Вибрати таймфрейм"/);
+});
+
+test('expanded tools may reveal their own compact timeframe menu', () => {
+  const html = renderToStaticMarkup(React.createElement(HookChartTimeframePicker, {
+    timeframes: ['1m', '5m', '15m', '1h', '4h', '1d'],
+    timeframe: '15m',
+    compactAvailable: true,
+    onChange: () => {},
+  }));
+  assert.match(html, /hookchart-timeframes-compact/);
+  assert.match(html, /aria-label="Вибрати таймфрейм"/);
+  assert.match(html, /aria-haspopup="listbox"/);
+});
+
 test('timeframe popover stays within a phone viewport at top, middle and bottom', () => {
   const viewport = {left: 0, top: 0, width: 390, height: 700};
   for (const top of [12, 180, 390, 660]) {
