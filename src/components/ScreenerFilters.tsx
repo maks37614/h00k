@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Search, SlidersHorizontal, LayoutGrid, List, ArrowUpDown, ArrowDown, ArrowUp, ChevronDown } from 'lucide-react';
+import { Search, SlidersHorizontal, LayoutGrid, List, ArrowUpDown, ArrowDown, ArrowUp, ChevronDown, Layers, CircleDot } from 'lucide-react';
 import { ScreenerFilterState, ExchangeId, MarketType, Timeframe, PatternCategory, PatternBias, PatternStatus } from '../types';
 import { useLanguage } from '../context/LanguageContext';
 import type { EarlyStageFilter } from '../utils/earlyFormationList';
@@ -218,31 +218,38 @@ export const ScreenerFilters: React.FC<ScreenerFiltersProps> = ({
           )}
 
           {!earlyMode && <>
-          <label
-            className="flex items-center gap-1.5 bg-slate-950 px-2 py-1 rounded-lg border border-slate-800 text-[11px] text-slate-300 cursor-pointer"
-            title="Лише формації з аномальною лімітною заявкою біля круглого рівня у поточному знімку стакана. Це не доказ, що заявка залишиться на ринку."
-          >
-            <input
-              type="checkbox"
-              checked={filters.densityConfirmedOnly}
-              onChange={(e) => onFilterChange({ densityConfirmedOnly: e.target.checked })}
-              className="accent-fuchsia-400"
-            />
-            Щільність
-          </label>
-          <label
-            className="flex items-center gap-1.5 bg-slate-950 px-2 py-1 rounded-lg border border-slate-800 text-[11px] text-slate-300 cursor-pointer"
-            title="Лише формації, біля ключового рівня яких виявлено кругле число (ROUND). Не вимагає підтвердження щільності стакана."
-          >
-            <input
-              type="checkbox"
-              checked={filters.roundNumberOnly}
-              onChange={(e) => onFilterChange({ roundNumberOnly: e.target.checked })}
-              className="accent-cyan-400"
+          {/* Keep both optional filters in the original toolbar slot, without widening its row. */}
+          <div className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-slate-800 bg-slate-950 p-0.5"
+            role="group" aria-label="Фільтри рівнів">
+            <button
+              type="button"
+              aria-pressed={filters.densityConfirmedOnly}
+              aria-label="Щільність"
+              title="Щільність — лише формації з підтвердженою великою лімітною заявкою в стакані"
+              onClick={() => onFilterChange({ densityConfirmedOnly: !filters.densityConfirmedOnly })}
+              className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fuchsia-400 ${
+                filters.densityConfirmedOnly
+                  ? 'border-fuchsia-500/40 bg-fuchsia-500/20 text-fuchsia-300'
+                  : 'border-transparent text-slate-400 hover:bg-slate-800 hover:text-slate-200'
+              }`}
+            >
+              <Layers className="h-4 w-4" aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              aria-pressed={filters.roundNumberOnly}
               aria-label="Круглі числа (ROUND)"
-            />
-            Круглі числа
-          </label>
+              title="Круглі числа (ROUND) — формації біля круглого рівня"
+              onClick={() => onFilterChange({ roundNumberOnly: !filters.roundNumberOnly })}
+              className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-400 ${
+                filters.roundNumberOnly
+                  ? 'border-cyan-500/40 bg-cyan-500/20 text-cyan-300'
+                  : 'border-transparent text-slate-400 hover:bg-slate-800 hover:text-slate-200'
+              }`}
+            >
+              <CircleDot className="h-4 w-4" aria-hidden="true" />
+            </button>
+          </div>
 
           <label className="flex items-center gap-1.5 bg-slate-950 px-2 py-1 rounded-lg border border-slate-800 text-[11px] text-slate-300">
             Статус
