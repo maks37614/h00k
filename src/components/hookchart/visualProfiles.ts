@@ -112,6 +112,7 @@ export function captureVisualProfile(
     visibleBars,
     verticalZoom,
     autoPriceScale: viewport.autoY,
-    rightGapBars: viewport.rightOffset >= 0 && viewport.rightOffset <= 100 ? Math.round(viewport.rightOffset) : current.rightGapBars,
+    // Only the Graph tab slider owns this setting; a saved pan/zoom must not rewrite it.
+    rightGapBars: current.rightGapBars,
   }, 'screenerQuick');
 }

@@ -378,7 +378,8 @@ export function Chart({candles,symbol,tf,tool,drawings,setDrawings,alerts,setAle
    const center=Number.isFinite(high)&&Number.isFinite(low)?(high+low)/2:1;
    const priceAuto=terminalAutoScale||visualProfile.autoPriceScale;
    setVp({
-     barWidth,rightOffset:terminalAutoScale?0:visualProfile.rightGapBars,autoY:priceAuto,
+     // The Graph-tab rightGapBars is applied exactly once by rightPaddingBars.
+     barWidth,rightOffset:0,autoY:priceAuto,
      manualCenter:priceAuto?null:center,
      manualRange:priceAuto?null:spread*(terminalMode?1.32:1.16)/visualProfile.verticalZoom,
      yZoom:terminalAutoScale?1:visualProfile.verticalZoom,fitAll:false,

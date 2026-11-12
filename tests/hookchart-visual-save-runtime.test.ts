@@ -82,6 +82,8 @@ test('capturing the actual preview zoom does not reset it; next slider change st
   env.setVp(manual);
   const saved = captureVisualProfile(env.visualProfile, 540, manual, 88);
   assert.ok(saved.visibleBars < env.visualProfile.visibleBars);
+  assert.equal(saved.rightGapBars, env.visualProfile.rightGapBars,
+    'capturing a gesture must never silently overwrite the Graph tab right margin');
   const before = updates.length;
   env.visualProfile = saved;
   env.visualProfileCaptureVersion = 1;

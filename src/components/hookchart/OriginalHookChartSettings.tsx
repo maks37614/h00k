@@ -617,8 +617,6 @@ export function OriginalHookChartSettings({
                 {onRetryHistory && <button type="button" onClick={onRetryHistory} className="hotkeyResetOne">Повторити</button>}
               </>}
             </div>}
-            <SwitchRow label="Відступ праворуч" desc="Загальний вільний простір після останньої свічки. Для Термінала з автомасштабом використовуйте «Графік → Відступ праворуч» для відповідного типу графіка." value={prefs.rightPaddingEnabled !== false} onChange={value => set('rightPaddingEnabled', value)} />
-            <Setting label="Кількість свічок" desc="Ширина загального відступу праворуч у барах, від 0 до 500. Не змінює кількість завантажених свічок."><Num value={prefs.rightPadding ?? 10} min={0} max={500} disabled={prefs.rightPaddingEnabled === false} set={value => set('rightPadding', Math.round(value))} /><b className="valueBadge">свічок</b></Setting>
             <SwitchRow label="Панель інструментів на графіку" value={prefs.chartToolbar !== false} onChange={value => set('chartToolbar', value)} />
             <SwitchRow label="Іконки верхньої панелі над графіком" desc="Приховує всі додаткові іконки верхньої панелі. Вибір таймфрейму залишається видимим і робочим." value={prefs.showTopToolbarIcons !== false} onChange={value => set('showTopToolbarIcons', value)} />
             <SwitchRow label="Показувати суми великих ринкових заявок під свічками" value={prefs.showMarketPrintSums === true} onChange={value => set('showMarketPrintSums', value)} />

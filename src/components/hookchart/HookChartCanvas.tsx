@@ -443,7 +443,10 @@ const HookChartCanvas = forwardRef<HookChartHandle, HookChartCanvasProps>(functi
       ? terminalToolbarVisibility.drawingToolsOpen
       : settings.drawingToolbarOpen === true
   );
-  const rightPaddingBars = activeVisualProfile ? 0 : terminalMode ? 8 : settings.rightPaddingEnabled === false ? 0 : (settings.rightPadding ?? 10);
+  // Single source of truth: only the Graph tab's per-context rightGapBars
+  // controls the space after the latest candle. Legacy global padding is ignored.
+  // Replay deliberately keeps its historical fixed spacing (no visual profiles).
+  const rightPaddingBars = replay ? 10 : getVisualProfile(settings, activeVisualContext, visualDevice).rightGapBars;
   const channel = useMemo(() => (replay ? replayOverlays.includes('channel') : settings.autoChannel)
     ? buildStructuralChannel(analysisSeries, candles.at(-1)?.c) : null,
     [analysisSeries, candles, settings.autoChannel, replay, replayOverlays]);
@@ -751,14 +754,7 @@ const HookChartCanvas = forwardRef<HookChartHandle, HookChartCanvasProps>(functi
         ...(delta.candleShortColor !== undefined ? { downColor: delta.candleShortColor } : {}), ...(delta.showVolumes !== undefined ? { volume: delta.showVolumes } : {}) });
     if (delta.language) delta = { ...delta, siteLanguageAtSelection: siteLanguage };
     setSettings(current => ({ ...current, ...delta, hotkeys: delta.hotkeys ? { ...current.hotkeys, ...delta.hotkeys } : current.hotkeys }));
-    queueSave({
-      ...(preferences?.rightPaddingVersion !== 2 ? {
-        rightPadding: settings.rightPadding,
-        rightPaddingEnabled: settings.rightPaddingEnabled,
-        rightPaddingVersion: 2,
-      } : {}),
-      ...delta,
-    });
+    queueSave(delta);
   };
   const captureCurrentVisual = (key: VisualProfileKey) => {
     if (replay || key !== activeVisualKey) return;
