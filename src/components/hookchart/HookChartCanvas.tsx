@@ -182,6 +182,7 @@ const HookChartCanvas = forwardRef<HookChartHandle, HookChartCanvasProps>(functi
   const [oi, setOi] = useState(EMPTY_OI);
   const [oiError, setOiError] = useState(false);
   const [saveError, setSaveError] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [profileSyncVersion, refreshProfileSettings] = useState(0);
   const engineRef = useRef<HookChartHandle | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
@@ -550,8 +551,14 @@ const HookChartCanvas = forwardRef<HookChartHandle, HookChartCanvasProps>(functi
     pending.current = null;
     pendingOwnerUid.current = null;
     savingByUid.current.set(owner, (savingByUid.current.get(owner) || 0) + 1);
+    if (mounted.current) setSaveStatus('saving');
     void saveRef.current({ hookChartPreferences: delta })
-      .then(() => { if (mounted.current && activeUid.current === owner) setSaveError(false); })
+      .then(() => {
+        if (mounted.current && activeUid.current === owner) {
+          setSaveError(false);
+          if (!pending.current && savingByUid.current.get(owner) === 1) setSaveStatus('saved');
+        }
+      })
       .catch(() => {
         if (!mounted.current || activeUid.current !== owner) return;
         pendingOwnerUid.current = owner;
@@ -561,6 +568,7 @@ const HookChartCanvas = forwardRef<HookChartHandle, HookChartCanvasProps>(functi
           alerts: { ...delta.alerts, ...pending.current?.alerts },
         };
         setSaveError(true);
+        setSaveStatus('error');
       })
       .finally(() => {
         const remaining = (savingByUid.current.get(owner) || 1) - 1;
@@ -574,6 +582,7 @@ const HookChartCanvas = forwardRef<HookChartHandle, HookChartCanvasProps>(functi
 
   const queueSave = useCallback((delta: HookChartPreferences) => {
     if (!user) return;
+    setSaveStatus('saving');
     if (pendingOwnerUid.current && pendingOwnerUid.current !== user.uid) {
       pending.current = null;
     }
@@ -602,6 +611,7 @@ const HookChartCanvas = forwardRef<HookChartHandle, HookChartCanvasProps>(functi
       pending.current = null;
       pendingOwnerUid.current = null;
       setSaveError(false);
+      setSaveStatus('idle');
     } else if (
       (pending.current && pendingOwnerUid.current === uid) ||
       (uid && (savingByUid.current.get(uid) || 0) > 0)
@@ -1210,6 +1220,7 @@ const HookChartCanvas = forwardRef<HookChartHandle, HookChartCanvasProps>(functi
           onRetryHistory={() => setHistoryRetry(previous => previous + 1)}
           prefs={{ ...settings, language: chartLanguage, ...(externalData ? { candleLongColor: externalData.appearance.upColor, candleShortColor: externalData.appearance.downColor, showVolumes: externalData.appearance.volume } : {}) }}
           onChange={changeSettings}
+          saveStatus={saveStatus}
           onApplyStrategy={applyStrategy}
           activeVisualContext={activeVisualContext}
           currentViewport={viewport}
