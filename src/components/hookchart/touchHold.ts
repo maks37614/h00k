@@ -12,14 +12,23 @@ interface HoldClock {
   cancel: (handle: unknown) => void;
 }
 
-/** One pending hold per chart. A small finger tremor must not turn a hold into a swipe. */
+/** Short hold reveals a freely movable cursor; a longer still hold reveals the lens. */
+export const TOUCH_CURSOR_HOLD_MS = 280;
+export const TOUCH_MAGNIFIER_HOLD_MS = 850;
+const TOUCH_HOLD_SLOP_PX = 10;
+
+/** Only one pointer may arm a hold. A swipe before cursor activation still pans. */
 export function createChartTouchHold(clock: HoldClock = {
   schedule: (callback, delay) => setTimeout(callback, delay),
   cancel: handle => clearTimeout(handle as ReturnType<typeof setTimeout>),
 }) {
   let candidate: {
-    id: number; start: TouchHoldPoint; latest: TouchHoldPoint;
-    activate: (point: TouchHoldPoint) => void;
+    id: number;
+    start: TouchHoldPoint;
+    latest: TouchHoldPoint;
+    cursorActivated: boolean;
+    activateCursor: (point: TouchHoldPoint) => void;
+    activateMagnifier?: (point: TouchHoldPoint) => void;
   } | null = null;
   let timer: unknown = null;
   const cancel = () => {
@@ -29,29 +38,49 @@ export function createChartTouchHold(clock: HoldClock = {
   };
   return {
     cancel,
-    pending: () => candidate !== null,
-    start(id: number, point: TouchHoldPoint, activate: (point: TouchHoldPoint) => void) {
+    /** A long press may still be armed after the cursor has appeared. */
+    pending: () => candidate !== null && !candidate.cursorActivated,
+    start(
+      id: number,
+      point: TouchHoldPoint,
+      activateCursor: (point: TouchHoldPoint) => void,
+      activateMagnifier?: (point: TouchHoldPoint) => void,
+    ) {
       cancel();
       if (![id, point.x, point.y].every(Number.isFinite)) return;
-      const current = { id, start: { ...point }, latest: { ...point }, activate };
+      const current = {
+        id, start: { ...point }, latest: { ...point },
+        cursorActivated: false, activateCursor, activateMagnifier,
+      };
       candidate = current;
       timer = clock.schedule(() => {
         if (candidate !== current) return;
         timer = null;
-        candidate = null;
-        current.activate(current.latest);
-      }, 350);
+        current.cursorActivated = true;
+        current.activateCursor(current.latest);
+        if (candidate !== current) return;
+        if (!current.activateMagnifier) {
+          candidate = null;
+          return;
+        }
+        timer = clock.schedule(() => {
+          if (candidate !== current) return;
+          timer = null;
+          candidate = null;
+          current.activateMagnifier?.(current.latest);
+        }, TOUCH_MAGNIFIER_HOLD_MS - TOUCH_CURSOR_HOLD_MS);
+      }, TOUCH_CURSOR_HOLD_MS);
     },
-    /** True while waiting: do not edit, pan or scale the chart during the touch slop. */
+    /** Return true only before the short hold, so a revealed cursor moves freely. */
     move(id: number, point: TouchHoldPoint): boolean {
       if (!candidate || candidate.id !== id) return false;
       if (![point.x, point.y].every(Number.isFinite) ||
-          Math.hypot(point.x - candidate.start.x, point.y - candidate.start.y) > 10) {
-        cancel();
+          Math.hypot(point.x - candidate.start.x, point.y - candidate.start.y) > TOUCH_HOLD_SLOP_PX) {
+        cancel(); // after short hold this only cancels the future lens, not the cursor
         return false;
       }
       candidate.latest = { ...point };
-      return true;
+      return !candidate.cursorActivated;
     },
   };
 }
