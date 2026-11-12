@@ -33,6 +33,7 @@ import { useAuth } from '../context/AuthContext';
 import { useAlerts } from '../context/AlertsContext';
 import { useArchive } from '../context/ArchiveContext';
 import { SmartAnalysisBlock } from './SmartAnalysisBlock';
+import { SiteFooter } from './SiteFooter';
 import { chartCrosshairAlertPrice } from '../utils/chartAlertPrice';
 import {
   readSmartAnalysisPanelCollapsed, saveSmartAnalysisPanelCollapsed,
@@ -1534,6 +1535,8 @@ export const FormationDetailsModal: React.FC<FormationDetailsModalProps> = ({
             )}
           </div>
         </div>
+        {/* Same localized legal/contact footer as the main Screener page. */}
+        <SiteFooter />
       </div>
 
     </div>
