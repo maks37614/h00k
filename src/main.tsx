@@ -3,6 +3,7 @@ import {createRoot} from 'react-dom/client';
 import App from './App.tsx';
 import { LegalPage } from './components/LegalPage';
 import './index.css';
+import './components/replay/replayCoinPicker.css';
 import { AuthProvider } from './context/AuthContext';
 import { AlertsProvider } from './context/AlertsContext';
 import { ArchiveProvider } from './context/ArchiveContext';

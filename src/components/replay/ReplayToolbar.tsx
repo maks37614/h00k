@@ -1,6 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import './replayCoinPicker.css';
 import {
   Play,
   Pause,

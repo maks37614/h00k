@@ -127,7 +127,9 @@ test('Coin modal locks background scrolling and closes on Escape', () => {
 
 test('Replay coin picker fluidly fits phones, tablets, desktop and landscape heights', () => {
   const css = readFileSync(new URL('../src/components/replay/replayCoinPicker.css', import.meta.url), 'utf8');
-  assert.match(toolbar, /import '\.\/replayCoinPicker\.css'/);
+  const entry = readFileSync(new URL('../src/main.tsx', import.meta.url), 'utf8');
+  assert.match(entry, /import '\.\/components\/replay\/replayCoinPicker\.css'/);
+  assert.doesNotMatch(toolbar, /import '\.\/replayCoinPicker\.css'/);
   assert.match(toolbar, /className="replay-coin-modal flex w-full min-w-0 flex-col overflow-hidden/);
   assert.match(toolbar, /replay-coin-body flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden/);
   assert.match(toolbar, /replay-coin-filters min-h-0 min-w-0 shrink-0/);
