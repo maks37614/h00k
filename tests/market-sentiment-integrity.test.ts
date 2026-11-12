@@ -78,7 +78,7 @@ test('unavailable market location data is excluded from location coverage', asyn
 test('UI score bands use the same thresholds as the API state', () => {
   const samples: [number, string, string][] = [
     [0, 'extreme_fear', '#ff294e'], [25, 'extreme_fear', '#ff294e'],
-    [26, 'fear', '#ff9842'], [42, 'fear', '#ff9842'],
+    [26, 'fear', '#fb5263'], [42, 'fear', '#fb5263'],
     [43, 'neutral', '#ffdf40'], [59, 'neutral', '#ffdf40'],
     [60, 'greed', '#32e5b1'], [77, 'greed', '#32e5b1'],
     [78, 'extreme_greed', '#0fbc83'], [100, 'extreme_greed', '#0fbc83'],
