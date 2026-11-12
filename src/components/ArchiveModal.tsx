@@ -135,16 +135,16 @@ export const ArchiveModal: React.FC<ArchiveModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 md:p-6 bg-black/80 backdrop-blur-sm overflow-y-auto">
-      <div className="relative w-full max-w-5xl bg-slate-900 border border-slate-800 rounded-2xl sm:rounded-3xl shadow-2xl overflow-hidden my-auto max-h-[92dvh] flex flex-col">
+    <div className="fixed inset-0 z-50 box-border flex w-full max-w-full items-center justify-center overflow-x-hidden overflow-y-auto bg-black/80 p-2 backdrop-blur-sm sm:p-4 md:p-6">
+      <div className="relative my-auto flex w-full min-w-0 max-w-[calc(100dvw-16px)] flex-col overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl max-h-[92dvh] sm:max-w-5xl sm:rounded-3xl">
         {/* Header */}
-        <div className="flex items-center justify-between gap-3 px-4 sm:px-6 py-3.5 sm:py-4 border-b border-slate-800 bg-slate-950/80 sticky top-0 z-10">
-          <div className="flex items-center gap-3 min-w-0">
+        <div className="sticky top-0 z-10 flex min-w-0 items-center justify-between gap-2 border-b border-slate-800 bg-slate-950/80 px-3 py-3.5 sm:gap-3 sm:px-6 sm:py-4">
+          <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
             <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-purple-500/15 border border-purple-500/40 text-purple-400 flex items-center justify-center shrink-0 shadow-sm">
               <FormationArchiveIcon className="w-5 h-5" />
             </div>
             <div className="min-w-0">
-              <div className="flex items-center gap-2">
+              <div className="flex min-w-0 items-center gap-2">
                 <h3 className="text-base sm:text-lg font-bold text-white tracking-tight flex items-center gap-2">
                   Архів Формацій
                   <span className="text-xs px-2 py-0.5 rounded-full font-mono bg-purple-950/80 text-purple-300 border border-purple-800/60 font-semibold">
@@ -156,11 +156,11 @@ export const ArchiveModal: React.FC<ArchiveModalProps> = ({
                   <span>Приватне сховище</span>
                 </span>
               </div>
-              <p className="text-xs text-slate-400 truncate">
+              <p className="min-w-0 truncate text-xs text-slate-400">
                 {user ? (
-                  <span className="flex items-center gap-1.5 text-emerald-400">
+                  <span className="flex min-w-0 items-center gap-1.5 overflow-hidden text-emerald-400">
                     <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 inline" />
-                    Прив'язано до вашого профілю: <strong className="text-white font-medium">{profile?.displayName || user.email}</strong>
+                    Прив'язано до вашого профілю: <strong className="min-w-0 truncate text-white font-medium">{profile?.displayName || user.email}</strong>
                   </span>
                 ) : (
                   <span className="text-amber-400 flex items-center gap-1">
@@ -171,7 +171,7 @@ export const ArchiveModal: React.FC<ArchiveModalProps> = ({
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex shrink-0 items-center gap-2">
             {archivedFormations.length > 0 && (
               <>
                 <button
@@ -246,19 +246,19 @@ export const ArchiveModal: React.FC<ArchiveModalProps> = ({
         )}
 
         {/* Search & Filter Toolbar */}
-        <div className="px-4 sm:px-6 py-3 bg-slate-950/60 border-b border-slate-800/80 flex flex-wrap items-center justify-between gap-2.5">
-          <div className="relative flex-1 min-w-[200px] max-w-md">
+        <div className="flex min-w-0 flex-wrap items-center justify-between gap-2.5 border-b border-slate-800/80 bg-slate-950/60 px-3 py-3 sm:px-6">
+          <div className="relative w-full min-w-0 flex-1 sm:min-w-[200px] sm:max-w-md">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Пошук за монетою (BTC, SOL...) чи патерном..."
-              className="w-full min-w-0 pl-9 pr-3 py-1.5 rounded-xl bg-slate-900 border border-slate-800 text-base sm:text-xs text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-purple-500/60 transition-colors touch-manipulation"
+              className="w-full min-w-0 pl-9 pr-3 py-1.5 rounded-xl bg-slate-900 border border-slate-800 text-[16px] leading-6 text-slate-200 placeholder:text-slate-500 focus:outline-none focus:border-purple-500/60 transition-colors touch-manipulation"
             />
           </div>
 
-          <div className="flex items-center flex-wrap gap-2 text-xs">
+          <div className="flex w-full min-w-0 flex-wrap items-center gap-2 text-xs sm:w-auto">
             {/* Exchange Filter */}
             <div className="flex items-center bg-slate-900 p-0.5 rounded-lg border border-slate-800">
               {(['all', 'binance', 'bybit'] as const).map((ex) => (
@@ -296,14 +296,14 @@ export const ArchiveModal: React.FC<ArchiveModalProps> = ({
         </div>
 
         {/* Formations List Container */}
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 sm:p-6 space-y-3 sm:space-y-4 sm:min-h-[300px]">
+        <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain p-4 sm:p-6 space-y-3 sm:space-y-4 sm:min-h-[300px]">
           {loading ? (
             <div className="flex flex-col items-center justify-center py-16 text-slate-400 gap-3">
               <div className="w-8 h-8 rounded-full border-2 border-purple-500 border-t-transparent animate-spin" />
               <p className="text-xs">Завантаження збережених формацій...</p>
             </div>
           ) : filteredFormations.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 sm:py-16 text-center max-w-md mx-auto space-y-3">
+            <div className="mx-auto flex max-w-full min-w-0 flex-col items-center justify-center space-y-3 break-words py-12 text-center sm:max-w-md sm:py-16">
               <div className="w-14 h-14 rounded-2xl bg-purple-500/10 border border-purple-500/20 text-purple-400 flex items-center justify-center">
                 <FormationArchiveIcon className="w-7 h-7" />
               </div>
@@ -518,7 +518,7 @@ export const ArchiveModal: React.FC<ArchiveModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="px-4 sm:px-6 py-3 border-t border-slate-800 bg-slate-950/90 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400">
+        <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 border-t border-slate-800 bg-slate-950/90 px-3 py-3 text-xs text-slate-400 sm:px-6">
           <div className="flex items-center gap-2">
             <span>
               Всього в особистому архіві: <strong className="text-white font-mono">{archivedFormations.length}</strong>
