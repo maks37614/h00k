@@ -411,6 +411,8 @@ export interface UserProfile {
   hookChartPreferences?: HookChartPreferences;
   timeZone?: string;
   soundAlertsEnabled?: boolean;
+  /** Shared across all coin detail pages; true only hides the custom Telegram alert form. */
+  telegramPriceAlertCollapsed?: boolean;
   watchlist?: string[];
   watchlistFolders?: Record<string, string[]>;
   metaScalpSettings?: MetaScalpSettings;
