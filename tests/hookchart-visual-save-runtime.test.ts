@@ -126,3 +126,58 @@ test('Replay/no-profile still bypasses visual presets entirely', () => {
   applyProfile(env);
   assert.equal(updates.length, 0);
 });
+
+test('144 visible candles, vertical zoom 0.4 and 81-bar gap update the preview immediately', () => {
+  const { env, updates, getViewport } = fixture();
+  env.visualProfile = {
+    visibleBars: 144, verticalZoom: .4, autoPriceScale: true, rightGapBars: 81,
+  };
+  env.visualProfileKey = 'terminalCompact:mobile';
+  env.terminalMode = true;
+  env.rightPaddingBars = 81;
+  applyProfile(env);
+  assert.equal(updates.length, 1);
+  const width = env.hookChartPlotWidth(600);
+  assert.ok(Math.abs(getViewport()!.barWidth - width / (144 + 81)) < 1e-8);
+  assert.equal(Math.round(width / getViewport()!.barWidth - env.rightPaddingBars), 144);
+  assert.equal(getViewport()!.rightOffset, 0);
+  assert.equal(getViewport()!.yZoom, .4);
+  assert.equal(getViewport()!.autoY, true);
+  assert.equal(getViewport()!.manualRange, null);
+
+  env.visualProfile = { ...env.visualProfile, rightGapBars: 50 };
+  env.rightPaddingBars = 50;
+  applyProfile(env);
+  assert.equal(updates.length, 2, 'changing the gap must update the preview without a Save click');
+  assert.ok(Math.abs(getViewport()!.barWidth - width / (144 + 50)) < 1e-8);
+
+  env.visualProfile = { ...env.visualProfile, visibleBars: 100 };
+  applyProfile(env);
+  assert.equal(updates.length, 3, 'moving the candle count slider updates width');
+  assert.ok(Math.abs(getViewport()!.barWidth - width / (100 + 50)) < 1e-8);
+
+  env.visualProfile = { ...env.visualProfile, autoPriceScale: false };
+  applyProfile(env);
+  assert.equal(updates.length, 4, 'switching auto price off updates the price range');
+  assert.equal(getViewport()!.autoY, false);
+  assert.ok(getViewport()!.manualRange > 0);
+  assert.equal(getViewport()!.yZoom, .4);
+
+  env.visualProfile = { ...env.visualProfile, verticalZoom: 1.4 };
+  applyProfile(env);
+  assert.equal(updates.length, 5, 'vertical zoom slider applies immediately');
+  assert.equal(getViewport()!.yZoom, 1.4);
+  assert.equal(getViewport()!.autoY, false);
+});
+
+test('visual preview passes the same right margin to candles and time axis', () => {
+  const preview = readFileSync(new URL('../src/components/hookchart/HookChartVisualPreview.tsx', import.meta.url), 'utf8');
+  const editor = readFileSync(new URL('../src/components/hookchart/OriginalHookChartSettings.tsx', import.meta.url), 'utf8');
+  assert.match(preview, /visualProfile=\{profile\}/);
+  assert.equal((preview.match(/rightPaddingBars=\{profile\.rightGapBars\}/g) || []).length, 2);
+  assert.match(editor, /profile=\{selectedProfile\}/);
+  assert.match(editor, /onChange=\{onProfileChange\}/);
+  for (const key of ['visibleBars', 'verticalZoom', 'autoPriceScale', 'rightGapBars']) {
+    assert.match(editor, new RegExp('onProfileChange\\(\\{ ' + key + ':'));
+  }
+});

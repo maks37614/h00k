@@ -369,8 +369,11 @@ export function Chart({candles,symbol,tf,tool,drawings,setDrawings,alerts,setAle
    // A saved request for hundreds of visible candles needs sub-3px bars.
    // The canvas already uses aggregated rasterization for tiny bar widths.
    const minBar=.12;
-   const barWidth=Math.max(minBar,Math.min(34,plotWidth/visualProfile.visibleBars));
-   const count=Math.max(1,Math.min(candles.length,Math.ceil(plotWidth/barWidth)));
+   // Fit the requested number of candles AND the right-hand empty slots.
+   // Previously a 144-candle view + an 81-bar gap displayed only ~63 candles.
+   const visibleSlots=Math.max(1,visualProfile.visibleBars+Math.max(0,rightPaddingBars));
+   const barWidth=Math.max(minBar,Math.min(34,plotWidth/visibleSlots));
+   const count=Math.max(1,Math.min(candles.length,Math.ceil(visualProfile.visibleBars)));
    const recent=candles.slice(-count);
    let low=Infinity,high=-Infinity;
    for(const candle of recent){low=Math.min(low,candle.l);high=Math.max(high,candle.h)}

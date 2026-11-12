@@ -55,18 +55,26 @@ test('capture records relative viewport properties, not fixed prices or ticker',
     barWidth:8,rightOffset:12,autoY:false,manualRange:50,
   },100);
   assert.deepEqual(captured,{
-    visibleBars:100,verticalZoom:2,autoPriceScale:false,rightGapBars:12,
+    visibleBars:88,verticalZoom:2,autoPriceScale:false,rightGapBars:12,
   });
   const auto = captureVisualProfile(base,800,{
     barWidth:10,rightOffset:15,autoY:true,manualRange:null,yZoom:1.3,
   });
   assert.equal(auto.verticalZoom,1.3);
-  assert.equal(auto.visibleBars,80);
+  assert.equal(auto.visibleBars,68);
   assert.ok(!('manualCenter' in captured));
   assert.ok(!('price' in captured));
   const withGap = { ...base, rightGapBars: 26 };
   assert.equal(captureVisualProfile(withGap, 800, { barWidth: 6, rightOffset: 0, autoY: true, manualRange: null }).rightGapBars, 26,
     'saving a zoom/pan does not modify the independent right-gap slider');
+  const combined = { ...base, visibleBars: 144, verticalZoom: .4, rightGapBars: 81 };
+  const availableWidth = 290, slotWidth = availableWidth / (combined.visibleBars + combined.rightGapBars);
+  const capturedWithGap = captureVisualProfile(combined, availableWidth,
+    { barWidth: slotWidth, rightOffset: 0, autoY: true, manualRange: null, yZoom: .4 });
+  assert.equal(capturedWithGap.visibleBars, 144,
+    'a large right-side gap must not inflate the saved candle count');
+  assert.equal(capturedWithGap.rightGapBars, 81);
+  assert.equal(capturedWithGap.verticalZoom, .4);
 });
 
 test('Graph tab uses existing personal settings persistence and preview without market fetch', () => {

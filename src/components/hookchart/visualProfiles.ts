@@ -104,7 +104,12 @@ export function captureVisualProfile(
 ): VisualChartProfile {
   const horizontalStep = viewport.fitAll || !Number.isFinite(viewport.barWidth) || viewport.barWidth <= 0
     ? plotWidth / current.visibleBars : viewport.barWidth;
-  const visibleBars = Math.round(clamp(plotWidth / Math.max(.12, horizontalStep), 15, 500, current.visibleBars));
+  // Right-side empty slots are configured separately in the Graph tab.
+  // Do not accidentally store them as visible candles when capturing the view.
+  const visibleBars = Math.round(clamp(
+    plotWidth / Math.max(.12, horizontalStep) - current.rightGapBars,
+    15, 500, current.visibleBars,
+  ));
   const verticalZoom = !viewport.autoY && viewport.manualRange && autoPriceRange && autoPriceRange > 0
     ? autoPriceRange / viewport.manualRange : (viewport.yZoom ?? current.verticalZoom);
   return normalizeVisualProfile({
