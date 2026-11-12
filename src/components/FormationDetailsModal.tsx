@@ -1020,63 +1020,57 @@ export const FormationDetailsModal: React.FC<FormationDetailsModalProps> = ({
               <div className={telegramAlertPanelCollapsed
                 ? 'flex w-full min-w-0 flex-col gap-2 rounded-xl border border-slate-800 bg-slate-950/90 p-2.5 sm:p-3'
                 : 'w-full space-y-4 rounded-2xl border border-slate-800 bg-slate-950/90 p-4 sm:p-5'}>
-                <div className={telegramAlertPanelCollapsed
-                  ? 'flex min-w-0 items-center gap-2'
-                  : 'flex flex-wrap items-center justify-between gap-3'}>
-                  <div className="flex min-w-0 items-center gap-2">
-                    <div className={telegramAlertPanelCollapsed
-                      ? 'shrink-0 rounded-lg border border-cyan-500/30 bg-cyan-500/10 p-1.5 text-cyan-400'
-                      : 'rounded-xl border border-cyan-500/30 bg-cyan-500/10 p-2 text-cyan-400'}>
-                      <Bell className="w-4 h-4" />
-                    </div>
-                    <div className="min-w-0">
-                      <h4 className={telegramAlertPanelCollapsed
-                        ? 'flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-bold text-white sm:text-sm'
-                        : 'flex flex-wrap items-center gap-2 text-sm font-bold text-white'}>
-                        <span>{telegramAlertPanelCollapsed ? 'Сповіщення в Telegram' : 'Власне сповіщення ціни в Telegram'}</span>
-                        <span className="inline-flex shrink-0 items-center gap-1.5">
-                          <span className="rounded-full border border-cyan-800/60 bg-cyan-950/80 px-2 py-0.5 font-mono text-[10px] text-cyan-300">
-                            {coin.symbol}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={toggleTelegramAlertPanel}
-                            aria-expanded={!telegramAlertPanelCollapsed}
-                            aria-controls="telegram-price-alert-panel-details"
-                            aria-label={telegramAlertPanelCollapsed ? 'Розгорнути власне сповіщення в Telegram' : 'Згорнути власне сповіщення в Telegram'}
-                            title={telegramAlertPanelCollapsed ? 'Розгорнути' : 'Згорнути'}
-                            className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-slate-700 bg-slate-900 text-slate-300 transition-colors hover:border-cyan-600 hover:text-cyan-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400"
-                          >
-                            {telegramAlertPanelCollapsed ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
-                          </button>
-                        </span>
-                      </h4>
-                      {!telegramAlertPanelCollapsed && (
-                        <p className="text-xs text-slate-400">
-                          Вкажіть будь-яку ціну, при досягненні якої бот надішле миттєвий сигнал
-                        </p>
-                      )}
-                    </div>
+                <div className="flex min-w-0 items-start gap-2 sm:gap-3">
+                  <div className={telegramAlertPanelCollapsed
+                    ? 'shrink-0 rounded-lg border border-cyan-500/30 bg-cyan-500/10 p-1.5 text-cyan-400'
+                    : 'shrink-0 rounded-xl border border-cyan-500/30 bg-cyan-500/10 p-2 text-cyan-400'}>
+                    <Bell className="h-4 w-4" />
                   </div>
-
-                  {/* Telegram status badge */}
-                  {!telegramAlertPanelCollapsed && isTelegramConfigured === false && onOpenTelegramModal && (
+                  <div className="min-w-0 flex-1">
+                    <h4 className="text-xs font-bold leading-7 text-white sm:text-sm">
+                      Сповіщення Telegram
+                    </h4>
+                    {!telegramAlertPanelCollapsed && (
+                      <p className="text-xs text-slate-400">
+                        Вкажіть будь-яку ціну, при досягненні якої бот надішле миттєвий сигнал
+                      </p>
+                    )}
+                  </div>
+                  <div className="ml-auto inline-flex shrink-0 items-center gap-1.5">
+                    <span className="rounded-full border border-cyan-800/60 bg-cyan-950/80 px-2 py-0.5 font-mono text-[10px] text-cyan-300">
+                      {coin.symbol}
+                    </span>
                     <button
                       type="button"
-                      onClick={() => onOpenTelegramModal({ symbol: coin.symbol })}
-                      className="text-xs px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-300 hover:bg-amber-500/20 flex items-center gap-1.5 transition-colors"
+                      onClick={toggleTelegramAlertPanel}
+                      aria-expanded={!telegramAlertPanelCollapsed}
+                      aria-controls="telegram-price-alert-panel-details"
+                      aria-label={telegramAlertPanelCollapsed ? 'Розгорнути сповіщення Telegram' : 'Згорнути сповіщення Telegram'}
+                      title={telegramAlertPanelCollapsed ? 'Розгорнути' : 'Згорнути'}
+                      className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-slate-700 bg-slate-900 text-slate-300 transition-colors hover:border-cyan-600 hover:text-cyan-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400"
                     >
-                      <AlertTriangle className="w-3.5 h-3.5" />
-                      <span>Підключити Telegram-бота</span>
+                      {telegramAlertPanelCollapsed ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
                     </button>
-                  )}
-                  {!telegramAlertPanelCollapsed && isTelegramConfigured && (
-                    <div className="text-xs px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center gap-1.5">
-                      <CheckCircle2 className="w-3.5 h-3.5" />
-                      <span>Бот підключено</span>
-                    </div>
-                  )}
+                  </div>
                 </div>
+                {/* Telegram status badge: keep it below the header so the coin and
+                    collapse control stay anchored at the top right on mobile. */}
+                {!telegramAlertPanelCollapsed && isTelegramConfigured === false && onOpenTelegramModal && (
+                  <button
+                    type="button"
+                    onClick={() => onOpenTelegramModal({ symbol: coin.symbol })}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-xs text-amber-300 transition-colors hover:bg-amber-500/20"
+                  >
+                    <AlertTriangle className="h-3.5 w-3.5" />
+                    <span>Підключити Telegram-бота</span>
+                  </button>
+                )}
+                {!telegramAlertPanelCollapsed && isTelegramConfigured && (
+                  <div className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 text-xs text-emerald-400">
+                    <CheckCircle2 className="h-3.5 w-3.5" />
+                    <span>Бот підключено</span>
+                  </div>
+                )}
                 {telegramAlertPanelSaveError && (
                   <p role="status" className="text-xs text-amber-300">
                     Не вдалося синхронізувати стан блоку з профілем. Налаштування залишиться локальним у цьому браузері.
