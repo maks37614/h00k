@@ -228,7 +228,20 @@ export const ScreenerFilters: React.FC<ScreenerFiltersProps> = ({
               onChange={(e) => onFilterChange({ densityConfirmedOnly: e.target.checked })}
               className="accent-fuchsia-400"
             />
-            Щільність підтверджена
+            Щільність
+          </label>
+          <label
+            className="flex items-center gap-1.5 bg-slate-950 px-2 py-1 rounded-lg border border-slate-800 text-[11px] text-slate-300 cursor-pointer"
+            title="Лише формації, біля ключового рівня яких виявлено кругле число (ROUND). Не вимагає підтвердження щільності стакана."
+          >
+            <input
+              type="checkbox"
+              checked={filters.roundNumberOnly}
+              onChange={(e) => onFilterChange({ roundNumberOnly: e.target.checked })}
+              className="accent-cyan-400"
+              aria-label="Круглі числа (ROUND)"
+            />
+            Круглі числа
           </label>
 
           <label className="flex items-center gap-1.5 bg-slate-950 px-2 py-1 rounded-lg border border-slate-800 text-[11px] text-slate-300">
