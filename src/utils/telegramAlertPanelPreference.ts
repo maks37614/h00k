@@ -29,3 +29,32 @@ export function saveTelegramAlertPanelCollapsed(
     // A blocked/full storage must not prevent the UI from collapsing.
   }
 }
+
+/** A failed profile write must not overwrite a newer local choice on reload. */
+export function telegramAlertPanelPendingKey(uid: string): string {
+  return `${TELEGRAM_ALERT_PANEL_STORAGE_PREFIX}:pending:${uid}`;
+}
+
+export function isTelegramAlertPanelSyncPending(
+  storage: Pick<Storage, 'getItem'> | null | undefined,
+  uid: string,
+): boolean {
+  try {
+    return storage?.getItem(telegramAlertPanelPendingKey(uid)) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+export function saveTelegramAlertPanelSyncPending(
+  storage: Pick<Storage, 'setItem' | 'removeItem'> | null | undefined,
+  uid: string,
+  pending: boolean,
+): void {
+  try {
+    if (pending) storage?.setItem(telegramAlertPanelPendingKey(uid), 'true');
+    else storage?.removeItem(telegramAlertPanelPendingKey(uid));
+  } catch {
+    // Local persistence is best effort and must not block the UI.
+  }
+}
