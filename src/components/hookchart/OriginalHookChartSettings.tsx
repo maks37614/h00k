@@ -277,13 +277,24 @@ function LiquidationMinimum({ value, disabled, onChange }: { value?: number | nu
     }} />;
 }
 function Num({ value, set, min, max, step = 1, disabled = false }: { value: number; set: (value: number) => void; min?: number; max?: number; step?: number; disabled?: boolean }) {
-  return <input className="numInput" type="number" value={value} min={min} max={max} step={step} disabled={disabled} onChange={event => {
-    let next = Number(event.target.value);
+  // Keep a temporary string while editing. Number('') is zero, so committing
+  // on every keystroke prevents users from deleting a displayed 0 on iOS.
+  const [draft, setDraft] = useState<string | null>(null);
+  const commit = (raw: string) => {
+    setDraft(null);
+    if (!raw.trim()) return; // Empty input cancels the edit, not a new zero.
+    let next = Number(raw);
     if (!Number.isFinite(next)) return;
     if (min !== undefined) next = Math.max(min, next);
     if (max !== undefined) next = Math.min(max, next);
-    set(next);
-  }} />;
+    if (next !== value) set(next);
+  };
+  return <input className="numInput" type="number" value={draft ?? value} min={min} max={max} step={step} disabled={disabled}
+    onFocus={event => { setDraft(String(value)); event.currentTarget.select(); }}
+    onChange={event => setDraft(event.currentTarget.value)}
+    onBlur={event => commit(event.currentTarget.value)}
+    onKeyDown={event => { if (event.key === 'Enter') event.currentTarget.blur(); }}
+  />;
 }
 function Choice({ label, desc, unavailable, values, labels, value, set }: { label: string; desc?: string; unavailable?: boolean; values: Array<string | number>; labels?: string[]; value: unknown; set: (value: any) => void }) {
   return <Setting label={label} desc={desc} unavailable={unavailable}><div className="settingsChips">{values.map((entry, index) => <button type="button" key={String(entry)} value={String(entry)} aria-pressed={value === entry} className={value === entry ? 'sel' : ''} onClick={() => set(entry)}>{labels?.[index] ?? String(entry)}</button>)}</div></Setting>;
@@ -606,8 +617,8 @@ export function OriginalHookChartSettings({
                 {onRetryHistory && <button type="button" onClick={onRetryHistory} className="hotkeyResetOne">Повторити</button>}
               </>}
             </div>}
-            <SwitchRow label="Відступ праворуч" desc="Вільне місце після останньої свічки перед шкалою цін." value={prefs.rightPaddingEnabled !== false} onChange={value => set('rightPaddingEnabled', value)} />
-            <Setting label="Кількість свічок" desc="Розмір відступу праворуч, від 0 до 500 свічок."><Num value={prefs.rightPadding ?? 10} min={0} max={500} disabled={prefs.rightPaddingEnabled === false} set={value => set('rightPadding', Math.round(value))} /><b className="valueBadge">свічок</b></Setting>
+            <SwitchRow label="Відступ праворуч" desc="Загальний вільний простір після останньої свічки. Для Термінала з автомасштабом використовуйте «Графік → Відступ праворуч» для відповідного типу графіка." value={prefs.rightPaddingEnabled !== false} onChange={value => set('rightPaddingEnabled', value)} />
+            <Setting label="Кількість свічок" desc="Ширина загального відступу праворуч у барах, від 0 до 500. Не змінює кількість завантажених свічок."><Num value={prefs.rightPadding ?? 10} min={0} max={500} disabled={prefs.rightPaddingEnabled === false} set={value => set('rightPadding', Math.round(value))} /><b className="valueBadge">свічок</b></Setting>
             <SwitchRow label="Панель інструментів на графіку" value={prefs.chartToolbar !== false} onChange={value => set('chartToolbar', value)} />
             <SwitchRow label="Іконки верхньої панелі над графіком" desc="Приховує всі додаткові іконки верхньої панелі. Вибір таймфрейму залишається видимим і робочим." value={prefs.showTopToolbarIcons !== false} onChange={value => set('showTopToolbarIcons', value)} />
             <SwitchRow label="Показувати суми великих ринкових заявок під свічками" value={prefs.showMarketPrintSums === true} onChange={value => set('showMarketPrintSums', value)} />
