@@ -1105,6 +1105,7 @@ export const FormationDetailsModal: React.FC<FormationDetailsModalProps> = ({
                 </div>
               ) : (
                 <TradingViewChart
+                  visualContext="formationsQuick"
                   klines={klines}
                   formation={formation}
                   symbol={`${coin.symbol}`}
