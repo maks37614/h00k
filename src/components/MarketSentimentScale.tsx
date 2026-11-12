@@ -38,6 +38,8 @@ export const MarketSentimentScale: React.FC<MarketSentimentScaleProps> = ({ scor
     SEGMENT_COLORS.length - 1,
     Math.floor(displayScore / (100 / SEGMENT_COLORS.length)),
   );
+  // Keep the marker's border, glow, and score color in sync with the current zone.
+  const markerAccent = SEGMENT_COLORS[activeSegment];
 
   return (
     <div
@@ -63,8 +65,13 @@ export const MarketSentimentScale: React.FC<MarketSentimentScaleProps> = ({ scor
         </div>
         <div
           data-market-sentiment-marker
-          className="pointer-events-none absolute top-1/2 z-10 flex h-[29px] min-w-[72px] -translate-x-1/2 -translate-y-1/2 items-center justify-center gap-0.5 rounded-[7px] border border-emerald-400 bg-[#091c24] px-2 font-mono text-[12px] font-bold text-emerald-300 shadow-[0_0_12px_rgba(16,235,192,0.65),inset_0_0_8px_rgba(16,235,192,0.12)] motion-safe:transition-[left] motion-safe:duration-1000 motion-safe:ease-out sm:text-[13px]"
-          style={{ left: `clamp(36px, ${markerPosition}%, calc(100% - 36px))` }}
+          className="pointer-events-none absolute top-1/2 z-10 flex h-[29px] min-w-[72px] -translate-x-1/2 -translate-y-1/2 items-center justify-center gap-0.5 rounded-[7px] border bg-[#091c24] px-2 font-mono text-[12px] font-bold motion-safe:transition-[left,border-color,color,box-shadow] motion-safe:duration-1000 motion-safe:ease-out sm:text-[13px]"
+          style={{
+            left: `clamp(36px, ${markerPosition}%, calc(100% - 36px))`,
+            borderColor: markerAccent,
+            color: markerAccent,
+            boxShadow: `0 0 12px ${markerAccent}66, inset 0 0 8px ${markerAccent}22`,
+          }}
           aria-hidden="true"
         >
           <span>{Math.round(displayScore)}</span>
