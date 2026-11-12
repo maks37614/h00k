@@ -22,6 +22,11 @@ export interface VisualChartProfile {
 }
 export type VisualProfiles = Partial<Record<VisualProfileKey, VisualChartProfile>>;
 
+// Broad practical bounds keep scales finite and avoid empty/overflowing chart canvases.
+export const VISUAL_ZOOM_MIN = 0.01;
+export const VISUAL_ZOOM_MAX = 100;
+export const VISUAL_GAP_MAX = 2000;
+
 const BASE: Record<VisualContextId, VisualChartProfile> = {
   screenerQuick: { visibleBars: 65, verticalZoom: 1, autoPriceScale: true, rightGapBars: 10 },
   screenerFull: { visibleBars: 110, verticalZoom: 1, autoPriceScale: true, rightGapBars: 12 },
@@ -57,9 +62,9 @@ export function normalizeVisualProfile(value: unknown, context: VisualContextId)
     ? value as Partial<VisualChartProfile> : {};
   return {
     visibleBars: Math.round(clamp(raw.visibleBars, 15, 500, defaults.visibleBars)),
-    verticalZoom: Math.round(clamp(raw.verticalZoom, 0.4, 4, defaults.verticalZoom) * 100) / 100,
+    verticalZoom: Math.round(clamp(raw.verticalZoom, VISUAL_ZOOM_MIN, VISUAL_ZOOM_MAX, defaults.verticalZoom) * 1000) / 1000,
     autoPriceScale: typeof raw.autoPriceScale === 'boolean' ? raw.autoPriceScale : defaults.autoPriceScale,
-    rightGapBars: Math.round(clamp(raw.rightGapBars, 0, 100, defaults.rightGapBars)),
+    rightGapBars: Math.round(clamp(raw.rightGapBars, 0, VISUAL_GAP_MAX, defaults.rightGapBars)),
   };
 }
 
