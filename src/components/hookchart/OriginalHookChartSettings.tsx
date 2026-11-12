@@ -373,7 +373,7 @@ function StrategySettings({ activeId, onSelect }: { activeId: string; onSelect: 
 /** Real HookChart preview uses the current chart's candles, with optional one-time sample in profile settings. */
 function VisualProfileEditor({
   visualContext, visualDevice, selectedProfile, onContextChange, onDeviceChange,
-  onProfileChange, onReset, onCapture, live, previewCandles, previewSymbol,
+  onProfileChange, onReset, onApplyToAll, onCapture, live, previewCandles, previewSymbol,
   previewTimeframe, previewExchange, previewMarketType, previewTimezone, previewLongColor, previewShortColor, saveStatus,
 }: {
   visualContext: VisualContextId;
@@ -383,6 +383,7 @@ function VisualProfileEditor({
   onDeviceChange: (device: VisualDevice) => void;
   onProfileChange: (delta: Partial<import('./visualProfiles').VisualChartProfile>) => void;
   onReset: () => void;
+  onApplyToAll: () => void;
   onCapture?: () => void;
   live: boolean;
   saveStatus?: 'idle' | 'saving' | 'saved' | 'error';
@@ -461,7 +462,12 @@ function VisualProfileEditor({
         {onCapture && <button type="button" className="hotkeyResetOne" onClick={onCapture}>
           Зберегти поточний вигляд графіка
         </button>}
+        <button type="button" className="hotkeyResetOne" onClick={onApplyToAll}>Зробити типовими для всіх графіків цього пристрою</button>
         <button type="button" className="hotkeyResetOne" onClick={onReset}>Скинути цей профіль</button>
+      </div>
+      <div className="settingsHint">
+        «Зробити типовими» копіює вибраний масштаб у всі графіки Скрінера, Формацій і Термінала
+        тільки для вибраного пристрою. Інший пристрій і сторінка відтворення не змінюються.
       </div>
       {live && <div className="settingsHint">
         Для збереження зуму, налаштованого безпосередньо пальцями/мишкою, натисни «Зберегти поточний вигляд графіка».
@@ -846,6 +852,14 @@ export function OriginalHookChartSettings({
               const key = makeVisualProfileKey(visualContext, visualDevice);
               set('visualProfiles', patchVisualProfile(prefs.visualProfiles, key, null));
               onResetVisual?.(key);
+            }}
+            onApplyToAll={() => {
+              const selected = getVisualProfile(prefs, visualContext, visualDevice);
+              const profiles = VISUAL_CONTEXTS.reduce(
+                (acc, context) => patchVisualProfile(acc, makeVisualProfileKey(context.id, visualDevice), selected),
+                prefs.visualProfiles,
+              );
+              set('visualProfiles', profiles);
             }}
             onCapture={onCaptureVisual && activeVisualContext === visualContext && visualDevice === (typeof window === 'undefined' ? 'desktop' : visualDeviceForWidth(window.innerWidth)) && currentViewport && (currentPlotWidth || 0) > 100
               ? () => onCaptureVisual(makeVisualProfileKey(visualContext, visualDevice)) : undefined}
