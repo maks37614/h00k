@@ -1361,16 +1361,28 @@ export default function App() {
               coin={activeSelectedPair.coin}
               formation={activeSelectedPair.formation}
               onFormationChange={(nextFormation) => {
+                if (!selectedPair) return;
                 setSelectedArchivedItem(null);
-                setSelectedPair(previous => {
-                  if (!previous) return previous;
-                  const rawCoin = coins.find(row => row.symbol === previous.coin.symbol
-                    && row.exchange === previous.coin.exchange
-                    && row.marketType === previous.coin.marketType
-                    && row.timeframe === previous.coin.timeframe);
-                  const rawFormation = rawCoin?.formations.find(row => row.id === nextFormation.id);
-                  return { coin: rawCoin ?? previous.coin, formation: rawFormation ?? nextFormation };
-                });
+                const rawCoin = coins.find(row => row.symbol === selectedPair.coin.symbol
+                  && row.exchange === selectedPair.coin.exchange
+                  && row.marketType === selectedPair.coin.marketType
+                  && row.timeframe === selectedPair.coin.timeframe);
+                const rawFormation = rawCoin?.formations.find(row => row.id === nextFormation.id) ?? nextFormation;
+                const chosen = { coin: rawCoin ?? selectedPair.coin, formation: rawFormation };
+                setSelectedPair(chosen);
+                if (chartRoute) {
+                  openChartPage({
+                    ...chartRoute, kind: 'coin', formationId: rawFormation.id,
+                  }, chosen, true);
+                }
+              }}
+              initialTimeframe={chartRoute?.timeframe}
+              onPageTimeframeChange={tf => {
+                if (!chartRoute || !selectedPair) return;
+                const coin = { ...selectedPair.coin, timeframe: tf };
+                setSelectedPair(previous => previous ? { ...previous, coin } : previous);
+                openChartPage({ ...chartRoute, timeframe: tf },
+                  { coin, formation: selectedPair.formation, archived: selectedArchivedItem }, true);
               }}
               archivedItem={selectedArchivedItem}
               allCoins={coins}
