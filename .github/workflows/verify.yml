@@ -22,7 +22,7 @@ jobs:
       - name: Type check
         run: npm run lint
       - name: Encyclopedia regression tests
-        run: node --import tsx --test tests/encyclopediaKotapych.test.ts
+        run: node --import tsx --test tests/encyclopediaKotapych.test.ts tests/encyclopediaClassicRules.test.ts
       - name: Build
         run: npm run build
       - name: Tests

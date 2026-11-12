@@ -115,6 +115,7 @@ const GUIDE_ITEMS: GuideItem[] = [
 
 const KotapychGuide = React.lazy(() => import('./encyclopedia/KotapychGuide').then(module => ({ default: module.KotapychGuide })));
 const OpenInterestGuide = React.lazy(() => import('./encyclopedia/OpenInterestGuide').then(module => ({ default: module.OpenInterestGuide })));
+const ClassicRulesGuide = React.lazy(() => import('./encyclopedia/ClassicRulesGuide').then(module => ({ default: module.ClassicRulesGuide })));
 
 interface FormationGuideModalProps {
   isOpen: boolean;
@@ -124,7 +125,7 @@ interface FormationGuideModalProps {
 export const FormationGuideModal: React.FC<FormationGuideModalProps> = ({ isOpen, onClose }) => {
   // Hooks must run on every render, including when the modal is closed.
   const [selectedId, setSelectedId] = useState<string>(GUIDE_ITEMS[0].id);
-  const [mainCategory, setMainCategory] = useState<'scalping' | 'patterns' | 'indicators'>('scalping');
+  const [mainCategory, setMainCategory] = useState<'scalping' | 'patterns' | 'indicators' | 'rules'>('scalping');
   const activeItem = GUIDE_ITEMS.find((item) => item.id === selectedId) || GUIDE_ITEMS[0];
 
   if (!isOpen) return null;
@@ -172,6 +173,12 @@ export const FormationGuideModal: React.FC<FormationGuideModalProps> = ({ isOpen
               : 'bg-slate-900 border-slate-700 text-slate-400 hover:text-white')}>
             Індикатори
           </button>
+          <button type="button" role="tab" aria-selected={mainCategory === 'rules'} onClick={() => setMainCategory('rules')}
+            className={'rounded-xl border px-3.5 py-2 text-xs font-bold transition-colors ' + (mainCategory === 'rules'
+              ? 'bg-cyan-500/15 border-cyan-500/40 text-cyan-200'
+              : 'bg-slate-900 border-slate-700 text-slate-400 hover:text-white')}>
+            Правила
+          </button>
         </div>
 
         {/* Sidebar: nested category and its entries */}
@@ -189,6 +196,12 @@ export const FormationGuideModal: React.FC<FormationGuideModalProps> = ({ isOpen
                 className="w-full text-left px-3 py-2.5 rounded-xl bg-slate-800 text-white font-bold flex items-center justify-between text-xs border border-sky-500/20">
                 <span><strong className="block text-xs">Open Interest (OI)</strong><small className="block text-[10px] text-slate-400 mt-1">Відкритий інтерес · 7 розділів</small></span>
                 <ChevronRight className="w-3.5 h-3.5 text-sky-400" />
+              </button>
+            ) : mainCategory === 'rules' ? (
+              <button type="button" aria-current="page" onClick={() => setMainCategory('rules')}
+                className="w-full text-left px-3 py-2.5 rounded-xl bg-slate-800 text-white font-bold flex items-center justify-between text-xs border border-cyan-500/20">
+                <span><strong className="block text-xs">Класика</strong><small className="block text-[10px] text-slate-400 mt-1">6 тематичних розділів · графічні приклади</small></span>
+                <ChevronRight className="w-3.5 h-3.5 text-cyan-400" />
               </button>
             ) : GUIDE_ITEMS.map((item) => (
               <button
@@ -218,6 +231,10 @@ export const FormationGuideModal: React.FC<FormationGuideModalProps> = ({ isOpen
             ) : mainCategory === 'indicators' ? (
               <React.Suspense fallback={<div role="status" className="text-xs text-slate-400">Завантажуємо матеріали про Open Interest…</div>}>
                 <OpenInterestGuide />
+              </React.Suspense>
+            ) : mainCategory === 'rules' ? (
+              <React.Suspense fallback={<div role="status" className="text-xs text-slate-400">Завантажуємо правила «Класика»…</div>}>
+                <ClassicRulesGuide />
               </React.Suspense>
             ) : (<>
             <div className="flex items-center justify-between">
