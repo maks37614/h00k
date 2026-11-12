@@ -80,6 +80,7 @@ const DEFAULT_FILTERS: ScreenerFilterState = {
   status: 'all',
   minVolumeUsd: 0,
   densityConfirmedOnly: false,
+  roundNumberOnly: false,
   searchQuery: '',
   sortBy: 'confidence',
   sortOrder: 'desc',
@@ -1515,6 +1516,7 @@ export default function App() {
               {earlyMode ? (earlyItems.length + ' попередніх W/M-сценаріїв') :
                 (groupedItems.length + ' монет · ' + flattenedItems.length + ' формацій')}
               {!earlyMode && filters.densityConfirmedOnly && ' · щільність стакана підтверджена'}
+              {!earlyMode && filters.roundNumberOnly && ' · біля круглого числа (ROUND)'}
             </div>
 
             {/* Error Notification */}
