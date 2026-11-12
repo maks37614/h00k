@@ -9,7 +9,7 @@ import { installFullEarlyScanRoutes } from './server/earlyScanRoutes';
 import { fetch24hTradeCount } from './server/chartMarketStats';
 import { analyzeFormationWithAI } from './server/geminiService';
 import { generateSmartAnalysis } from './server/smartAnalysisService';
-import { calculateMarketSentiment } from './server/sentimentService';
+import { calculateMarketSentiment, SentimentDataUnavailableError } from './server/sentimentService';
 import { installCryptoNewsRoutes } from './server/cryptoNewsFeed';
 import { installTelegramRoutes } from './server/telegramRoutes';
 import { startSharedTelegramBot } from './server/telegramLinkService';
@@ -212,8 +212,12 @@ async function startServer() {
       const sentiment = await calculateMarketSentiment();
       res.json({ success: true, data: sentiment });
     } catch (err: any) {
+      if (err instanceof SentimentDataUnavailableError) {
+        res.status(503).json({ success: false, error: err.message, code: 'SENTIMENT_DATA_UNAVAILABLE' });
+        return;
+      }
       console.error('Error calculating market sentiment:', err);
-      res.status(500).json({ success: false, error: err.message || 'Failed to calculate market sentiment' });
+      res.status(500).json({ success: false, error: 'Не вдалося обчислити індекс настрою' });
     }
   });
 
