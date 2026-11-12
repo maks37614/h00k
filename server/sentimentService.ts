@@ -75,6 +75,7 @@ export async function calculateMarketSentiment(providedCoins?: MarketCoin[]): Pr
     }
   }
 
+  const unchangedCount = total - advancingCount - decliningCount;
   const advancingPct = Number((advancingCount / total * 100).toFixed(1));
   const avgChange24h = Number((totalChange / total).toFixed(2));
   const avgVolatility = Number((totalVolatility / total).toFixed(2));
@@ -136,7 +137,7 @@ export async function calculateMarketSentiment(providedCoins?: MarketCoin[]): Pr
   const updatedAt = latestSourceTime > 0 ? latestSourceTime : now;
 
   const summary = `Настрій ринку: ${sentimentLabel} (${compositeScore}/100). ` +
-    `Зростають ${advancingCount} із ${total} пар (${advancingPct}%), падають ${decliningCount}; ` +
+    `Зростають ${advancingCount} із ${total} пар (${advancingPct}%), падають ${decliningCount}, без суттєвого руху ${unchangedCount}; ` +
     `середня зміна ціни за 24 год: ${avgChange24h >= 0 ? '+' : ''}${avgChange24h}%. ` +
     `Середній добовий діапазон: ${avgVolatility}%. ` +
     'Індекс є орієнтовною оцінкою цінової динаміки, не вимірюванням грошових потоків.' +
@@ -152,6 +153,7 @@ export async function calculateMarketSentiment(providedCoins?: MarketCoin[]): Pr
     priceTrendDynamics: {
       advancingCount,
       decliningCount,
+      unchangedCount,
       advancingPct,
       trendBias,
       avgChange24h,
