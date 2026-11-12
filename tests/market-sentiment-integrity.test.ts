@@ -29,6 +29,7 @@ test('unchanged prices are neutral, not 100% advancing', async () => {
   assert.equal(result.sentimentState, 'neutral');
   assert.equal(result.priceTrendDynamics.advancingCount, 0);
   assert.equal(result.priceTrendDynamics.decliningCount, 0);
+  assert.equal(result.priceTrendDynamics.unchangedCount, 100);
   assert.equal(result.marketBreadth.breadthScore, 50);
 });
 
