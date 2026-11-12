@@ -1,6 +1,6 @@
 import { normalizeExchangeSymbol } from '../utils/marketSymbols';
 import { useTelegram } from '../context/TelegramContext';
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
   Sparkles,
   Target,
@@ -33,6 +33,12 @@ import { useAuth } from '../context/AuthContext';
 import { useAlerts } from '../context/AlertsContext';
 import { useArchive } from '../context/ArchiveContext';
 import { SmartAnalysisBlock } from './SmartAnalysisBlock';
+import { chartCrosshairAlertPrice } from '../utils/chartAlertPrice';
+import {
+  readSmartAnalysisPanelCollapsed, saveSmartAnalysisPanelCollapsed,
+  smartAnalysisPanelStorageKey, isSmartAnalysisPanelSyncPending,
+  saveSmartAnalysisPanelSyncPending,
+} from '../utils/smartAnalysisPanelPreference';
 import { ChartTopAnalysisText } from './ChartTopAnalysisText';
 import {
   readTelegramAlertPanelCollapsed,
@@ -220,13 +226,105 @@ export const FormationDetailsModal: React.FC<FormationDetailsModalProps> = ({
       .finally(() => { pendingTelegramAlertPreferenceWrites.current -= 1; });
   };
 
+  // AI + Quant visibility is independent from the Telegram panel and shared
+  // across every coin. The signed-in profile is the cross-device authority.
+  const smartAnalysisStorageKey = smartAnalysisPanelStorageKey(user?.uid);
+  const [smartAnalysisCollapsed, setSmartAnalysisCollapsed] = useState(
+    () => readSmartAnalysisPanelCollapsed(alertPanelStorage(), user?.uid)
+  );
+  const [smartAnalysisSaveError, setSmartAnalysisSaveError] = useState(false);
+  const pendingSmartAnalysisWrites = useRef(0);
+
+  useEffect(() => {
+    if (pendingSmartAnalysisWrites.current > 0) return;
+    const saved = profile?.uid === user?.uid ? profile.smartAnalysisCollapsed : undefined;
+    const pending = !!user?.uid && isSmartAnalysisPanelSyncPending(alertPanelStorage(), user.uid);
+    const collapsed = !pending && typeof saved === 'boolean'
+      ? saved : readSmartAnalysisPanelCollapsed(alertPanelStorage(), user?.uid);
+    setSmartAnalysisCollapsed(collapsed);
+    saveSmartAnalysisPanelCollapsed(alertPanelStorage(), collapsed, user?.uid);
+  }, [user?.uid, profile?.uid, profile?.smartAnalysisCollapsed]);
+
+  useEffect(() => {
+    const syncAcrossTabs = (event: StorageEvent) => {
+      if (event.key === smartAnalysisStorageKey) {
+        setSmartAnalysisCollapsed(event.newValue === 'true');
+      }
+    };
+    window.addEventListener('storage', syncAcrossTabs);
+    return () => window.removeEventListener('storage', syncAcrossTabs);
+  }, [smartAnalysisStorageKey]);
+
+  const toggleSmartAnalysis = () => {
+    const next = !smartAnalysisCollapsed;
+    setSmartAnalysisCollapsed(next);
+    setSmartAnalysisSaveError(false);
+    saveSmartAnalysisPanelCollapsed(alertPanelStorage(), next, user?.uid);
+    if (!user) return;
+    saveSmartAnalysisPanelSyncPending(alertPanelStorage(), user.uid, true);
+    pendingSmartAnalysisWrites.current += 1;
+    void updateProfileData({ smartAnalysisCollapsed: next })
+      .then(() => {
+        if (pendingSmartAnalysisWrites.current === 1) {
+          saveSmartAnalysisPanelSyncPending(alertPanelStorage(), user.uid, false);
+        }
+      })
+      .catch(() => setSmartAnalysisSaveError(true))
+      .finally(() => { pendingSmartAnalysisWrites.current -= 1; });
+  };
+
   // Custom price alert under chart state
   const [customAlertPrice, setCustomAlertPrice] = useState<string>('');
+  const customAlertPriceInputRef = useRef<HTMLInputElement>(null);
+  const crosshairPriceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const latestCrosshairPrice = useRef<number | null>(null);
+  const lastCrosshairPriceAppliedAt = useRef(0);
   const [customAlertCondition, setCustomAlertCondition] = useState<'gte' | 'lte'>('gte');
   const [customAlertNote, setCustomAlertNote] = useState<string>('');
   const [settingCustomAlert, setSettingCustomAlert] = useState<boolean>(false);
   const [customAlertSuccess, setCustomAlertSuccess] = useState<string | null>(null);
   const [customAlertError, setCustomAlertError] = useState<string | null>(null);
+
+  // Cursor movements update only the draft price, never create/delete alerts.
+  // Throttle updates while dragging and flush the last sampled price at rest.
+  const applyCrosshairAlertPrice = useCallback((price: number) => {
+    if (document.activeElement === customAlertPriceInputRef.current) return;
+    const value = chartCrosshairAlertPrice(price);
+    if (!value) return;
+    setCustomAlertPrice(previous => previous === value ? previous : value);
+    const direction = price >= (livePrice || coin.currentPrice) ? 'gte' : 'lte';
+    setCustomAlertCondition(previous => previous === direction ? previous : direction);
+  }, [livePrice, coin.currentPrice]);
+
+  const handleCrosshairAlertPrice = useCallback((price: number) => {
+    if (telegramAlertPanelCollapsed || !Number.isFinite(price) || price <= 0) return;
+    if (document.activeElement === customAlertPriceInputRef.current) return;
+    latestCrosshairPrice.current = price;
+    const now = performance.now();
+    const remaining = 85 - (now - lastCrosshairPriceAppliedAt.current);
+    if (remaining <= 0) {
+      lastCrosshairPriceAppliedAt.current = now;
+      if (crosshairPriceTimer.current !== null) {
+        clearTimeout(crosshairPriceTimer.current);
+        crosshairPriceTimer.current = null;
+      }
+      applyCrosshairAlertPrice(price);
+    } else if (crosshairPriceTimer.current === null) {
+      crosshairPriceTimer.current = setTimeout(() => {
+        crosshairPriceTimer.current = null;
+        lastCrosshairPriceAppliedAt.current = performance.now();
+        const latest = latestCrosshairPrice.current;
+        if (latest !== null) applyCrosshairAlertPrice(latest);
+      }, remaining);
+    }
+  }, [telegramAlertPanelCollapsed, applyCrosshairAlertPrice]);
+
+  useEffect(() => () => {
+    if (crosshairPriceTimer.current !== null) {
+      clearTimeout(crosshairPriceTimer.current);
+      crosshairPriceTimer.current = null;
+    }
+  }, [telegramAlertPanelCollapsed, coin.symbol]);
 
   // Fullscreen chart modal state
   const [isFullscreenChartOpen, setIsFullscreenChartOpen] = useState<boolean>(false);
@@ -1003,6 +1101,7 @@ export const FormationDetailsModal: React.FC<FormationDetailsModalProps> = ({
                   onHistoryLimitChange={setHistoryLimit}
                   onTimeframeChange={setTimeframe}
                   onLivePriceUpdate={setLivePrice}
+                  onCrosshairPriceChange={handleCrosshairAlertPrice}
                   hideHeaderLiveIndicator={true}
                   hideHeaderFormationBadge={true}
                   hideSymbolAndPrice={true}
@@ -1159,6 +1258,7 @@ export const FormationDetailsModal: React.FC<FormationDetailsModalProps> = ({
                           $
                         </span>
                         <input
+                          ref={customAlertPriceInputRef}
                           type="number"
                           step="any"
                           value={customAlertPrice}
