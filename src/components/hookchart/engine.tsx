@@ -19,6 +19,7 @@ import type { ChartMarkerInfo, DetectedFormation } from '../../types';
 import { formatCryptoPrice } from '../../utils/formatters';
 import { hookChartHorizontalRange, hookChartIndexAtTime, hookChartTimeAtIndex, restoredHookViewport, terminalHookViewport } from '../../utils/hookchartData';
 import { drawHookTimeMarkers, type HookTimeMarker } from './timeMarkers';
+import { terminalCandlePriceRange } from './terminalAutoScale';
 import { HOOKCHART_PRICE_SCALE_WIDTH, HOOKCHART_PRICE_LABEL_HEIGHT, hookChartPlotWidth, layoutPriceScaleLabels } from './priceScale';
 export interface HookChartHandle { takeScreenshot(): string | null; fitContent(): void; zoomToLatest(): void; zoom(factor: number): void; }
 export type Candle={t:number,o:number,h:number,l:number,c:number,v:number,n:number,tb?:number};
@@ -314,12 +315,25 @@ export function ChartTimeAxis({candles,tf,timezone,language='uk',viewport,rightP
 
 export type Viewport={barWidth:number;rightOffset:number;autoY:boolean;manualCenter:number|null;manualRange:number|null;fitAll?:boolean;yZoom?:number};
 
-export function Chart({candles,symbol,tf,tool,drawings,setDrawings,alerts,setAlerts,onCreatePriceAlert,onSelectPriceAlert,densities,marketPrints,liquidations,autoLevels,levelLabelMode,levelLabelColor='#2090F0',levelLabelSize=11,levelLabelStyle='text',levelLineStyle='solid',crosshairLineWidth=DEFAULT_CROSSHAIR_LINE_WIDTH,rightPadding=0,rightPaddingBars=0,roundGrid=false,roundness=2,gridHorizontal=false,gridVertical=false,showMarketPrintSums=false,showVolumes=true,showLiquidations=true,showLiquidationLong=true,showLiquidationShort=true,sessionLiquidationsUsd=0,cascadeRisk,liquidationCut=0,liquidationSource='',liquidationStreamLive=false,liquidationLastEventAt=null,timezone='Europe/Warsaw',language='uk',showDensityLines=true,showDensityLabels=true,showDensityAmounts=true,highlightDensityReaction=false,autoSR=false,showSRLabels=true,autoPrevDay=false,autoDayOpen=false,autoVWAP=false,autoLocalHL=false,autoRoundLevels=false,autoPOC=false,autoChannel=false,autoStops=false,showLiqRiskBlock=true,channelModel=null,strategyResult=null,hideTimeJump=false,hideBarCountdown=hideTimeJump,controlsContainer,countdownContainer,candleLongColor='#0ECB81',candleShortColor='#F6465D',densityLineColor='#7B61FF',densityLabelColor='#C4B5FD',densityLineWidth=.5,densityLineStyle='solid',densityLabelSize=8,onViewportChange,onCrosshairChange,onCrosshairPriceChange,onNeedHistory,markers=[],timeMarkers=[],splitVolumes=false,transientRuler=false,backgroundColor=CHART_THEME.bg,gridColor,controlRef,initialViewport,initialLogicalRange,visualProfile,visualProfileKey,terminalMode=false,expandPriceScaleToMarkers=false,focusFormation,textLabel='Нотатка'}:{candles:Candle[],symbol:string,tf:string,tool:string,drawings:Drawing[],setDrawings:React.Dispatch<React.SetStateAction<Drawing[]>>,alerts:Alert[],setAlerts:React.Dispatch<React.SetStateAction<Alert[]>>,onCreatePriceAlert?:(price:number)=>void,onSelectPriceAlert?:(markerId:string)=>void,densities:Density[],marketPrints:MarketPrint[],liquidations:Liquidation[],autoLevels:AutoLevel[],levelLabelMode:'always'|'hover'|'off',levelLabelColor?:string,levelLabelSize?:number,levelLabelStyle?:'text'|'filled'|'outline',levelLineStyle?:'solid'|'dash'|'dot',crosshairLineWidth?:number,rightPadding?:number,rightPaddingBars?:number,roundGrid?:boolean,roundness?:number,gridHorizontal?:boolean,gridVertical?:boolean,showMarketPrintSums?:boolean,showVolumes?:boolean,showLiquidations?:boolean,showLiquidationLong?:boolean,showLiquidationShort?:boolean,sessionLiquidationsUsd?:number,cascadeRisk:CascadeRisk,liquidationCut?:number,liquidationSource?:string,liquidationStreamLive?:boolean,liquidationLastEventAt?:number|null,timezone?:string,language?:SupportedLanguage,showDensityLines?:boolean,showDensityLabels?:boolean,showDensityAmounts?:boolean,highlightDensityReaction?:boolean,autoSR?:boolean,showSRLabels?:boolean,autoPrevDay?:boolean,autoDayOpen?:boolean,autoVWAP?:boolean,autoLocalHL?:boolean,autoRoundLevels?:boolean,autoPOC?:boolean,autoChannel?:boolean,autoStops?:boolean,showLiqRiskBlock?:boolean,channelModel?:AutoChannelModel|null,strategyResult?:StrategyResult|null,hideTimeJump?:boolean,hideBarCountdown?:boolean,controlsContainer?:HTMLElement|null,countdownContainer?:HTMLElement|null,candleLongColor?:string,candleShortColor?:string,densityLineColor?:string,densityLabelColor?:string,densityLineWidth?:number,densityLineStyle?:'solid'|'dash'|'dot',densityLabelSize?:number,onViewportChange?:(v:Viewport)=>void,onCrosshairChange?:(position:CrosshairPosition|null)=>void,onCrosshairPriceChange?:(price:number)=>void,onNeedHistory?:(targetTs:number)=>Promise<boolean>;markers?:ChartMarkerInfo[];timeMarkers?:HookTimeMarker[];splitVolumes?:boolean;transientRuler?:boolean;backgroundColor?:string;gridColor?:string;controlRef?:React.Ref<HookChartHandle>;initialViewport?:Viewport;initialLogicalRange?:{from:number;to:number};visualProfile?:VisualChartProfile;visualProfileKey?:string;terminalMode?:boolean;expandPriceScaleToMarkers?:boolean;focusFormation?:DetectedFormation|null;textLabel?:string}){
+export function Chart({candles,symbol,tf,tool,drawings,setDrawings,alerts,setAlerts,onCreatePriceAlert,onSelectPriceAlert,densities,marketPrints,liquidations,autoLevels,levelLabelMode,levelLabelColor='#2090F0',levelLabelSize=11,levelLabelStyle='text',levelLineStyle='solid',crosshairLineWidth=DEFAULT_CROSSHAIR_LINE_WIDTH,rightPadding=0,rightPaddingBars=0,roundGrid=false,roundness=2,gridHorizontal=false,gridVertical=false,showMarketPrintSums=false,showVolumes=true,showLiquidations=true,showLiquidationLong=true,showLiquidationShort=true,sessionLiquidationsUsd=0,cascadeRisk,liquidationCut=0,liquidationSource='',liquidationStreamLive=false,liquidationLastEventAt=null,timezone='Europe/Warsaw',language='uk',showDensityLines=true,showDensityLabels=true,showDensityAmounts=true,highlightDensityReaction=false,autoSR=false,showSRLabels=true,autoPrevDay=false,autoDayOpen=false,autoVWAP=false,autoLocalHL=false,autoRoundLevels=false,autoPOC=false,autoChannel=false,autoStops=false,showLiqRiskBlock=true,channelModel=null,strategyResult=null,hideTimeJump=false,hideBarCountdown=hideTimeJump,controlsContainer,countdownContainer,candleLongColor='#0ECB81',candleShortColor='#F6465D',densityLineColor='#7B61FF',densityLabelColor='#C4B5FD',densityLineWidth=.5,densityLineStyle='solid',densityLabelSize=8,onViewportChange,onCrosshairChange,onCrosshairPriceChange,onNeedHistory,markers=[],timeMarkers=[],splitVolumes=false,transientRuler=false,backgroundColor=CHART_THEME.bg,gridColor,controlRef,initialViewport,initialLogicalRange,visualProfile,visualProfileKey,terminalMode=false,terminalAutoScale=false,expandPriceScaleToMarkers=false,focusFormation,textLabel='Нотатка'}:{candles:Candle[],symbol:string,tf:string,tool:string,drawings:Drawing[],setDrawings:React.Dispatch<React.SetStateAction<Drawing[]>>,alerts:Alert[],setAlerts:React.Dispatch<React.SetStateAction<Alert[]>>,onCreatePriceAlert?:(price:number)=>void,onSelectPriceAlert?:(markerId:string)=>void,densities:Density[],marketPrints:MarketPrint[],liquidations:Liquidation[],autoLevels:AutoLevel[],levelLabelMode:'always'|'hover'|'off',levelLabelColor?:string,levelLabelSize?:number,levelLabelStyle?:'text'|'filled'|'outline',levelLineStyle?:'solid'|'dash'|'dot',crosshairLineWidth?:number,rightPadding?:number,rightPaddingBars?:number,roundGrid?:boolean,roundness?:number,gridHorizontal?:boolean,gridVertical?:boolean,showMarketPrintSums?:boolean,showVolumes?:boolean,showLiquidations?:boolean,showLiquidationLong?:boolean,showLiquidationShort?:boolean,sessionLiquidationsUsd?:number,cascadeRisk:CascadeRisk,liquidationCut?:number,liquidationSource?:string,liquidationStreamLive?:boolean,liquidationLastEventAt?:number|null,timezone?:string,language?:SupportedLanguage,showDensityLines?:boolean,showDensityLabels?:boolean,showDensityAmounts?:boolean,highlightDensityReaction?:boolean,autoSR?:boolean,showSRLabels?:boolean,autoPrevDay?:boolean,autoDayOpen?:boolean,autoVWAP?:boolean,autoLocalHL?:boolean,autoRoundLevels?:boolean,autoPOC?:boolean,autoChannel?:boolean,autoStops?:boolean,showLiqRiskBlock?:boolean,channelModel?:AutoChannelModel|null,strategyResult?:StrategyResult|null,hideTimeJump?:boolean,hideBarCountdown?:boolean,controlsContainer?:HTMLElement|null,countdownContainer?:HTMLElement|null,candleLongColor?:string,candleShortColor?:string,densityLineColor?:string,densityLabelColor?:string,densityLineWidth?:number,densityLineStyle?:'solid'|'dash'|'dot',densityLabelSize?:number,onViewportChange?:(v:Viewport)=>void,onCrosshairChange?:(position:CrosshairPosition|null)=>void,onCrosshairPriceChange?:(price:number)=>void,onNeedHistory?:(targetTs:number)=>Promise<boolean>;markers?:ChartMarkerInfo[];timeMarkers?:HookTimeMarker[];splitVolumes?:boolean;transientRuler?:boolean;backgroundColor?:string;gridColor?:string;controlRef?:React.Ref<HookChartHandle>;initialViewport?:Viewport;initialLogicalRange?:{from:number;to:number};visualProfile?:VisualChartProfile;visualProfileKey?:string;terminalMode?:boolean;terminalAutoScale?:boolean;expandPriceScaleToMarkers?:boolean;focusFormation?:DetectedFormation|null;textLabel?:string}){
  const ref=useRef<HTMLCanvasElement>(null),interactionRef=useRef<HTMLCanvasElement>(null),box=useRef<HTMLDivElement>(null);
  const [vp,setVp]=useState<Viewport>(()=>initialViewport||{barWidth:9,rightOffset:0,autoY:true,manualCenter:null,manualRange:null,fitAll:false});
  const visualAppliedRef=useRef<string|null>(null);
  useEffect(()=>{onViewportChange?.(vp)},[vp,onViewportChange]);
  const terminalNavigation=useRef(false),terminalFocusKey=useRef<string|null>(null);
+ const autoFollowCandleRef=useRef<string|null>(null);
+ const lastCandleTime=candles.at(-1)?.t;
+ // Follow new candles without polling, touching feeds, or recalculating all blocks.
+ useEffect(()=>{
+   if(!terminalAutoScale){autoFollowCandleRef.current=null;return}
+   if(lastCandleTime===undefined)return;
+   const key=`${symbol}:${tf}:${lastCandleTime}`;
+   if(autoFollowCandleRef.current===key)return;
+   autoFollowCandleRef.current=key;
+   terminalNavigation.current=true;
+   setVp(previous=>previous.rightOffset===0&&previous.autoY&&previous.manualCenter===null&&previous.manualRange===null&&!previous.fitAll&&(previous.yZoom??1)===1
+     ?previous:{...previous,rightOffset:0,autoY:true,manualCenter:null,manualRange:null,fitAll:false,yZoom:1});
+ },[terminalAutoScale,symbol,tf,lastCandleTime]);
  useEffect(()=>{if(!visualProfile){visualAppliedRef.current=null;if(terminalMode) terminalNavigation.current=false}},[!!visualProfile,terminalMode]);
  const rangeRestored=useRef(false);
  useLayoutEffect(()=>{
@@ -339,7 +353,7 @@ export function Chart({candles,symbol,tf,tool,drawings,setDrawings,alerts,setAle
    if(width<=0)return;
    // Include the coin and timeframe: switching markets must restore the
    // selected profile even when its numeric settings have not changed.
-   const signature=[symbol,tf,visualProfileKey,visualProfile.visibleBars,visualProfile.verticalZoom,visualProfile.autoPriceScale,visualProfile.rightGapBars].join(':');
+   const signature=[symbol,tf,visualProfileKey,visualProfile.visibleBars,visualProfile.verticalZoom,visualProfile.autoPriceScale,visualProfile.rightGapBars,terminalAutoScale].join(':');
    if(visualAppliedRef.current===signature)return;
    visualAppliedRef.current=signature;
    terminalNavigation.current=true;
@@ -354,13 +368,14 @@ export function Chart({candles,symbol,tf,tool,drawings,setDrawings,alerts,setAle
    for(const candle of recent){low=Math.min(low,candle.l);high=Math.max(high,candle.h)}
    const spread=Number.isFinite(low)&&Number.isFinite(high)?Math.max(high-low,Math.abs(high)*.01,1e-10):1;
    const center=Number.isFinite(high)&&Number.isFinite(low)?(high+low)/2:1;
+   const priceAuto=terminalAutoScale||visualProfile.autoPriceScale;
    setVp({
-     barWidth,rightOffset:visualProfile.rightGapBars,autoY:visualProfile.autoPriceScale,
-     manualCenter:visualProfile.autoPriceScale?null:center,
-     manualRange:visualProfile.autoPriceScale?null:spread*(terminalMode?1.32:1.16)/visualProfile.verticalZoom,
-     yZoom:visualProfile.verticalZoom,fitAll:false,
+     barWidth,rightOffset:terminalAutoScale?0:visualProfile.rightGapBars,autoY:priceAuto,
+     manualCenter:priceAuto?null:center,
+     manualRange:priceAuto?null:spread*(terminalMode?1.32:1.16)/visualProfile.verticalZoom,
+     yZoom:terminalAutoScale?1:visualProfile.verticalZoom,fitAll:false,
    });
- },[symbol,tf,visualProfileKey,visualProfile?.visibleBars,visualProfile?.verticalZoom,visualProfile?.autoPriceScale,visualProfile?.rightGapBars,!!candles.length,initialLogicalRange,terminalMode]);
+ },[symbol,tf,visualProfileKey,visualProfile?.visibleBars,visualProfile?.verticalZoom,visualProfile?.autoPriceScale,visualProfile?.rightGapBars,!!candles.length,initialLogicalRange,terminalMode,terminalAutoScale]);
  useLayoutEffect(()=>{if(rangeRestored.current||!candles.length||!initialLogicalRange)return;const width=ref.current?.getBoundingClientRect().width||800,restored=restoredHookViewport(candles.length,hookChartPlotWidth(width),initialLogicalRange);if(restored){rangeRestored.current=true;setVp({...restored,rightOffset:restored.rightOffset+Math.max(0,rightPaddingBars)+Math.max(0,rightPadding)/Math.max(3,restored.barWidth)})}},[candles.length,initialLogicalRange,rightPaddingBars,rightPadding]);
  const [draft,setDraft]=useState<{t:number,p:number}|null>(null),[selectedDrawingId,setSelectedDrawingId]=useState<string|null>(null),[editingDrawingId,setEditingDrawingId]=useState<string|null>(null);
  const [zoomPanelOpen,setZoomPanelOpen]=useState<boolean>(()=>false),[clockNow,setClockNow]=useState(()=>Date.now()),[jumpOpen,setJumpOpen]=useState(false),[jumpMode,setJumpMode]=useState<'day'|'time'>('day'),[jumpDate,setJumpDate]=useState(()=>zoneDateKey(Date.now(),timezone)),[jumpTime,setJumpTime]=useState('12:00'),[jumpBusy,setJumpBusy]=useState(false),[jumpMessage,setJumpMessage]=useState(''),[pendingJump,setPendingJump]=useState<{t:number,fitDay:boolean}|null>(null),[liqHudOpen,setLiqHudOpen]=useState<boolean>(()=>true);
@@ -430,11 +445,18 @@ export function Chart({candles,symbol,tf,tool,drawings,setDrawings,alerts,setAle
   const data=dataEnd>dataStart?candles.slice(dataStart,dataEnd):[];
   const scaleData=data.length?data:candles.slice(-Math.min(80,candles.length));
   let lo=Infinity,hi=-Infinity;for(const z of scaleData){if(z.l<lo)lo=z.l;if(z.h>hi)hi=z.h}if(!Number.isFinite(lo)||!Number.isFinite(hi)){lo=0;hi=1}
-  if(vp.autoY&&candles.length&&densities.length){const cp=candles.at(-1)!.c;const near=[...densities].filter(d=>d.active&&Math.abs(d.p-cp)/Math.max(cp,1e-12)<=.03).sort((a,b)=>Math.abs(a.p-cp)-Math.abs(b.p-cp)).slice(0,4);for(const d of near){if(d.p<lo)lo=d.p;if(d.p>hi)hi=d.p}}
-  if((terminalMode||expandPriceScaleToMarkers)&&vp.autoY){for(const marker of markers){if(Number.isFinite(marker.price)&&marker.price>0){lo=Math.min(lo,marker.price);hi=Math.max(hi,marker.price)}}}
-  const pad=(hi-lo||Math.abs(hi)*.01||1)*(terminalMode ? .16 : .08);lo-=pad;hi+=pad;
-   if(vp.autoY&&vp.yZoom&&vp.yZoom!==1){const mid=(hi+lo)/2,half=(hi-lo)/(2*Math.max(.4,Math.min(4,vp.yZoom)));lo=mid-half;hi=mid+half}
-  if(!vp.autoY&&vp.manualCenter!=null&&vp.manualRange!=null){lo=vp.manualCenter-vp.manualRange/2;hi=vp.manualCenter+vp.manualRange/2}
+  if(!terminalAutoScale&&vp.autoY&&candles.length&&densities.length){const cp=candles.at(-1)!.c;const near=[...densities].filter(d=>d.active&&Math.abs(d.p-cp)/Math.max(cp,1e-12)<=.03).sort((a,b)=>Math.abs(a.p-cp)-Math.abs(b.p-cp)).slice(0,4);for(const d of near){if(d.p<lo)lo=d.p;if(d.p>hi)hi=d.p}}
+  if(!terminalAutoScale&&(terminalMode||expandPriceScaleToMarkers)&&vp.autoY){for(const marker of markers){if(Number.isFinite(marker.price)&&marker.price>0){lo=Math.min(lo,marker.price);hi=Math.max(hi,marker.price)}}}
+  if(terminalAutoScale){
+    // Price-only auto fit: reserve the bottom volume band and a visible gap.
+    // Skip distant TP/SL markers and densities so tiny charts prioritize candles.
+    const range=terminalCandlePriceRange(lo,hi,plotH,showVolumes);
+    lo=range.low;hi=range.high;
+  }else{
+    const pad=(hi-lo||Math.abs(hi)*.01||1)*(terminalMode ? .16 : .08);lo-=pad;hi+=pad;
+    if(vp.autoY&&vp.yZoom&&vp.yZoom!==1){const mid=(hi+lo)/2,half=(hi-lo)/(2*Math.max(.4,Math.min(4,vp.yZoom)));lo=mid-half;hi=mid+half}
+    if(!vp.autoY&&vp.manualCenter!=null&&vp.manualRange!=null){lo=vp.manualCenter-vp.manualRange/2;hi=vp.manualCenter+vp.manualRange/2}
+  }
   const y=(p:number)=>plotH-(p-lo)/(hi-lo)*plotH,p=(yy:number)=>lo+(plotH-yy)/plotH*(hi-lo);
   const nearestIndex=(t:number)=>{let loI=0,hiI=candles.length-1;while(loI<hiI){const m=Math.floor((loI+hiI)/2);if(candles[m].t<t)loI=m+1;else hiI=m}const a=Math.max(0,loI-1),b=Math.min(candles.length-1,loI);return Math.abs(candles[a].t-t)<=Math.abs(candles[b].t-t)?a:b};
   const indexAtTime=(t:number)=>hookChartIndexAtTime(candles,t,intervalMs);
