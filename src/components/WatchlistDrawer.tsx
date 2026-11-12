@@ -299,7 +299,7 @@ export const WatchlistDrawer: React.FC<WatchlistDrawerProps> = ({
   return createPortal(
     <div
       ref={drawerOverlayRef}
-      className="fixed left-0 top-0 z-[270] flex h-[100dvh] w-screen min-h-0 justify-end overflow-hidden bg-black/60 pl-[max(12px,env(safe-area-inset-left))] pr-[max(12px,env(safe-area-inset-right))] pt-[max(12px,env(safe-area-inset-top))] pb-[max(16px,env(safe-area-inset-bottom))] backdrop-blur-sm"
+      className="fixed left-0 top-0 z-[270] flex h-[100dvh] w-screen min-h-0 items-start justify-end overflow-hidden bg-black/60 pl-[max(12px,env(safe-area-inset-left))] pr-[max(12px,env(safe-area-inset-right))] pt-[max(12px,env(safe-area-inset-top))] pb-[max(24px,env(safe-area-inset-bottom))] backdrop-blur-sm"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onClose();
       }}
@@ -308,7 +308,13 @@ export const WatchlistDrawer: React.FC<WatchlistDrawerProps> = ({
         role="dialog"
         aria-modal="true"
         aria-labelledby="watchlist-drawer-title"
-        className="watchlist-drawer flex h-full min-h-0 min-w-0 w-full max-w-md flex-col overflow-hidden rounded-xl border border-slate-700 bg-slate-900 shadow-2xl animate-in slide-in-from-right duration-200"
+        className="watchlist-drawer flex min-h-0 min-w-0 w-full max-w-md flex-col overflow-hidden rounded-xl border border-slate-700 bg-slate-900 shadow-2xl animate-in slide-in-from-right duration-200"
+        style={{
+          // Content-sized when empty or short; never stretch to the bottom
+          // of mobile Safari's browser chrome. Long lists scroll internally.
+          minHeight: 'min(340px, calc(100% - 48px))',
+          maxHeight: 'calc(100% - 48px)',
+        }}
       >
         {/* Header */}
         <div className="flex min-w-0 shrink-0 items-center justify-between gap-2 border-b border-slate-800 bg-slate-950/80 px-3 py-3 sm:px-5 sm:py-4">
@@ -375,7 +381,7 @@ export const WatchlistDrawer: React.FC<WatchlistDrawerProps> = ({
         </div>
 
         {/* List */}
-        <div className="watchlist-drawer-list min-h-0 min-w-0 flex-1 space-y-3 overflow-x-hidden overflow-y-auto overscroll-contain p-3 touch-scroll sm:p-4">
+        <div className="watchlist-drawer-list min-h-0 min-w-0 flex-auto space-y-3 overflow-x-hidden overflow-y-auto overscroll-contain p-3 touch-scroll sm:p-4">
           {entries.length === 0 ? (
             <div className="text-center py-12 text-slate-500 text-xs space-y-2">
               <Star className="w-8 h-8 text-slate-700 mx-auto" />
