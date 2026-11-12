@@ -1642,8 +1642,8 @@
 }
 
 
-/* Interactive real HookChart preview in Visual Settings. The preview reuses
-   OHLCV from its parent chart and is mounted only while the Chart tab is open. */
+/* Lightweight synthetic Visual Settings editor. It never mounts the live HookChart,
+   fetches exchange candles, starts timers or creates a parallel market feed. */
 .hookchart-root .hookchart-visual-preview {
   display:flex;
   flex-direction:column;
@@ -1792,5 +1792,40 @@
   .hookchart-root.profile-hookchart-settings .originalSettingsPanel .numInput {
     font-size:16px !important;
     min-height:36px;
+  }
+}
+
+/* Bidirectional synthetic candle editor. Keep iPhone gestures inside the SVG. */
+.hookchart-root .hookchart-synthetic-preview {
+  display:block;
+  width:100%;
+  height:auto;
+  max-width:100%;
+  touch-action:none;
+  cursor:grab;
+  user-select:none;
+  -webkit-user-select:none;
+  -webkit-tap-highlight-color:transparent;
+}
+.hookchart-root .hookchart-synthetic-preview:active { cursor:grabbing; }
+.hookchart-root .hookchart-synthetic-preview:focus-visible {
+  outline:2px solid #41c4e8;
+  outline-offset:-3px;
+}
+.hookchart-root .hookchart-demo-controls {
+  display:flex;
+  align-items:center;
+  flex-wrap:wrap;
+  gap:6px;
+}
+.hookchart-root .hookchart-demo-controls button[aria-pressed="true"] {
+  border-color:#16a68c;
+  color:#a6f8e5;
+  background:#0d3635;
+}
+@media (max-width:600px) {
+  .hookchart-root .hookchart-visual-preview-actions button {
+    font-size:12px;
+    min-height:40px;
   }
 }
