@@ -108,6 +108,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           searchSettings: { minVolumeUsd: 0, presetFilter: 'all', sortBy: 'volume', sortDirection: 'desc' },
           inviteCode: code,
           installGuideTipShown: false,
+           onboardingCompleted: false,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         };
@@ -375,6 +376,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               defaultMarketType: 'all',
               defaultTimeframe: '1h',
               installGuideTipShown: false,
+           onboardingCompleted: false,
               createdAt: new Date().toISOString(),
               updatedAt: new Date().toISOString(),
             };
@@ -454,6 +456,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           metaScalpSettings: { enabled: true, port: 17845, binding: '001', autoSwitchOnClick: true },
           inviteCode: validInviteCode,
           installGuideTipShown: false,
+           onboardingCompleted: false,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         };
@@ -509,6 +512,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           metaScalpSettings: { enabled: true, port: 17845, binding: '001', autoSwitchOnClick: true },
           inviteCode: validInviteCode,
           installGuideTipShown: false,
+           onboardingCompleted: false,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         };
