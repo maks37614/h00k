@@ -373,7 +373,7 @@ function StrategySettings({ activeId, onSelect }: { activeId: string; onSelect: 
 
 /** Custom chart-context picker avoids Safari's bright native <select> popup.
  * A body portal keeps the menu visible outside the clipped settings sections. */
-function VisualContextPicker({ value, onChange }: {
+export function VisualContextPicker({ value, onChange }: {
   value: VisualContextId;
   onChange: (id: VisualContextId) => void;
 }) {
