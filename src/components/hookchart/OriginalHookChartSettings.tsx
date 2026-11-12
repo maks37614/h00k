@@ -521,6 +521,29 @@ export function OriginalHookChartSettings({
     if (activeVisualContext) setVisualContext(activeVisualContext);
   }, [activeVisualContext]);
   const dialogRef = useRef<HTMLDivElement>(null);
+  const [headerHelpOpen, setHeaderHelpOpen] = useState(false);
+  const headerHelpRef = useRef<HTMLSpanElement>(null);
+  const headerHelpId = React.useId();
+  useEffect(() => {
+    if (!open || !embedded || !headerHelpOpen) return;
+    const onPointerDown = (event: PointerEvent) => {
+      if (event.target instanceof Node && !headerHelpRef.current?.contains(event.target)) {
+        setHeaderHelpOpen(false);
+      }
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.stopPropagation();
+        setHeaderHelpOpen(false);
+      }
+    };
+    document.addEventListener('pointerdown', onPointerDown);
+    window.addEventListener('keydown', onKeyDown, true);
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown);
+      window.removeEventListener('keydown', onKeyDown, true);
+    };
+  }, [open, embedded, headerHelpOpen]);
   useEffect(() => {
     if (!open || embedded) return;
     const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -583,8 +606,21 @@ export function OriginalHookChartSettings({
   return <div className={embedded ? "originalSettingsBackdrop embeddedSettingsBackdrop" : "originalSettingsBackdrop"} onMouseDown={event => { if (!embedded && event.target === event.currentTarget) onClose(); }}>
     <div ref={dialogRef} tabIndex={embedded ? undefined : -1} className="originalSettingsPanel" role={embedded ? "region" : "dialog"} aria-modal={embedded ? undefined : true} aria-label="Налаштування hookchart">
       <div className="settingsHeader">
-        <div><b>Налаштування графіка</b><small>Параметри зберігаються автоматично</small></div>
-        {!embedded && <button type="button" onClick={onClose} aria-label="Закрити">×</button>}
+        <div><b>Налаштування графіка</b>{!embedded && <small>Параметри зберігаються автоматично</small>}</div>
+        {embedded && <span ref={headerHelpRef} className="profileSettingsHelp">
+          <button type="button" className="profileSettingsHelpButton"
+            aria-label="Про налаштування графіка"
+            aria-expanded={headerHelpOpen}
+            aria-controls={headerHelpId}
+            title="Інформація про налаштування графіка"
+            onClick={() => setHeaderHelpOpen(value => !value)}>?</button>
+          {headerHelpOpen && <span id={headerHelpId} role="tooltip" className="profileSettingsHelpPopover">
+            Налаштування HookChart для Скрінера, Формацій і Термінала. Візуальні профілі телефона,
+            комп’ютера й різних розмірів графіка зберігаються окремо.
+            Усі налаштування зберігаються автоматично.
+          </span>}
+        </span>}
+        {!embedded && <button type="button" onClick={onClose} aria-label="Закрити">×</button>
       </div>
       <div className="settingsTabs">
         <button type="button" className={tab === 'main' ? 'active' : ''} onClick={() => setTab('main')}>Основні</button>
