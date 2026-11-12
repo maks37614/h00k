@@ -4,6 +4,9 @@ import {
   readTelegramAlertPanelCollapsed,
   saveTelegramAlertPanelCollapsed,
   telegramAlertPanelStorageKey,
+  telegramAlertPanelPendingKey,
+  isTelegramAlertPanelSyncPending,
+  saveTelegramAlertPanelSyncPending,
 } from '../src/utils/telegramAlertPanelPreference';
 
 test('Telegram price-alert panel defaults expanded and uses one key for all coins and routes', () => {
@@ -49,4 +52,23 @@ test('blocked browser storage does not crash the Telegram alert panel', () => {
   assert.doesNotThrow(() => saveTelegramAlertPanelCollapsed(broken, true, 'trader-123'));
   assert.equal(readTelegramAlertPanelCollapsed(null), false);
   assert.doesNotThrow(() => saveTelegramAlertPanelCollapsed(null, false));
+});
+
+test('failed server sync keeps the last browser preference until a successful save', () => {
+  const cache = new Map<string, string>();
+  const storage = {
+    getItem: (key: string) => cache.get(key) ?? null,
+    setItem: (key: string, value: string) => { cache.set(key, value); },
+    removeItem: (key: string) => { cache.delete(key); },
+  };
+  const uid = 'trader-123';
+  saveTelegramAlertPanelCollapsed(storage, true, uid);
+  saveTelegramAlertPanelSyncPending(storage, uid, true);
+  assert.equal(isTelegramAlertPanelSyncPending(storage, uid), true);
+  assert.equal(readTelegramAlertPanelCollapsed(storage, uid), true);
+  assert.equal(cache.get(telegramAlertPanelPendingKey(uid)), 'true');
+  assert.equal(isTelegramAlertPanelSyncPending(storage, 'another-trader'), false);
+  saveTelegramAlertPanelSyncPending(storage, uid, false);
+  assert.equal(isTelegramAlertPanelSyncPending(storage, uid), false);
+  assert.equal(readTelegramAlertPanelCollapsed(storage, uid), true);
 });
