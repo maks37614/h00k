@@ -95,7 +95,7 @@ test('preview accepts mouse-wheel zoom inside the settings dialog, but ignores o
 test('saved visual profiles reinitialize on coin and timeframe changes but not on every candle tick', () => {
   const engine = source('../src/components/hookchart/engine.tsx');
   assert.match(engine, /const signature=\[symbol,tf,visualProfileKey,visualProfile\.visibleBars/);
-  assert.match(engine, /\},\[symbol,tf,visualProfileKey,visualProfile\?\.visibleBars/);
+  assert.match(engine, /\},\[symbol,tf,visualProfileKey,visualProfileCaptureVersion,visualProfile\?\.visibleBars/);
   assert.match(engine, /if\(visualAppliedRef\.current===signature\)return/);
   // A stored wide overview must not be capped at three-pixel bars.
   assert.match(engine, /const minBar=\.12/);
