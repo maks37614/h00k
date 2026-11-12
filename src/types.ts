@@ -951,6 +951,7 @@ export interface MarketSentimentData {
     fundingBias: 'long_heavy' | 'short_heavy' | 'balanced' | null;
     /** Number of observed Bybit linear instruments included in this sample. */
     instrumentCount?: number;
+    fundingInstrumentCount?: number;
     sourceLabel?: string;
   };
 
