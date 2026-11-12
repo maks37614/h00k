@@ -5,6 +5,7 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { HookChartVisualPreview } from '../src/components/hookchart/HookChartVisualPreview';
 import { getVisualProfile } from '../src/components/hookchart/visualProfiles';
+import { demoDragProfile, demoPinchProfile, demoWheelProfile, demoZoomBars } from '../src/components/hookchart/syntheticPreviewModel';
 
 const source = (name: string) => readFileSync(new URL(name, import.meta.url), 'utf8');
 const previewSource = source('../src/components/hookchart/HookChartVisualPreview.tsx');
@@ -18,121 +19,95 @@ const candles = Array.from({ length: 80 }, (_, index) => ({
   v: 12 + index / 2, n: 0,
 }));
 
-test('real settings preview renders the HookChart canvas with actual OHLCV, price and time axis', () => {
+test('visual settings render a synthetic responsive candle editor, not a nested HookChart', () => {
   const html = renderToStaticMarkup(React.createElement(HookChartVisualPreview, {
-    candles,
-    symbol: 'BTCUSDT',
-    timeframe: '1h',
-    exchange: 'binance',
-    marketType: 'futures',
-    visualContext: 'screenerQuick',
-    visualDevice: 'desktop',
-    profile: getVisualProfile(undefined, 'screenerQuick', 'desktop'),
-    onChange: () => {},
+    candles, symbol: 'BTCUSDT', timeframe: '1h', exchange: 'binance',
+    marketType: 'futures', visualContext: 'screenerQuick', visualDevice: 'desktop',
+    profile: getVisualProfile(undefined, 'screenerQuick', 'desktop'), onChange: () => {},
   }));
   assert.match(html, /class="hookchart-visual-preview-frame"/);
-  assert.match(html, /class="chartWrap"/);
-  assert.match(html, /<canvas/);
-  assert.match(html, /aria-label="Графік BTCUSDT"/);
-  assert.match(html, /class="chartTimeAxis"/);
-  assert.match(html, /Binance/);
-  assert.match(html, /Свічки відкритого графіка/);
+  assert.match(html, /<svg[^>]*class="hookchart-synthetic-preview"/);
+  assert.match(html, /role="application"/);
+  assert.match(html, /DEMO · OHLCV/);
+  assert.match(html, /Штучні дані/);
   assert.match(html, /Зберегти масштаб із цього графіка/);
-  assert.doesNotMatch(html, /Приклад відносного масштабу|не реальні котирування/);
+  assert.match(html, /Автоціна/);
+  assert.doesNotMatch(html, /<canvas|chartCanvasSurface|Реальні свічки|Binance · Futures/);
 });
 
-test('settings editor replaces synthetic SVG with real HookChart preview and wires existing candles', () => {
+test('editor reuses the same account visual profile for sliders and synthetic preview', () => {
   assert.match(settingsSource, /<HookChartVisualPreview/);
   assert.match(settingsSource, /profile=\{selectedProfile\}/);
   assert.match(settingsSource, /onChange=\{onProfileChange\}/);
   assert.match(settingsSource, /previewCandles=\{previewCandles\}/);
-  assert.doesNotMatch(settingsSource, /const bars = Math\.max\(14, Math\.min\(72/);
-  assert.doesNotMatch(settingsSource, /Приклад відносного масштабу/);
   assert.match(canvasSource, /previewCandles=\{candles\}/);
   assert.match(canvasSource, /previewSymbol=\{symbol\}/);
-  assert.match(canvasSource, /previewTimeframe=\{timeframe\}/);
-  assert.match(canvasSource, /!replay && panel === 'settings'/);
 });
 
-test('live preview never creates another exchange feed or changes drawing and alert persistence', () => {
-  assert.match(previewSource, /import \{\s*Chart, ChartTimeAxis,/);
-  assert.match(previewSource, /const useParentCandles = candles !== undefined/);
-  assert.match(previewSource, /if \(useParentCandles\) return/);
-  assert.match(previewSource, /fetchDirectKlines\('binance', 'spot', 'BTCUSDT', '1h', 700\)/);
-  assert.match(previewSource, /showLiqRiskBlock=\{false\}/);
-  assert.match(previewSource, /controlsContainer=\{null\}/);
-  assert.match(previewSource, /onViewportChange=\{setViewport\}/);
-  assert.match(previewSource, /captureVisualProfile\(/);
-  assert.doesNotMatch(previewSource, /new WebSocket|setInterval|onCreatePriceAlert=|onNeedHistory=/);
+test('synthetic editor never starts exchange requests, real HookChart, websockets or timers', () => {
+  assert.doesNotMatch(previewSource, /fetchDirectKlines|toHookCandles|<Chart|ChartTimeAxis|new WebSocket|setInterval|onNeedHistory/);
+  assert.match(previewSource, /syntheticBar\(/);
+  assert.match(previewSource, /changeRef\.current\(next\)/);
+  assert.match(previewSource, /onPointerMove=\{onPointerMove\}/);
+  assert.match(previewSource, /addEventListener\('wheel', onWheel, \{ passive: false \}\)/);
+  assert.match(previewSource, /changeRef\.current\(\{ \.\.\.profileRef\.current \}\)/);
 });
 
-test('phone and compact Terminal previews use the real canvas at limited widths', () => {
+test('demo horizontal/vertical drag immediately updates the exact numeric settings', () => {
+  const current = { visibleBars: 144, rightGapBars: 81, verticalZoom: .4, autoPriceScale: true };
+  const moved = demoDragProfile(current, -40, -40);
+  assert.ok(moved.rightGapBars > current.rightGapBars, 'moving candles left increases future space');
+  assert.ok(moved.verticalZoom > current.verticalZoom, 'moving upward increases candle height');
+  assert.equal(moved.visibleBars, current.visibleBars);
+  assert.equal(moved.autoPriceScale, current.autoPriceScale);
+
+  const reverse = demoDragProfile(current, 40, 40);
+  assert.ok(reverse.rightGapBars < current.rightGapBars);
+  assert.ok(reverse.verticalZoom < current.verticalZoom);
+});
+
+test('pinch and wheel update the visible-candle setting without interfering with the gap', () => {
+  const current = { visibleBars: 144, rightGapBars: 81, verticalZoom: .4, autoPriceScale: true };
+  const horizontal = demoPinchProfile(current, 200, 300, 3, 4);
+  assert.ok(horizontal.visibleBars < 144);
+  assert.equal(horizontal.verticalZoom, .4, 'horizontal pinch must not squeeze candles vertically');
+  assert.equal(horizontal.rightGapBars, 81);
+  const vertical = demoPinchProfile(current, 4, 6, 100, 180);
+  assert.equal(vertical.visibleBars, 144);
+  assert.ok(vertical.verticalZoom > .4);
+  assert.ok(demoWheelProfile(current, 100).visibleBars > 144);
+  assert.ok(demoZoomBars(current, .8).visibleBars < 144);
+});
+
+test('phone and compact Terminal use a capped synthetic preview size', () => {
   assert.match(previewSource, /if \(device === 'mobile'\) return 354/);
   assert.match(previewSource, /if \(context === 'terminalCompact'\) return 370/);
   assert.match(previewSource, /style=\{\{ maxWidth: profilePreviewWidth\(visualContext, visualDevice\) \}\}/);
   const css = source('../src/components/hookchart/integration.css');
-  assert.match(css, /hookchart-visual-preview-chart/);
+  assert.match(css, /hookchart-synthetic-preview/);
   assert.match(css, /touch-action:none/);
-  assert.match(css, /@media\(max-width:600px\)/);
-  assert.match(previewSource, /Реальні свічки для прикладу/);
+  assert.match(previewSource, /onPointerCancel=\{onPointerEnd\}/);
 });
 
-test('Replay chart is unaffected by the new chart-only settings preview', () => {
+test('Replay stays independent of the synthetic settings editor', () => {
   const replay = source('../src/components/replay/ReplayChart.tsx');
-  assert.doesNotMatch(replay, /HookChartVisualPreview|previewCandles|visualProfileEditor/);
+  assert.doesNotMatch(replay, /HookChartVisualPreview|syntheticPreviewModel|visualProfileEditor/);
 });
 
-
-test('preview accepts mouse-wheel zoom inside the settings dialog, but ignores other dialog controls', () => {
-  const engine = source('../src/components/hookchart/engine.tsx');
-  assert.match(engine, /const surface=target\.closest\('\.chartStage,\.chartWrap,\.chartTimeAxis'\)/);
-  assert.match(engine, /target\.closest\('\.originalSettingsBackdrop'\)&&!target\.closest\('\.hookchart-visual-preview'\)/);
-  assert.doesNotMatch(engine, /timeJumpPopover,\.originalSettingsBackdrop,\.densityQuickPopup/);
-  assert.match(engine, /host\.addEventListener\('wheel',onWheel,\{capture:true,passive:false\}\)/);
-  assert.match(engine, /wheelHandlerRef\.current\(event\)/);
-});
-
-test('saved visual profiles reinitialize on coin and timeframe changes but not on every candle tick', () => {
+test('saved visual profiles still reinitialize real charts on coin/timeframe changes', () => {
   const engine = source('../src/components/hookchart/engine.tsx');
   assert.match(engine, /const signature=\[symbol,tf,visualProfileKey,visualProfile\.visibleBars/);
   assert.match(engine, /\},\[symbol,tf,visualProfileKey,visualProfileCaptureVersion,visualProfile\?\.visibleBars/);
   assert.match(engine, /if\(visualAppliedRef\.current===signature\)return/);
-  // A stored wide overview must not be capped at three-pixel bars.
   assert.match(engine, /const minBar=\.12/);
   const horizontal = source('../src/utils/hookchartData.ts');
   assert.match(horizontal, /Math\.max\(\.12, viewport\.barWidth\)/);
-  assert.match(engine, /const denseBars=g\.step\*scaleX<1\.15/);
 });
 
-
-test('saving a manually zoomed preview preserves the viewport rather than reapplying defaults', () => {
-  const preview = source('../src/components/hookchart/HookChartVisualPreview.tsx');
+test('saved visual profiles still take precedence over stale per-coin ranges', () => {
   const engine = source('../src/components/hookchart/engine.tsx');
-  assert.match(preview, /visualProfileCaptureVersion, setVisualProfileCaptureVersion/);
-  assert.match(preview, /onChange\(captured\);\s*setVisualProfileCaptureVersion\(version => version \+ 1\)/);
-  assert.match(preview, /visualProfileCaptureVersion=\{visualProfileCaptureVersion\}/);
-  assert.match(engine, /lastVisualCaptureRef=useRef\(visualProfileCaptureVersion\)/);
-  assert.match(engine, /if\(lastVisualCaptureRef\.current!==visualProfileCaptureVersion\)/);
-  assert.match(engine, /visualAppliedRef\.current=signature;\s*return;/);
-  assert.match(engine, /\[symbol,tf,visualProfileKey,visualProfileCaptureVersion,/);
-});
-
-test('saved chart visual profile overrides stale per-coin logical ranges', () => {
-  const engine = source('../src/components/hookchart/engine.tsx');
-  const canvas = source('../src/components/hookchart/HookChartCanvas.tsx');
-  const preview = source('../src/components/hookchart/HookChartVisualPreview.tsx');
   assert.match(engine, /if\(!visualProfile\|\|!visualProfileKey\|\|!candles\.length\)return/);
-  assert.doesNotMatch(engine, /if\(!visualProfile\|\|!visualProfileKey\|\|initialLogicalRange\|\|/);
   assert.match(engine, /if\(visualProfile\|\|rangeRestored\.current\|\|!candles\.length\|\|!initialLogicalRange\)return/);
-  assert.match(canvas, /initialLogicalRange=\{savedChartParams\?\.visibleRange\}/);
-  assert.match(canvas, /visualProfile=\{activeVisualProfile\}/);
-  assert.match(preview, /rightPaddingBars=\{profile\.rightGapBars\}/);
+  assert.match(canvasSource, /visualProfile=\{activeVisualProfile\}/);
   assert.match(engine, /barWidth,rightOffset:0,autoY:priceAuto/);
-});
-
-test('wheel zoom is isolated between preview and its underlying live chart', () => {
-  const engine = source('../src/components/hookchart/engine.tsx');
-  assert.match(engine, /const ownPreview=box\.current\?\.closest\('\.hookchart-visual-preview'\)/);
-  assert.match(engine, /ownPreview \? !ownPreview\.contains\(surface\) : !!surface\.closest\('\.hookchart-visual-preview'\)/);
-  assert.match(engine, /if\(target\.closest\('\.originalSettingsBackdrop'\)&&!target\.closest\('\.hookchart-visual-preview'\)\)return/);
 });
