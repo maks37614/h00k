@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { readFileSync } from 'node:fs';
 import { getVisibleFormations, groupVisibleFormations } from '../src/utils/formationList';
 import type { DetectedFormation, ScannedCoin, ScreenerFilterState } from '../src/types';
 
@@ -34,6 +35,15 @@ test('grouping shows one coin per exchange/market/timeframe but preserves distin
   const groups = groupVisibleFormations(getVisibleFormations(input, { ...filters, exchange: 'all' }));
   assert.equal(groups.length, 2);
   assert.deepEqual(groups.find(g => g.coin.exchange === 'binance')?.formations.map(f => f.id), ['triangle', 'double-bottom']);
+});
+
+test('regular Formation filters show Щільність and Круглі числа next to each other', () => {
+  const source = readFileSync(new URL('../src/components/ScreenerFilters.tsx', import.meta.url), 'utf8');
+  assert.match(source, /checked=\{filters\.densityConfirmedOnly\}/);
+  assert.match(source, /checked=\{filters\.roundNumberOnly\}/);
+  assert.match(source, /onFilterChange\(\{ roundNumberOnly: e\.target\.checked \}\)/);
+  assert.match(source, /Щільність\s*<\/label>\s*<label[\s\S]*?Круглі числа/);
+  assert.doesNotMatch(source, /Щільність підтверджена/);
 });
 
 test('density-only filter rejects proximity to a round number without order-book proof', () => {
