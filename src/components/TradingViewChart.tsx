@@ -45,6 +45,8 @@ interface TradingViewChartProps {
   onHistoryLimitChange?: (limit: number) => void;
   onTimeframeChange?: (timeframe: Timeframe) => void;
   onLivePriceUpdate?: (price: number) => void;
+  /** Optional price under the chart crosshair, for an expanded Telegram alert form. */
+  onCrosshairPriceChange?: (price: number) => void;
   /** Called at most once when a new candle starts; reuses the existing chart feed. */
   onClosedCandle?: (candle: Kline) => void;
   onOpenFullscreen?: () => void;
@@ -180,6 +182,7 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
   onHistoryLimitChange,
   onTimeframeChange,
   onLivePriceUpdate,
+  onCrosshairPriceChange,
   onClosedCandle,
   onOpenFullscreen,
   onAddToArchive,
@@ -204,6 +207,8 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
   const savedChartProvider = useChartProvider();
   const chartProvider = forceHookChart ? 'hookchart' : savedChartProvider;
   const hookChartRef = useRef<HookChartHandle | null>(null);
+  const onCrosshairPriceChangeRef = useRef(onCrosshairPriceChange);
+  onCrosshairPriceChangeRef.current = onCrosshairPriceChange;
   const hookTickRef = useRef<Kline | null>(null);
   const hookTickTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const chartContainerRef = useRef<HTMLDivElement>(null);
@@ -642,6 +647,14 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
 
     chartRef.current = chart;
     candleSeriesRef.current = candleSeries;
+    const handleCrosshairMove = (param: { point?: { x: number; y: number } }) => {
+      if (!param.point || !onCrosshairPriceChangeRef.current) return;
+      const price = candleSeries.coordinateToPrice(param.point.y);
+      if (price !== null && Number.isFinite(price) && price > 0) {
+        onCrosshairPriceChangeRef.current(price);
+      }
+    };
+    chart.subscribeCrosshairMove(handleCrosshairMove);
 
     let resizeTimer: any;
     const handleResize = () => {
@@ -668,6 +681,7 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
       }
       resizeObserver.disconnect();
       logoObserver.disconnect();
+      chart.unsubscribeCrosshairMove(handleCrosshairMove);
       chart.remove();
       chartRef.current = null;
       candleSeriesRef.current = null;
@@ -1295,6 +1309,7 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
           symbol={symbol} timeframe={timeframe} exchange={exchange} marketType={marketType}
           terminalMode={terminalMode} terminalToolbarVisibility={terminalToolbarVisibility} focusFormation={formation}
           markers={hookMarkers} expandPriceScaleToMarkers={previewMarkers} savedChartParams={savedChartParams} onTimeframeChange={onTimeframeChange}
+          onCrosshairPriceChange={onCrosshairPriceChange}
           tradeLevelToggle={previewMarkers ? undefined : combinedTradeLevels}
           toolbarActions={hookchartToolbarActions} toolbarOverlays={hookchartToolbarOverlays}
           chartActions={showNavigationControls ? chartActions : null} /> : <div
