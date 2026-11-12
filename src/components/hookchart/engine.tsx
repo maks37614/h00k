@@ -318,6 +318,7 @@ export function Chart({candles,symbol,tf,tool,drawings,setDrawings,alerts,setAle
  const ref=useRef<HTMLCanvasElement>(null),interactionRef=useRef<HTMLCanvasElement>(null),box=useRef<HTMLDivElement>(null);
  const [vp,setVp]=useState<Viewport>(()=>initialViewport||{barWidth:9,rightOffset:0,autoY:true,manualCenter:null,manualRange:null,fitAll:false});
  const visualAppliedRef=useRef<string|null>(null);
+ useEffect(()=>{if(!visualProfile) visualAppliedRef.current=null},[!!visualProfile]);
  useEffect(()=>{onViewportChange?.(vp)},[vp,onViewportChange]);
  const terminalNavigation=useRef(false),terminalFocusKey=useRef<string|null>(null);
  const rangeRestored=useRef(false);
