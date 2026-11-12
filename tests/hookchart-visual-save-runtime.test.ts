@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import ts from 'typescript';
-import { captureVisualProfile, getVisualProfile } from '../src/components/hookchart/visualProfiles';
+import { VISUAL_CONTEXTS, captureVisualProfile, getVisualProfile, makeVisualProfileKey } from '../src/components/hookchart/visualProfiles';
 
 /** Execute the real HookChart visual-profile effect, not a duplicate algorithm. */
 const source = readFileSync(new URL('../src/components/hookchart/engine.tsx', import.meta.url), 'utf8');
@@ -180,4 +180,44 @@ test('visual preview passes the same right margin to candles and time axis', () 
   for (const key of ['visibleBars', 'verticalZoom', 'autoPriceScale', 'rightGapBars']) {
     assert.match(editor, new RegExp('onProfileChange\\(\\{ ' + key + ':'));
   }
+});
+
+test('all seven live HookChart contexts honor expanded saved zoom and gap on phone and desktop', () => {
+  for (const context of VISUAL_CONTEXTS) {
+    for (const device of ['mobile', 'desktop'] as const) {
+      const { env, updates, getViewport } = fixture();
+      env.visualProfileKey = makeVisualProfileKey(context.id, device);
+      env.visualProfile = { visibleBars: 144, verticalZoom: .02, autoPriceScale: true, rightGapBars: 900 };
+      env.rightPaddingBars = 900;
+      env.terminalMode = context.id.startsWith('terminal');
+      applyProfile(env);
+      assert.equal(updates.length, 1, env.visualProfileKey);
+      assert.ok(Math.abs(getViewport()!.barWidth - 540 / (144 + 900)) < 1e-8, env.visualProfileKey);
+      assert.equal(getViewport()!.autoY, true, env.visualProfileKey);
+      assert.equal(getViewport()!.yZoom, .02, env.visualProfileKey);
+      assert.equal(getViewport()!.rightOffset, 0, env.visualProfileKey);
+
+      env.visualProfile = { ...env.visualProfile, verticalZoom: 100, autoPriceScale: false };
+      applyProfile(env);
+      assert.equal(updates.length, 2, env.visualProfileKey);
+      assert.equal(getViewport()!.autoY, false, env.visualProfileKey);
+      assert.equal(getViewport()!.yZoom, 100, env.visualProfileKey);
+      assert.ok(Number.isFinite(getViewport()!.manualRange) && getViewport()!.manualRange > 0, env.visualProfileKey);
+    }
+  }
+});
+
+test('Terminal global auto-scale intentionally overrides manual vertical zoom, but preserves candle count and gap', () => {
+  const { env, updates, getViewport } = fixture();
+  env.visualProfileKey = 'terminalCompact:mobile';
+  env.visualProfile = { visibleBars: 144, verticalZoom: 2, autoPriceScale: false, rightGapBars: 81 };
+  env.rightPaddingBars = 81;
+  env.terminalMode = true;
+  env.terminalAutoScale = true;
+  applyProfile(env);
+  assert.equal(updates.length, 1);
+  assert.equal(getViewport()!.yZoom, 1);
+  assert.equal(getViewport()!.autoY, true);
+  assert.equal(getViewport()!.manualRange, null);
+  assert.ok(Math.abs(getViewport()!.barWidth - 540 / (144 + 81)) < 1e-8);
 });
