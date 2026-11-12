@@ -19,6 +19,8 @@ import { candlesBeforeHistoryEnd, clampHookChartHistory, extendHookChartHistory,
 import { createChartCrosshairStore } from './crosshairState';
 import { Chart, ChartTimeAxis, IndicatorDock, buildStructuralChannel, type Alert, type Candle, type Drawing, type HookChartHandle, type Viewport } from './engine';
 import { INDICATOR_META, type IndicatorId, type OIPoint } from './indicatorEngine';
+import { captureVisualProfile, getVisualProfile, makeVisualProfileKey, patchVisualProfile, visualContextForTerminalWidth, visualDeviceForWidth, type VisualContextId, type VisualProfileKey } from './visualProfiles';
+import { hookChartPlotWidth } from './priceScale';
 import { FibIcon, IndicatorIcon, OverlayIcon } from './ToolbarIcons';
 import { HookChartTimeframePicker } from './HookChartTimeframePicker';
 import { DEFAULT_HOOKCHART_HOTKEYS, OriginalHookChartSettings, hotkeyMatches, normalizeOriginalHookChartPreferences } from './OriginalHookChartSettings';
@@ -61,6 +63,8 @@ export interface HookChartCanvasProps {
   replay?: boolean;
   focusTrigger?: number;
   terminalMode?: boolean;
+  /** Live placement; Replay ignores all user visual presets. */
+  visualContext?: VisualContextId;
   terminalToolbarVisibility?: TerminalToolbarVisibility;
   focusFormation?: DetectedFormation | null;
   onTimeframeChange?: (timeframe: Timeframe) => void;
@@ -127,7 +131,7 @@ function enabledIndicators(preferences?: HookChartPreferences, replay = false, m
 }
 
 const HookChartCanvas = forwardRef<HookChartHandle, HookChartCanvasProps>(function HookChartCanvas({
-  externalData, klines, symbol, timeframe, exchange, marketType, markers = [], expandPriceScaleToMarkers = false, savedChartParams, replay = false, focusTrigger, terminalMode = false, terminalToolbarVisibility, focusFormation, onTimeframeChange, onCrosshairPriceChange, timeframeDisabled = false, replayPlaybackSpeed, onReplayPlaybackSpeedChange, chartActions, toolbarActions, toolbarOverlays, tradeLevelToggle, footerActions,
+  externalData, klines, symbol, timeframe, exchange, marketType, markers = [], expandPriceScaleToMarkers = false, savedChartParams, replay = false, focusTrigger, terminalMode = false, visualContext, terminalToolbarVisibility, focusFormation, onTimeframeChange, onCrosshairPriceChange, timeframeDisabled = false, replayPlaybackSpeed, onReplayPlaybackSpeedChange, chartActions, toolbarActions, toolbarOverlays, tradeLevelToggle, footerActions,
 }, forwardedRef) {
   const { user, profile, updateProfileData } = useAuth();
   const { alerts: priceAlerts, addAlert, deleteAlert } = useAlerts();
@@ -179,6 +183,30 @@ const HookChartCanvas = forwardRef<HookChartHandle, HookChartCanvasProps>(functi
   const [profileSyncVersion, refreshProfileSettings] = useState(0);
   const engineRef = useRef<HookChartHandle | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
+  const [visualDevice, setVisualDevice] = useState(() =>
+    visualDeviceForWidth(typeof window === 'undefined' ? 1280 : window.innerWidth));
+  const [terminalVisualContext, setTerminalVisualContext] = useState<VisualContextId>('terminalMedium');
+  useEffect(() => {
+    if (replay) return;
+    const updateDevice = () => setVisualDevice(visualDeviceForWidth(window.innerWidth));
+    updateDevice();
+    window.addEventListener('resize', updateDevice);
+    return () => window.removeEventListener('resize', updateDevice);
+  }, [replay]);
+  useEffect(() => {
+    if (!terminalMode || replay || !rootRef.current || typeof ResizeObserver === 'undefined') return;
+    const root = rootRef.current;
+    const update = () => setTerminalVisualContext(visualContextForTerminalWidth(root.getBoundingClientRect().width));
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(root);
+    return () => observer.disconnect();
+  }, [terminalMode, replay]);
+  const activeVisualContext = terminalMode ? terminalVisualContext : (visualContext || 'screenerQuick');
+  const activeVisualKey = makeVisualProfileKey(activeVisualContext, visualDevice);
+  // No saved profile means legacy HookChart defaults stay unchanged.
+  const activeVisualProfile = replay || !settings.visualProfiles?.[activeVisualKey]
+    ? undefined : getVisualProfile(settings, activeVisualContext, visualDevice);
   const toolbarRef = useRef<HTMLDivElement | null>(null);
   const extraToolsRef = useRef<HTMLDivElement | null>(null);
   const statsBarRef = useRef<HTMLDivElement | null>(null);
@@ -413,7 +441,7 @@ const HookChartCanvas = forwardRef<HookChartHandle, HookChartCanvasProps>(functi
       ? terminalToolbarVisibility.drawingToolsOpen
       : settings.drawingToolbarOpen === true
   );
-  const rightPaddingBars = terminalMode ? 8 : settings.rightPaddingEnabled === false ? 0 : (settings.rightPadding ?? 10);
+  const rightPaddingBars = activeVisualProfile ? 0 : terminalMode ? 8 : settings.rightPaddingEnabled === false ? 0 : (settings.rightPadding ?? 10);
   const channel = useMemo(() => (replay ? replayOverlays.includes('channel') : settings.autoChannel)
     ? buildStructuralChannel(analysisSeries, candles.at(-1)?.c) : null,
     [analysisSeries, candles, settings.autoChannel, replay, replayOverlays]);
@@ -729,6 +757,20 @@ const HookChartCanvas = forwardRef<HookChartHandle, HookChartCanvasProps>(functi
       } : {}),
       ...delta,
     });
+  };
+  const captureCurrentVisual = (key: VisualProfileKey) => {
+    if (replay || key !== activeVisualKey) return;
+    const plotWidth = hookChartPlotWidth(rootRef.current?.clientWidth || 800);
+    const count = Math.max(1,Math.ceil(plotWidth/Math.max(.12,viewport.barWidth)));
+    const right = Math.max(0,Math.floor(viewport.rightOffset));
+    const end = Math.max(0,candles.length-right);
+    const visible = candles.slice(Math.max(0,end-count),end);
+    let low=Infinity,high=-Infinity;
+    for (const item of visible){low=Math.min(low,item.l);high=Math.max(high,item.h)}
+    const autoRange=Number.isFinite(high)&&Number.isFinite(low)
+      ? Math.max(high-low,Math.abs(high)*.01,1e-10)*(terminalMode?1.32:1.16) : undefined;
+    const profile = captureVisualProfile(getVisualProfile(settings,activeVisualContext,visualDevice),plotWidth,viewport,autoRange);
+    changeSettings({ visualProfiles: patchVisualProfile(settings.visualProfiles,key,profile) });
   };
   const toggleIndicator = (id: IndicatorId) => {
     if (replay) {
@@ -1171,6 +1213,11 @@ const HookChartCanvas = forwardRef<HookChartHandle, HookChartCanvasProps>(functi
           prefs={{ ...settings, language: chartLanguage, ...(externalData ? { candleLongColor: externalData.appearance.upColor, candleShortColor: externalData.appearance.downColor, showVolumes: externalData.appearance.volume } : {}) }}
           onChange={changeSettings}
           onApplyStrategy={applyStrategy}
+          activeVisualContext={activeVisualContext}
+          currentViewport={viewport}
+          currentPlotWidth={hookChartPlotWidth(rootRef.current?.clientWidth || 800)}
+          onCaptureVisual={captureCurrentVisual}
+          onResetVisual={key => { if (key === activeVisualKey) engineRef.current?.zoomToLatest(); }}
           onClose={closeSettings}
         />
       </div>,
@@ -1265,6 +1312,8 @@ const HookChartCanvas = forwardRef<HookChartHandle, HookChartCanvasProps>(functi
       <Chart
         candles={candles}
         terminalMode={terminalMode}
+        visualProfile={activeVisualProfile}
+        visualProfileKey={replay ? undefined : activeVisualKey}
         focusFormation={focusFormation}
         symbol={symbol}
         tf={timeframe}

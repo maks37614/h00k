@@ -1,6 +1,7 @@
 import React from 'react';
 import type { DetectedFormation, ExchangeId, Kline, MarketType, Timeframe } from '../types';
 import { TradingViewChart } from './TradingViewChart';
+import type { VisualContextId } from './hookchart/visualProfiles';
 import type { TerminalToolbarVisibility } from './hookchart/HookChartCanvas';
 
 const EMPTY_HISTORY: Kline[] = [];
@@ -12,6 +13,7 @@ interface ExchangeCandlestickChartProps {
   timeframe: string;
   historyLimit?: number;
   terminalMode?: boolean;
+  visualContext?: VisualContextId;
   terminalToolbarVisibility?: TerminalToolbarVisibility;
   hookchartToolbarActions?: React.ReactNode;
   hookchartToolbarOverlays?: React.ReactNode;
@@ -21,13 +23,14 @@ interface ExchangeCandlestickChartProps {
 
 export const ExchangeCandlestickChart: React.FC<ExchangeCandlestickChartProps> = ({
   symbol, exchange, marketType, timeframe, historyLimit = 1000, onTimeframeChange,
-  terminalMode, terminalToolbarVisibility, hookchartToolbarActions, hookchartToolbarOverlays, formation,
+  terminalMode, visualContext, terminalToolbarVisibility, hookchartToolbarActions, hookchartToolbarOverlays, formation,
 }) => (
   <div className="h-full w-full min-h-0" role="group" aria-label={`Графік ${symbol}`}>
     <TradingViewChart
       key={`${exchange}:${marketType}:${symbol}:${timeframe}`}
       klines={EMPTY_HISTORY}
       terminalMode={terminalMode}
+      visualContext={visualContext}
       terminalToolbarVisibility={terminalToolbarVisibility}
       hookchartToolbarActions={hookchartToolbarActions}
       hookchartToolbarOverlays={hookchartToolbarOverlays}

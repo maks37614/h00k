@@ -33,6 +33,7 @@ import { CHART_TRADE_LEVELS_EVENT, chartTradeLevelStorageKey, normalizeChartTrad
 import { HookChart } from './HookChart';
 import type { TerminalToolbarVisibility } from './hookchart/HookChartCanvas';
 import type { HookChartHandle } from './hookchart/engine';
+import type { VisualContextId } from './hookchart/visualProfiles';
 
 interface TradingViewChartProps {
   klines: Kline[];
@@ -65,6 +66,7 @@ interface TradingViewChartProps {
   hideHeaderFormationBadge?: boolean;
   hideSymbolAndPrice?: boolean;
   terminalMode?: boolean;
+  visualContext?: VisualContextId;
   terminalToolbarVisibility?: TerminalToolbarVisibility;
   hookchartToolbarActions?: React.ReactNode;
   hookchartToolbarOverlays?: React.ReactNode;
@@ -198,6 +200,7 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
   hideHeaderFormationBadge = false,
   hideSymbolAndPrice = false,
   terminalMode = false,
+  visualContext = 'screenerQuick',
   terminalToolbarVisibility,
   hookchartToolbarActions,
   hookchartToolbarOverlays,
@@ -1307,7 +1310,7 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
         {/* TradingView Chart Container */}
         {chartProvider === 'hookchart' ? <HookChart ref={hookChartRef} klines={effectiveKlines}
           symbol={symbol} timeframe={timeframe} exchange={exchange} marketType={marketType}
-          terminalMode={terminalMode} terminalToolbarVisibility={terminalToolbarVisibility} focusFormation={formation}
+          terminalMode={terminalMode} visualContext={visualContext} terminalToolbarVisibility={terminalToolbarVisibility} focusFormation={formation}
           markers={hookMarkers} expandPriceScaleToMarkers={previewMarkers} savedChartParams={savedChartParams} onTimeframeChange={onTimeframeChange}
           onCrosshairPriceChange={onCrosshairPriceChange}
           tradeLevelToggle={previewMarkers ? undefined : combinedTradeLevels}

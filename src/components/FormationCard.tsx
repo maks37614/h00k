@@ -214,6 +214,7 @@ export const FormationCard: React.FC<FormationCardProps> = ({
               </div>
             )}
             <TradingViewChart
+              visualContext="formationsQuick"
               klines={klines}
               formation={formation}
               symbol={coin.symbol}

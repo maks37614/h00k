@@ -184,6 +184,7 @@ export function EarlyFormationDetailsModal({
               </div>
             ) : (
               <TradingViewChart
+                visualContext="formationsQuick"
                 key={[coin.exchange, coin.marketType, coin.symbol, timeframe].join(':')}
                 forceHookChart
                 klines={klines}

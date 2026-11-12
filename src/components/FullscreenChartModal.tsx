@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { Kline, DetectedFormation, Timeframe, ExchangeId, MarketType, ChartMarkerInfo, ChartRestoreParams, ScannedCoin } from '../types';
 import { TradingViewChart } from './TradingViewChart';
+import type { VisualContextId } from './hookchart/visualProfiles';
 import { SiteFooter } from './SiteFooter';
 import { normalizeExchangeSymbol } from '../utils/marketSymbols';
 import { formatCryptoPrice } from '../utils/formatters';
@@ -28,6 +29,7 @@ interface FullscreenChartModalProps {
   onClose: () => void;
   /** Standalone coin / early-chart route (avoids background screener overlay). */
   pageMode?: boolean;
+  visualContext?: VisualContextId;
   /** Keep a standalone route in sync when a favorite or timeframe is selected. */
   onPageCoinChange?: (coin: ScannedCoin) => void;
   onPageTimeframeChange?: (timeframe: Timeframe) => void;
@@ -67,6 +69,7 @@ export const FullscreenChartModal: React.FC<FullscreenChartModalProps> = ({
   isOpen,
   onClose,
   pageMode = false,
+  visualContext,
   onPageCoinChange,
   onPageTimeframeChange,
   coin,
@@ -667,6 +670,7 @@ export const FullscreenChartModal: React.FC<FullscreenChartModalProps> = ({
         <div className="w-full h-full min-h-0 flex flex-col p-2 sm:p-4">
           <TradingViewChart
             forceHookChart
+            visualContext={visualContext ?? (formation || earlyCandidate ? 'formationsFull' : 'screenerFull')}
             fullHeight
             klines={activeKlines}
             formation={formation}

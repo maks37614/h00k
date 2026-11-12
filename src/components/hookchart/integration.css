@@ -1532,3 +1532,57 @@
 .liqSettingHelp>button{width:17px;height:17px;display:inline-grid;place-items:center;border:1px solid #718198;border-radius:50%;background:transparent;color:#acbdd0;font:700 11px/1 system-ui;cursor:help;padding:0}
 .liqSettingHelp>span{position:absolute;z-index:100;bottom:calc(100% + 7px);left:0;width:min(260px,70vw);max-width:70vw;background:#141d2b;border:1px solid #46596e;border-radius:6px;padding:8px 10px;color:#e7eef8;font:12px/1.45 system-ui;box-shadow:0 8px 25px rgba(0,0,0,.4);display:none;white-space:normal}
 .liqSettingHelp:hover>span,.liqSettingHelp:focus-within>span{display:block}
+
+
+/* Live HookChart visual-profile editor: responsive controls, iOS-safe selectors.
+   Scoped to the new panel; all legacy settings retain their original sizing. */
+.hookchart-root .visualProfileEditor .settingControl select.visualProfileSelect {
+  width: min(100%, 320px);
+  min-width: 0;
+  max-width: 320px;
+  height: 40px;
+  font: 600 16px/1.25 system-ui;
+  text-align: left;
+  padding: 0 28px 0 10px;
+  touch-action: manipulation;
+}
+.hookchart-root .visualProfileEditor .visualProfileRange {
+  flex: 1 1 130px;
+  width: min(220px, 100%);
+  min-width: 80px;
+  height: 30px;
+  accent-color: #22d3ee;
+  cursor: pointer;
+}
+.hookchart-root .visualProfileEditor .settingControl > div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  max-width: 100%;
+}
+.hookchart-root .visualProfileEditor .valueBadge {
+  min-width: 35px;
+  text-align: right;
+  font-size: 11px;
+}
+@media (max-width: 620px) {
+  .hookchart-root .visualProfileEditor .settingRow {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+    padding: 9px 0;
+  }
+  .hookchart-root .visualProfileEditor .settingControl {
+    justify-content: flex-start;
+    width: 100%;
+  }
+  .hookchart-root .visualProfileEditor .settingControl select.visualProfileSelect {
+    min-height: 44px;
+    max-width: 100%;
+  }
+  .hookchart-root .visualProfileEditor .visualProfileRange {
+    min-width: 110px;
+    width: min(240px, 70vw);
+  }
+}
