@@ -343,7 +343,10 @@ export function Chart({candles,symbol,tf,tool,drawings,setDrawings,alerts,setAle
    if(visualAppliedRef.current===signature)return;
    visualAppliedRef.current=signature;
    terminalNavigation.current=true;
-   const plotWidth=hookChartPlotWidth(width),minBar=terminalMode?.12:3;
+   const plotWidth=hookChartPlotWidth(width);
+   // A saved request for hundreds of visible candles needs sub-3px bars.
+   // The canvas already uses aggregated rasterization for tiny bar widths.
+   const minBar=.12;
    const barWidth=Math.max(minBar,Math.min(34,plotWidth/visualProfile.visibleBars));
    const count=Math.max(1,Math.min(candles.length,Math.ceil(plotWidth/barWidth)));
    const recent=candles.slice(-count);
