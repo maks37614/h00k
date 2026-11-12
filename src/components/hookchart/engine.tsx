@@ -961,7 +961,7 @@ export function Chart({candles,symbol,tf,tool,drawings,setDrawings,alerts,setAle
      suppressTouchClick.current=true;
      mouseRef.current={x:z.x,y:z.y};
      pointers.current.set(e.pointerId,{x:z.x,y:z.y});
-     drag.current={kind:'touchCursor',x:z.x,y:z.y,vp:{...vp},g:z.g,panning:false,inspecting:true};
+     drag.current={kind:'touchCursor',x:z.x,y:z.y,vp:{...vp},g:z.g,panning:false,inspecting:true,startRightPaddingBars:rightPaddingBars};
      scheduleDraw();
      return;
    }
@@ -986,7 +986,7 @@ export function Chart({candles,symbol,tf,tool,drawings,setDrawings,alerts,setAle
    if((e.pointerType==='touch'||e.pointerType==='pen')&&tool==='cursor'){
      touchHold.current?.start(e.pointerId,{x:z.x,y:z.y},position=>{
        if(pointers.current.size!==1||!pointers.current.has(e.pointerId))return;
-       drag.current={kind:'touchCursor',x:position.x,y:position.y,vp:{...vp},g:z.g,panning:false,inspecting:true};
+       drag.current={kind:'touchCursor',x:position.x,y:position.y,vp:{...vp},g:z.g,panning:false,inspecting:true,startRightPaddingBars:rightPaddingBars};
        magnifierPointer.current=null;
        touchCursorVisible.current=true;suppressTouchClick.current=true;
        mouseRef.current={x:position.x,y:position.y};
@@ -1005,11 +1005,11 @@ export function Chart({candles,symbol,tf,tool,drawings,setDrawings,alerts,setAle
    if(editingDrawingId){const ed=drawings.find(d=>d.id===editingDrawingId&&(d.type==='trend'||d.type==='ruler'||d.type==='fib'||d.type==='profile')&&d.pts[1]);if(ed){if(ed.type==='profile'){const pd=profileData(ed,z.g);if(pd){const x0=z.g.x(ed.pts[0].t),x1=z.g.x(ed.pts[1].t),insideY=z.y>=pd.yTop-12&&z.y<=pd.yBottom+12,d0=insideY?Math.abs(z.x-x0):999,d1=insideY?Math.abs(z.x-x1):999;if(Math.min(d0,d1)<=12){drag.current={kind:'editDrawingPoint',drawingId:ed.id,pointIndex:d0<=d1?0:1};return}}}else{const pts=ed.pts.slice(0,2).map(p=>({x:z.g.x(p.t),y:z.g.y(p.p)})),d0=Math.hypot(z.x-pts[0].x,z.y-pts[0].y),d1=Math.hypot(z.x-pts[1].x,z.y-pts[1].y);if(Math.min(d0,d1)<=12){drag.current={kind:'editDrawingPoint',drawingId:ed.id,pointIndex:d0<=d1?0:1};return}}}}
    const zn=zone(z.x,z.y,z.g);
    if((e.pointerType==='touch'||e.pointerType==='pen')&&tool==='cursor'&&zn==='plot'){
-     drag.current={kind:'touchCursor',x:z.x,y:z.y,vp:{...vp},g:z.g,panning:false,inspecting:!!resumeCursor};
+     drag.current={kind:'touchCursor',x:z.x,y:z.y,vp:{...vp},g:z.g,panning:false,inspecting:!!resumeCursor,startRightPaddingBars:rightPaddingBars};
      if(resumeCursor&&transientRuler)transient.current={t:z.g.timeAtX(z.x),p:z.g.p(z.y)};
      return;
    }
-   drag.current={kind:zn,x:z.x,y:z.y,vp:{...vp},g:z.g,baseCenter:(z.g.hi+z.g.lo)/2,baseRange:z.g.hi-z.g.lo};
+   drag.current={kind:zn,x:z.x,y:z.y,vp:{...vp},g:z.g,baseCenter:(z.g.hi+z.g.lo)/2,baseRange:z.g.hi-z.g.lo,startRightPaddingBars:rightPaddingBars};
  };
  const handlePointerMove=(e:React.PointerEvent<HTMLElement>)=>{
    if(!pointers.current.has(e.pointerId)&&isChartControlTarget(e.target))return;
@@ -1044,12 +1044,12 @@ export function Chart({candles,symbol,tf,tool,drawings,setDrawings,alerts,setAle
      if(!d.panning&&Math.hypot(dx,dy)>=5){d.panning=true;cancelTouchHold();suppressTouchClick.current=true}
      if(d.panning){
        const center=d.g.p(d.g.plotH/2-dy);
-       gestureUpdate(v=>({...v,rightOffset:d.vp.rightOffset+dx/Math.max(.001,d.g.step),autoY:false,manualCenter:center,manualRange:d.vp.manualRange||d.g.hi-d.g.lo,fitAll:false}))
+       gestureUpdate(v=>({...v,rightOffset:d.vp.rightOffset+dx/Math.max(.001,d.g.step)+rightPaddingBars-(d.startRightPaddingBars??rightPaddingBars),autoY:false,manualCenter:center,manualRange:d.vp.manualRange||d.g.hi-d.g.lo,fitAll:false}))
      }
      return
    }
    if(d.kind==='plot'){
-     const dx=z.x-d.x,dy=z.y-d.y,nextOffset=d.vp.rightOffset+dx/Math.max(.001,d.vp.fitAll?d.g.step:d.vp.barWidth);
+     const dx=z.x-d.x,dy=z.y-d.y,nextOffset=d.vp.rightOffset+dx/Math.max(.001,d.vp.fitAll?d.g.step:d.vp.barWidth)+rightPaddingBars-(d.startRightPaddingBars??rightPaddingBars);
      const movedY=Math.abs(dy)>1.5||!d.vp.autoY;
      if(movedY){
        const center=d.baseCenter+(dy/Math.max(1,d.g.plotH))*d.baseRange;
