@@ -95,6 +95,20 @@ const MarketExtremeIcon: React.FC<{ direction: 'high' | 'low'; label: string }> 
   );
 };
 
+// Preserve the Screener's local filter/sort choices while its component is
+// unmounted for a routed chart; no hidden polling or DOM is retained.
+const screenerUiSession = new Map<string, {
+  presetFilter: ScreenerPresetFilter;
+  searchQuery: string;
+  exchange: 'all' | ExchangeId;
+  marketType: 'all' | MarketType;
+  maxVolumeUsd: number;
+  sortBy: ScreenerSortBy;
+  sortOrder: 'asc' | 'desc';
+  viewMode: 'table' | 'cards';
+  displayLimit: number;
+}>();
+
 export const CoinScreenerPage: React.FC<CoinScreenerPageProps> = ({
   onSelectCoin,
   onSendMetaScalp,
@@ -109,6 +123,7 @@ export const CoinScreenerPage: React.FC<CoinScreenerPageProps> = ({
   const { t } = useLanguage();
   const { user } = useAuth();
   const isGuest = !user;
+  const cachedUi = screenerUiSession.get(user?.uid || 'guest');
   const [coins, setCoins] = useState<MarketCoin[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -117,20 +132,20 @@ export const CoinScreenerPage: React.FC<CoinScreenerPageProps> = ({
   const { preferences } = useAppPreferences();
 
   // Search & Filter state
-  const [presetFilter, setPresetFilter] = useState<ScreenerPresetFilter>('all');
-  const [searchQuery, setSearchQuery] = useState<string>('');
-  const [exchange, setExchange] = useState<'all' | ExchangeId>(() => getStoredPreferences().defaultExchange);
-  const [marketType, setMarketType] = useState<'all' | MarketType>(() => getStoredPreferences().defaultMarketType);
+  const [presetFilter, setPresetFilter] = useState<ScreenerPresetFilter>(() => cachedUi?.presetFilter ?? 'all');
+  const [searchQuery, setSearchQuery] = useState<string>(() => cachedUi?.searchQuery ?? '');
+  const [exchange, setExchange] = useState<'all' | ExchangeId>(() => cachedUi?.exchange ?? getStoredPreferences().defaultExchange);
+  const [marketType, setMarketType] = useState<'all' | MarketType>(() => cachedUi?.marketType ?? getStoredPreferences().defaultMarketType);
 
   useEffect(() => {
     setExchange((prev) => (prev === preferences.defaultExchange ? prev : preferences.defaultExchange));
     setMarketType((prev) => (prev === preferences.defaultMarketType ? prev : preferences.defaultMarketType));
   }, [preferences.defaultExchange, preferences.defaultMarketType]);
   // 0 means no upper limit; thresholds include the selected value.
-  const [maxVolumeUsd, setMaxVolumeUsd] = useState<number>(0);
-  const [sortBy, setSortBy] = useState<ScreenerSortBy>('volume');
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
-  const [viewMode, setViewMode] = useState<'table' | 'cards'>('table');
+  const [maxVolumeUsd, setMaxVolumeUsd] = useState<number>(() => cachedUi?.maxVolumeUsd ?? 0);
+  const [sortBy, setSortBy] = useState<ScreenerSortBy>(() => cachedUi?.sortBy ?? 'volume');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>(() => cachedUi?.sortOrder ?? 'desc');
+  const [viewMode, setViewMode] = useState<'table' | 'cards'>(() => cachedUi?.viewMode ?? 'table');
 
   const { coins: surveillanceCoins, addCoinToSurveillance, removeCoinFromSurveillance, isCoinMonitored, isCoinOnSurveillance } = useSurveillance();
   const [surveillanceToast, setSurveillanceToast] = useState<string | null>(null);
@@ -162,7 +177,15 @@ export const CoinScreenerPage: React.FC<CoinScreenerPageProps> = ({
       }
     }
   };
-  const [displayLimit, setDisplayLimit] = useState<number>(50);
+  const [displayLimit, setDisplayLimit] = useState<number>(() => cachedUi?.displayLimit ?? 50);
+
+  useEffect(() => {
+    screenerUiSession.set(user?.uid || 'guest', {
+      presetFilter, searchQuery, exchange, marketType, maxVolumeUsd, sortBy,
+      sortOrder, viewMode, displayLimit,
+    });
+  }, [user?.uid, presetFilter, searchQuery, exchange, marketType, maxVolumeUsd,
+    sortBy, sortOrder, viewMode, displayLimit]);
 
   const currentRequest = useRef<{ key: string; controller: AbortController } | null>(null);
   const loadedSelection = useRef<string | null>(null);
