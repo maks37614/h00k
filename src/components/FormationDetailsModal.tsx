@@ -56,6 +56,9 @@ interface FormationDetailsModalProps {
   onClose: () => void;
   /** Standalone page instead of the historical overlay. */
   pageMode?: boolean;
+  /** Keep the standalone chart URL on the user's selected timeframe. */
+  initialTimeframe?: Timeframe;
+  onPageTimeframeChange?: (timeframe: Timeframe) => void;
   onSendMetaScalp?: (coin: ScannedCoin) => void;
   metaScalpBinding?: string;
   onOpenTelegramModal?: (prefill?: any) => void;
@@ -73,6 +76,8 @@ export const FormationDetailsModal: React.FC<FormationDetailsModalProps> = ({
   onFormationChange,
   onClose,
   pageMode = false,
+  initialTimeframe,
+  onPageTimeframeChange,
   onSendMetaScalp,
   metaScalpBinding = '001',
   onOpenTelegramModal,
@@ -121,7 +126,7 @@ export const FormationDetailsModal: React.FC<FormationDetailsModalProps> = ({
   }, [pageMode]);
 
   const [timeframe, setTimeframe] = useState<Timeframe>(
-    archivedItem?.chartParams?.timeframe || archivedItem?.timeframe || coin.timeframe || '1h'
+    initialTimeframe || archivedItem?.chartParams?.timeframe || archivedItem?.timeframe || coin.timeframe || '1h'
   );
   const [historyLimit, setHistoryLimit] = useState<number>(
     archivedItem?.chartParams?.historyLimit || 1000
@@ -1090,7 +1095,7 @@ export const FormationDetailsModal: React.FC<FormationDetailsModalProps> = ({
                 klines={klines}
                 livePrice={livePrice}
                 timeframe={timeframe}
-                onTimeframeChange={setTimeframe}
+                onTimeframeChange={tf => { setTimeframe(tf); onPageTimeframeChange?.(tf); }}
               />
 
               {loadingKlines ? (
@@ -1108,7 +1113,7 @@ export const FormationDetailsModal: React.FC<FormationDetailsModalProps> = ({
                   marketType={coin.marketType}
                   historyLimit={historyLimit}
                   onHistoryLimitChange={setHistoryLimit}
-                  onTimeframeChange={setTimeframe}
+                  onTimeframeChange={tf => { setTimeframe(tf); onPageTimeframeChange?.(tf); }}
                   onLivePriceUpdate={setLivePrice}
                   onCrosshairPriceChange={handleCrosshairAlertPrice}
                   hideHeaderLiveIndicator={true}
@@ -1558,7 +1563,7 @@ export const FormationDetailsModal: React.FC<FormationDetailsModalProps> = ({
         formation={formation}
         klines={klines}
         currentTimeframe={timeframe}
-        onTimeframeChange={setTimeframe}
+        onTimeframeChange={tf => { setTimeframe(tf); onPageTimeframeChange?.(tf); }}
         livePrice={livePrice}
         onOpenTelegramModal={onOpenTelegramModal}
         onSendMetaScalp={onSendMetaScalp}
