@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { touchMagnifierLayout, drawTouchMagnifier } from '../src/components/hookchart/touchMagnifier';
+import { touchMagnifierLayout, drawTouchMagnifier, magnifierZoomFromPriceDrag } from '../src/components/hookchart/touchMagnifier';
 
 test('touch magnifier floats inside chart bounds while sampling the selected candle on every screen size', () => {
   for (const [width, height] of [[240, 160], [390, 700], [768, 500], [1366, 800]]) {
@@ -107,4 +107,41 @@ test('the isolated lens composites its cursor in source coordinates at every cha
     assert.ok(Math.abs(point.x*a+tx-sample.width/2)<1e-8);
     assert.ok(Math.abs(point.y*d+ty-sample.height/2)<1e-8);
   }
+});
+
+test('the second finger on the price scale controls lens zoom smoothly and within safe limits', () => {
+  assert.equal(magnifierZoomFromPriceDrag(2, 0), 2);
+  assert.ok(magnifierZoomFromPriceDrag(2, -100) > 2, 'upward drag zooms the lens in');
+  assert.ok(magnifierZoomFromPriceDrag(2, 100) < 2, 'downward drag zooms the lens out');
+  assert.equal(magnifierZoomFromPriceDrag(2, -10_000), 6);
+  assert.equal(magnifierZoomFromPriceDrag(2, 10_000), 1.25);
+  assert.equal(magnifierZoomFromPriceDrag(3.5, 0), 3.5, 'a new second-finger drag keeps its previous zoom');
+  assert.ok(Number.isFinite(magnifierZoomFromPriceDrag(2, NaN)));
+});
+
+test('changing lens zoom changes only the sampled window, never the selected candle or lens position', () => {
+  const point = {x:180, y:420};
+  const defaultLens = touchMagnifierLayout(390, 700, point)!;
+  const zoomedLens = touchMagnifierLayout(390, 700, point, 4)!;
+  assert.equal(zoomedLens.x, defaultLens.x);
+  assert.equal(zoomedLens.y, defaultLens.y);
+  assert.equal(zoomedLens.sourceSize, defaultLens.sourceSize / 2);
+  assert.equal(zoomedLens.sourceX + zoomedLens.sourceSize / 2, point.x);
+  assert.equal(zoomedLens.sourceY + zoomedLens.sourceSize / 2, point.y);
+  const zoomedOut = touchMagnifierLayout(390, 700, point, 1.25)!;
+  assert.ok(zoomedOut.sourceSize > defaultLens.sourceSize);
+});
+
+test('drawTouchMagnifier zoom argument changes captured chart area without moving the cursor', () => {
+  const calls: number[][] = [];
+  const buffer = {clearRect(){},drawImage(_chart: unknown,...args:number[]){calls.push(args);}};
+  const chart={width:780,height:1400} as HTMLCanvasElement;
+  const sample={width:0,height:0,getContext:()=>buffer} as unknown as HTMLCanvasElement;
+  const context={save(){},restore(){},setLineDash(){},beginPath(){},arc(){},fill(){},clip(){},stroke(){},drawImage(){}}
+    as unknown as CanvasRenderingContext2D;
+  drawTouchMagnifier(chart,context,sample,390,700,{x:180,y:420},'#131722',undefined,2);
+  drawTouchMagnifier(chart,context,sample,390,700,{x:180,y:420},'#131722',undefined,4);
+  assert.equal(calls.length,2);
+  assert.equal(calls[1][2],calls[0][2]/2);
+  assert.equal(calls[1][3],calls[0][3]/2);
 });
