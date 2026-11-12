@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, ArrowLeftRight, BookOpen, ChevronRight, Layers, Search, ShieldCheck } from 'lucide-react';
+import { AlertTriangle, BookOpen, ChevronRight, Layers, Search, ShieldCheck } from 'lucide-react';
 import { KOTAPYCH_SETUPS, KOTAPYCH_TOPICS, type KotapychSetup } from './kotapychGuideData';
 import type { KotapychSourcePage } from './kotapychArchive';
 
@@ -94,7 +94,7 @@ export function KotapychGuide() {
     const normalized = query.toLocaleLowerCase('ru').trim();
     return !normalized ? sourcePages : sourcePages.filter(item => item.text.toLocaleLowerCase('ru').includes(normalized));
   }, [sourcePages, query]);
-  const selectedPage = sourcePages.find(item => item.page === page) || sourcePages[0];
+  const selectedPage = matchingPages.find(item => item.page === page) || matchingPages[0];
   const setup = KOTAPYCH_SETUPS.find(item => item.id === screen);
   const topic = KOTAPYCH_TOPICS.find(item => item.id === topicId) || KOTAPYCH_TOPICS[0];
 
@@ -174,7 +174,7 @@ export function KotapychGuide() {
         <p className="text-[11px] text-slate-500">Знайдено сторінок: {matchingPages.length} із {sourcePages.length}. Вибери сторінку для читання.</p>
         <div className="flex flex-wrap gap-1 max-h-36 overflow-y-auto rounded-lg border border-slate-800 p-2">
           {matchingPages.map(item=><button type="button" key={item.page} onClick={()=>setPage(item.page)}
-            aria-pressed={page===item.page}
+            aria-pressed={selectedPage?.page===item.page}
             className={'min-w-8 h-8 px-1 rounded-md text-[11px] font-semibold ' + (page===item.page?'bg-cyan-500/20 text-cyan-200 border border-cyan-500/50':'bg-slate-900 text-slate-400 border border-slate-800 hover:text-white')}>
             {item.page}
           </button>)}
@@ -189,8 +189,8 @@ export function KotapychGuide() {
             ? <p lang="ru" className="whitespace-pre-wrap break-words text-xs leading-6 text-slate-300">{selectedPage.text}</p>
             : <p className="text-xs text-slate-400">На сторінці графічний приклад без окремого тексту. Дивись оригінальний документ.</p>}
           <div className="flex justify-between gap-2 mt-4">
-            <button type="button" disabled={selectedPage.page<=1} onClick={()=>setPage(n=>Math.max(1,n-1))} className="disabled:opacity-30 text-xs px-2.5 py-1.5 border border-slate-700 rounded-lg">Попередня</button>
-            <button type="button" disabled={selectedPage.page>=sourcePages.length} onClick={()=>setPage(n=>Math.min(sourcePages.length,n+1))} className="disabled:opacity-30 text-xs px-2.5 py-1.5 border border-slate-700 rounded-lg">Наступна</button>
+            <button type="button" disabled={matchingPages.findIndex(item=>item.page===selectedPage.page)<=0} onClick={()=>setPage(matchingPages[Math.max(0,matchingPages.findIndex(item=>item.page===selectedPage.page)-1)].page)} className="disabled:opacity-30 text-xs px-2.5 py-1.5 border border-slate-700 rounded-lg">Попередня</button>
+            <button type="button" disabled={matchingPages.findIndex(item=>item.page===selectedPage.page)>=matchingPages.length-1} onClick={()=>setPage(matchingPages[Math.min(matchingPages.length-1,matchingPages.findIndex(item=>item.page===selectedPage.page)+1)].page)} className="disabled:opacity-30 text-xs px-2.5 py-1.5 border border-slate-700 rounded-lg">Наступна</button>
           </div>
         </article>}
       </>}
