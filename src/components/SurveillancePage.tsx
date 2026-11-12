@@ -132,6 +132,7 @@ export const SurveillancePage: React.FC<SurveillancePageProps> = ({
   const [isCheckingMap, setIsCheckingMap] = useState<Record<string, boolean>>({});
   const [isRunningAll, setIsRunningAll] = useState(false);
   const [notificationToast, setNotificationToast] = useState<{ message: string; type: 'success' | 'info' | 'error' } | null>(null);
+  const [isMonitoringHelpOpen, setIsMonitoringHelpOpen] = useState(false);
 
   // Recent surveillance events feed state
   const [isEventsExpanded, setIsEventsExpanded] = useState(true);
@@ -459,14 +460,41 @@ export const SurveillancePage: React.FC<SurveillancePageProps> = ({
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
                   <h1 className="text-xl font-black text-white tracking-tight">Моніторинг</h1>
+                  <div className="relative inline-flex shrink-0 items-center" onMouseLeave={() => setIsMonitoringHelpOpen(false)}>
+                    <button
+                      type="button"
+                      aria-label="Інформація про моніторинг"
+                      aria-expanded={isMonitoringHelpOpen}
+                      aria-describedby={isMonitoringHelpOpen ? 'surveillance-monitoring-help' : undefined}
+                      onMouseEnter={() => setIsMonitoringHelpOpen(true)}
+                      onFocus={() => setIsMonitoringHelpOpen(true)}
+                      onBlur={() => setIsMonitoringHelpOpen(false)}
+                      onClick={() => setIsMonitoringHelpOpen(true)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Escape') {
+                          setIsMonitoringHelpOpen(false);
+                          event.currentTarget.blur();
+                        }
+                      }}
+                      className="inline-flex h-7 w-7 items-center justify-center rounded-full text-slate-400 hover:bg-slate-800 hover:text-cyan-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 transition-colors cursor-help"
+                    >
+                      <HelpCircle className="h-4 w-4" aria-hidden="true" />
+                    </button>
+                    {isMonitoringHelpOpen && (
+                      <div
+                        id="surveillance-monitoring-help"
+                        role="tooltip"
+                        className="absolute z-50 left-1/2 top-full mt-2 w-[min(78vw,22rem)] -translate-x-1/2 rounded-xl border border-cyan-500/30 bg-slate-950/95 px-3 py-2.5 text-xs font-normal normal-case leading-relaxed text-slate-200 shadow-2xl shadow-black/50 backdrop-blur-sm break-words"
+                      >
+                        Комплексний моніторинг ринку на серверах h00k.top: Local Order Book, Multi-Timeframe структура, рівні, щільності та Telegram алерти
+                      </div>
+                    )}
+                  </div>
                   <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1 font-mono">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
                     Live
                   </span>
                 </div>
-                <p className="text-xs text-slate-400">
-                  Комплексний моніторинг ринку на серверах h00k.top: Local Order Book, Multi-Timeframe структура, рівні, щільності та Telegram алерти
-                </p>
               </div>
             </div>
           </div>

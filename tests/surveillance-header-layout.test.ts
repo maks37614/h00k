@@ -19,3 +19,17 @@ test('watched count is immediately after the refresh control in the header actio
   assert.equal((topBar.match(/\{activeCount\} МОНЕТ/g) || []).length, 1);
   assert.doesNotMatch(topBar, /pt-3 border-t border-slate-800\/80 font-mono/);
 });
+
+test('monitoring question-mark tooltip shows the full description on hover, focus and tap', () => {
+  const description = 'Комплексний моніторинг ринку на серверах h00k.top: Local Order Book, Multi-Timeframe структура, рівні, щільності та Telegram алерти';
+  assert.equal(topBar.split(description).length - 1, 1, 'description must live only in the tooltip');
+  assert.match(topBar, /<HelpCircle className="h-4 w-4" aria-hidden="true" \/>/);
+  assert.match(topBar, /aria-label="Інформація про моніторинг"/);
+  assert.match(topBar, /onMouseEnter=\{\(\) => setIsMonitoringHelpOpen\(true\)\}/);
+  assert.match(topBar, /onFocus=\{\(\) => setIsMonitoringHelpOpen\(true\)\}/);
+  assert.match(topBar, /onClick=\{\(\) => setIsMonitoringHelpOpen\(true\)\}/);
+  assert.match(topBar, /onBlur=\{\(\) => setIsMonitoringHelpOpen\(false\)\}/);
+  assert.match(topBar, /role="tooltip"/);
+  assert.match(topBar, /aria-describedby=\{isMonitoringHelpOpen \? 'surveillance-monitoring-help' : undefined\}/);
+  assert.doesNotMatch(topBar, /<p className="text-xs text-slate-400">\s*Комплексний моніторинг/);
+});
