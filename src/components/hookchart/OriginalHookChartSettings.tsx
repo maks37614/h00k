@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import type { ExchangeId, HookChartPreferences, MarketType } from '../../types';
 import { clampHookChartHistory } from '../../utils/hookChartHistory';
 import { normalizeDensityDistance } from './marketAnalytics';
-import { VISUAL_CONTEXTS, getVisualProfile, makeVisualProfileKey, normalizedVisualProfiles, patchVisualProfile, visualDeviceForWidth, type VisualContextId, type VisualDevice, type VisualProfileKey } from './visualProfiles';
+import { VISUAL_CONTEXTS, VISUAL_ZOOM_MIN, VISUAL_ZOOM_MAX, VISUAL_GAP_MAX, getVisualProfile, makeVisualProfileKey, normalizedVisualProfiles, patchVisualProfile, visualDeviceForWidth, type VisualContextId, type VisualDevice, type VisualProfileKey } from './visualProfiles';
 import type { Candle, Viewport } from './engine';
 import { HookChartVisualPreview } from './HookChartVisualPreview';
 import { DEFAULT_CROSSHAIR_LINE_WIDTH, normalizeCrosshairLineWidth } from './chartCursor';
@@ -276,7 +276,7 @@ function LiquidationMinimum({ value, disabled, onChange }: { value?: number | nu
       if (Number.isFinite(next) && next >= 0) onChange(Math.min(1_000_000_000_000, next));
     }} />;
 }
-function Num({ value, set, min, max, step = 1, disabled = false }: { value: number; set: (value: number) => void; min?: number; max?: number; step?: number; disabled?: boolean }) {
+function Num({ value, set, min, max, step = 1, disabled = false, ariaLabel }: { value: number; set: (value: number) => void; min?: number; max?: number; step?: number; disabled?: boolean; ariaLabel?: string }) {
   // Keep a temporary string while editing. Number('') is zero, so committing
   // on every keystroke prevents users from deleting a displayed 0 on iOS.
   const [draft, setDraft] = useState<string | null>(null);
@@ -289,7 +289,7 @@ function Num({ value, set, min, max, step = 1, disabled = false }: { value: numb
     if (max !== undefined) next = Math.min(max, next);
     if (next !== value) set(next);
   };
-  return <input className="numInput" type="number" value={draft ?? value} min={min} max={max} step={step} disabled={disabled}
+  return <input className="numInput" type="number" value={draft ?? value} min={min} max={max} step={step} disabled={disabled} aria-label={ariaLabel}
     onFocus={event => { setDraft(String(value)); event.currentTarget.select(); }}
     onChange={event => setDraft(event.currentTarget.value)}
     onBlur={event => commit(event.currentTarget.value)}
@@ -430,20 +430,24 @@ function VisualProfileEditor({
           <b className="valueBadge">{selectedProfile.visibleBars}</b>
         </div>
       </Setting>
-      <Setting label="Вертикальний зум" desc="1× — природний діапазон; більше — свічки вищі, менше — компактніші.">
+      <Setting label="Вертикальний зум" desc="1× — природний діапазон. Розширений зум від 0,01× до 100×; значення можна вписати вручну.">
         <div className="flex items-center gap-2">
-          <input aria-label="Вертикальний зум" type="range" className="visualProfileRange" min="0.4" max="4" step="0.1"
-            value={selectedProfile.verticalZoom} onChange={event => onProfileChange({ verticalZoom: Number(event.target.value) })}/>
-          <b className="valueBadge">{selectedProfile.verticalZoom.toFixed(1)}×</b>
+          <input aria-label="Вертикальний зум" type="range" className="visualProfileRange" min="-2" max="2" step="0.01"
+            value={Math.log10(selectedProfile.verticalZoom)} onChange={event => onProfileChange({ verticalZoom: Number((10 ** Number(event.target.value)).toFixed(3)) })}/>
+          <Num ariaLabel="Точний вертикальний зум" value={selectedProfile.verticalZoom} min={VISUAL_ZOOM_MIN} max={VISUAL_ZOOM_MAX} step={0.01}
+            set={value => onProfileChange({ verticalZoom: value })}/>
+          <b className="valueBadge">×</b>
         </div>
       </Setting>
       <SwitchRow label="Автоматичний масштаб ціни" desc="Автоматично підлаштовувати висоту свічок до поточного видимого діапазону."
         value={selectedProfile.autoPriceScale} onChange={value => onProfileChange({ autoPriceScale: value })}/>
-      <Setting label="Відступ праворуч" desc="Вільний простір праворуч від останньої свічки (у барах).">
+      <Setting label="Відступ праворуч" desc="Вільний простір праворуч від останньої свічки (у барах). Великий відступ може зменшити видиму область свічок на вузькому екрані.">
         <div className="flex items-center gap-2">
-          <input aria-label="Відступ праворуч у барах" type="range" className="visualProfileRange" min="0" max="100" step="1"
+          <input aria-label="Відступ праворуч у барах" type="range" className="visualProfileRange" min="0" max={Math.max(300, selectedProfile.rightGapBars)} step="1"
             value={selectedProfile.rightGapBars} onChange={event => onProfileChange({ rightGapBars: Number(event.target.value) })}/>
-          <b className="valueBadge">{selectedProfile.rightGapBars}</b>
+          <Num ariaLabel="Точний відступ праворуч у барах" value={selectedProfile.rightGapBars} min={0} max={VISUAL_GAP_MAX} step={1}
+            set={value => onProfileChange({ rightGapBars: Math.round(value) })}/>
+          <b className="valueBadge">барів</b>
         </div>
       </Setting>
       <div className="flex flex-wrap gap-2">
