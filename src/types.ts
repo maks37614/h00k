@@ -413,6 +413,8 @@ export interface UserProfile {
   soundAlertsEnabled?: boolean;
   /** Shared across all coin detail pages; true only hides the custom Telegram alert form. */
   telegramPriceAlertCollapsed?: boolean;
+  /** Shared across all coin pages; only affects the Smart Analysis UI. */
+  smartAnalysisCollapsed?: boolean;
   watchlist?: string[];
   watchlistFolders?: Record<string, string[]>;
   metaScalpSettings?: MetaScalpSettings;
