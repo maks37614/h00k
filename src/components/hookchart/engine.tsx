@@ -486,7 +486,7 @@ export function Chart({candles,symbol,tf,tool,drawings,setDrawings,alerts,setAle
      return;
    }
    const mouse=mouseRef.current;
-   const cursorVisible=!!mouse&&mouse.x>=0&&mouse.x<g.plotW&&mouse.y>=0&&mouse.y<g.plotH&&drag.current?.kind!=='pinch'&&!(drag.current?.kind==='touchCursor'&&drag.current.panning);
+   const cursorVisible=!!mouse&&mouse.x>=0&&mouse.x<g.plotW&&mouse.y>=0&&mouse.y<g.plotH&&drag.current?.kind!=='pinch'&&!(drag.current?.kind==='touchCursor'&&(drag.current.panning||!drag.current.inspecting));
    const magnifierVisible=!!mouse&&magnifierPointer.current!==null&&pointers.current.has(magnifierPointer.current)&&(pointers.current.size===1||magnifierPriceDrag.current!==null)&&drag.current?.kind==='touchCursor'&&drag.current.inspecting;
    const rulerAnchor=transient.current;
    const cursorPosition=cursorVisible?{x:mouse!.x,time:g.timeAtX(mouse!.x)}:null;
@@ -828,6 +828,8 @@ export function Chart({candles,symbol,tf,tool,drawings,setDrawings,alerts,setAle
  };
  const handlePointerDown=(e:React.PointerEvent<HTMLElement>)=>{
    if(isChartControlTarget(e.target))return;
+   // Never inspect geometry retained from the previous coin while new candles load.
+   if(!candles.length){resetInteraction();scheduleDraw();return}
    const z=point(e);if(!z||z.x<0||z.x>z.g.r.width||z.y<0||z.y>z.g.r.height)return;
    terminalNavigation.current=true;
    if(terminalMode||e.pointerType==='touch'||e.pointerType==='pen')e.preventDefault();
@@ -974,8 +976,13 @@ export function Chart({candles,symbol,tf,tool,drawings,setDrawings,alerts,setAle
    }
    pointers.current.delete(e.pointerId);
    if(e.currentTarget.hasPointerCapture?.(e.pointerId))e.currentTarget.releasePointerCapture(e.pointerId);
-   if(!pointers.current.size)drag.current=null;
-   else if(wasLensPointer){
+   if(!pointers.current.size){
+     drag.current=null;
+     if(e.pointerType==='touch'||e.pointerType==='pen'){
+       touchCursorVisible.current=false;
+       mouseRef.current=null;
+     }
+   }else if(wasLensPointer){
      // Lifting the inspecting finger ends the lens even if the scale finger remains.
      // Suppress incidental cursor drawing until the remaining finger is released.
      drag.current={kind:'pinch'};
