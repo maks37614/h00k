@@ -30,7 +30,14 @@ export function interpolate(template: string, params: LocaleParams = {}): string
 }
 
 export function translateKey(language: SupportedLanguage, key: string, params?: LocaleParams): string {
-  const value = locales[language]?.strings[key] ?? locales.uk.strings[key] ?? key;
+  // Telegram profile controls are stored under the telegram namespace in the
+  // existing locale files. Those entries are UI labels, not bot message templates.
+  const telegramUiKey = key.startsWith('telegram.');
+  const value = locales[language]?.strings[key]
+    ?? (telegramUiKey ? locales[language]?.telegram[key] : undefined)
+    ?? locales.uk.strings[key]
+    ?? (telegramUiKey ? locales.uk.telegram[key] : undefined)
+    ?? key;
   return interpolate(value, params);
 }
 
