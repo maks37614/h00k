@@ -29,6 +29,7 @@ function buildEffect(needle: string) {
     'visualAppliedRef','ref','initialLogicalRange','candles','symbol','tf','terminalMode',
     'terminalNavigation','terminalAutoScale','setVp','hookChartPlotWidth','rangeRestored',
     'restoredHookViewport','rightPaddingBars','rightPadding',
+    'ResizeObserver','setVisualCanvasWidth',
   ];
   const script = `exports.run=(env)=>{const {${vars.join(',')}}=env;(${callback})();};`;
   const code = ts.transpileModule(script, {
@@ -41,6 +42,7 @@ function buildEffect(needle: string) {
 }
 
 const applyProfile = buildEffect('lastVisualCaptureRef.current!==visualProfileCaptureVersion');
+const trackCanvasWidth = buildEffect('setVisualCanvasWidth(previous=>previous===measured?previous:measured)');
 const restorePreviousRange = buildEffect('rangeRestored.current');
 
 function fixture() {
@@ -220,4 +222,50 @@ test('Terminal global auto-scale intentionally overrides manual vertical zoom, b
   assert.equal(getViewport()!.autoY, true);
   assert.equal(getViewport()!.manualRange, null);
   assert.ok(Math.abs(getViewport()!.barWidth - 540 / (144 + 81)) < 1e-8);
+});
+
+test('live HookChart applies a saved profile when a hidden canvas becomes visible and after resize', () => {
+  const { env, updates, getViewport } = fixture();
+  env.visualCanvasWidth = 0;
+  env.visualProfile = {
+    visibleBars: 144, verticalZoom: 2, autoPriceScale: false, rightGapBars: 81,
+  };
+  env.rightPaddingBars = 81;
+  let width = 0;
+  let notify: () => void = () => {};
+  let observerDisconnected = false;
+  env.ref.current.getBoundingClientRect = () => ({ width });
+  env.ResizeObserver = class {
+    constructor(callback: () => void) { notify = callback; }
+    observe() {}
+    disconnect() { observerDisconnected = true; }
+  };
+  env.setVisualCanvasWidth = (update: (current: number) => number) => {
+    env.visualCanvasWidth = update(env.visualCanvasWidth);
+  };
+  const stop = trackCanvasWidth(env);
+  applyProfile(env);
+  assert.equal(updates.length, 0, 'zero-width hidden charts cannot apply a visual profile');
+  width = 600;
+  notify();
+  assert.equal(env.visualCanvasWidth, 600);
+  applyProfile(env);
+  assert.equal(updates.length, 1, 'saved profile applies after the canvas becomes measurable');
+  assert.equal(getViewport()!.autoY, false);
+  assert.equal(getViewport()!.yZoom, 2);
+  assert.ok(Math.abs(getViewport()!.barWidth - 540 / (144 + 81)) < 1e-8);
+
+  width = 810;
+  notify();
+  assert.equal(env.visualCanvasWidth, 810);
+  applyProfile(env);
+  assert.equal(updates.length, 2, 'resizing a Terminal card or fullscreen panel updates the bar width');
+  assert.ok(Math.abs(getViewport()!.barWidth - 750 / (144 + 81)) < 1e-8);
+  notify();
+  applyProfile(env);
+  assert.equal(updates.length, 2, 'unchanged canvas width must not reapply the same profile');
+
+  // The actual ResizeObserver hook provides a cleanup in React; the extracted
+  // runner intentionally executes only the effect callback body here.
+  assert.equal(observerDisconnected, false);
 });
