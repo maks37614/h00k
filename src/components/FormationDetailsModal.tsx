@@ -54,6 +54,8 @@ interface FormationDetailsModalProps {
   formation: DetectedFormation | null;
   onFormationChange?: (formation: DetectedFormation) => void;
   onClose: () => void;
+  /** Standalone page instead of the historical overlay. */
+  pageMode?: boolean;
   onSendMetaScalp?: (coin: ScannedCoin) => void;
   metaScalpBinding?: string;
   onOpenTelegramModal?: (prefill?: any) => void;
@@ -70,6 +72,7 @@ export const FormationDetailsModal: React.FC<FormationDetailsModalProps> = ({
   formation,
   onFormationChange,
   onClose,
+  pageMode = false,
   onSendMetaScalp,
   metaScalpBinding = '001',
   onOpenTelegramModal,
@@ -99,22 +102,23 @@ export const FormationDetailsModal: React.FC<FormationDetailsModalProps> = ({
 
   const chartSectionRef = useRef<HTMLDivElement>(null);
 
-  // Lock background body scroll and auto-focus / center on chart upon entering page
+  // The standalone chart uses normal document scrolling and browser history.
+  // Preserve the original scroll lock only for legacy modal callers.
   useEffect(() => {
+    if (pageMode) {
+      window.scrollTo({ top: 0, behavior: 'instant' });
+      return;
+    }
     const originalOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
-
     const focusTimer = setTimeout(() => {
-      if (chartSectionRef.current) {
-        chartSectionRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }
+      chartSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }, 150);
-
     return () => {
       document.body.style.overflow = originalOverflow;
       clearTimeout(focusTimer);
     };
-  }, []);
+  }, [pageMode]);
 
   const [timeframe, setTimeframe] = useState<Timeframe>(
     archivedItem?.chartParams?.timeframe || archivedItem?.timeframe || coin.timeframe || '1h'
@@ -921,8 +925,12 @@ export const FormationDetailsModal: React.FC<FormationDetailsModalProps> = ({
   return (
     <>
       {!isFullscreenChartOpen && (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-4 md:p-6 bg-black/80 backdrop-blur-sm overflow-y-auto no-scrollbar">
-      <div className="relative w-full max-w-6xl 2xl:max-w-7xl bg-slate-900 border-0 sm:border border-slate-800 rounded-none sm:rounded-3xl shadow-2xl overflow-hidden my-auto min-h-screen sm:min-h-0 sm:max-h-[95vh] flex flex-col">
+    <div className={pageMode
+      ? 'relative w-full min-h-0 bg-[#070a12] pb-4 sm:pb-6'
+      : 'fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-4 md:p-6 bg-black/80 backdrop-blur-sm overflow-y-auto no-scrollbar'}>
+      <div className={pageMode
+        ? 'relative mx-auto flex w-full max-w-6xl flex-col bg-slate-900 shadow-2xl sm:my-4 sm:rounded-3xl sm:border sm:border-slate-800 2xl:max-w-7xl'
+        : 'relative w-full max-w-6xl 2xl:max-w-7xl bg-slate-900 border-0 sm:border border-slate-800 rounded-none sm:rounded-3xl shadow-2xl overflow-hidden my-auto min-h-screen sm:min-h-0 sm:max-h-[95vh] flex flex-col'}>
         {/* Modal Header */}
         <div className="flex items-center justify-between gap-2 sm:gap-3 px-3 sm:px-6 py-2.5 sm:py-4 border-b border-slate-800 bg-slate-950/80 sticky top-0 z-20">
           <div className="flex items-center gap-2 sm:gap-3 min-w-0">
@@ -1070,7 +1078,7 @@ export const FormationDetailsModal: React.FC<FormationDetailsModalProps> = ({
         </div>
 
         {/* Modal Body */}
-        <div className="p-3 sm:p-6 overflow-y-auto no-scrollbar space-y-4 sm:space-y-6">
+        <div className={pageMode ? 'min-w-0 space-y-4 p-3 sm:space-y-6 sm:p-6' : 'p-3 sm:p-6 overflow-y-auto no-scrollbar space-y-4 sm:space-y-6'}>
           {/* Main Grid: Left Chart, Right Setup Details */}
           <div className="grid grid-cols-1 gap-4 sm:gap-6">
             {/* Left: Chart & Timeframe switch (col-span-2) */}
@@ -1536,7 +1544,7 @@ export const FormationDetailsModal: React.FC<FormationDetailsModalProps> = ({
           </div>
         </div>
         {/* Same localized legal/contact footer as the main Screener page. */}
-        <SiteFooter />
+        {!pageMode && <SiteFooter />}
       </div>
 
     </div>
