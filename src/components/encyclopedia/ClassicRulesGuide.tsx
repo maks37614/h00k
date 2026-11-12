@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { AlertTriangle, BookOpen, CheckCircle2, ChevronRight, Layers, LineChart, Route, ShieldCheck } from 'lucide-react';
+import { AlertTriangle, BookOpen, CheckCircle2, Layers, LineChart, Route, ShieldCheck } from 'lucide-react';
 import {
   CLASSIC_GENERAL_RULES,
   CLASSIC_LEVEL_RULES,
