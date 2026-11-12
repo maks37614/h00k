@@ -64,6 +64,8 @@ export interface HookChartCanvasProps {
   terminalToolbarVisibility?: TerminalToolbarVisibility;
   focusFormation?: DetectedFormation | null;
   onTimeframeChange?: (timeframe: Timeframe) => void;
+  /** Optional vertical crosshair price from the main chart, for the price-alert input. */
+  onCrosshairPriceChange?: (price: number) => void;
   /** Replay-only protection while historical candles are loading. */
   timeframeDisabled?: boolean;
   replayPlaybackSpeed?: number;
@@ -125,7 +127,7 @@ function enabledIndicators(preferences?: HookChartPreferences, replay = false, m
 }
 
 const HookChartCanvas = forwardRef<HookChartHandle, HookChartCanvasProps>(function HookChartCanvas({
-  externalData, klines, symbol, timeframe, exchange, marketType, markers = [], expandPriceScaleToMarkers = false, savedChartParams, replay = false, focusTrigger, terminalMode = false, terminalToolbarVisibility, focusFormation, onTimeframeChange, timeframeDisabled = false, replayPlaybackSpeed, onReplayPlaybackSpeedChange, chartActions, toolbarActions, toolbarOverlays, tradeLevelToggle, footerActions,
+  externalData, klines, symbol, timeframe, exchange, marketType, markers = [], expandPriceScaleToMarkers = false, savedChartParams, replay = false, focusTrigger, terminalMode = false, terminalToolbarVisibility, focusFormation, onTimeframeChange, onCrosshairPriceChange, timeframeDisabled = false, replayPlaybackSpeed, onReplayPlaybackSpeedChange, chartActions, toolbarActions, toolbarOverlays, tradeLevelToggle, footerActions,
 }, forwardedRef) {
   const { user, profile, updateProfileData } = useAuth();
   const { alerts: priceAlerts, addAlert, deleteAlert } = useAlerts();
@@ -1341,6 +1343,7 @@ const HookChartCanvas = forwardRef<HookChartHandle, HookChartCanvasProps>(functi
         onNeedHistory={replay ? undefined : needHistory}
         onViewportChange={setViewport}
         onCrosshairChange={crosshair.set}
+        onCrosshairPriceChange={onCrosshairPriceChange}
       />
       {selectedPriceMarker && (selectedPriceAlert || selectedLocalMarker) && (
         <div className="hookchart-alert-confirm" role="dialog" aria-label="Видалити цінове сповіщення">
