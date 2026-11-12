@@ -1234,7 +1234,7 @@ export default function App() {
       {/* First-visit installation tip remains available to guests on all devices. */}
       <InstallAppButton variant="tip" />
       {/* Header */}
-      <Header
+      {!chartPageActive && <Header
         isLoading={isLoading}
         totalCoins={coins.length}
         formationsCount={flattenedItems.length}
@@ -1276,11 +1276,108 @@ export default function App() {
         onOpenProfile={() => setIsProfileModalOpen(true)}
         activePage={activePage}
         onPageChange={handlePageChange}
-      />
+      />}
 
       {/* Main Content Area */}
-      <main className="flex-1 max-w-[2560px] 3xl:max-w-[3440px] w-full mx-auto px-2 sm:px-4 lg:px-6 2xl:px-8 py-2 sm:py-4 space-y-3 sm:space-y-4">
-        {activePage === 'terminal' ? (
+      <main className={chartPageActive
+        ? 'w-full min-w-0 flex-1'
+        : 'flex-1 max-w-[2560px] 3xl:max-w-[3440px] w-full mx-auto px-2 sm:px-4 lg:px-6 2xl:px-8 py-2 sm:py-4 space-y-3 sm:space-y-4'}>
+        {chartPageActive ? (
+          !user ? (
+            <section className="mx-auto flex min-h-[55vh] max-w-lg flex-col items-center justify-center gap-4 px-5 text-center">
+              <h1 className="text-lg font-bold text-white">Графік {chartRoute?.symbol}</h1>
+              <p className="text-sm text-slate-400">Увійдіть у свій акаунт, щоб відкрити графік.</p>
+              <button type="button" onClick={() => handleOpenAuthModal('signin', 'chart')}
+                className="rounded-xl border border-cyan-600 bg-cyan-950/60 px-4 py-2 text-sm text-cyan-200">
+                Увійти
+              </button>
+              <button type="button" onClick={closeChartPage} className="text-sm text-slate-400 underline">
+                Назад до Скрінера
+              </button>
+            </section>
+          ) : chartRouteLoading ? (
+            <div role="status" className="flex min-h-[55vh] items-center justify-center text-slate-400">
+              Завантаження графіка…
+            </div>
+          ) : selectedEarly && activeEarlyCandidate && chartRoute?.kind === 'early' ? (
+            <FullscreenChartModal
+              pageMode isOpen
+              key={[user.uid,selectedEarly.coin.exchange,selectedEarly.coin.marketType,
+                selectedEarly.coin.symbol,selectedEarly.candidate.id].join(':')}
+              coin={selectedEarly.coin}
+              formation={null}
+              earlyCandidate={activeEarlyCandidate}
+              earlyTouchRule={selectedEarly.candidate.tpSlBuilder?.touches.verified
+                ? getTpSlRule(constructorSettings,selectedEarly.coin.symbol,activeEarlyCandidate.patternKey)
+                : undefined}
+              customMarkers={earlyFormationChartMarkers(activeEarlyCandidate)}
+              currentTimeframe={selectedEarly.coin.timeframe}
+              livePrice={selectedEarly.coin.currentPrice}
+              allCoins={coins}
+              watchlist={watchlist}
+              onToggleWatchlist={handleToggleWatchlist}
+              onOpenTelegramModal={handleOpenTelegramAlerts}
+              onSendMetaScalp={handleSendToMetaScalp}
+              metaScalpBinding={metaScalpSettings.binding}
+              onClose={closeChartPage}
+            />
+          ) : activeSelectedPair?.formation && chartRoute?.kind !== 'early' ? (
+            <FormationDetailsModal
+              pageMode
+              coin={activeSelectedPair.coin}
+              formation={activeSelectedPair.formation}
+              onFormationChange={(nextFormation) => {
+                setSelectedArchivedItem(null);
+                setSelectedPair(previous => {
+                  if (!previous) return previous;
+                  const rawCoin = coins.find(row => row.symbol === previous.coin.symbol
+                    && row.exchange === previous.coin.exchange
+                    && row.marketType === previous.coin.marketType
+                    && row.timeframe === previous.coin.timeframe);
+                  const rawFormation = rawCoin?.formations.find(row => row.id === nextFormation.id);
+                  return { coin: rawCoin ?? previous.coin, formation: rawFormation ?? nextFormation };
+                });
+              }}
+              archivedItem={selectedArchivedItem}
+              allCoins={coins}
+              watchlist={watchlist}
+              onToggleWatchlist={handleToggleWatchlist}
+              onClose={closeChartPage}
+              onSendMetaScalp={handleSendToMetaScalp}
+              metaScalpBinding={metaScalpSettings.binding}
+              onOpenTelegramModal={handleOpenTelegramAlerts}
+              onOpenAuth={() => setIsAuthModalOpen(true)}
+              onAlertToast={handleAlertToast}
+            />
+          ) : selectedPair ? (
+            <>
+              {chartRouteError && (
+                <p role="status" className="mx-auto max-w-5xl border-b border-amber-800/30 bg-slate-900 px-4 py-2 text-xs text-amber-200">
+                  {chartRouteError}
+                </p>
+              )}
+              <FullscreenChartModal
+                pageMode isOpen
+                coin={selectedPair.coin}
+                formation={null}
+                currentTimeframe={chartRoute?.timeframe || selectedPair.coin.timeframe || preferences.defaultTimeframe}
+                livePrice={selectedPair.coin.currentPrice}
+                allCoins={coins}
+                watchlist={watchlist}
+                onToggleWatchlist={handleToggleWatchlist}
+                onClose={closeChartPage}
+                onSendMetaScalp={handleSendToMetaScalp}
+                metaScalpBinding={metaScalpSettings.binding}
+                onOpenTelegramModal={handleOpenTelegramAlerts}
+              />
+            </>
+          ) : (
+            <section className="flex min-h-[55vh] flex-col items-center justify-center gap-3 text-center">
+              <p className="text-sm text-slate-400">{chartRouteError || 'Підготовка графіка…'}</p>
+              <button type="button" onClick={closeChartPage} className="rounded-lg border border-slate-700 px-4 py-2 text-slate-300">Назад</button>
+            </section>
+          )
+        ) : activePage === 'terminal' ? (
           <TerminalPage
             key={user?.uid || 'guest'}
             coins={coins}
@@ -1555,80 +1652,10 @@ export default function App() {
         )}
       </main>
 
-      <SiteFooter />
+      {!chartPageActive && <SiteFooter />}
 
-      {/* Early W/M scenarios open the fullscreen HookChart directly. */}
-      {selectedEarly && activeEarlyCandidate && (
-        <FullscreenChartModal
-          key={[user?.uid ?? 'guest', selectedEarly.coin.exchange, selectedEarly.coin.marketType, selectedEarly.coin.symbol, selectedEarly.coin.timeframe, selectedEarly.candidate.id].join(':')}
-          isOpen
-          coin={selectedEarly.coin}
-          formation={null}
-          earlyCandidate={activeEarlyCandidate}
-          earlyTouchRule={activeEarlyCandidate.tpSlBuilder?.touches.verified
-            ? getTpSlRule(constructorSettings, selectedEarly.coin.symbol, activeEarlyCandidate.patternKey)
-            : undefined}
-          customMarkers={earlyFormationChartMarkers(activeEarlyCandidate)}
-          currentTimeframe={selectedEarly.coin.timeframe}
-          livePrice={selectedEarly.coin.currentPrice}
-          allCoins={coins}
-          watchlist={watchlist}
-          onToggleWatchlist={handleToggleWatchlist}
-          onOpenTelegramModal={handleOpenTelegramAlerts}
-          onSendMetaScalp={handleSendToMetaScalp}
-          metaScalpBinding={metaScalpSettings.binding}
-          onClose={() => setSelectedEarly(null)}
-        />
-      )}
-      {/* Detailed chart: extended formation analysis when available, full chart otherwise */}
-      {activeSelectedPair?.formation ? (
-        <FormationDetailsModal
-          coin={activeSelectedPair.coin}
-          formation={activeSelectedPair.formation}
-          onFormationChange={(nextFormation) => {
-            setSelectedArchivedItem(null);
-            setSelectedPair((previous) => {
-              if (!previous) return previous;
-              const rawCoin = coins.find(row =>
-                row.symbol === previous.coin.symbol && row.exchange === previous.coin.exchange
-                && row.marketType === previous.coin.marketType && row.timeframe === previous.coin.timeframe);
-              const raw = rawCoin?.formations.find(row => row.id === nextFormation.id);
-              return { coin: rawCoin ?? previous.coin, formation: raw ?? nextFormation };
-            });
-          }}
-          archivedItem={selectedArchivedItem}
-          allCoins={coins}
-          watchlist={watchlist}
-          onToggleWatchlist={handleToggleWatchlist}
-          onClose={() => {
-            setSelectedPair(null);
-            setSelectedArchivedItem(null);
-          }}
-          onSendMetaScalp={handleSendToMetaScalp}
-          metaScalpBinding={metaScalpSettings.binding}
-          onOpenTelegramModal={handleOpenTelegramAlerts}
-          onOpenAuth={() => setIsAuthModalOpen(true)}
-          onAlertToast={handleAlertToast}
-        />
-      ) : selectedPair ? (
-        <FullscreenChartModal
-          isOpen={true}
-          coin={selectedPair.coin}
-          formation={null}
-          currentTimeframe={selectedPair.coin.timeframe || preferences.defaultTimeframe}
-          livePrice={selectedPair.coin.currentPrice}
-          allCoins={coins}
-          watchlist={watchlist}
-          onToggleWatchlist={handleToggleWatchlist}
-          onClose={() => {
-            setSelectedPair(null);
-            setSelectedArchivedItem(null);
-          }}
-          onSendMetaScalp={handleSendToMetaScalp}
-          metaScalpBinding={metaScalpSettings.binding}
-          onOpenTelegramModal={handleOpenTelegramAlerts}
-        />
-      ) : null}
+      {/* Coin, archived and early charts now render inside the main route
+          above. Nothing is mounted over a background Screener anymore. */}
 
       {/* Formations Archive Modal */}
       <ArchiveModal
