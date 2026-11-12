@@ -14,6 +14,7 @@ import {
   DollarSign,
   Clock,
   RefreshCw,
+  ChevronUp,
   Gauge,
   Sliders,
   Radio,
@@ -37,6 +38,8 @@ interface SmartAnalysisBlockProps {
   timeframe?: Timeframe;
   /** Canonical detected-formation setup and its Telegram actions from detail view. */
   tradeSetup?: React.ReactNode;
+  /** Close the panel without changing the analysis refresh behavior. */
+  onCollapse?: () => void;
 }
 
 export const SmartAnalysisBlock: React.FC<SmartAnalysisBlockProps> = ({
@@ -45,6 +48,7 @@ export const SmartAnalysisBlock: React.FC<SmartAnalysisBlockProps> = ({
   klines,
   timeframe,
   tradeSetup,
+  onCollapse,
 }) => {
   const [data, setData] = useState<SmartAnalysisData | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
@@ -94,11 +98,25 @@ export const SmartAnalysisBlock: React.FC<SmartAnalysisBlockProps> = ({
     return () => analysisAbortRef.current?.abort();
   }, [coin.symbol, coin.exchange, coin.marketType, coin.timeframe, timeframe]);
 
+  const collapseControl = onCollapse ? (
+    <button
+      type="button"
+      onClick={onCollapse}
+      aria-expanded={true}
+      aria-label="Згорнути Розумний аналіз AI + Quant"
+      title="Згорнути Розумний аналіз"
+      className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-indigo-500/40 bg-slate-900 text-slate-300 transition-colors hover:text-indigo-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-400"
+    >
+      <ChevronUp className="h-4 w-4" />
+    </button>
+  ) : null;
+
   if (loading && !data) {
     return (
       <>
       {tradeSetup}
       <div className="p-6 rounded-2xl bg-gradient-to-b from-slate-900 to-slate-950 border border-indigo-900/40 text-center space-y-3 animate-pulse">
+        {onCollapse && <div className="mb-1 flex justify-end">{collapseControl}</div>}
         <div className="flex items-center justify-center gap-2 text-indigo-400">
           <Sparkles className="w-5 h-5 animate-spin" />
           <span className="text-sm font-bold uppercase tracking-wider">Генерація Розумного Аналізу...</span>
@@ -115,18 +133,21 @@ export const SmartAnalysisBlock: React.FC<SmartAnalysisBlockProps> = ({
     return (
       <>
       {tradeSetup}
-      <div className="p-4 rounded-xl bg-rose-950/20 border border-rose-800/40 flex items-center justify-between text-xs text-rose-300">
+      <div className="p-4 rounded-xl bg-rose-950/20 border border-rose-800/40 flex flex-wrap items-center justify-between gap-3 text-xs text-rose-300">
         <div className="flex items-center gap-2">
           <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
           <span>{error}</span>
         </div>
-        <button
-          onClick={fetchAnalysis}
-          className="px-2.5 py-1 rounded bg-rose-900/40 hover:bg-rose-900/60 text-white font-medium flex items-center gap-1 cursor-pointer"
-        >
-          <RefreshCw className="w-3 h-3" />
-          Спробувати знову
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={fetchAnalysis}
+            className="px-2.5 py-1 rounded bg-rose-900/40 hover:bg-rose-900/60 text-white font-medium flex items-center gap-1 cursor-pointer"
+          >
+            <RefreshCw className="w-3 h-3" />
+            Спробувати знову
+          </button>
+          {collapseControl}
+        </div>
       </div>
       </>
     );
@@ -147,37 +168,35 @@ export const SmartAnalysisBlock: React.FC<SmartAnalysisBlockProps> = ({
 
   return (
     <div className="p-4 sm:p-6 rounded-2xl bg-gradient-to-b from-slate-900 via-slate-900/90 to-slate-950 border border-indigo-500/30 shadow-xl shadow-indigo-950/20 space-y-5">
-      {/* Header Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-800">
-        <div className="flex items-center gap-2.5">
-          <div className="w-8 h-8 rounded-xl bg-indigo-500/20 border border-indigo-500/40 flex items-center justify-center text-indigo-400">
-            <Zap className="w-4 h-4 fill-current" />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <h4 className="text-sm sm:text-base font-bold text-white uppercase tracking-wider">
-                РОЗУМНИЙ АНАЛІЗ
-              </h4>
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-500/20 border border-indigo-500/40 text-indigo-300 font-mono">
-                AI + Quant
-              </span>
-            </div>
-            <p className="text-[11px] text-slate-400">
-              Повний аудит: BTC контекст, стакан ордерів, зона POC, деривативи, ризик маніпуляцій та рекомендації
-            </p>
-          </div>
+      {/* Header controls have their own grid column: no absolute overlay over the title on mobile. */}
+      <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-x-2.5 gap-y-1 pb-3 border-b border-slate-800">
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-indigo-500/40 bg-indigo-500/20 text-indigo-400">
+          <Zap className="h-4 w-4 fill-current" />
         </div>
-
-        <div className="flex items-center gap-2 pr-10">
+        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+          <h4 className="min-w-0 text-[13px] sm:text-base font-bold text-white uppercase tracking-wider">
+            РОЗУМНИЙ АНАЛІЗ
+          </h4>
+          <span className="shrink-0 px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-500/20 border border-indigo-500/40 text-indigo-300 font-mono">
+            AI + Quant
+          </span>
+        </div>
+        <div className="flex shrink-0 items-center gap-1.5">
           <button
+            type="button"
             onClick={fetchAnalysis}
             disabled={loading}
-            className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 transition-colors cursor-pointer"
+            aria-label="Оновити розрахунок"
             title="Оновити розрахунок"
+            className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
           </button>
+          {collapseControl}
         </div>
+        <p className="col-span-3 min-w-0 text-[11px] leading-relaxed text-slate-400 sm:col-start-2 sm:col-span-1">
+          Повний аудит: BTC контекст, стакан ордерів, зона POC, деривативи, ризик маніпуляцій та рекомендації
+        </p>
       </div>
 
       {/* Hero Score & Executive Summary Card */}

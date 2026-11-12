@@ -1505,16 +1505,18 @@ export const FormationDetailsModal: React.FC<FormationDetailsModalProps> = ({
               no Telegram alert or trading setting is changed. */}
           <div className="relative w-full min-w-0">
             {smartAnalysisCollapsed ? (
-              <div className="flex w-full min-w-0 items-center gap-2 rounded-xl border border-indigo-500/30 bg-slate-950/90 p-3 sm:p-4">
+              <div className="grid w-full min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 rounded-xl border border-indigo-500/30 bg-slate-950/90 p-3 sm:p-4">
                 <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-indigo-500/40 bg-indigo-500/20 text-indigo-400">
                   <Zap className="h-4 w-4 fill-current" />
                 </span>
-                <h4 className="min-w-0 text-xs font-bold uppercase tracking-wide text-white sm:text-sm">
-                  РОЗУМНИЙ АНАЛІЗ
-                </h4>
-                <span className="shrink-0 rounded-full border border-indigo-500/40 bg-indigo-500/20 px-2 py-0.5 font-mono text-[10px] font-bold text-indigo-300">
-                  AI + Quant
-                </span>
+                <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                  <h4 className="min-w-0 text-xs font-bold uppercase tracking-wide text-white sm:text-sm">
+                    РОЗУМНИЙ АНАЛІЗ
+                  </h4>
+                  <span className="shrink-0 rounded-full border border-indigo-500/40 bg-indigo-500/20 px-2 py-0.5 font-mono text-[10px] font-bold text-indigo-300">
+                    AI + Quant
+                  </span>
+                </div>
                 <button
                   type="button"
                   onClick={toggleSmartAnalysis}
@@ -1528,17 +1530,7 @@ export const FormationDetailsModal: React.FC<FormationDetailsModalProps> = ({
               </div>
             ) : (
               <>
-                <SmartAnalysisBlock coin={coin} formation={formation} klines={klines} timeframe={timeframe} tradeSetup={tradeSetupPanel} />
-                <button
-                  type="button"
-                  onClick={toggleSmartAnalysis}
-                  aria-expanded={true}
-                  aria-label="Згорнути Розумний аналіз AI + Quant"
-                  title="Згорнути Розумний аналіз"
-                  className="absolute right-4 top-4 z-10 inline-flex h-8 w-8 items-center justify-center rounded-lg border border-indigo-500/40 bg-slate-900 text-slate-300 transition-colors hover:text-indigo-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-400 sm:right-6 sm:top-6"
-                >
-                  <ChevronUp className="h-4 w-4" />
-                </button>
+                <SmartAnalysisBlock coin={coin} formation={formation} klines={klines} timeframe={timeframe} tradeSetup={tradeSetupPanel} onCollapse={toggleSmartAnalysis} />
               </>
             )}
             {smartAnalysisSaveError && (
