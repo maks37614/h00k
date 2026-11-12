@@ -443,7 +443,13 @@ const HookChartCanvas = forwardRef<HookChartHandle, HookChartCanvasProps>(functi
       ? terminalToolbarVisibility.drawingToolsOpen
       : settings.drawingToolbarOpen === true
   );
-  const rightPaddingBars = activeVisualProfile ? 0 : terminalMode ? 8 : settings.rightPaddingEnabled === false ? 0 : (settings.rightPadding ?? 10);
+  // The Terminal's global candle auto-scale follows the latest bar. Keep the
+  // per-device visual profile's right-side gap instead of resetting it to zero.
+  // Other chart pages and manually scaled Terminal charts remain unchanged.
+  const rightPaddingBars = terminalMode && terminalAutoScale
+    ? (activeVisualProfile?.rightGapBars ?? 8)
+    : activeVisualProfile ? 0 : terminalMode ? 8
+      : settings.rightPaddingEnabled === false ? 0 : (settings.rightPadding ?? 10);
   const channel = useMemo(() => (replay ? replayOverlays.includes('channel') : settings.autoChannel)
     ? buildStructuralChannel(analysisSeries, candles.at(-1)?.c) : null,
     [analysisSeries, candles, settings.autoChannel, replay, replayOverlays]);
