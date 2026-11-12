@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import React from 'react';
+import { readFileSync } from 'node:fs';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { HookChartTimeframePicker, timeframeMenuPosition } from '../src/components/hookchart/HookChartTimeframePicker';
 
@@ -70,4 +71,16 @@ test('popover supports narrow visual viewports and near-right-edge timeframes', 
     assert.ok(menu.top >= viewport.top + 8);
     assert.ok(menu.top + menu.maxHeight <= viewport.top + viewport.height - 8);
   }
+});
+
+test('HookChart connects the second timeframe icon to actual tools expansion', () => {
+  const canvas = readFileSync(new URL('../src/components/hookchart/HookChartCanvas.tsx', import.meta.url), 'utf8');
+  const styles = readFileSync(new URL('../src/components/hookchart/integration.css', import.meta.url), 'utf8');
+  const defaults = readFileSync(new URL('../src/components/hookchart/OriginalHookChartSettings.tsx', import.meta.url), 'utf8');
+  assert.match(canvas, /compactAvailable=\{topToolbarOpen && !integratedToolbar\}/);
+  assert.match(canvas, /className="topToolbarToggle"/);
+  assert.match(canvas, /aria-expanded=\{topToolbarOpen\}/);
+  assert.match(styles, /\[data-extra-tools-open="true"\] \.hookchart-timeframes-compact \{/);
+  assert.match(styles, /\.hookchart-toolbar > \.topToolbarToggle \{/);
+  assert.match(defaults, /showTopToolbarIcons: false,/);
 });
