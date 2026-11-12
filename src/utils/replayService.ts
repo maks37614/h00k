@@ -24,6 +24,14 @@ export function timeframeToMs(tf: Timeframe): number {
   }
 }
 
+/** Replay shortcut: calendar date at local midnight for all device time zones. */
+export function getReplayPresetDate(daysAgo: number, now = new Date()): Date {
+  const date = new Date(now);
+  date.setDate(date.getDate() - daysAgo);
+  date.setHours(0, 0, 0, 0);
+  return date;
+}
+
 /**
  * Fetch a rich historical window of candles centered around a target date
  */
@@ -49,7 +57,7 @@ export async function fetchHistoricalReplayCandles(
     if (res.ok) {
       const json = await res.json();
       if (json.success && Array.isArray(json.data) && json.data.length >= 10) {
-        return processCandlesForCutoff(json.data, targetTimestampMs);
+        return processCandlesForCutoff(json.data, targetTimestampMs, timeframe);
       }
     }
   } catch (err) {
@@ -60,7 +68,7 @@ export async function fetchHistoricalReplayCandles(
   try {
     const directData = await fetchDirectKlines(exchange, market, symbol, timeframe, totalLimit, startTime, endTime);
     if (directData && directData.length >= 10) {
-      return processCandlesForCutoff(directData, targetTimestampMs);
+      return processCandlesForCutoff(directData, targetTimestampMs, timeframe);
     }
   } catch (err) {
     console.warn('Direct klines fetch error:', err);
@@ -84,7 +92,12 @@ export async function fetchHistoricalReplayCandles(
   return { allCandles: [], cutoffIndex: 0 };
 }
 
-function processCandlesForCutoff(candles: Kline[], targetTimestampMs: number): { allCandles: Kline[]; cutoffIndex: number } {
+export function processCandlesForCutoff(
+  candles: Kline[],
+  targetTimestampMs: number,
+  timeframe: Timeframe,
+  now = Date.now()
+): { allCandles: Kline[]; cutoffIndex: number } {
   // Sort candles ascending by time
   const sorted = [...candles].sort((a, b) => a.time - b.time);
   
@@ -113,8 +126,11 @@ function processCandlesForCutoff(candles: Kline[], targetTimestampMs: number): {
   if (cutoffIdx < 10) {
     cutoffIdx = Math.min(20, Math.floor(uniqueCandles.length / 3));
   }
-  // If target timestamp is beyond last candle, leave room for replay
-  if (cutoffIdx >= uniqueCandles.length - 5) {
+  // Historic dates beyond the exchange's last candle leave a small replay
+  // buffer. For recent presets (today / 1 day / 5 days), do not silently
+  // rewind 30 bars: there may simply be no future candles yet.
+  const recentTarget = targetTimestampMs >= now - 7 * timeframeToMs(timeframe);
+  if (cutoffIdx >= uniqueCandles.length - 5 && !recentTarget) {
     cutoffIdx = Math.max(10, uniqueCandles.length - 30);
   }
 

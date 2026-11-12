@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { ExchangeId, MarketType, ScannedCoin } from '../../types';
 import { formatCryptoPrice, formatLargeNumber } from '../../utils/formatters';
+import { getReplayPresetDate } from '../../utils/replayService';
 
 interface ReplayToolbarProps {
   // Coin & Market
@@ -156,8 +157,9 @@ export const ReplayToolbar: React.FC<ReplayToolbarProps> = ({
   };
 
   const handleApplyPresetDaysAgo = (days: number) => {
-    const d = new Date(Date.now() - days * 24 * 3600 * 1000);
-    onSelectHistoricalDate(d);
+    // Calendar-day presets begin at local midnight (not N*24h before now).
+    // This also avoids shifting into the previous date around DST changes.
+    onSelectHistoricalDate(getReplayPresetDate(days));
     setIsDatePickerOpen(false);
   };
 
@@ -334,7 +336,7 @@ export const ReplayToolbar: React.FC<ReplayToolbarProps> = ({
             role="dialog"
             aria-modal="true"
             aria-labelledby="replay-date-picker-title"
-            className="flex w-full max-w-md max-h-[calc(100dvh-16px)] min-h-0 flex-col overflow-hidden rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl sm:max-h-[calc(100dvh-32px)]"
+            className="flex w-full min-w-0 max-w-md max-h-[calc(100dvh-16px)] min-h-0 flex-col overflow-hidden rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl sm:max-h-[calc(100dvh-32px)]"
           >
             {/* The title and close button stay visible even on short iPhone screens. */}
             <div className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-800 px-4 py-3 sm:px-5 sm:py-4">
@@ -355,7 +357,7 @@ export const ReplayToolbar: React.FC<ReplayToolbarProps> = ({
             </div>
 
             {/* Only this area scrolls; the chart stays behind the overlay. */}
-            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-4 py-4 sm:px-5">
+            <div className="min-h-0 min-w-0 flex-1 space-y-4 overflow-x-hidden overflow-y-auto overscroll-contain px-4 py-4 sm:px-5">
               <p className="text-xs leading-relaxed text-slate-400">
                 Виберіть момент у минулому. Графік миттєво переміститься туди, автоматично сфокусується на свічках, а всі наступні свічки будуть приховані для реалістичної торгівлі!
               </p>
@@ -380,8 +382,11 @@ export const ReplayToolbar: React.FC<ReplayToolbarProps> = ({
                 <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
                   Швидкі переходи:
                 </span>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-2 gap-2 min-[380px]:grid-cols-3">
                   {[
+                    { label: 'Сьогодні', days: 0 },
+                    { label: '1 день тому', days: 1 },
+                    { label: '5 днів тому', days: 5 },
                     { label: '14 днів тому', days: 14 },
                     { label: '30 днів тому', days: 30 },
                     { label: '60 днів тому', days: 60 },
@@ -393,7 +398,7 @@ export const ReplayToolbar: React.FC<ReplayToolbarProps> = ({
                       key={item.days}
                       type="button"
                       onClick={() => handleApplyPresetDaysAgo(item.days)}
-                      className="rounded-lg border border-slate-700/60 bg-slate-800/80 px-2 py-1.5 font-mono text-xs font-semibold text-slate-200 transition-colors hover:bg-slate-700"
+                      className="min-w-0 rounded-lg border border-slate-700/60 bg-slate-800/80 px-2 py-1.5 text-center font-mono text-xs font-semibold leading-snug text-slate-200 transition-colors hover:bg-slate-700"
                     >
                       {item.label}
                     </button>
@@ -410,7 +415,7 @@ export const ReplayToolbar: React.FC<ReplayToolbarProps> = ({
                   type="datetime-local"
                   value={customDateTime}
                   onChange={(event) => setCustomDateTime(event.target.value)}
-                  className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 font-mono text-xs text-white focus:border-cyan-500 focus:outline-none"
+                  className="block w-full min-w-0 max-w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 font-mono text-base text-white focus:border-cyan-500 focus:outline-none sm:text-xs"
                 />
               </div>
             </div>
