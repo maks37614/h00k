@@ -190,3 +190,63 @@ export function resolveWatchlistEntries(
   }
   return [...resolved.values()];
 }
+
+
+/** Minimal quote data delivered by the shared-market favorite-quotes endpoint.
+ * It is not a formation scan: synthetic technical indicators are never added.
+ */
+export interface WatchlistMarketQuote {
+  exchange: ExchangeId;
+  marketType: MarketType;
+  symbol: string;
+  baseAsset: string;
+  quoteAsset: string;
+  price: number;
+  change24h: number;
+  high24h: number;
+  low24h: number;
+  volumeUsd: number;
+}
+
+export function isWatchlistMarketQuote(value: unknown): value is WatchlistMarketQuote {
+  if (!value || typeof value !== 'object') return false;
+  const item = value as Partial<WatchlistMarketQuote>;
+  return (item.exchange === 'binance' || item.exchange === 'bybit')
+    && (item.marketType === 'futures' || item.marketType === 'spot')
+    && typeof item.symbol === 'string' && /^[A-Z0-9]{2,40}$/.test(item.symbol)
+    && typeof item.baseAsset === 'string' && typeof item.quoteAsset === 'string'
+    && typeof item.price === 'number' && Number.isFinite(item.price) && item.price > 0
+    && typeof item.change24h === 'number' && Number.isFinite(item.change24h)
+    && typeof item.volumeUsd === 'number' && Number.isFinite(item.volumeUsd)
+    && typeof item.high24h === 'number' && Number.isFinite(item.high24h)
+    && typeof item.low24h === 'number' && Number.isFinite(item.low24h);
+}
+
+/** Reuse the existing Watchlist UI and MetaScalp identity without triggering a
+ * heavy formation scan. This quote has no detected formation by design.
+ */
+export function watchlistQuoteToScannedCoin(quote: WatchlistMarketQuote, updatedAt: number): ScannedCoin {
+  const { exchange, marketType, symbol } = quote;
+  const exchangeUrl = exchange === 'binance'
+    ? marketType === 'futures'
+      ? 'https://www.binance.com/en/futures/' + symbol
+      : 'https://www.binance.com/en/trade/' + symbol
+    : marketType === 'futures'
+      ? 'https://www.bybit.com/trade/usdt/' + symbol
+      : 'https://www.bybit.com/en/trade/spot/' + symbol.replace(/USDT$/, '') + '/USDT';
+  return {
+    exchange, marketType, symbol,
+    baseAsset: quote.baseAsset,
+    quoteAsset: quote.quoteAsset,
+    currentPrice: quote.price,
+    priceChange24h: quote.change24h,
+    highPrice24h: quote.high24h,
+    lowPrice24h: quote.low24h,
+    volume24hUsd: quote.volumeUsd,
+    volumeUsd: quote.volumeUsd,
+    formations: [],
+    timeframe: '1h',
+    lastUpdated: updatedAt,
+    exchangeUrl,
+  };
+}

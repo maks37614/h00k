@@ -1,7 +1,10 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { X, Trash2, Star, Zap, FolderPlus, ArrowUpDown, ChevronDown, ChevronUp } from 'lucide-react';
-import type { ScannedCoin } from '../types';
-import { resolveWatchlistEntries } from '../utils/watchlistUtils';
+import type { ExchangeId, MarketType, ScannedCoin } from '../types';
+import {
+  getCoinWatchlistKey, resolveWatchlistEntries, isWatchlistMarketQuote,
+  watchlistQuoteToScannedCoin,
+} from '../utils/watchlistUtils';
 import type { ResolvedWatchlistEntry } from '../utils/watchlistUtils';
 import { formatCryptoPrice } from '../utils/formatters';
 
@@ -32,10 +35,98 @@ export const WatchlistDrawer: React.FC<WatchlistDrawerProps> = ({
   const [sortBy, setSortBy] = useState<'name' | 'price' | 'change' | 'volume'>('name');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [collapsedFolders, setCollapsedFolders] = useState<Record<string, boolean>>({});
+  const [marketQuotes, setMarketQuotes] = useState<ScannedCoin[]>([]);
+  const [quoteSources, setQuoteSources] = useState<Array<{
+    exchange: ExchangeId; marketType: MarketType;
+    status: 'live' | 'stale' | 'unavailable'; updatedAt: number | null;
+  }>>([]);
+  const [quotesLoading, setQuotesLoading] = useState(false);
+  const [quotesFailed, setQuotesFailed] = useState(false);
+
+  // Screener formation scans only include a subset of instruments. Fetch
+  // public tickers for saved pairs absent from that subset, regardless of the
+  // current Screener exchange, volume filter or timeframe.
+  const missingQuoteKeys = useMemo(() => {
+    const scanned = new Set(allCoins.map(getCoinWatchlistKey));
+    return [...new Set(watchlistSymbols.map(getCoinWatchlistKey))]
+      .filter((key) => !scanned.has(key));
+  }, [allCoins, watchlistSymbols]);
+  const missingKeySignature = missingQuoteKeys.join('|');
+
+  useEffect(() => {
+    if (!isOpen || !missingKeySignature) return;
+    const keys = missingKeySignature.split('|');
+    const controller = new AbortController();
+    let disposed = false;
+    let inFlight = false;
+
+    const refresh = async () => {
+      if (inFlight) return;
+      inFlight = true;
+      setQuotesLoading(true);
+      setQuotesFailed(false);
+      try {
+        // Bounded batch sizes: no giant responses or query strings when an
+        // account has hundreds of favorites. Feed refresh is shared by VPS.
+        const batches: string[][] = [];
+        for (let i = 0; i < keys.length; i += 100) batches.push(keys.slice(i, i + 100));
+        const responses = await Promise.all(batches.map(async (batch) => {
+          const response = await fetch('/api/market/favorite-quotes', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ keys: batch }),
+            cache: 'no-store',
+            signal: AbortSignal.any([controller.signal, AbortSignal.timeout(15_000)]),
+          });
+          if (!response.ok) throw new Error('Failed to load favorite quotes');
+          const json = await response.json();
+          if (!json.success || !Array.isArray(json.data)) throw new Error('Invalid favorite quotes');
+          return json;
+        }));
+        if (disposed) return;
+        const sources = responses.flatMap((response) => Array.isArray(response.sources) ? response.sources : [])
+          .filter((source) => source && (source.exchange === 'binance' || source.exchange === 'bybit')
+            && (source.marketType === 'futures' || source.marketType === 'spot')
+            && ['live', 'stale', 'unavailable'].includes(source.status));
+        const updatedAt = Date.now();
+        const quotes = responses.flatMap((response) => response.data)
+          .filter(isWatchlistMarketQuote)
+          .map((quote) => watchlistQuoteToScannedCoin(quote, updatedAt));
+        setMarketQuotes(quotes);
+        setQuoteSources(sources);
+      } catch {
+        if (!disposed && !controller.signal.aborted) setQuotesFailed(true);
+      } finally {
+        inFlight = false;
+        if (!disposed) setQuotesLoading(false);
+      }
+    };
+
+    void refresh();
+    const interval = window.setInterval(() => { void refresh(); }, 60_000);
+    return () => {
+      disposed = true;
+      window.clearInterval(interval);
+      controller.abort();
+    };
+  }, [isOpen, missingKeySignature]);
 
   if (!isOpen) return null;
 
-  const entries = resolveWatchlistEntries(watchlistSymbols, allCoins);
+  // Prefer a full scanned coin when available, then the lightweight exact
+  // exchange quote. Neither price nor MetaScalp needs a formation scan.
+  const entries = resolveWatchlistEntries(watchlistSymbols, [...allCoins, ...marketQuotes]);
+  const unavailableText = (entry: ResolvedWatchlistEntry): string => {
+    if (quotesLoading) return 'Завантажуємо котирування з біржі…';
+    if (quotesFailed) return 'Не вдалося оновити котирування. Повторимо запит автоматично.';
+    const source = quoteSources.find((item) =>
+      item.exchange === entry.exchange && item.marketType === entry.marketType);
+    if (source?.status === 'unavailable')
+      return 'Котирування біржі тимчасово недоступні. Монета залишається в обраному.';
+    if (source?.status === 'live' || source?.status === 'stale')
+      return 'Для цієї пари біржа зараз не повернула котирування.';
+    return 'Очікуємо котирування біржі. Монета залишається в обраному.';
+  };
   const folderNames = Object.keys(folders);
   const getFolderForEntry = (entry: ResolvedWatchlistEntry) =>
     folderNames.find((folder) => {
@@ -193,7 +284,7 @@ export const WatchlistDrawer: React.FC<WatchlistDrawerProps> = ({
                     {entry.coin ? (
                       <span className="font-mono font-bold text-xs text-white">${formatPrice(entry.coin.currentPrice)}</span>
                     ) : (
-                      <span className="text-[10px] font-medium text-amber-300" title="Ця монета збережена, але відсутня в поточному скануванні">Немає даних</span>
+                      <span className="text-[10px] font-medium text-amber-300" title={unavailableText(entry)}>{quotesLoading ? 'Завантаження…' : 'Немає котирувань'}</span>
                     )}
                     {onSendMetaScalp && entry.coin && (
                       <button
@@ -224,10 +315,8 @@ export const WatchlistDrawer: React.FC<WatchlistDrawerProps> = ({
                 </div>
                 {!entry.coin && (
                   <div className="flex flex-wrap items-center gap-1 text-[10px] text-amber-300/80">
-                    <span>Недоступна у поточному скануванні:</span>
-                    <span className="font-mono">{entry.symbol}</span>
-                    <span className="font-mono text-slate-500">· {entry.marketType}</span>
-                    <span className="text-slate-500">— можна видалити кнопкою кошика</span>
+                    <span>{unavailableText(entry)}</span>
+                    <span className="font-mono text-slate-500">{entry.symbol} · {entry.exchange} {entry.marketType}</span>
                   </div>
                 )}
               </div>

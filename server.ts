@@ -4,6 +4,7 @@ import { installProductionAssets } from './server/productionAssets';
 import { createServer as createViteServer } from 'vite';
 import { runScreenerScan, fetchKlines, fetchDualExchangeOI } from './server/marketService';
 import { installMarketQuoteRoutes, publicQuoteResponseCache } from './server/marketQuoteResponse';
+import { installFavoriteQuoteRoutes } from './server/favoriteQuotes';
 import { installFullEarlyScanRoutes } from './server/earlyScanRoutes';
 import { fetch24hTradeCount } from './server/chartMarketStats';
 import { analyzeFormationWithAI } from './server/geminiService';
@@ -202,6 +203,8 @@ async function startServer() {
   // Reuse identical public snapshots across many browser requests.
   // The endpoint schema and query validation remain unchanged.
   installMarketQuoteRoutes(app, publicQuoteResponseCache);
+  // Small on-demand quotes for saved favorites, independent of formation scans.
+  installFavoriteQuoteRoutes(app);
 
   // Market Sentiment endpoint ("Настрій Ринку")
   app.get('/api/market/sentiment', async (req, res) => {
