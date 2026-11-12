@@ -48,7 +48,7 @@ const coin = (): ScannedCoin => ({
 const standard: ScreenerFilterState = {
   exchange: 'binance', marketType: 'futures', timeframe: '15m',
   category: 'all', bias: 'all', status: 'all', minVolumeUsd: 0,
-  densityConfirmedOnly: false, searchQuery: '', sortBy: 'confidence', sortOrder: 'desc',
+  densityConfirmedOnly: false, roundNumberOnly: false, searchQuery: '', sortBy: 'confidence', sortOrder: 'desc',
 };
 
 test('Wilder RSI14 handles flat, rising and falling prices without NaN', () => {
