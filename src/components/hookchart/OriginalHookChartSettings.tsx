@@ -620,7 +620,7 @@ export function OriginalHookChartSettings({
             Усі налаштування зберігаються автоматично.
           </span>}
         </span>}
-        {!embedded && <button type="button" onClick={onClose} aria-label="Закрити">×</button>
+        {!embedded && <button type="button" onClick={onClose} aria-label="Закрити">×</button>}
       </div>
       <div className="settingsTabs">
         <button type="button" className={tab === 'main' ? 'active' : ''} onClick={() => setTab('main')}>Основні</button>
