@@ -95,7 +95,8 @@ test('Screener, Formations, Terminal carry visual contexts, Replay passes none',
   const early = src('../src/components/EarlyFormationCard.tsx');
   const terminal = src('../src/components/terminal/TerminalChartWidget.tsx');
   const replay = src('../src/components/replay/ReplayChart.tsx');
-  assert.match(canvas,/const activeVisualProfile = replay \? undefined : getVisualProfile/);
+  assert.match(canvas,/const activeVisualProfile = replay \|\| !settings\.visualProfiles\?\.\[activeVisualKey\]/);
+  assert.match(canvas,/onResetVisual=\{key =>/);
   assert.match(canvas,/visualProfileKey=\{replay \? undefined : activeVisualKey\}/);
   assert.match(canvas,/visualContextForTerminalWidth/);
   assert.match(engine,/if\(!visualProfile\|\|!visualProfileKey\|\|initialLogicalRange\|\|!candles\.length\)return/);
