@@ -103,3 +103,33 @@ test('saved visual profiles reinitialize on coin and timeframe changes but not o
   assert.match(horizontal, /Math\.max\(\.12, viewport\.barWidth\)/);
   assert.match(engine, /const denseBars=g\.step\*scaleX<1\.15/);
 });
+
+
+test('saving a manually zoomed preview preserves the viewport rather than reapplying defaults', () => {
+  const preview = source('../src/components/hookchart/HookChartVisualPreview.tsx');
+  const engine = source('../src/components/hookchart/engine.tsx');
+  assert.match(preview, /visualProfileCaptureVersion, setVisualProfileCaptureVersion/);
+  assert.match(preview, /onChange\(captured\);\s*setVisualProfileCaptureVersion\(version => version \+ 1\)/);
+  assert.match(preview, /visualProfileCaptureVersion=\{visualProfileCaptureVersion\}/);
+  assert.match(engine, /lastVisualCaptureRef=useRef\(visualProfileCaptureVersion\)/);
+  assert.match(engine, /if\(lastVisualCaptureRef\.current!==visualProfileCaptureVersion\)/);
+  assert.match(engine, /visualAppliedRef\.current=signature;\s*return;/);
+  assert.match(engine, /\[symbol,tf,visualProfileKey,visualProfileCaptureVersion,/);
+});
+
+test('saved chart visual profile overrides stale per-coin logical ranges', () => {
+  const engine = source('../src/components/hookchart/engine.tsx');
+  const canvas = source('../src/components/hookchart/HookChartCanvas.tsx');
+  assert.match(engine, /if\(!visualProfile\|\|!visualProfileKey\|\|!candles\.length\)return/);
+  assert.doesNotMatch(engine, /if\(!visualProfile\|\|!visualProfileKey\|\|initialLogicalRange\|\|/);
+  assert.match(engine, /if\(visualProfile\|\|rangeRestored\.current\|\|!candles\.length\|\|!initialLogicalRange\)return/);
+  assert.match(canvas, /initialLogicalRange=\{savedChartParams\?\.visibleRange\}/);
+  assert.match(canvas, /visualProfile=\{activeVisualProfile\}/);
+});
+
+test('wheel zoom is isolated between preview and its underlying live chart', () => {
+  const engine = source('../src/components/hookchart/engine.tsx');
+  assert.match(engine, /const ownPreview=box\.current\?\.closest\('\.hookchart-visual-preview'\)/);
+  assert.match(engine, /ownPreview \? !ownPreview\.contains\(surface\) : !!surface\.closest\('\.hookchart-visual-preview'\)/);
+  assert.match(engine, /if\(target\.closest\('\.originalSettingsBackdrop'\)&&!target\.closest\('\.hookchart-visual-preview'\)\)return/);
+});
