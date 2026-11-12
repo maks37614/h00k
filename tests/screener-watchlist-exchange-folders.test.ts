@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import type { ScannedCoin } from '../types';
+import type { ScannedCoin } from '../src/types';
 import {
   getCoinWatchlistKey,
   isCoinInWatchlist,
