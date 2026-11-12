@@ -908,6 +908,8 @@ export interface MarketSentimentData {
   priceTrendDynamics: {
     advancingCount: number;
     decliningCount: number;
+    /** Instruments with absolute 24h change <= 0.1%. */
+    unchangedCount?: number;
     advancingPct: number;
     trendBias: 'bullish' | 'bearish' | 'neutral';
     avgChange24h: number;
