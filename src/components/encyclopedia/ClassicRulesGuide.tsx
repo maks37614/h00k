@@ -128,12 +128,12 @@ function SectionBanner({ icon, title, subtitle }: {icon: React.ReactNode;title: 
 export function ClassicRulesGuide() {
   const [selected, setSelected] = useState<ClassicTopicId>('overview');
 
-  return <div className="space-y-4" aria-label="Правила — Класика">
+  return <div className="space-y-4" aria-label="Скальпінг — Правила">
     <header className="rounded-2xl border border-cyan-500/20 bg-gradient-to-r from-cyan-950/40 via-slate-900 to-slate-900 p-3 sm:p-4">
       <div className="flex gap-2 items-center text-cyan-300 text-[11px] font-bold uppercase tracking-wider">
-        <Layers className="w-3.5 h-3.5" /> Правила / Класика
+        <Layers className="w-3.5 h-3.5" /> Скальпінг / Правила
       </div>
-      <h3 className="text-lg sm:text-xl font-extrabold text-white mt-1">Класичні правила торгівлі</h3>
+      <h3 className="text-lg sm:text-xl font-extrabold text-white mt-1">Правила торгівлі</h3>
       <p className="text-xs sm:text-sm text-slate-300 leading-relaxed mt-1">
         Структурований навчальний регламент за 10-сторінковим документом «Свод правил»: відбір сетапів, рівні, проторговки, каскади, одиночний хай і похилі лінії.
       </p>
