@@ -142,8 +142,7 @@ test('drawTouchMagnifier zoom argument changes captured chart area without movin
   const buffer = {clearRect(){},drawImage(_chart: unknown,...args:number[]){calls.push(args);}};
   const chart={width:780,height:1400} as HTMLCanvasElement;
   const sample={width:0,height:0,getContext:()=>buffer} as unknown as HTMLCanvasElement;
-  const context={save(){},restore(){},setLineDash(){},beginPath(){},arc(){},fill(){},clip(){},stroke(){},drawImage(){}}
-    as unknown as CanvasRenderingContext2D;
+  const context={save(){},restore(){},setLineDash(){},beginPath(){},arc(){},fill(){},clip(){},stroke(){},drawImage(){}} as unknown as CanvasRenderingContext2D;
   drawTouchMagnifier(chart,context,sample,390,700,{x:180,y:420},'#131722',undefined,2);
   drawTouchMagnifier(chart,context,sample,390,700,{x:180,y:420},'#131722',undefined,4);
   assert.equal(calls.length,2);

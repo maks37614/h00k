@@ -87,3 +87,31 @@ test('Kotapych source notes are not rendered as footers on any setup or topic', 
   assert.equal(KOTAPYCH_SETUPS.length, 4);
   assert.equal(KOTAPYCH_TOPICS.length, 19);
 });
+
+test('new corrected Kotapych document is the archived source for all 79 note pages', () => {
+  const notes = KOTAPYCH_SOURCE_PAGES.filter(item => item.source === 'Копатыч.docx');
+  assert.equal(notes.length, 79);
+  assert.match(notes[7].text, /поглощение шортовой\s+активности/i);
+  assert.match(notes[21].text, /не делает перехая/i);
+  assert.match(notes[47].text, /1,5-2%/);
+  assert.match(notes[77].text, /25-30%/);
+  assert.ok(!notes.some(item => /погощение|адикчающие/i.test(item.text)), 'obsolete transcription typos must be replaced');
+});
+
+test('four corrected-source clarifications and the ambiguous 25-30% volume rule remain visible', () => {
+  const setup1 = KOTAPYCH_SETUPS.find(item => item.id === 'setup1');
+  const setup2 = KOTAPYCH_SETUPS.find(item => item.id === 'setup2');
+  assert.ok(setup1 && setup2);
+  assert.match(setup1.entry.join(' '), /Ранній варіант входу/);
+  assert.match(setup1.entry.join(' '), /Підтверджений варіант/);
+  assert.match(setup1.stop.join(' '), /1,5–2%/);
+  assert.match(setup1.context.join(' '), /глобальний шортовий сценарій/);
+  assert.match(setup2.summary, /без нового максимуму/);
+  assert.match(setup2.entry.join(' '), /прокол не є обов’язковою умовою/);
+  const byId = Object.fromEntries(KOTAPYCH_TOPICS.map(topic => [topic.id, topic]));
+  assert.match(byId['market-context'].points.join(' '), /входу в шорт/);
+  assert.match(byId['execution-sizing'].points.join(' '), /1,5–2%/);
+  assert.match(byId['base-secondary'].points.join(' '), /неоднозначні приклади/);
+  assert.match(byId['base-secondary'].points.join(' '), /не надійний числовий поріг/);
+  assert.equal(KOTAPYCH_TOPICS.length, 19);
+});
