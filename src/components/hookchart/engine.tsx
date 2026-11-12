@@ -337,7 +337,9 @@ export function Chart({candles,symbol,tf,tool,drawings,setDrawings,alerts,setAle
    if(!visualProfile||!visualProfileKey||initialLogicalRange||!candles.length)return;
    const width=ref.current?.getBoundingClientRect().width||0;
    if(width<=0)return;
-   const signature=[visualProfileKey,visualProfile.visibleBars,visualProfile.verticalZoom,visualProfile.autoPriceScale,visualProfile.rightGapBars].join(':');
+   // Include the coin and timeframe: switching markets must restore the
+   // selected profile even when its numeric settings have not changed.
+   const signature=[symbol,tf,visualProfileKey,visualProfile.visibleBars,visualProfile.verticalZoom,visualProfile.autoPriceScale,visualProfile.rightGapBars].join(':');
    if(visualAppliedRef.current===signature)return;
    visualAppliedRef.current=signature;
    terminalNavigation.current=true;
@@ -355,7 +357,7 @@ export function Chart({candles,symbol,tf,tool,drawings,setDrawings,alerts,setAle
      manualRange:visualProfile.autoPriceScale?null:spread*(terminalMode?1.32:1.16)/visualProfile.verticalZoom,
      yZoom:visualProfile.verticalZoom,fitAll:false,
    });
- },[visualProfileKey,visualProfile?.visibleBars,visualProfile?.verticalZoom,visualProfile?.autoPriceScale,visualProfile?.rightGapBars,!!candles.length,initialLogicalRange,terminalMode]);
+ },[symbol,tf,visualProfileKey,visualProfile?.visibleBars,visualProfile?.verticalZoom,visualProfile?.autoPriceScale,visualProfile?.rightGapBars,!!candles.length,initialLogicalRange,terminalMode]);
  useLayoutEffect(()=>{if(rangeRestored.current||!candles.length||!initialLogicalRange)return;const width=ref.current?.getBoundingClientRect().width||800,restored=restoredHookViewport(candles.length,hookChartPlotWidth(width),initialLogicalRange);if(restored){rangeRestored.current=true;setVp({...restored,rightOffset:restored.rightOffset+Math.max(0,rightPaddingBars)+Math.max(0,rightPadding)/Math.max(3,restored.barWidth)})}},[candles.length,initialLogicalRange,rightPaddingBars,rightPadding]);
  const [draft,setDraft]=useState<{t:number,p:number}|null>(null),[selectedDrawingId,setSelectedDrawingId]=useState<string|null>(null),[editingDrawingId,setEditingDrawingId]=useState<string|null>(null);
  const [zoomPanelOpen,setZoomPanelOpen]=useState<boolean>(()=>false),[clockNow,setClockNow]=useState(()=>Date.now()),[jumpOpen,setJumpOpen]=useState(false),[jumpMode,setJumpMode]=useState<'day'|'time'>('day'),[jumpDate,setJumpDate]=useState(()=>zoneDateKey(Date.now(),timezone)),[jumpTime,setJumpTime]=useState('12:00'),[jumpBusy,setJumpBusy]=useState(false),[jumpMessage,setJumpMessage]=useState(''),[pendingJump,setPendingJump]=useState<{t:number,fitDay:boolean}|null>(null),[liqHudOpen,setLiqHudOpen]=useState<boolean>(()=>true);
@@ -1076,7 +1078,10 @@ export function Chart({candles,symbol,tf,tool,drawings,setDrawings,alerts,setAle
      if(!target?.closest)return;
      const surface=target.closest('.chartStage,.chartWrap,.chartTimeAxis');
      if(!surface||!host.contains(surface))return;
-     if(target.closest('input,textarea,select,[contenteditable],.floatingDrawTools,.indicatorDrawer,.timeJumpPopover,.originalSettingsBackdrop,.densityQuickPopup'))return;
+     if(target.closest('input,textarea,select,[contenteditable],.floatingDrawTools,.indicatorDrawer,.timeJumpPopover,.densityQuickPopup'))return;
+     // The interactive HookChart *inside* settings must accept wheel zoom.
+     // Other modal controls remain excluded from the global wheel listener.
+     if(target.closest('.originalSettingsBackdrop')&&!target.closest('.hookchart-visual-preview'))return;
      wheelHandlerRef.current(event);
    };
    host.addEventListener('wheel',onWheel,{capture:true,passive:false});
