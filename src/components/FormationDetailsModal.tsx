@@ -1025,7 +1025,7 @@ export const FormationDetailsModal: React.FC<FormationDetailsModalProps> = ({
                     title={`Формація: ${formation.name} (${formation.statusLabel})`}
                   >
                     <span className="text-[9px] sm:text-[10px] font-black">{isBullish ? '▲' : isBearish ? '▼' : '◆'}</span>
-                    <span className="min-w-0 truncate font-medium tracking-tight">{formation.name}</span>
+                    <span className="min-w-0 truncate font-medium tracking-tight">{formation.name.replace(/\s*\(Підтримка\)\s*$/iu, '')}</span>
                   </button>
                 )}
             </div>
