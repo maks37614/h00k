@@ -63,6 +63,13 @@ import {
 } from 'lucide-react';
 import { AUTHOR_TELEGRAM_CHANNEL_URL, AUTHOR_TELEGRAM_USERNAME } from './utils/accessCodes';
 import { getStoredPreferences, useAppPreferences } from './utils/userPreferences';
+import { loadMarketCoins } from './utils/marketCoinLoader';
+import { marketQuoteToChartCoin } from './utils/chartPageCoin';
+import {
+  chartPageHash, readChartPageHash, sameChartPageRoute,
+  saveChartPageSnapshot, readChartPageSnapshot, saveChartReturnHash, readChartReturnHash,
+  safeReturnHash, type ChartPageRoute, type ChartPageSnapshot,
+} from './utils/chartPageRoute';
 
 const DEFAULT_FILTERS: ScreenerFilterState = {
   exchange: 'binance',
@@ -79,6 +86,14 @@ const DEFAULT_FILTERS: ScreenerFilterState = {
 };
 
 export default function App() {
+  // Routed charts are real SPA pages: the Screener is unmounted, not covered.
+  const [chartRoute, setChartRoute] = useState<ChartPageRoute | null>(() =>
+    typeof window === 'undefined' ? null : readChartPageHash(window.location.hash));
+  const chartPageActive = chartRoute !== null;
+  const [chartRouteLoading, setChartRouteLoading] = useState(false);
+  const [chartRouteError, setChartRouteError] = useState<string | null>(null);
+  const chartNavigation = useRef({ enteredFromApp: false, scrollY: 0 });
+  const scanAbortRef = useRef<AbortController | null>(null);
   const { preferences } = useAppPreferences();
   const { t } = useLanguage();
   const [coins, setCoins] = useState<ScannedCoin[]>(() => getFallbackScannedCoins());
@@ -155,6 +170,9 @@ export default function App() {
       setFullEarlyScan(null);
       return;
     }
+    // Do not run the browser's early-scan poller while a standalone chart is open.
+    // The independent server monitoring/Telegram workers are not stopped.
+    if (chartPageActive) return;
     let alive = true;
     const controller = new AbortController();
     let stopRequested = false;
@@ -336,17 +354,17 @@ export default function App() {
       controller.abort();
       if (stopEarlyScanRef.current === stopScan) stopEarlyScanRef.current = null;
     };
-  }, [earlyMode, earlyFilters.exchange, earlyFilters.marketType, earlyFilters.timeframe,
+  }, [earlyMode, chartPageActive, earlyFilters.exchange, earlyFilters.marketType, earlyFilters.timeframe,
     earlyFilters.minVolumeUsd, earlyRefreshNonce]);
 
   // Refresh a completed scan at a lower cadence; never restart or reset a
   // still-running exhaustive sweep, which can span many exchange API batches.
   useEffect(() => {
-    if (!earlyMode || !fullEarlyScan
+    if (chartPageActive || !earlyMode || !fullEarlyScan
       || !['completed', 'partial', 'failed'].includes(fullEarlyScan.status)) return;
     const timer = setTimeout(refreshFullEarlyScan, 5 * 60_000);
     return () => clearTimeout(timer);
-  }, [earlyMode, fullEarlyScan?.status, fullEarlyScan?.finishedAt, refreshFullEarlyScan]);
+  }, [chartPageActive, earlyMode, fullEarlyScan?.status, fullEarlyScan?.finishedAt, refreshFullEarlyScan]);
 
   const handleOpenAuthModal = useCallback((mode: 'signin' | 'signup' = 'signin', reason: AuthPromptReason = null) => {
     setAuthInitialMode(mode);
@@ -362,6 +380,8 @@ export default function App() {
   useEffect(() => {
     const handleHashChange = () => {
       const hash = window.location.hash;
+      // The chart is its own route; do not reset the user's previous section.
+      if (readChartPageHash(hash)) return;
       if (hash === '#replay') {
         setActivePage((prev) => (prev === 'replay' ? prev : 'replay'));
         return;
@@ -664,6 +684,35 @@ export default function App() {
     [user, metaScalpSettings, handleOpenAuthModal]
   );
 
+  // Enter a dedicated chart URL without losing the originating Screener tab.
+  // A small per-user session snapshot restores the exact formation/archive
+  // when reloading the chart, without launching a second full-market scan.
+  const openChartPage = useCallback((
+    route: ChartPageRoute,
+    snapshot: ChartPageSnapshot,
+    replaceCurrent = false,
+  ) => {
+    const uid = user?.uid;
+    if (!uid) return;
+    const currentHash = window.location.hash;
+    if (!readChartPageHash(currentHash)) {
+      chartNavigation.current = { enteredFromApp: true, scrollY: window.scrollY };
+      try {
+        saveChartReturnHash(window.sessionStorage, uid, safeReturnHash(currentHash));
+      } catch { /* Storage access may be blocked by the browser. */ }
+    }
+    try {
+      saveChartPageSnapshot(window.sessionStorage, uid, route, snapshot);
+    } catch { /* A restricted iOS storage session still opens the chart. */ }
+    setChartRoute(route);
+    setChartRouteError(null);
+    setChartRouteLoading(false);
+    const nextHash = chartPageHash(route);
+    if (replaceCurrent) window.history.replaceState(null, '', nextHash);
+    else if (currentHash !== nextHash) window.location.hash = nextHash;
+    window.scrollTo({ top: 0, behavior: 'auto' });
+  }, [user?.uid]);
+
   // Handler when selecting pair for details modal
   const handleSelectPair = useCallback(
     (coin: ScannedCoin, formation?: DetectedFormation) => {
@@ -679,7 +728,13 @@ export default function App() {
       const chosen = formation || coin.formations[0];
       const rawFormation = rawCoin?.formations.find(item => item.id === chosen?.id) ?? chosen;
       setSelectedArchivedItem(null);
-      setSelectedPair({ coin: rawCoin ?? coin, formation: rawFormation });
+      const selected = { coin: rawCoin ?? coin, formation: rawFormation };
+      setSelectedPair(selected);
+      openChartPage({
+        exchange: selected.coin.exchange, marketType: selected.coin.marketType,
+        symbol: selected.coin.symbol.toUpperCase(), timeframe: selected.coin.timeframe || preferences.defaultTimeframe,
+        kind: 'coin', formationId: rawFormation?.id,
+      }, selected);
       const shouldAutoSwitch =
         metaScalpSettings.enabled && metaScalpSettings.autoSwitchOnClick;
 
@@ -687,7 +742,7 @@ export default function App() {
         handleSendToMetaScalp(coin);
       }
     },
-    [user, coins, metaScalpSettings, handleSendToMetaScalp, handleOpenAuthModal]
+    [user, coins, metaScalpSettings, handleSendToMetaScalp, handleOpenAuthModal, openChartPage, preferences.defaultTimeframe]
   );
 
   const [selectedEarly, setSelectedEarly] = useState<{ coin: ScannedCoin; candidate: EarlyFormationCandidate } | null>(null);
@@ -706,14 +761,16 @@ export default function App() {
   // instrument, timeframe and structure. Recalculate its levels on each refresh;
   // close the old preview immediately when the setup disappears or invalidates.
   useEffect(() => {
-    if (!selectedEarly) return;
+    // The historical early candidate is pinned to the open chart page; an
+    // unrelated Screener refresh must not close the user's active chart.
+    if (!selectedEarly || chartPageActive) return;
     const current = findCurrentEarlyFormation(selectedEarly, earlyMode ? (fullEarlyScan?.data ?? []) : coins);
     if (!current) {
       setSelectedEarly(null);
     } else if (current.coin !== selectedEarly.coin || current.candidate !== selectedEarly.candidate) {
       setSelectedEarly(current);
     }
-  }, [coins, earlyMode, fullEarlyScan?.data, selectedEarly]);
+  }, [coins, chartPageActive, earlyMode, fullEarlyScan?.data, selectedEarly]);
 
   const handleOpenEarly = useCallback((coin: ScannedCoin, candidate: EarlyFormationCandidate) => {
     if (!user) { handleOpenAuthModal('signin', 'chart'); return; }
@@ -723,7 +780,12 @@ export default function App() {
     if (!raw) return; // Stale candidate: do not reopen an invalidated scenario.
     setSelectedPair(null);
     setSelectedEarly(raw);
-  }, [user, handleOpenAuthModal, fullEarlyScan?.data]);
+    openChartPage({
+      exchange: raw.coin.exchange, marketType: raw.coin.marketType,
+      symbol: raw.coin.symbol.toUpperCase(), timeframe: raw.coin.timeframe,
+      kind: 'early', formationId: raw.candidate.id,
+    }, { coin: raw.coin, earlyCandidate: raw.candidate });
+  }, [user, handleOpenAuthModal, fullEarlyScan?.data, openChartPage]);
 
   // Handler when selecting archived formation to restore
   const handleSelectArchivedFormation = useCallback(
@@ -760,6 +822,11 @@ export default function App() {
         coin: matchingCoin,
         formation: archived.formation,
       });
+      openChartPage({
+        exchange: matchingCoin.exchange, marketType: matchingCoin.marketType,
+        symbol: matchingCoin.symbol.toUpperCase(), timeframe: archived.timeframe,
+        kind: 'archive', formationId: archived.formation.id,
+      }, { coin: matchingCoin, formation: archived.formation, archived });
       setIsArchiveModalOpen(false);
       const shouldAutoSwitch =
         metaScalpSettings.enabled && metaScalpSettings.autoSwitchOnClick;
@@ -768,8 +835,166 @@ export default function App() {
         handleSendToMetaScalp(matchingCoin);
       }
     },
-    [coins, metaScalpSettings, handleSendToMetaScalp]
+    [coins, metaScalpSettings, handleSendToMetaScalp, openChartPage]
   );
+
+  // Browser Back/Forward switches between real Screener and chart pages.
+  // The old Screener DOM is unmounted while chartPageActive is true.
+  useEffect(() => {
+    const syncChartLocation = () => {
+      const next = readChartPageHash(window.location.hash);
+      setChartRoute(previous => sameChartPageRoute(previous, next) ? previous : next);
+      if (!next) {
+        setSelectedPair(null);
+        setSelectedEarly(null);
+        setSelectedArchivedItem(null);
+        setChartRouteError(null);
+        setChartRouteLoading(false);
+        if (chartNavigation.current.enteredFromApp) {
+          const savedScroll = chartNavigation.current.scrollY;
+          chartNavigation.current.enteredFromApp = false;
+          // The list remounts and resumes its refresh. Avoid losing the user's
+          // former scroll position when the browser returns from a chart.
+          requestAnimationFrame(() => window.scrollTo({ top: savedScroll, behavior: 'auto' }));
+        }
+      }
+    };
+    window.addEventListener('hashchange', syncChartLocation);
+    window.addEventListener('popstate', syncChartLocation);
+    return () => {
+      window.removeEventListener('hashchange', syncChartLocation);
+      window.removeEventListener('popstate', syncChartLocation);
+    };
+  }, []);
+
+  const chartRouteKey = chartRoute ? chartPageHash(chartRoute) : null;
+  // Restore from the exact account-scoped selection first. When a user opens
+  // a copied chart URL in a new browser, resolve just the instrument quotes;
+  // do NOT run the entire formation screener to display the chart.
+  useEffect(() => {
+    if (!chartRoute || !user || authLoading) return;
+    const route = chartRoute;
+    let stored: ChartPageSnapshot | null = null;
+    try { stored = readChartPageSnapshot(window.sessionStorage, user.uid, route); } catch {}
+    if (route.kind === 'archive' && !stored) {
+      const archived = archivedFormations.find(item => item.formation.id === route.formationId
+        && item.symbol.toUpperCase() === route.symbol && item.exchange === route.exchange
+        && item.marketType === route.marketType);
+      if (archived) {
+        const currentCoin = coins.find(item => item.symbol === route.symbol &&
+          item.exchange === route.exchange && item.marketType === route.marketType);
+        const fallback: ScannedCoin = currentCoin ?? {
+          symbol: archived.symbol, baseAsset: archived.baseAsset, quoteAsset: archived.quoteAsset,
+          exchange: archived.exchange, marketType: archived.marketType,
+          timeframe: archived.timeframe, currentPrice: archived.savedPrice,
+          priceChange24h: 0, volume24hUsd: 0, highPrice24h: archived.savedPrice,
+          lowPrice24h: archived.savedPrice, lastUpdated: archived.savedAtTimestamp,
+          formations: [archived.formation], exchangeUrl: '',
+        };
+        stored = { coin: fallback, formation: archived.formation, archived };
+      }
+    }
+    if (stored) {
+      if (route.kind === 'early' && stored.earlyCandidate) {
+        setSelectedEarly({ coin: stored.coin, candidate: stored.earlyCandidate });
+        setSelectedPair(null);
+        setSelectedArchivedItem(null);
+      } else {
+        setSelectedPair({ coin: stored.coin, formation: stored.formation ?? undefined });
+        setSelectedArchivedItem(stored.archived ?? null);
+        setSelectedEarly(null);
+      }
+      setChartRouteError(null);
+      setChartRouteLoading(false);
+      return;
+    }
+    const controller = new AbortController();
+    setChartRouteLoading(true);
+    setChartRouteError(null);
+    void (async () => {
+      let quoteCoin: ScannedCoin | null = null;
+      try {
+        const snapshot = await loadMarketCoins({
+          exchange: route.exchange, marketType: route.marketType,
+        }, controller.signal);
+        const quote = snapshot.coins.find(row => row.symbol.toUpperCase() === route.symbol
+          && row.exchange === route.exchange && row.marketType === route.marketType);
+        if (quote) quoteCoin = marketQuoteToChartCoin(quote, route.timeframe);
+      } catch { /* Offline fallback still opens the chart and uses /api/klines. */ }
+      if (controller.signal.aborted) return;
+      if (!quoteCoin) {
+        const baseAsset = route.symbol.replace(/(USDT|USDC|BUSD|BTC|ETH)$/,'');
+        const quoteAsset = route.symbol.slice(baseAsset.length) || 'USDT';
+        quoteCoin = {
+          symbol: route.symbol, baseAsset, quoteAsset, exchange: route.exchange,
+          marketType: route.marketType, timeframe: route.timeframe,
+          currentPrice: 0, priceChange24h: 0, volume24hUsd: 0,
+          highPrice24h: 0, lowPrice24h: 0,
+          formations: [], lastUpdated: Date.now(), exchangeUrl: '',
+        };
+      }
+      // A cross-device link cannot contain a private archived/early snapshot.
+      // Fall back to its functional live chart rather than showing stale data.
+      setSelectedPair({ coin: quoteCoin });
+      setSelectedEarly(null);
+      setSelectedArchivedItem(null);
+      if (route.formationId || route.kind !== 'coin') {
+        setChartRouteError('Дані вибраної формації недоступні в цій вкладці. Показано живий графік монети без непідтверджених рівнів.');
+      }
+      setChartRouteLoading(false);
+    })();
+    return () => controller.abort();
+  }, [chartRouteKey, user?.uid, authLoading, archivedFormations]);
+
+  const closeChartPage = useCallback(() => {
+    setSelectedPair(null);
+    setSelectedArchivedItem(null);
+    setSelectedEarly(null);
+    setChartRoute(null);
+    setChartRouteError(null);
+    setChartRouteLoading(false);
+    if (chartNavigation.current.enteredFromApp) {
+      window.history.back();
+    } else {
+      let saved = '#screener';
+      try { saved = readChartReturnHash(window.sessionStorage, user?.uid || 'guest'); } catch {}
+      window.history.replaceState(null, '', saved);
+      setActivePage(saved.slice(1) as ActivePageType);
+    }
+  }, [user?.uid]);
+
+  const selectFavoriteOnChartPage = useCallback((favorite: ScannedCoin) => {
+    if (!chartRoute) return;
+    const quotePrice = Number.isFinite(favorite.currentPrice) ? favorite.currentPrice : 0;
+    const chosen: ScannedCoin = {
+      symbol: favorite.symbol, baseAsset: favorite.baseAsset, quoteAsset: favorite.quoteAsset,
+      exchange: favorite.exchange, marketType: favorite.marketType,
+      timeframe: chartRoute.timeframe, currentPrice: quotePrice,
+      priceChange24h: favorite.priceChange24h || 0,
+      volume24hUsd: favorite.volume24hUsd || 0,
+      highPrice24h: favorite.highPrice24h ?? favorite.high24h ?? quotePrice,
+      lowPrice24h: favorite.lowPrice24h ?? favorite.low24h ?? quotePrice,
+      lastUpdated: favorite.lastUpdated || Date.now(), formations: [],
+      exchangeUrl: favorite.exchangeUrl || '',
+    };
+    setSelectedEarly(null);
+    setSelectedArchivedItem(null);
+    setSelectedPair({ coin: chosen });
+    openChartPage({
+      exchange: chosen.exchange, marketType: chosen.marketType,
+      symbol: chosen.symbol.toUpperCase(), timeframe: chosen.timeframe, kind: 'coin',
+    }, { coin: chosen }, true);
+  }, [chartRoute, openChartPage]);
+
+  const changeStandaloneChartTimeframe = useCallback((timeframe: ScannedCoin['timeframe']) => {
+    if (!chartRoute || !selectedPair) return;
+    const coin = { ...selectedPair.coin, timeframe };
+    setSelectedPair({ ...selectedPair, coin });
+    openChartPage({
+      exchange: coin.exchange, marketType: coin.marketType,
+      symbol: coin.symbol.toUpperCase(), timeframe, kind: 'coin',
+    }, { coin }, true);
+  }, [chartRoute, selectedPair, openChartPage]);
 
   // Play a gentle alert tone using Web Audio API
   const playAlertSound = useCallback(() => {
@@ -798,6 +1023,10 @@ export default function App() {
 
   // Fetch screener data from API
   const fetchScreenerData = useCallback(async (currentTf = filters.timeframe, currentExchange = filters.exchange, currentMarket = filters.marketType) => {
+    if (chartPageActive) return;
+    scanAbortRef.current?.abort();
+    const controller = new AbortController();
+    scanAbortRef.current = controller;
     const requestId = ++scanRequestRef.current;
     setIsLoading(true);
     setError(null);
@@ -811,7 +1040,7 @@ export default function App() {
 
       let dataLoaded = false;
       try {
-        const res = await fetch(`/api/screener/scan?${params.toString()}`);
+        const res = await fetch(`/api/screener/scan?${params.toString()}`, { signal: controller.signal });
         if (res.ok) {
           const contentType = res.headers.get('content-type');
           if (contentType && contentType.includes('application/json')) {
@@ -845,11 +1074,12 @@ export default function App() {
 
       // If backend did not yield data (e.g. an upstream network failure), fall back to direct browser connection
       if (!dataLoaded) {
+        if (controller.signal.aborted) return;
         const directCoins = await runDirectClientScan({
           exchange: currentExchange,
           marketType: currentMarket,
           timeframe: currentTf,
-        });
+        }, { signal: controller.signal });
         if (directCoins.length > 0) {
           if (requestId !== scanRequestRef.current) return;
           setCoins(directCoins);
@@ -860,25 +1090,35 @@ export default function App() {
     } catch (err: any) {
       console.warn('Scan complete fallback error:', err);
     } finally {
+      if (scanAbortRef.current === controller) scanAbortRef.current = null;
       if (requestId === scanRequestRef.current) setIsLoading(false);
     }
-  }, [filters.timeframe, filters.exchange, filters.marketType, filters.minVolumeUsd, playAlertSound]);
+  }, [chartPageActive, filters.timeframe, filters.exchange, filters.marketType, filters.minVolumeUsd, playAlertSound]);
+
+  // Abort an in-flight browser scan on route transition, not merely its timer.
+  useEffect(() => {
+    if (!chartPageActive) return;
+    ++scanRequestRef.current;
+    scanAbortRef.current?.abort();
+    scanAbortRef.current = null;
+    setIsLoading(false);
+  }, [chartPageActive]);
 
   // The full early scan has its own throttled job. Avoid running the 75-pair
   // standard scan every minute at the same time and competing for exchange quota.
   useEffect(() => {
-    if (earlyMode && activePage === 'screener') return;
+    if (chartPageActive || (earlyMode && activePage === 'screener')) return;
     fetchScreenerData(filters.timeframe, filters.exchange, filters.marketType);
-  }, [earlyMode, activePage, filters.timeframe, filters.exchange, filters.marketType, filters.minVolumeUsd]);
+  }, [chartPageActive, earlyMode, activePage, filters.timeframe, filters.exchange, filters.marketType, filters.minVolumeUsd]);
 
   // Lightweight screener refresh remains unchanged outside full W/M mode.
   useEffect(() => {
-    if (earlyMode && activePage === 'screener') return;
+    if (chartPageActive || (earlyMode && activePage === 'screener')) return;
     const interval = setInterval(() => {
       fetchScreenerData();
     }, 60000);
     return () => clearInterval(interval);
-  }, [earlyMode, activePage, fetchScreenerData]);
+  }, [chartPageActive, earlyMode, activePage, fetchScreenerData]);
 
   // Favorites preserve exchange + market type. A plain symbol from legacy
   // callers is treated as Binance Futures, never guessed from current filters.
@@ -1033,7 +1273,7 @@ export default function App() {
       {/* First-visit installation tip remains available to guests on all devices. */}
       <InstallAppButton variant="tip" />
       {/* Header */}
-      <Header
+      {!chartPageActive && <Header
         isLoading={isLoading}
         totalCoins={coins.length}
         formationsCount={flattenedItems.length}
@@ -1075,11 +1315,123 @@ export default function App() {
         onOpenProfile={() => setIsProfileModalOpen(true)}
         activePage={activePage}
         onPageChange={handlePageChange}
-      />
+      />}
 
       {/* Main Content Area */}
-      <main className="flex-1 max-w-[2560px] 3xl:max-w-[3440px] w-full mx-auto px-2 sm:px-4 lg:px-6 2xl:px-8 py-2 sm:py-4 space-y-3 sm:space-y-4">
-        {activePage === 'terminal' ? (
+      <main className={chartPageActive
+        ? 'w-full min-w-0 flex-1'
+        : 'flex-1 max-w-[2560px] 3xl:max-w-[3440px] w-full mx-auto px-2 sm:px-4 lg:px-6 2xl:px-8 py-2 sm:py-4 space-y-3 sm:space-y-4'}>
+        {chartPageActive ? (
+          !user ? (
+            <section className="mx-auto flex min-h-[55vh] max-w-lg flex-col items-center justify-center gap-4 px-5 text-center">
+              <h1 className="text-lg font-bold text-white">Графік {chartRoute?.symbol}</h1>
+              <p className="text-sm text-slate-400">Увійдіть у свій акаунт, щоб відкрити графік.</p>
+              <button type="button" onClick={() => handleOpenAuthModal('signin', 'chart')}
+                className="rounded-xl border border-cyan-600 bg-cyan-950/60 px-4 py-2 text-sm text-cyan-200">
+                Увійти
+              </button>
+              <button type="button" onClick={closeChartPage} className="text-sm text-slate-400 underline">
+                Назад до Скрінера
+              </button>
+            </section>
+          ) : chartRouteLoading ? (
+            <div role="status" className="flex min-h-[55vh] items-center justify-center text-slate-400">
+              Завантаження графіка…
+            </div>
+          ) : selectedEarly && activeEarlyCandidate && chartRoute?.kind === 'early' ? (
+            <FullscreenChartModal
+              pageMode isOpen
+              key={[user.uid,selectedEarly.coin.exchange,selectedEarly.coin.marketType,
+                selectedEarly.coin.symbol,selectedEarly.candidate.id].join(':')}
+              coin={selectedEarly.coin}
+              formation={null}
+              earlyCandidate={activeEarlyCandidate}
+              earlyTouchRule={selectedEarly.candidate.tpSlBuilder?.touches.verified
+                ? getTpSlRule(constructorSettings,selectedEarly.coin.symbol,activeEarlyCandidate.patternKey)
+                : undefined}
+              customMarkers={earlyFormationChartMarkers(activeEarlyCandidate)}
+              currentTimeframe={selectedEarly.coin.timeframe}
+              livePrice={selectedEarly.coin.currentPrice}
+              allCoins={coins}
+              watchlist={watchlist}
+              onToggleWatchlist={handleToggleWatchlist}
+              onOpenTelegramModal={handleOpenTelegramAlerts}
+              onSendMetaScalp={handleSendToMetaScalp}
+              metaScalpBinding={metaScalpSettings.binding}
+              onClose={closeChartPage}
+              onPageCoinChange={selectFavoriteOnChartPage}
+            />
+          ) : activeSelectedPair?.formation && chartRoute?.kind !== 'early' ? (
+            <FormationDetailsModal
+              pageMode
+              coin={activeSelectedPair.coin}
+              formation={activeSelectedPair.formation}
+              onFormationChange={(nextFormation) => {
+                if (!selectedPair) return;
+                setSelectedArchivedItem(null);
+                const rawCoin = coins.find(row => row.symbol === selectedPair.coin.symbol
+                  && row.exchange === selectedPair.coin.exchange
+                  && row.marketType === selectedPair.coin.marketType
+                  && row.timeframe === selectedPair.coin.timeframe);
+                const rawFormation = rawCoin?.formations.find(row => row.id === nextFormation.id) ?? nextFormation;
+                const chosen = { coin: rawCoin ?? selectedPair.coin, formation: rawFormation };
+                setSelectedPair(chosen);
+                if (chartRoute) {
+                  openChartPage({
+                    ...chartRoute, kind: 'coin', formationId: rawFormation.id,
+                  }, chosen, true);
+                }
+              }}
+              initialTimeframe={chartRoute?.timeframe}
+              onPageTimeframeChange={tf => {
+                if (!chartRoute || !selectedPair) return;
+                const coin = { ...selectedPair.coin, timeframe: tf };
+                setSelectedPair(previous => previous ? { ...previous, coin } : previous);
+                openChartPage({ ...chartRoute, timeframe: tf },
+                  { coin, formation: selectedPair.formation, archived: selectedArchivedItem }, true);
+              }}
+              archivedItem={selectedArchivedItem}
+              allCoins={coins}
+              watchlist={watchlist}
+              onToggleWatchlist={handleToggleWatchlist}
+              onClose={closeChartPage}
+              onSendMetaScalp={handleSendToMetaScalp}
+              metaScalpBinding={metaScalpSettings.binding}
+              onOpenTelegramModal={handleOpenTelegramAlerts}
+              onOpenAuth={() => setIsAuthModalOpen(true)}
+              onAlertToast={handleAlertToast}
+            />
+          ) : selectedPair ? (
+            <>
+              {chartRouteError && (
+                <p role="status" className="mx-auto max-w-5xl border-b border-amber-800/30 bg-slate-900 px-4 py-2 text-xs text-amber-200">
+                  {chartRouteError}
+                </p>
+              )}
+              <FullscreenChartModal
+                pageMode isOpen
+                coin={selectedPair.coin}
+                formation={null}
+                currentTimeframe={chartRoute?.timeframe || selectedPair.coin.timeframe || preferences.defaultTimeframe}
+                onPageCoinChange={selectFavoriteOnChartPage}
+                onPageTimeframeChange={changeStandaloneChartTimeframe}
+                livePrice={selectedPair.coin.currentPrice}
+                allCoins={coins}
+                watchlist={watchlist}
+                onToggleWatchlist={handleToggleWatchlist}
+                onClose={closeChartPage}
+                onSendMetaScalp={handleSendToMetaScalp}
+                metaScalpBinding={metaScalpSettings.binding}
+                onOpenTelegramModal={handleOpenTelegramAlerts}
+              />
+            </>
+          ) : (
+            <section className="flex min-h-[55vh] flex-col items-center justify-center gap-3 text-center">
+              <p className="text-sm text-slate-400">{chartRouteError || 'Підготовка графіка…'}</p>
+              <button type="button" onClick={closeChartPage} className="rounded-lg border border-slate-700 px-4 py-2 text-slate-300">Назад</button>
+            </section>
+          )
+        ) : activePage === 'terminal' ? (
           <TerminalPage
             key={user?.uid || 'guest'}
             coins={coins}
@@ -1354,80 +1706,10 @@ export default function App() {
         )}
       </main>
 
-      <SiteFooter />
+      {!chartPageActive && <SiteFooter />}
 
-      {/* Early W/M scenarios open the fullscreen HookChart directly. */}
-      {selectedEarly && activeEarlyCandidate && (
-        <FullscreenChartModal
-          key={[user?.uid ?? 'guest', selectedEarly.coin.exchange, selectedEarly.coin.marketType, selectedEarly.coin.symbol, selectedEarly.coin.timeframe, selectedEarly.candidate.id].join(':')}
-          isOpen
-          coin={selectedEarly.coin}
-          formation={null}
-          earlyCandidate={activeEarlyCandidate}
-          earlyTouchRule={activeEarlyCandidate.tpSlBuilder?.touches.verified
-            ? getTpSlRule(constructorSettings, selectedEarly.coin.symbol, activeEarlyCandidate.patternKey)
-            : undefined}
-          customMarkers={earlyFormationChartMarkers(activeEarlyCandidate)}
-          currentTimeframe={selectedEarly.coin.timeframe}
-          livePrice={selectedEarly.coin.currentPrice}
-          allCoins={coins}
-          watchlist={watchlist}
-          onToggleWatchlist={handleToggleWatchlist}
-          onOpenTelegramModal={handleOpenTelegramAlerts}
-          onSendMetaScalp={handleSendToMetaScalp}
-          metaScalpBinding={metaScalpSettings.binding}
-          onClose={() => setSelectedEarly(null)}
-        />
-      )}
-      {/* Detailed chart: extended formation analysis when available, full chart otherwise */}
-      {activeSelectedPair?.formation ? (
-        <FormationDetailsModal
-          coin={activeSelectedPair.coin}
-          formation={activeSelectedPair.formation}
-          onFormationChange={(nextFormation) => {
-            setSelectedArchivedItem(null);
-            setSelectedPair((previous) => {
-              if (!previous) return previous;
-              const rawCoin = coins.find(row =>
-                row.symbol === previous.coin.symbol && row.exchange === previous.coin.exchange
-                && row.marketType === previous.coin.marketType && row.timeframe === previous.coin.timeframe);
-              const raw = rawCoin?.formations.find(row => row.id === nextFormation.id);
-              return { coin: rawCoin ?? previous.coin, formation: raw ?? nextFormation };
-            });
-          }}
-          archivedItem={selectedArchivedItem}
-          allCoins={coins}
-          watchlist={watchlist}
-          onToggleWatchlist={handleToggleWatchlist}
-          onClose={() => {
-            setSelectedPair(null);
-            setSelectedArchivedItem(null);
-          }}
-          onSendMetaScalp={handleSendToMetaScalp}
-          metaScalpBinding={metaScalpSettings.binding}
-          onOpenTelegramModal={handleOpenTelegramAlerts}
-          onOpenAuth={() => setIsAuthModalOpen(true)}
-          onAlertToast={handleAlertToast}
-        />
-      ) : selectedPair ? (
-        <FullscreenChartModal
-          isOpen={true}
-          coin={selectedPair.coin}
-          formation={null}
-          currentTimeframe={selectedPair.coin.timeframe || preferences.defaultTimeframe}
-          livePrice={selectedPair.coin.currentPrice}
-          allCoins={coins}
-          watchlist={watchlist}
-          onToggleWatchlist={handleToggleWatchlist}
-          onClose={() => {
-            setSelectedPair(null);
-            setSelectedArchivedItem(null);
-          }}
-          onSendMetaScalp={handleSendToMetaScalp}
-          metaScalpBinding={metaScalpSettings.binding}
-          onOpenTelegramModal={handleOpenTelegramAlerts}
-        />
-      ) : null}
+      {/* Coin, archived and early charts now render inside the main route
+          above. Nothing is mounted over a background Screener anymore. */}
 
       {/* Formations Archive Modal */}
       <ArchiveModal

@@ -1,0 +1,25 @@
+name: Verify standalone chart navigation
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  chart-route:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install
+        run: npm ci
+      - name: TypeScript
+        run: npm run lint
+      - name: Navigation, persistence, chart gestures
+        run: node --import ./tests/fixtures/offline-network.mjs --import tsx --test tests/chart-page-route.test.ts tests/hookchart-touch-hold.test.ts tests/hookchart-gestures.test.ts tests/chart-crosshair-alert-price.test.ts tests/smart-analysis-panel-preference.test.ts
+      - name: Production build
+        run: npm run build
