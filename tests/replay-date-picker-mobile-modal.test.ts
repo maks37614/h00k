@@ -35,7 +35,7 @@ test('Replay date picker preserves date choice actions and only changes date dia
   assert.match(toolbar, /onClick=\{handleApplyCustomDate\}/);
   assert.match(toolbar, /onRandomHistoricalDate\(\)/);
   assert.match(toolbar, /onChange=\{\(event\) => setCustomDateTime\(event\.target\.value\)\}/);
-  assert.match(toolbar, /isCoinModalOpen && \(/);
+  assert.match(toolbar, /isCoinModalOpen && typeof document !== 'undefined' && createPortal\(/);
 });
 
 test('Replay quick dates start with 1, 3 and 5 days ago before older presets', () => {
@@ -86,4 +86,41 @@ test('Near-live replay dates do not rewind 30 candles when future data is unavai
   assert.equal(recent.cutoffIndex, dateCutoff);
   const beyondLast = processCandlesForCutoff(candles, beginning - 30 * oneHour, '1h', now);
   assert.ok(beyondLast.cutoffIndex < candles.length - 1);
+});
+
+
+test('Replay coin picker uses a body portal and scales across phone and desktop viewports', () => {
+  assert.match(toolbar, /isCoinModalOpen && typeof document !== 'undefined' && createPortal\(/);
+  assert.match(toolbar, /aria-labelledby="replay-coin-picker-title"/);
+  assert.match(toolbar, /role="dialog"/);
+  assert.match(toolbar, /aria-modal="true"/);
+  assert.match(toolbar, /fixed inset-0 z-\[250\]/);
+  assert.match(toolbar, /h-\[90dvh\] max-h-\[calc\(100dvh-16px\)\]/);
+  assert.match(toolbar, /max-h-\[42dvh\].*overflow-x-hidden overflow-y-auto/);
+  assert.match(toolbar, /min-h-0 min-w-0 flex-1 space-y-3 overflow-x-hidden overflow-y-auto/);
+  assert.match(toolbar, /min-w-0 grid-cols-1 gap-2 sm:grid-cols-2/);
+  assert.match(toolbar, /document\.body\s*\n\s*\)\}/);
+});
+
+test('Coin search and filters fit mobile width without losing sorting or market controls', () => {
+  assert.match(toolbar, /relative w-full min-w-0 flex-1/);
+  assert.match(toolbar, /font-mono text-base text-white focus:border-cyan-500/);
+  assert.match(toolbar, /min-w-0 max-w-full flex-1 cursor-pointer/);
+  assert.match(toolbar, /flex w-full min-w-0 flex-wrap items-center gap-2 sm:w-auto/);
+  assert.match(toolbar, /flex max-w-full flex-wrap items-center rounded-xl/);
+  assert.match(toolbar, /setCoinVolumeFilter\(tier\.id as any\)/);
+  assert.match(toolbar, /setCoinExchangeFilter\(ex\)/);
+  assert.match(toolbar, /setCoinMarketFilter\(mkt\)/);
+  assert.match(toolbar, /setCoinSortBy\(e\.target\.value\)/);
+  assert.match(toolbar, /onSelectCoin\(coin\.symbol, coin\.exchange, coin\.marketType\)/);
+  assert.doesNotMatch(toolbar, /relative flex-1 min-w-\[220px\]/);
+  assert.doesNotMatch(toolbar, /autoFocus/);
+});
+
+test('Coin modal locks background scrolling and closes on Escape', () => {
+  assert.match(toolbar, /if \(!isDatePickerOpen && !isCoinModalOpen\) return/);
+  assert.match(toolbar, /if \(isCoinModalOpen\) setIsCoinModalOpen\(false\)/);
+  assert.match(toolbar, /\[isDatePickerOpen, isCoinModalOpen\]/);
+  assert.match(toolbar, /document\.body\.style\.overflow = bodyOverflow/);
+  assert.match(toolbar, /document\.documentElement\.style\.overflow = htmlOverflow/);
 });

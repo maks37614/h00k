@@ -68,17 +68,20 @@ export const ReplayToolbar: React.FC<ReplayToolbarProps> = ({
   const [isCoinModalOpen, setIsCoinModalOpen] = useState(false);
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
 
-  // The date picker is rendered in document.body, above the chart. Keep the
-  // underlying page still while allowing the dialog content to scroll.
+  // Both Replay dialogs live above chart stacking contexts in document.body.
+  // Keep the underlying page from scrolling while either dialog is open.
   useEffect(() => {
-    if (!isDatePickerOpen) return;
+    if (!isDatePickerOpen && !isCoinModalOpen) return;
     const bodyOverflow = document.body.style.overflow;
     const htmlOverflow = document.documentElement.style.overflow;
     document.body.style.overflow = 'hidden';
     document.documentElement.style.overflow = 'hidden';
 
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setIsDatePickerOpen(false);
+      if (event.key === 'Escape') {
+        if (isCoinModalOpen) setIsCoinModalOpen(false);
+        else setIsDatePickerOpen(false);
+      }
     };
     document.addEventListener('keydown', onKeyDown);
     return () => {
@@ -86,7 +89,7 @@ export const ReplayToolbar: React.FC<ReplayToolbarProps> = ({
       document.body.style.overflow = bodyOverflow;
       document.documentElement.style.overflow = htmlOverflow;
     };
-  }, [isDatePickerOpen]);
+  }, [isDatePickerOpen, isCoinModalOpen]);
   const [coinSearchQuery, setCoinSearchQuery] = useState('');
   const [coinExchangeFilter, setCoinExchangeFilter] = useState<'all' | 'binance' | 'bybit'>('all');
   const [coinMarketFilter, setCoinMarketFilter] = useState<'all' | 'futures' | 'spot'>('all');
@@ -443,50 +446,61 @@ export const ReplayToolbar: React.FC<ReplayToolbarProps> = ({
       )}
 
       {/* Coin Selection Modal */}
-      {isCoinModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/85 backdrop-blur-md animate-in fade-in duration-150">
-          <div className="w-full max-w-4xl max-h-[90vh] flex flex-col rounded-2xl bg-slate-900 border border-slate-700 shadow-2xl overflow-hidden">
+      {isCoinModalOpen && typeof document !== 'undefined' && createPortal(
+        <div
+          className="fixed inset-0 z-[250] flex items-center justify-center bg-slate-950/85 p-2 backdrop-blur-md sm:p-4"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setIsCoinModalOpen(false);
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="replay-coin-picker-title"
+            className="flex h-[90dvh] max-h-[calc(100dvh-16px)] w-full min-w-0 max-w-4xl flex-col overflow-hidden rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl sm:max-h-[calc(100dvh-32px)]"
+          >
             {/* Modal Header */}
-            <div className="flex items-center justify-between p-4 border-b border-slate-800 bg-slate-950/50">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center border border-amber-500/30">
+            <div className="flex shrink-0 items-start justify-between gap-2 border-b border-slate-800 bg-slate-950/50 p-3 sm:p-4">
+              <div className="flex min-w-0 items-start gap-2 sm:gap-3">
+                <div className="w-9 h-9 shrink-0 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center border border-amber-500/30">
                   <Activity className="w-5 h-5" />
                 </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="font-extrabold text-white text-base">
+                <div className="min-w-0">
+                  <div className="flex min-w-0 flex-wrap items-center gap-1.5 sm:gap-2">
+                    <h3 id="replay-coin-picker-title" className="text-sm font-extrabold text-white sm:text-base">
                       Усі монети ринку криптовалют
                     </h3>
-                    <span className="px-2 py-0.5 rounded-full text-[11px] font-mono font-bold bg-cyan-950 text-cyan-300 border border-cyan-800/60">
+                    <span className="shrink-0 rounded-full border border-cyan-800/60 bg-cyan-950 px-2 py-0.5 font-mono text-[11px] font-bold text-cyan-300">
                       {filteredCoins.length} монет
                     </span>
                   </div>
-                  <p className="text-xs text-slate-400">
+                  <p className="text-[11px] leading-relaxed text-slate-400 sm:text-xs">
                     Реальний ринок Binance & Bybit з 24г обсягом від <b>$100 тис.</b> до <b>$10 млрд</b>
                   </p>
                 </div>
               </div>
               <button
                 onClick={() => setIsCoinModalOpen(false)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+                type="button"
+                aria-label="Закрити вибір монети"
+                className="shrink-0 rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-800 hover:text-white"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             {/* Search & Comprehensive Filters */}
-            <div className="p-3.5 sm:p-4 border-b border-slate-800/80 bg-slate-950/40 space-y-3">
-              <div className="flex flex-wrap items-center gap-2.5">
+            <div className="max-h-[42dvh] min-h-0 min-w-0 shrink-0 space-y-3 overflow-x-hidden overflow-y-auto overscroll-contain border-b border-slate-800/80 bg-slate-950/40 p-3 sm:p-4">
+              <div className="flex min-w-0 flex-col gap-2.5 sm:flex-row sm:flex-wrap sm:items-center">
                 {/* Search */}
-                <div className="relative flex-1 min-w-[220px]">
+                <div className="relative w-full min-w-0 flex-1">
                   <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
                   <input
                     type="text"
                     placeholder="Пошук монети (BTC, SOL, PEPE, SUI, DOGE...)"
                     value={coinSearchQuery}
                     onChange={(e) => setCoinSearchQuery(e.target.value)}
-                    className="w-full pl-9 pr-3 py-1.5 rounded-xl bg-slate-900 border border-slate-700 text-xs font-mono text-white focus:outline-none focus:border-cyan-500"
-                    autoFocus
+                    className="w-full min-w-0 rounded-xl border border-slate-700 bg-slate-900 py-2 pl-9 pr-3 font-mono text-base text-white focus:border-cyan-500 focus:outline-none sm:py-1.5 sm:text-xs"
                   />
                   {coinSearchQuery && (
                     <button
@@ -499,12 +513,12 @@ export const ReplayToolbar: React.FC<ReplayToolbarProps> = ({
                 </div>
 
                 {/* Sort Dropdown */}
-                <div className="flex items-center gap-1.5 text-xs">
-                  <span className="text-[11px] font-semibold text-slate-400">Сортування:</span>
+                <div className="flex w-full min-w-0 flex-wrap items-center gap-1.5 text-xs sm:w-auto">
+                  <span className="shrink-0 text-[11px] font-semibold text-slate-400">Сортування:</span>
                   <select
                     value={coinSortBy}
                     onChange={(e: any) => setCoinSortBy(e.target.value)}
-                    className="px-2.5 py-1.5 rounded-xl bg-slate-900 border border-slate-700 text-xs font-mono text-slate-200 focus:outline-none focus:border-cyan-500 cursor-pointer"
+                    className="min-w-0 max-w-full flex-1 cursor-pointer rounded-xl border border-slate-700 bg-slate-900 px-2.5 py-2 font-mono text-base text-slate-200 focus:border-cyan-500 focus:outline-none sm:flex-none sm:py-1.5 sm:text-xs"
                   >
                     <option value="volumeDesc">Обсяг 24г (найбільші)</option>
                     <option value="volumeAsc">Обсяг 24г (найменші)</option>
@@ -516,9 +530,9 @@ export const ReplayToolbar: React.FC<ReplayToolbarProps> = ({
               </div>
 
               {/* Filter Tiers: Volume & Exchange & Market */}
-              <div className="flex flex-wrap items-center justify-between gap-2.5 pt-1 text-xs">
+              <div className="flex min-w-0 flex-wrap items-start justify-between gap-2.5 pt-1 text-xs">
                 {/* Volume Tiers (100k to 10B) */}
-                <div className="flex flex-wrap items-center gap-1">
+                <div className="flex min-w-0 flex-wrap items-center gap-1">
                   <span className="text-[11px] font-bold text-slate-400 uppercase mr-1">
                     Обсяг:
                   </span>
@@ -547,9 +561,9 @@ export const ReplayToolbar: React.FC<ReplayToolbarProps> = ({
                 </div>
 
                 {/* Exchange & Market Tabs */}
-                <div className="flex items-center gap-2">
+                <div className="flex w-full min-w-0 flex-wrap items-center gap-2 sm:w-auto">
                   {/* Exchange */}
-                  <div className="flex items-center p-0.5 rounded-xl bg-slate-900 border border-slate-800 text-[11px]">
+                  <div className="flex max-w-full flex-wrap items-center rounded-xl border border-slate-800 bg-slate-900 p-0.5 text-[11px]">
                     {(['all', 'binance', 'bybit'] as const).map((ex) => (
                       <button
                         key={ex}
@@ -569,7 +583,7 @@ export const ReplayToolbar: React.FC<ReplayToolbarProps> = ({
                   </div>
 
                   {/* Market */}
-                  <div className="flex items-center p-0.5 rounded-xl bg-slate-900 border border-slate-800 text-[11px]">
+                  <div className="flex max-w-full flex-wrap items-center rounded-xl border border-slate-800 bg-slate-900 p-0.5 text-[11px]">
                     {(['all', 'futures', 'spot'] as const).map((mkt) => (
                       <button
                         key={mkt}
@@ -592,8 +606,8 @@ export const ReplayToolbar: React.FC<ReplayToolbarProps> = ({
             </div>
 
             {/* Coins Grid / List */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-3">
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
+            <div className="min-h-0 min-w-0 flex-1 space-y-3 overflow-x-hidden overflow-y-auto overscroll-contain p-3 sm:p-4">
+              <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                 {filteredCoins.slice(0, displayCount).map((coin) => {
                   const isSelected =
                     coin.symbol === selectedSymbol && coin.exchange === selectedExchange;
@@ -604,15 +618,15 @@ export const ReplayToolbar: React.FC<ReplayToolbarProps> = ({
                         onSelectCoin(coin.symbol, coin.exchange, coin.marketType);
                         setIsCoinModalOpen(false);
                       }}
-                      className={`flex items-center justify-between p-2.5 rounded-xl border text-left transition-all cursor-pointer ${
+                      className={`flex min-w-0 items-center justify-between gap-2 overflow-hidden rounded-xl border p-2.5 text-left transition-all cursor-pointer ${
                         isSelected
                           ? 'bg-amber-950/40 border-amber-500/70 text-white ring-1 ring-amber-500'
                           : 'bg-slate-950/60 border-slate-800/80 hover:border-slate-700 hover:bg-slate-800/50 text-slate-300'
                       }`}
                     >
-                      <div>
-                        <div className="flex items-center gap-1.5">
-                          <span className="font-extrabold text-sm font-mono text-white">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex min-w-0 items-center gap-1.5">
+                          <span className="min-w-0 truncate font-mono text-sm font-extrabold text-white">
                             {coin.baseAsset}
                           </span>
                           <span className="text-[10px] text-slate-500 font-mono">
@@ -632,7 +646,7 @@ export const ReplayToolbar: React.FC<ReplayToolbarProps> = ({
                         </div>
                       </div>
 
-                      <div className="text-right">
+                      <div className="shrink-0 text-right">
                         <div
                           className={`text-xs font-mono font-extrabold ${
                             coin.priceChange24h >= 0 ? 'text-emerald-400' : 'text-rose-400'
@@ -670,7 +684,7 @@ export const ReplayToolbar: React.FC<ReplayToolbarProps> = ({
 
               {/* Load More Button if filteredCoins > displayCount */}
               {filteredCoins.length > displayCount && (
-                <div className="pt-2 flex items-center justify-center gap-3">
+                <div className="flex flex-wrap items-center justify-center gap-2 pt-2 sm:gap-3">
                   <button
                     onClick={() => setDisplayCount((prev) => prev + 300)}
                     className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition-colors cursor-pointer"
@@ -688,8 +702,8 @@ export const ReplayToolbar: React.FC<ReplayToolbarProps> = ({
             </div>
 
             {/* Modal Footer */}
-            <div className="p-3 bg-slate-950/90 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400">
-              <div className="font-mono">
+            <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-slate-800 bg-slate-950/90 p-3 text-xs text-slate-400">
+              <div className="min-w-0 font-mono">
                 Показано <b className="text-white">{Math.min(displayCount, filteredCoins.length)}</b> з <b className="text-cyan-400">{filteredCoins.length}</b> монет на ринку ($100k – $10B)
               </div>
               <button
@@ -700,7 +714,8 @@ export const ReplayToolbar: React.FC<ReplayToolbarProps> = ({
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
