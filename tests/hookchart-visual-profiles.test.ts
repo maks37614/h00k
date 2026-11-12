@@ -94,6 +94,7 @@ test('Screener, Formations, Terminal carry visual contexts, Replay passes none',
   const formation = src('../src/components/FormationCard.tsx');
   const early = src('../src/components/EarlyFormationCard.tsx');
   const terminal = src('../src/components/terminal/TerminalChartWidget.tsx');
+  const terminalPage = src('../src/components/TerminalPage.tsx');
   const replay = src('../src/components/replay/ReplayChart.tsx');
   assert.match(canvas,/const activeVisualProfile = replay \|\| !settings\.visualProfiles\?\.\[activeVisualKey\]/);
   assert.match(canvas,/const rightPaddingBars = activeVisualProfile \? 0 : terminalMode/);
@@ -108,5 +109,8 @@ test('Screener, Formations, Terminal carry visual contexts, Replay passes none',
   assert.match(fullscreen,/visualContext=\{visualContext \?\? \(formation \|\| earlyCandidate \? 'formationsFull' : 'screenerFull'\)\}/);
   assert.match(trading,/visualContext=\{visualContext\}/);
   assert.match(terminal,/terminalMode=\{useIntegratedHookChartToolbar\}/);
+  assert.match(terminalPage, /<ExchangeCandlestickChart\s+visualContext="terminalLarge"\s+symbol=\{activeCoin\.symbol\}/);
+  assert.match(src('../src/components/ExchangeCandlestickChart.tsx'),/visualContext=\{visualContext\}/);
+  assert.match(src('../src/components/TradingViewChart.tsx'),/visualContext=\{visualContext\}/);
   assert.doesNotMatch(replay,/visualContext=|visualProfiles/);
 });
