@@ -91,7 +91,7 @@ test('Kotapych source notes are not rendered as footers on any setup or topic', 
 test('new corrected Kotapych document is the archived source for all 79 note pages', () => {
   const notes = KOTAPYCH_SOURCE_PAGES.filter(item => item.source === 'Копатыч.docx');
   assert.equal(notes.length, 79);
-  assert.match(notes[7].text, /поглощение шортовой активности/i);
+  assert.match(notes[7].text, /поглощение шортовой\s+активности/i);
   assert.match(notes[21].text, /не делает перехая/i);
   assert.match(notes[47].text, /1,5-2%/);
   assert.match(notes[77].text, /25-30%/);
