@@ -63,6 +63,13 @@ import {
 } from 'lucide-react';
 import { AUTHOR_TELEGRAM_CHANNEL_URL, AUTHOR_TELEGRAM_USERNAME } from './utils/accessCodes';
 import { getStoredPreferences, useAppPreferences } from './utils/userPreferences';
+import { loadMarketCoins } from './utils/marketCoinLoader';
+import { marketQuoteToChartCoin } from './utils/chartPageCoin';
+import {
+  chartPageHash, readChartPageHash, sameChartPageRoute,
+  saveChartPageSnapshot, readChartPageSnapshot, saveChartReturnHash, readChartReturnHash,
+  safeReturnHash, type ChartPageRoute, type ChartPageSnapshot,
+} from './utils/chartPageRoute';
 
 const DEFAULT_FILTERS: ScreenerFilterState = {
   exchange: 'binance',
@@ -79,6 +86,14 @@ const DEFAULT_FILTERS: ScreenerFilterState = {
 };
 
 export default function App() {
+  // Routed charts are real SPA pages: the Screener is unmounted, not covered.
+  const [chartRoute, setChartRoute] = useState<ChartPageRoute | null>(() =>
+    typeof window === 'undefined' ? null : readChartPageHash(window.location.hash));
+  const chartPageActive = chartRoute !== null;
+  const [chartRouteLoading, setChartRouteLoading] = useState(false);
+  const [chartRouteError, setChartRouteError] = useState<string | null>(null);
+  const chartNavigation = useRef({ enteredFromApp: false, scrollY: 0 });
+  const scanAbortRef = useRef<AbortController | null>(null);
   const { preferences } = useAppPreferences();
   const { t } = useLanguage();
   const [coins, setCoins] = useState<ScannedCoin[]>(() => getFallbackScannedCoins());
@@ -155,6 +170,9 @@ export default function App() {
       setFullEarlyScan(null);
       return;
     }
+    // Do not run the browser's early-scan poller while a standalone chart is open.
+    // The independent server monitoring/Telegram workers are not stopped.
+    if (chartPageActive) return;
     let alive = true;
     const controller = new AbortController();
     let stopRequested = false;
@@ -336,17 +354,17 @@ export default function App() {
       controller.abort();
       if (stopEarlyScanRef.current === stopScan) stopEarlyScanRef.current = null;
     };
-  }, [earlyMode, earlyFilters.exchange, earlyFilters.marketType, earlyFilters.timeframe,
+  }, [earlyMode, chartPageActive, earlyFilters.exchange, earlyFilters.marketType, earlyFilters.timeframe,
     earlyFilters.minVolumeUsd, earlyRefreshNonce]);
 
   // Refresh a completed scan at a lower cadence; never restart or reset a
   // still-running exhaustive sweep, which can span many exchange API batches.
   useEffect(() => {
-    if (!earlyMode || !fullEarlyScan
+    if (chartPageActive || !earlyMode || !fullEarlyScan
       || !['completed', 'partial', 'failed'].includes(fullEarlyScan.status)) return;
     const timer = setTimeout(refreshFullEarlyScan, 5 * 60_000);
     return () => clearTimeout(timer);
-  }, [earlyMode, fullEarlyScan?.status, fullEarlyScan?.finishedAt, refreshFullEarlyScan]);
+  }, [chartPageActive, earlyMode, fullEarlyScan?.status, fullEarlyScan?.finishedAt, refreshFullEarlyScan]);
 
   const handleOpenAuthModal = useCallback((mode: 'signin' | 'signup' = 'signin', reason: AuthPromptReason = null) => {
     setAuthInitialMode(mode);
@@ -362,6 +380,8 @@ export default function App() {
   useEffect(() => {
     const handleHashChange = () => {
       const hash = window.location.hash;
+      // The chart is its own route; do not reset the user's previous section.
+      if (readChartPageHash(hash)) return;
       if (hash === '#replay') {
         setActivePage((prev) => (prev === 'replay' ? prev : 'replay'));
         return;
@@ -798,6 +818,10 @@ export default function App() {
 
   // Fetch screener data from API
   const fetchScreenerData = useCallback(async (currentTf = filters.timeframe, currentExchange = filters.exchange, currentMarket = filters.marketType) => {
+    if (chartPageActive) return;
+    scanAbortRef.current?.abort();
+    const controller = new AbortController();
+    scanAbortRef.current = controller;
     const requestId = ++scanRequestRef.current;
     setIsLoading(true);
     setError(null);
@@ -811,7 +835,7 @@ export default function App() {
 
       let dataLoaded = false;
       try {
-        const res = await fetch(`/api/screener/scan?${params.toString()}`);
+        const res = await fetch(`/api/screener/scan?${params.toString()}`, { signal: controller.signal });
         if (res.ok) {
           const contentType = res.headers.get('content-type');
           if (contentType && contentType.includes('application/json')) {
@@ -845,11 +869,12 @@ export default function App() {
 
       // If backend did not yield data (e.g. an upstream network failure), fall back to direct browser connection
       if (!dataLoaded) {
+        if (controller.signal.aborted) return;
         const directCoins = await runDirectClientScan({
           exchange: currentExchange,
           marketType: currentMarket,
           timeframe: currentTf,
-        });
+        }, { signal: controller.signal });
         if (directCoins.length > 0) {
           if (requestId !== scanRequestRef.current) return;
           setCoins(directCoins);
@@ -860,25 +885,35 @@ export default function App() {
     } catch (err: any) {
       console.warn('Scan complete fallback error:', err);
     } finally {
+      if (scanAbortRef.current === controller) scanAbortRef.current = null;
       if (requestId === scanRequestRef.current) setIsLoading(false);
     }
-  }, [filters.timeframe, filters.exchange, filters.marketType, filters.minVolumeUsd, playAlertSound]);
+  }, [chartPageActive, filters.timeframe, filters.exchange, filters.marketType, filters.minVolumeUsd, playAlertSound]);
+
+  // Abort an in-flight browser scan on route transition, not merely its timer.
+  useEffect(() => {
+    if (!chartPageActive) return;
+    ++scanRequestRef.current;
+    scanAbortRef.current?.abort();
+    scanAbortRef.current = null;
+    setIsLoading(false);
+  }, [chartPageActive]);
 
   // The full early scan has its own throttled job. Avoid running the 75-pair
   // standard scan every minute at the same time and competing for exchange quota.
   useEffect(() => {
-    if (earlyMode && activePage === 'screener') return;
+    if (chartPageActive || (earlyMode && activePage === 'screener')) return;
     fetchScreenerData(filters.timeframe, filters.exchange, filters.marketType);
-  }, [earlyMode, activePage, filters.timeframe, filters.exchange, filters.marketType, filters.minVolumeUsd]);
+  }, [chartPageActive, earlyMode, activePage, filters.timeframe, filters.exchange, filters.marketType, filters.minVolumeUsd]);
 
   // Lightweight screener refresh remains unchanged outside full W/M mode.
   useEffect(() => {
-    if (earlyMode && activePage === 'screener') return;
+    if (chartPageActive || (earlyMode && activePage === 'screener')) return;
     const interval = setInterval(() => {
       fetchScreenerData();
     }, 60000);
     return () => clearInterval(interval);
-  }, [earlyMode, activePage, fetchScreenerData]);
+  }, [chartPageActive, earlyMode, activePage, fetchScreenerData]);
 
   // Favorites preserve exchange + market type. A plain symbol from legacy
   // callers is treated as Binance Futures, never guessed from current filters.
