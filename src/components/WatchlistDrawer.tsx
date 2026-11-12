@@ -43,6 +43,7 @@ export const WatchlistDrawer: React.FC<WatchlistDrawerProps> = ({
   } | null>(null);
   const folderMenuRef = useRef<HTMLDivElement>(null);
   const folderTriggerRef = useRef<HTMLButtonElement>(null);
+  const drawerOverlayRef = useRef<HTMLDivElement>(null);
   const [marketQuotes, setMarketQuotes] = useState<ScannedCoin[]>([]);
   const [quoteSources, setQuoteSources] = useState<Array<{
     exchange: ExchangeId; marketType: MarketType;
@@ -143,6 +144,35 @@ export const WatchlistDrawer: React.FC<WatchlistDrawerProps> = ({
       document.documentElement.style.overflow = oldHtmlOverflow;
     };
   }, [isOpen, onClose, folderMenu]);
+
+  // Mobile browser bars and the keyboard change the *visible* viewport
+  // independently of 100vh/100dvh on some iOS Safari versions. Keep this
+  // portal within the actually visible area, including when bars expand,
+  // the device rotates, or the on-screen keyboard opens.
+  useEffect(() => {
+    if (!isOpen) return;
+    const overlay = drawerOverlayRef.current;
+    if (!overlay) return;
+
+    const syncVisibleViewport = () => {
+      const viewport = window.visualViewport;
+      if (!viewport) return; // 100dvh / 100vw remain the CSS fallback.
+      overlay.style.top = `${viewport.offsetTop}px`;
+      overlay.style.left = `${viewport.offsetLeft}px`;
+      overlay.style.width = `${viewport.width}px`;
+      overlay.style.height = `${viewport.height}px`;
+    };
+
+    syncVisibleViewport();
+    window.visualViewport?.addEventListener('resize', syncVisibleViewport);
+    window.visualViewport?.addEventListener('scroll', syncVisibleViewport);
+    window.addEventListener('resize', syncVisibleViewport);
+    return () => {
+      window.visualViewport?.removeEventListener('resize', syncVisibleViewport);
+      window.visualViewport?.removeEventListener('scroll', syncVisibleViewport);
+      window.removeEventListener('resize', syncVisibleViewport);
+    };
+  }, [isOpen]);
 
   // The floating list is measured relative to the viewport, not to a coin
   // card with overflow:hidden. Close it on viewport changes / list scroll.
@@ -268,7 +298,8 @@ export const WatchlistDrawer: React.FC<WatchlistDrawerProps> = ({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[270] flex h-[100dvh] min-h-0 justify-end overflow-hidden bg-black/60 pb-[max(12px,env(safe-area-inset-bottom))] backdrop-blur-sm"
+      ref={drawerOverlayRef}
+      className="fixed left-0 top-0 z-[270] flex h-[100dvh] w-screen min-h-0 justify-end overflow-hidden bg-black/60 pl-[max(12px,env(safe-area-inset-left))] pr-[max(12px,env(safe-area-inset-right))] pt-[max(12px,env(safe-area-inset-top))] pb-[max(16px,env(safe-area-inset-bottom))] backdrop-blur-sm"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onClose();
       }}
@@ -277,7 +308,7 @@ export const WatchlistDrawer: React.FC<WatchlistDrawerProps> = ({
         role="dialog"
         aria-modal="true"
         aria-labelledby="watchlist-drawer-title"
-        className="watchlist-drawer flex min-h-0 min-w-0 w-full max-w-md flex-col overflow-hidden rounded-b-xl border-l border-b border-slate-700 bg-slate-900 shadow-2xl animate-in slide-in-from-right duration-200"
+        className="watchlist-drawer flex h-full min-h-0 min-w-0 w-full max-w-md flex-col overflow-hidden rounded-xl border border-slate-700 bg-slate-900 shadow-2xl animate-in slide-in-from-right duration-200"
       >
         {/* Header */}
         <div className="flex min-w-0 shrink-0 items-center justify-between gap-2 border-b border-slate-800 bg-slate-950/80 px-3 py-3 sm:px-5 sm:py-4">
