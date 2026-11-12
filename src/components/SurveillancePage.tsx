@@ -457,10 +457,10 @@ export const SurveillancePage: React.FC<SurveillancePageProps> = ({
               <div className="w-14 h-14 shrink-0 flex items-center justify-center">
                 <MonitoringIcon className="w-14 h-14" />
               </div>
-              <div className="min-w-0">
+              <div className="relative min-w-0 flex-1" onMouseLeave={() => setIsMonitoringHelpOpen(false)}>
                 <div className="flex flex-wrap items-center gap-2">
                   <h1 className="inline-block text-lg sm:text-xl font-black tracking-tight bg-gradient-to-r from-white via-cyan-100 to-sky-300 bg-clip-text text-transparent">Стеження за монетами</h1>
-                  <div className="relative inline-flex shrink-0 items-center" onMouseLeave={() => setIsMonitoringHelpOpen(false)}>
+                  <div className="inline-flex shrink-0 items-center">
                     <button
                       type="button"
                       aria-label="Інформація про стеження за монетами"
@@ -480,21 +480,21 @@ export const SurveillancePage: React.FC<SurveillancePageProps> = ({
                     >
                       <HelpCircle className="h-4 w-4" aria-hidden="true" />
                     </button>
-                    {isMonitoringHelpOpen && (
-                      <div
-                        id="surveillance-monitoring-help"
-                        role="tooltip"
-                        className="absolute z-50 left-1/2 top-full mt-2 w-[min(78vw,22rem)] -translate-x-1/2 rounded-xl border border-cyan-500/30 bg-slate-950/95 px-3 py-2.5 text-xs font-normal normal-case leading-relaxed text-slate-200 shadow-2xl shadow-black/50 backdrop-blur-sm break-words"
-                      >
-                        Комплексний моніторинг ринку на серверах h00k.top: Local Order Book, Multi-Timeframe структура, рівні, щільності та Telegram алерти
-                      </div>
-                    )}
                   </div>
                   <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1 font-mono">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
                     Live
                   </span>
                 </div>
+                {isMonitoringHelpOpen && (
+                  <div
+                    id="surveillance-monitoring-help"
+                    role="tooltip"
+                    className="absolute left-0 top-full z-50 mt-2 box-border w-full max-w-[22rem] min-w-0 rounded-xl border border-cyan-500/30 bg-slate-950/95 px-3 py-2.5 text-xs font-normal normal-case leading-relaxed text-slate-200 shadow-2xl shadow-black/50 backdrop-blur-sm break-words whitespace-normal"
+                  >
+                    Комплексний моніторинг ринку на серверах h00k.top: Local Order Book, Multi-Timeframe структура, рівні, щільності та Telegram алерти
+                  </div>
+                )}
               </div>
             </div>
           </div>
