@@ -17,6 +17,7 @@ import {
   ArrowLeft,
   X,
   Grid,
+  ScanLine,
 } from 'lucide-react';
 import {
   TerminalChartBlock,
@@ -89,6 +90,14 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
   const [marketError, setMarketError] = useState<string | null>(null);
   const marketCoins = marketSnapshot.coins;
   const terminalCoinCount = blocks.length;
+  const [autoScaleCharts, setAutoScaleCharts] = useState<boolean>(() => {
+    try { return localStorage.getItem('terminal_auto_scale_charts') === 'true'; }
+    catch { return false; }
+  });
+  useEffect(() => {
+    try { localStorage.setItem('terminal_auto_scale_charts', String(autoScaleCharts)); }
+    catch { /* Private browsing may disable storage. */ }
+  }, [autoScaleCharts]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -721,13 +730,23 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
       {/* Block count, centered clock and actions above the chart controls */}
       <header className="z-20 flex shrink-0 flex-col gap-1.5 border-b border-slate-800 bg-slate-950/95 px-2 py-1.5 sm:px-3">
         <div className="grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center sm:gap-2">
-          <span
-            title="Кількість відкритих блоків монет"
-            aria-label={`Відкритих блоків монет: ${terminalCoinCount}`}
-            className="min-w-0 justify-self-start whitespace-nowrap font-mono text-xs text-cyan-400"
+          <button
+            type="button"
+            onClick={() => setAutoScaleCharts(enabled => !enabled)}
+            disabled={chartProvider !== 'hookchart'}
+            aria-label="Автоматичний масштаб свічок усіх графіків"
+            aria-pressed={autoScaleCharts && chartProvider === 'hookchart'}
+            title={chartProvider !== 'hookchart'
+              ? 'Автомасштабування доступне для HookChart'
+              : autoScaleCharts
+                ? 'Вимкнути автоматичне масштабування свічок усіх графіків'
+                : 'Автоматично підлаштовувати всі графіки так, щоб свічки не перекривали об’єми'}
+            className={`flex h-7 w-8 shrink-0 items-center justify-center justify-self-start rounded-lg border transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${autoScaleCharts && chartProvider === 'hookchart'
+              ? 'border-cyan-500/50 bg-cyan-500/15 text-cyan-300'
+              : 'border-slate-700/80 bg-slate-900 text-slate-400 hover:text-cyan-300'}`}
           >
-            Монет: {terminalCoinCount}
-          </span>
+            <ScanLine className="h-4 w-4" />
+          </button>
 
           <TerminalClock timeZone={profile?.timeZone} open={showTradingSessions} buttonRef={clockButtonRef}
             onOpenChange={setShowTradingSessions} onOpen={() => setShowCoinPresets(false)} />
@@ -801,7 +820,15 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
 
         <div className="grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-1 sm:gap-2">
           {/* Layout Grid Switcher (1x1, 2x1, 2x2, 3 cols) */}
-          <div className="col-start-1 row-start-1 hidden shrink-0 items-center justify-self-start bg-slate-900 lg:flex p-0.5 rounded-xl border border-slate-800 text-xs font-mono">
+          <div className="col-start-1 row-start-1 flex min-w-0 items-center justify-self-start gap-1 sm:gap-2">
+            <span
+              title="Кількість відкритих блоків монет"
+              aria-label={`Відкритих блоків монет: ${terminalCoinCount}`}
+              className="whitespace-nowrap font-mono text-[11px] text-cyan-400 sm:text-xs"
+            >
+              Монет: {terminalCoinCount}
+            </span>
+            <div className="hidden shrink-0 items-center bg-slate-900 p-0.5 lg:flex rounded-xl border border-slate-800 text-xs font-mono">
             <button
               onClick={() => {
                 setConfig((prev) => ({ ...prev, layoutPreset: '1x1', columns: 1, autoFitScreen: true }));
@@ -866,6 +893,7 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
             >
               4x
             </button>
+            </div>
           </div>
 
           {/* Timeframe Selector */}
@@ -1157,6 +1185,7 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
               </>
             ) : (
               <ExchangeCandlestickChart
+                terminalAutoScale={autoScaleCharts && chartProvider === 'hookchart'}
                 symbol={activeCoin.symbol}
                 exchange={activeCoin.exchange}
                 marketType={activeCoin.marketType}
@@ -1199,6 +1228,7 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
                     <TerminalChartWidget
                       key={block.id}
                       block={block}
+                      terminalAutoScale={autoScaleCharts && chartProvider === 'hookchart'}
                       coin={coinData}
                       allCoins={coins}
                       isSingleBlock={blocks.length === 1}
