@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { MarketTickerFeed } from '../server/marketTickerFeed';
+import { ExchangeBudgetError } from '../server/exchangeHttp';
 import { fetchMarketCoins } from '../server/marketService';
 import { loadMarketCoins } from '../src/utils/marketCoinLoader';
 import { fetchDirectBinanceTickers, fetchDirectBybitTickers, type DirectTickerOptions, type DirectTickerSourceStatus } from '../src/utils/directExchangeClient';
@@ -39,6 +40,38 @@ test('ticker requests coalesce; cache keeps actual quote time and stale data exp
   clock = 122_000;
   assert.deepEqual(await feed.get('binance', 'futures'), []);
   assert.equal(feed.status('binance', 'futures').status, 'unavailable');
+});
+
+test('Bybit REST-only tickers stay live between 30-second browser polls', async () => {
+  let clock = 1_000;
+  let calls = 0;
+  const feed = new MarketTickerFeed(async () => {
+    calls++;
+    return json({ retCode: 0, result: { list: [bybitTicker] } });
+  }, () => clock);
+
+  assert.equal((await feed.get('bybit', 'futures')).length, 1);
+  clock = 31_000;
+  assert.equal(feed.status('bybit', 'futures').status, 'live');
+  assert.equal((await feed.get('bybit', 'futures')).length, 1);
+  assert.equal(calls, 1, 'scheduled 30-second poll should not duplicate REST requests');
+
+  clock = 47_000;
+  assert.equal(feed.status('bybit', 'futures').status, 'stale');
+  assert.equal((await feed.get('bybit', 'futures')).length, 1);
+  assert.equal(calls, 2, 'next poll after the freshness window refreshes Bybit');
+  assert.equal(feed.status('bybit', 'futures').status, 'live');
+});
+
+test('a local exchange budget cooldown is identified instead of a generic data error', async () => {
+  let calls = 0;
+  const feed = new MarketTickerFeed(async () => {
+    calls++;
+    throw new ExchangeBudgetError('Exchange bybit cooling down');
+  });
+  assert.deepEqual(await feed.get('bybit', 'futures'), []);
+  assert.equal(calls, 1, 'do not retry another Bybit hostname during cooldown');
+  assert.match(feed.status('bybit', 'futures').error || '', /призупинив запити/);
 });
 
 test('regional denial and rate limit stop mirror retries; retry-after is respected', async () => {
