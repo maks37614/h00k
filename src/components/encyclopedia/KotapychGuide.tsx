@@ -64,7 +64,6 @@ function SetupDetails({ setup }: { setup: KotapychSetup }) {
     <Lines label="5. Стоп і контроль ризику" lines={setup.stop} color="text-rose-300" />
     <Lines label="6. Цілі та фіксація" lines={setup.targets} color="text-emerald-300" />
     <Lines label="7. Коли сценарій скасовано" lines={setup.cancellation} color="text-rose-300" />
-    <p className="text-[11px] text-slate-500 italic">Джерело: {setup.source}</p>
   </div>;
 }
 
@@ -124,9 +123,6 @@ export function KotapychGuide() {
       <h4 className="text-base text-white font-extrabold">{topic.title}</h4>
       <p className="text-xs text-slate-400">{topic.summary}</p>
       <Lines label="Основні висновки з нотаток" lines={topic.points} />
-      <div className="rounded-lg border border-slate-800 bg-slate-950/50 px-3 py-2.5 text-[11px] leading-relaxed text-slate-400">
-        Джерело теми: «Копатыч.docx», стор. {topic.notePages.join(', ')}. Основні чотири сетапи додатково звірено з «4 set.docx» (8 стор.). Текст першоджерел збережений в архіві репозиторію, без окремої вкладки в енциклопедії.
-      </div>
     </div>}
 
     <div className="flex items-center gap-2 pt-3 border-t border-slate-800 text-[11px] text-slate-500">
