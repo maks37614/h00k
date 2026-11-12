@@ -34,11 +34,13 @@ interface HookChartTimeframePickerProps {
   timeframes: readonly string[];
   timeframe: string;
   disabled?: boolean;
+  /** Only reveal the secondary compact timeframe menu while extra tools are expanded. */
+  compactAvailable?: boolean;
   onChange: (timeframe: string) => void;
 }
 
 export function HookChartTimeframePicker({
-  timeframes, timeframe, disabled = false, onChange,
+  timeframes, timeframe, disabled = false, compactAvailable = true, onChange,
 }: HookChartTimeframePickerProps) {
   const [open, setOpen] = useState(false);
   const [position, setPosition] = useState<TimeframeMenuPosition | null>(null);
@@ -48,7 +50,7 @@ export function HookChartTimeframePicker({
   const optionsKey = timeframes.join('|');
 
   // The choice may also change via a keyboard shortcut, toolbar button or Replay.
-  useEffect(() => { setOpen(false); }, [timeframe, optionsKey, disabled]);
+  useEffect(() => { setOpen(false); }, [timeframe, optionsKey, disabled, compactAvailable]);
 
   useEffect(() => {
     if (!open) return;
@@ -126,7 +128,7 @@ export function HookChartTimeframePicker({
         aria-pressed={timeframe === tf} disabled={disabled}
         className={timeframe === tf ? 'active' : ''} onClick={() => select(tf)}>{tf}</button>)}
     </div>
-    <button type="button" ref={triggerRef} className="hookchart-timeframes-compact"
+    {compactAvailable && <button type="button" ref={triggerRef} className="hookchart-timeframes-compact"
       aria-label="Вибрати таймфрейм" title="Змінити таймфрейм"
       aria-haspopup="listbox" aria-expanded={open} aria-controls={open ? menuId : undefined}
       disabled={disabled}
@@ -138,8 +140,8 @@ export function HookChartTimeframePicker({
         }
       }}>
       <span>{timeframe}</span><ChevronDown size={12} aria-hidden="true" />
-    </button>
-    {open && position && createPortal(
+    </button>}
+    {compactAvailable && open && position && createPortal(
       <div id={menuId} ref={menuRef} className="hookchart-timeframe-menu" role="listbox"
         aria-label="Виберіть таймфрейм" onKeyDown={onMenuKeyDown}
         style={{ left: position.left, top: position.top,
