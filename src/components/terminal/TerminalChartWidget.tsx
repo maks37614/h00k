@@ -28,6 +28,7 @@ import {
 } from '../../types';
 import { formatCryptoPrice, formatVolume } from '../../utils/formatters';
 import { ExchangeCandlestickChart } from '../ExchangeCandlestickChart';
+import type { TerminalToolbarVisibility } from '../hookchart/HookChartCanvas';
 import { getTradingViewSymbol, normalizeExchangeSymbol } from '../../utils/marketSymbols';
 import { fetchDirectKlines } from '../../utils/directExchangeClient';
 import { useChartProvider } from '../../utils/useChartProvider';
@@ -158,6 +159,16 @@ export const TerminalChartWidget: React.FC<TerminalChartWidgetProps> = ({
   const [isCoinPickerOpen, setIsCoinPickerOpen] = useState(false);
   const [coinSearch, setCoinSearch] = useState('');
   const [isSpanPickerOpen, setIsSpanPickerOpen] = useState(false);
+  // Stable per-block state even when a distant chart temporarily unmounts.
+  // Never synchronize open panels through profile, storage, or global events.
+  const [extraToolsOpen, setExtraToolsOpen] = useState(false);
+  const [drawingToolsOpen, setDrawingToolsOpen] = useState(false);
+  const terminalToolbarVisibility = useMemo<TerminalToolbarVisibility>(() => ({
+    extraToolsOpen,
+    drawingToolsOpen,
+    onExtraToolsOpenChange: setExtraToolsOpen,
+    onDrawingToolsOpenChange: setDrawingToolsOpen,
+  }), [extraToolsOpen, drawingToolsOpen]);
   const [showDrawingToolbar, setShowDrawingToolbar] = useState<boolean>(() => {
     try {
       const saved = localStorage.getItem('terminal_widget_show_toolbar');
@@ -863,6 +874,7 @@ export const TerminalChartWidget: React.FC<TerminalChartWidgetProps> = ({
             ) : (
               <ExchangeCandlestickChart
                 terminalMode={useIntegratedHookChartToolbar}
+                terminalToolbarVisibility={useIntegratedHookChartToolbar ? terminalToolbarVisibility : undefined}
                 onTimeframeChange={useIntegratedHookChartToolbar ? (nextTimeframe) => onUpdateBlock({ timeframe: nextTimeframe }) : undefined}
                 hookchartToolbarActions={useIntegratedHookChartToolbar ? (
                   <div ref={headerRef} className="terminal-chart-header terminal-chart-integrated-toolbar flex items-center gap-1.5 text-xs select-none">

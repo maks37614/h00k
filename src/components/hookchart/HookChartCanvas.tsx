@@ -30,6 +30,16 @@ import type { HookTimeMarker } from './timeMarkers';
 import './hookchart.css';
 import './integration.css';
 
+/** Local visibility state belonging to one chart block in Terminal only.
+ * Opening these panels does not write shared HookChart account settings.
+ */
+export interface TerminalToolbarVisibility {
+  extraToolsOpen: boolean;
+  drawingToolsOpen: boolean;
+  onExtraToolsOpenChange: (open: boolean) => void;
+  onDrawingToolsOpenChange: (open: boolean) => void;
+}
+
 export interface HookChartCanvasProps {
   externalData?: {
     onNeedHistory: (timestamp: number) => Promise<boolean>;
@@ -50,6 +60,7 @@ export interface HookChartCanvasProps {
   replay?: boolean;
   focusTrigger?: number;
   terminalMode?: boolean;
+  terminalToolbarVisibility?: TerminalToolbarVisibility;
   focusFormation?: DetectedFormation | null;
   onTimeframeChange?: (timeframe: Timeframe) => void;
   /** Replay-only protection while historical candles are loading. */
@@ -113,7 +124,7 @@ function enabledIndicators(preferences?: HookChartPreferences, replay = false, m
 }
 
 const HookChartCanvas = forwardRef<HookChartHandle, HookChartCanvasProps>(function HookChartCanvas({
-  externalData, klines, symbol, timeframe, exchange, marketType, markers = [], expandPriceScaleToMarkers = false, savedChartParams, replay = false, focusTrigger, terminalMode = false, focusFormation, onTimeframeChange, timeframeDisabled = false, replayPlaybackSpeed, onReplayPlaybackSpeedChange, chartActions, toolbarActions, toolbarOverlays, tradeLevelToggle, footerActions,
+  externalData, klines, symbol, timeframe, exchange, marketType, markers = [], expandPriceScaleToMarkers = false, savedChartParams, replay = false, focusTrigger, terminalMode = false, terminalToolbarVisibility, focusFormation, onTimeframeChange, timeframeDisabled = false, replayPlaybackSpeed, onReplayPlaybackSpeedChange, chartActions, toolbarActions, toolbarOverlays, tradeLevelToggle, footerActions,
 }, forwardedRef) {
   const { user, profile, updateProfileData } = useAuth();
   const { alerts: priceAlerts, addAlert, deleteAlert } = useAlerts();
@@ -169,8 +180,11 @@ const HookChartCanvas = forwardRef<HookChartHandle, HookChartCanvasProps>(functi
   const extraToolsRef = useRef<HTMLDivElement | null>(null);
   const statsBarRef = useRef<HTMLDivElement | null>(null);
   const integratedToolbar = terminalMode && !!toolbarActions;
-  // Shared account setting: keep expanded terminal tools on across charts/pages.
-  const terminalExtraToolsOpen = settings.terminalExtraToolsOpen === true;
+  // A Terminal chart's panel is controlled by its own widget, never by
+  // the account-wide preference. Other chart pages keep their old behavior.
+  const terminalExtraToolsOpen = integratedToolbar && terminalToolbarVisibility
+    ? terminalToolbarVisibility.extraToolsOpen
+    : settings.terminalExtraToolsOpen === true;
   const scrollExtraTools = (direction: -1 | 1) => {
     const strip = extraToolsRef.current;
     if (!strip) return;
@@ -391,7 +405,11 @@ const HookChartCanvas = forwardRef<HookChartHandle, HookChartCanvasProps>(functi
   // Terminal extras must open visibly below the crowded chart controls.
   // Other HookChart pages keep using the saved toolbar preference.
   const topToolbarOpen = replay ? replayToolsOpen : (integratedToolbar ? terminalExtraToolsOpen : settings.showTopToolbarIcons !== false);
-  const drawingToolbarOpen = replay ? replayDrawingToolbarOpen : chartToolbarEnabled && settings.drawingToolbarOpen === true;
+  const drawingToolbarOpen = replay ? replayDrawingToolbarOpen : chartToolbarEnabled && (
+    terminalMode && terminalToolbarVisibility
+      ? terminalToolbarVisibility.drawingToolsOpen
+      : settings.drawingToolbarOpen === true
+  );
   const rightPaddingBars = terminalMode ? 8 : settings.rightPaddingEnabled === false ? 0 : (settings.rightPadding ?? 10);
   const channel = useMemo(() => (replay ? replayOverlays.includes('channel') : settings.autoChannel)
     ? buildStructuralChannel(analysisSeries, candles.at(-1)?.c) : null,
@@ -744,6 +762,8 @@ const HookChartCanvas = forwardRef<HookChartHandle, HookChartCanvasProps>(functi
   const toggleDrawingToolbar = () => {
     if (!chartToolbarEnabled) return;
     if (replay) setReplayDrawingToolbarOpen(current => !current);
+    else if (terminalMode && terminalToolbarVisibility)
+      terminalToolbarVisibility.onDrawingToolsOpenChange(!drawingToolbarOpen);
     else changeSettings({ drawingToolbarOpen: !drawingToolbarOpen });
     setPanel(null);
     setTool('cursor');
@@ -898,6 +918,8 @@ const HookChartCanvas = forwardRef<HookChartHandle, HookChartCanvasProps>(functi
         title={settings.tooltips !== false ? (topToolbarOpen ? 'Згорнути верхні інструменти' : 'Розгорнути верхні інструменти') : undefined}
         onClick={() => {
           if (replay) setReplayToolsOpen(current => !current);
+          else if (integratedToolbar && terminalToolbarVisibility)
+            terminalToolbarVisibility.onExtraToolsOpenChange(!terminalExtraToolsOpen);
           else if (integratedToolbar) changeSettings({ terminalExtraToolsOpen: !terminalExtraToolsOpen });
           else changeSettings({ showTopToolbarIcons: !topToolbarOpen });
           setDensityQuickOpen(false);

@@ -31,6 +31,7 @@ import { useChartProvider } from '../utils/useChartProvider';
 import { filterVisibleTradeMarkers, formationChartMarkers, hasCompleteTradeLevelSet, mergeLiveCandle, toggleCombinedTradeLevels } from '../utils/hookchartData';
 import { CHART_TRADE_LEVELS_EVENT, chartTradeLevelStorageKey, normalizeChartTradeLevelVisibility, readChartTradeLevels, saveChartTradeLevels, type ChartTradeLevelVisibility } from '../utils/chartTradeLevelPreferences';
 import { HookChart } from './HookChart';
+import type { TerminalToolbarVisibility } from './hookchart/HookChartCanvas';
 import type { HookChartHandle } from './hookchart/engine';
 
 interface TradingViewChartProps {
@@ -62,6 +63,7 @@ interface TradingViewChartProps {
   hideHeaderFormationBadge?: boolean;
   hideSymbolAndPrice?: boolean;
   terminalMode?: boolean;
+  terminalToolbarVisibility?: TerminalToolbarVisibility;
   hookchartToolbarActions?: React.ReactNode;
   hookchartToolbarOverlays?: React.ReactNode;
   onLiveStatusChange?: (status: { isConnected: boolean; mode: 'ws' | 'rest' }) => void;
@@ -193,6 +195,7 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
   hideHeaderFormationBadge = false,
   hideSymbolAndPrice = false,
   terminalMode = false,
+  terminalToolbarVisibility,
   hookchartToolbarActions,
   hookchartToolbarOverlays,
   onLiveStatusChange,
@@ -1290,7 +1293,7 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
         {/* TradingView Chart Container */}
         {chartProvider === 'hookchart' ? <HookChart ref={hookChartRef} klines={effectiveKlines}
           symbol={symbol} timeframe={timeframe} exchange={exchange} marketType={marketType}
-          terminalMode={terminalMode} focusFormation={formation}
+          terminalMode={terminalMode} terminalToolbarVisibility={terminalToolbarVisibility} focusFormation={formation}
           markers={hookMarkers} expandPriceScaleToMarkers={previewMarkers} savedChartParams={savedChartParams} onTimeframeChange={onTimeframeChange}
           tradeLevelToggle={previewMarkers ? undefined : combinedTradeLevels}
           toolbarActions={hookchartToolbarActions} toolbarOverlays={hookchartToolbarOverlays}
