@@ -174,7 +174,7 @@ export const FormationGuideModal: React.FC<FormationGuideModalProps> = ({ isOpen
             {mainCategory === 'scalping' ? (
               <button type="button" aria-current="page" onClick={() => setMainCategory('scalping')}
                 className="w-full text-left px-3 py-2.5 rounded-xl bg-slate-800 text-white font-bold flex items-center justify-between text-xs border border-cyan-500/20">
-                <span><strong className="block text-xs">Котапич</strong><small className="block text-[10px] text-slate-400 mt-1">4 сетапи · повні нотатки</small></span>
+                <span><strong className="block text-xs">Котапич</strong><small className="block text-[10px] text-slate-400 mt-1">4 сетапи · 19 тематичних розділів</small></span>
                 <ChevronRight className="w-3.5 h-3.5 text-cyan-400" />
               </button>
             ) : GUIDE_ITEMS.map((item) => (

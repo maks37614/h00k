@@ -43,10 +43,35 @@ test('both complete source document transcripts are indexed and remain accessibl
 
 test('Kotapych guide renders structured Ukrainian navigation', () => {
   const html = renderToString(React.createElement(KotapychGuide));
-  for (const name of ['Сетап №1', 'Сетап №2', 'Сетап №3', 'Сетап №4', 'Поглиблений аналіз', 'Повні нотатки']) {
+  for (const name of ['Сетап №1', 'Сетап №2', 'Сетап №3', 'Сетап №4', 'Поглиблений аналіз']) {
     assert.ok(html.includes(name), name + ' tab missing');
   }
   assert.match(html, /LONG/);
   assert.match(html, /SHORT/);
   assert.match(html, /Не є індивідуальною інвестиційною рекомендацією/);
+});
+
+test('all key concepts from both documents are covered before hiding raw-notes navigation', () => {
+  const topicIds = KOTAPYCH_TOPICS.map(topic => topic.id);
+  const required = [
+    'market-context', 'bases-levels', 'base-secondary', 'liquidity-sweeps',
+    'retest-rounding', 'setup1-variants', 'setup2-variants', 'setup3-pump',
+    'setup4-pit', 'tape-orderbook', 'volume-clusters', 'execution-sizing',
+    'stops-targets', 'chop-avoidance', 'transitions', 'funding-spot-futures',
+    'instrument-selection', 'daily-risk', 'journal-psychology',
+  ];
+  assert.deepEqual(topicIds, required, 'important concepts must remain accessible');
+  for (const topic of KOTAPYCH_TOPICS) {
+    assert.ok(topic.points.length >= 6, topic.id + ' must include substantive detail');
+    assert.ok(topic.notePages.length >= 5, topic.id + ' must cite original note pages');
+    assert.ok(topic.points.every(text => text.trim().length >= 60), topic.id + ' has an incomplete explanation');
+  }
+  const markup = renderToString(React.createElement(KotapychGuide));
+  assert.doesNotMatch(markup, /Повні нотатки|Повний текст наданих матеріалів|Оригінал/);
+  assert.ok(markup.includes('Поглиблений аналіз'));
+});
+
+test('raw document transcripts are retained in the repository for future verification', () => {
+  const count = KOTAPYCH_SOURCE_PAGES.length;
+  assert.equal(count, 87);
 });
