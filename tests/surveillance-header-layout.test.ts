@@ -1,6 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { MonitoringIcon, MonitoringMenuIcon } from '../src/components/MonitoringIcon';
 
 const source = readFileSync(new URL('../src/components/SurveillancePage.tsx', import.meta.url), 'utf8');
 const topBar = source.slice(
@@ -32,4 +35,24 @@ test('monitoring question-mark tooltip shows the full description on hover, focu
   assert.match(topBar, /role="tooltip"/);
   assert.match(topBar, /aria-describedby=\{isMonitoringHelpOpen \? 'surveillance-monitoring-help' : undefined\}/);
   assert.doesNotMatch(topBar, /<p className="text-xs text-slate-400">\s*Комплексний моніторинг/);
+});
+
+test('monitoring uses the approved high-resolution inline SVG emblem', () => {
+  assert.match(topBar, /<MonitoringIcon className="w-14 h-14" \/>/);
+  const markup = renderToStaticMarkup(React.createElement(MonitoringIcon, { className: 'w-14 h-14' }));
+  assert.match(markup, /<svg[^>]+viewBox="0 0 100 100"/);
+  assert.match(markup, /24\/7/);
+  assert.match(markup, /<linearGradient/);
+  assert.match(markup, /<feGaussianBlur/);
+  assert.match(markup, /<circle/);
+  assert.match(markup, /<rect/);
+  assert.match(markup, /<text/);
+  assert.doesNotMatch(markup, /monitoring-24-7\.png|mask-image|maskImage/);
+  assert.match(markup, /aria-hidden="true"/);
+});
+
+test('monitoring menu icon remains unchanged and renders independently', () => {
+  const markup = renderToStaticMarkup(React.createElement(MonitoringMenuIcon));
+  assert.match(markup, /viewBox="0 0 24 24"/);
+  assert.match(markup, /<svg/);
 });
