@@ -268,7 +268,7 @@ export const WatchlistDrawer: React.FC<WatchlistDrawerProps> = ({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[270] flex justify-end overflow-hidden bg-black/60 backdrop-blur-sm"
+      className="fixed inset-0 z-[270] flex h-[100dvh] min-h-0 justify-end overflow-hidden bg-black/60 pb-[max(12px,env(safe-area-inset-bottom))] backdrop-blur-sm"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onClose();
       }}
@@ -277,7 +277,7 @@ export const WatchlistDrawer: React.FC<WatchlistDrawerProps> = ({
         role="dialog"
         aria-modal="true"
         aria-labelledby="watchlist-drawer-title"
-        className="watchlist-drawer flex min-h-0 min-w-0 w-full max-w-md flex-col overflow-hidden border-l border-slate-800 bg-slate-900 shadow-2xl animate-in slide-in-from-right duration-200"
+        className="watchlist-drawer flex min-h-0 min-w-0 w-full max-w-md flex-col overflow-hidden rounded-b-xl border-l border-b border-slate-700 bg-slate-900 shadow-2xl animate-in slide-in-from-right duration-200"
       >
         {/* Header */}
         <div className="flex min-w-0 shrink-0 items-center justify-between gap-2 border-b border-slate-800 bg-slate-950/80 px-3 py-3 sm:px-5 sm:py-4">
