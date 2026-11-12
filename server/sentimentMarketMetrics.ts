@@ -38,9 +38,11 @@ export type TakerDeltaSnapshot = {
   sampledPairs: number;
   requestedPairs: number;
   sampledAt: number;
+  /** Futures if accessible; otherwise the public Binance Spot market-data API. */
+  marketType: 'futures' | 'spot';
 };
 
-/** One unfinished UTC-day candle; not a 24h rolling capital-inflow metric. */
+/** One unfinished UTC-day candle; not a rolling 24-hour net capital inflow. */
 export function parseBinanceDailyTakerDelta(payload: unknown, now: number): number | null {
   const row = Array.isArray(payload) && Array.isArray(payload[0]) ? payload[0] : null;
   if (!row || row.length < 11) return null;
@@ -49,64 +51,130 @@ export function parseBinanceDailyTakerDelta(payload: unknown, now: number): numb
   const quote = Number(row[7]);
   const buy = Number(row[10]);
   if (![quote, buy].every(Number.isFinite) || quote <= 0 || buy < 0 || buy > quote) return null;
-  // taker buy quote volume - taker sell quote volume
+  // Quote volume of taker buys minus taker sells, in USDT.
   return 2 * buy - quote;
 }
 
-// At most eight lightweight Binance futures kline calls per five minutes,
-// across ALL site visitors. Existing exchangeFetch enforces the shared IP budget.
+// Server-wide, never per-user. Both sources share the existing global IP limiter.
 const SAMPLE_SIZE = 8;
 const CACHE_MS = 5 * 60_000;
+const FUTURES_GEO_COOLDOWN_MS = 30 * 60_000;
 let cache: { at: number; utcDay: number; value: TakerDeltaSnapshot | null } | null = null;
 let inflight: Promise<TakerDeltaSnapshot | null> | null = null;
+let futuresGeoBlockedUntil = 0;
 
-export async function getSampledTakerDelta(coins: readonly MarketCoin[], now = Date.now()):
-  Promise<TakerDeltaSnapshot | null> {
+function sampleSymbols(coins: readonly MarketCoin[], marketType: 'futures' | 'spot'): string[] {
+  return [...new Set(coins
+    .filter(c => c.exchange === 'binance' && c.marketType === marketType && c.volumeUsd > 0 &&
+      /^[A-Z0-9]{3,20}USDT$/.test(c.symbol))
+    .sort((a, b) => b.volumeUsd - a.volumeUsd)
+    .map(c => c.symbol))].slice(0, SAMPLE_SIZE);
+}
+
+type MarketSample = { deltaUsd: number; count: number; blockedStatus: number | null };
+
+/**
+ * A fixed-size, current-UTC-day sample. Never join Spot and Futures values:
+ * they are separate markets with distinct activity and must be labeled.
+ */
+async function sampleMarket(
+  marketType: 'futures' | 'spot',
+  symbols: readonly string[],
+  now: number,
+  request: typeof fetch,
+): Promise<MarketSample> {
+  let current = 0;
+  let deltaUsd = 0;
+  let count = 0;
+  let blockedStatus: number | null = null;
+  const endpoint = marketType === 'futures'
+    ? 'https://fapi.binance.com/fapi/v1/klines'
+    : 'https://data-api.binance.vision/api/v3/klines';
+
+  await Promise.all(Array.from({ length: Math.min(4, symbols.length) }, async () => {
+    while (current < symbols.length && blockedStatus === null) {
+      const symbol = symbols[current++];
+      try {
+        const response = await request(
+          `${endpoint}?symbol=${encodeURIComponent(symbol)}&interval=1d&limit=1`,
+          { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(4_000) },
+        );
+        if (!response.ok) {
+          if (response.status === 403 || response.status === 451 || response.status === 429) {
+            blockedStatus = response.status;
+          }
+          continue;
+        }
+        const observed = parseBinanceDailyTakerDelta(await response.json(), now);
+        if (observed === null) continue;
+        deltaUsd += observed;
+        count++;
+      } catch {
+        // No synthetic fallback. Try the independent Spot market below.
+      }
+    }
+  }));
+  return { deltaUsd, count, blockedStatus };
+}
+
+/**
+ * Prefer Binance USD-M Futures; when its REST endpoint is blocked (for example
+ * geo HTTP 451), fall back to the officially published Binance Spot data API.
+ * Restrict both sources to eight symbols every five minutes globally.
+ * Uses shared exchangeFetch IP budgets, not per-browser REST requests.
+ */
+export async function getSampledTakerDelta(
+  coins: readonly MarketCoin[],
+  now = Date.now(),
+  request: typeof fetch = exchangeFetch,
+): Promise<TakerDeltaSnapshot | null> {
   const utcDay = Math.floor(now / 86_400_000);
   if (cache && cache.utcDay === utcDay && now - cache.at >= 0 && now - cache.at < CACHE_MS) {
     return cache.value;
   }
   if (inflight) return inflight;
 
-  const symbols = [...new Set(coins
-    .filter(c => c.exchange === 'binance' && c.marketType === 'futures' && c.volumeUsd > 0 &&
-      /^[A-Z0-9]{3,20}USDT$/.test(c.symbol))
-    .sort((a, b) => b.volumeUsd - a.volumeUsd)
-    .map(c => c.symbol))].slice(0, SAMPLE_SIZE);
-  if (!symbols.length) return null;
+  const futuresSymbols = sampleSymbols(coins, 'futures');
+  const spotSymbols = sampleSymbols(coins, 'spot');
+  if (!futuresSymbols.length && !spotSymbols.length) return null;
 
   inflight = (async () => {
-    let current = 0;
-    let delta = 0;
-    let completed = 0;
-    // Limit concurrent requests to four, even across many visitors.
-    await Promise.all(Array.from({ length: Math.min(4, symbols.length) }, async () => {
-      while (current < symbols.length) {
-        const symbol = symbols[current++];
-        try {
-          const response = await exchangeFetch(
-            `https://fapi.binance.com/fapi/v1/klines?symbol=${encodeURIComponent(symbol)}&interval=1d&limit=1`,
-            { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(2500) },
-          );
-          if (!response.ok) continue;
-          const sample = parseBinanceDailyTakerDelta(await response.json(), now);
-          if (sample === null) continue;
-          delta += sample;
-          completed++;
-        } catch {
-          // Missing sample is never replaced with a guessed value.
-        }
+    if (futuresSymbols.length >= 3 && now >= futuresGeoBlockedUntil) {
+      const futures = await sampleMarket('futures', futuresSymbols, now, request);
+      if (futures.blockedStatus === 403 || futures.blockedStatus === 451) {
+        futuresGeoBlockedUntil = now + FUTURES_GEO_COOLDOWN_MS;
+        console.warn(`[SentimentFlow] Binance Futures klines unavailable (HTTP ${futures.blockedStatus}); switching to Spot`);
       }
-    }));
-    // Do not present a one-symbol sample as capital flow for the market.
-    const result: TakerDeltaSnapshot | null = completed >= 3
-      ? { deltaUsd: Math.round(delta), sampledPairs: completed, requestedPairs: symbols.length, sampledAt: Date.now() }
-      : null;
-    cache = { at: Date.now(), utcDay, value: result };
-    return result;
+      if (futures.count >= 3) {
+        return {
+          deltaUsd: Math.round(futures.deltaUsd),
+          sampledPairs: futures.count,
+          requestedPairs: futuresSymbols.length,
+          sampledAt: Date.now(),
+          marketType: 'futures' as const,
+        };
+      }
+    }
+
+    if (spotSymbols.length >= 3) {
+      const spot = await sampleMarket('spot', spotSymbols, now, request);
+      if (spot.count >= 3) {
+        return {
+          deltaUsd: Math.round(spot.deltaUsd),
+          sampledPairs: spot.count,
+          requestedPairs: spotSymbols.length,
+          sampledAt: Date.now(),
+          marketType: 'spot' as const,
+        };
+      }
+    }
+
+    return null;
   })();
   try {
-    return await inflight;
+    const value = await inflight;
+    cache = { at: now, utcDay, value };
+    return value;
   } finally {
     inflight = null;
   }
