@@ -1001,10 +1001,10 @@
 /* At every screen width, the collapsed row has regular TF buttons followed
  * immediately by the tools chevron. The secondary TF menu belongs ONLY to
  * the expanded tools row; never show a duplicate timeframe control closed. */
-.hookchart-root:not(.hookchart-terminal)[data-extra-tools-open="true"] .hookchart-timeframes-buttons {
+.hookchart-root[data-extra-tools-open="true"] .hookchart-timeframes-buttons {
   display:none;
 }
-.hookchart-root:not(.hookchart-terminal)[data-extra-tools-open="true"] .hookchart-timeframes-compact {
+.hookchart-root[data-extra-tools-open="true"] .hookchart-timeframes-compact {
   display:inline-flex;
   flex:0 0 auto;
   box-sizing:border-box;
@@ -1025,7 +1025,7 @@
   touch-action:manipulation;
 }
 .hookchart-root .hookchart-timeframes-compact > svg { flex-shrink:0; }
-.hookchart-root:not(.hookchart-terminal)[data-extra-tools-open="true"] .hookchart-timeframes {
+.hookchart-root[data-extra-tools-open="true"] .hookchart-timeframes {
   flex:0 0 auto;
   min-width:0;
   margin-right:2px;
