@@ -320,6 +320,7 @@ export function Chart({candles,symbol,tf,tool,drawings,setDrawings,alerts,setAle
  const [vp,setVp]=useState<Viewport>(()=>initialViewport||{barWidth:9,rightOffset:0,autoY:true,manualCenter:null,manualRange:null,fitAll:false});
  const visualAppliedRef=useRef<string|null>(null);
  const lastVisualCaptureRef=useRef(visualProfileCaptureVersion);
+ const [visualCanvasWidth,setVisualCanvasWidth]=useState(0);
  useEffect(()=>{onViewportChange?.(vp)},[vp,onViewportChange]);
  const terminalNavigation=useRef(false),terminalFocusKey=useRef<string|null>(null);
  const autoFollowCandleRef=useRef<string|null>(null);
@@ -336,6 +337,22 @@ export function Chart({candles,symbol,tf,tool,drawings,setDrawings,alerts,setAle
      ?previous:{...previous,rightOffset:0,autoY:true,manualCenter:null,manualRange:null,fitAll:false,yZoom:1});
  },[terminalAutoScale,symbol,tf,lastCandleTime]);
  useEffect(()=>{if(!visualProfile){visualAppliedRef.current=null;if(terminalMode&&!terminalAutoScale) terminalNavigation.current=false}},[!!visualProfile,terminalMode,terminalAutoScale]);
+ // Profile editing may finish while the canvas is hidden or has zero width
+ // (tabs, fullscreen transitions, Terminal cards). Reapply when measurable.
+ // ResizeObserver runs on geometry changes only; no extra market requests.
+ useLayoutEffect(()=>{
+   if(!visualProfile||!visualProfileKey||typeof ResizeObserver==='undefined')return;
+   const canvas=ref.current;
+   if(!canvas)return;
+   const update=()=>{
+     const measured=Math.round(canvas.getBoundingClientRect().width);
+     if(measured>0)setVisualCanvasWidth(previous=>previous===measured?previous:measured);
+   };
+   update();
+   const observer=new ResizeObserver(update);
+   observer.observe(canvas);
+   return()=>observer.disconnect();
+ },[!!visualProfile,visualProfileKey]);
  const rangeRestored=useRef(false);
  useLayoutEffect(()=>{
    if(!terminalMode||visualProfile||!candles.length||initialLogicalRange)return;
@@ -354,7 +371,7 @@ export function Chart({candles,symbol,tf,tool,drawings,setDrawings,alerts,setAle
    if(width<=0)return;
    // Include the coin and timeframe: switching markets must restore the
    // selected profile even when its numeric settings have not changed.
-   const signature=[symbol,tf,visualProfileKey,visualProfile.visibleBars,visualProfile.verticalZoom,visualProfile.autoPriceScale,visualProfile.rightGapBars,terminalAutoScale].join(':');
+   const signature=[symbol,tf,visualProfileKey,visualProfile.visibleBars,visualProfile.verticalZoom,visualProfile.autoPriceScale,visualProfile.rightGapBars,terminalAutoScale,Math.round(width)].join(':');
    // Saving a gesture-edited preview must preserve its exact viewport, rather
    // than rerunning initial preset placement and jumping back.
    if(lastVisualCaptureRef.current!==visualProfileCaptureVersion){
@@ -387,7 +404,7 @@ export function Chart({candles,symbol,tf,tool,drawings,setDrawings,alerts,setAle
      manualRange:priceAuto?null:spread*(terminalMode?1.32:1.16)/visualProfile.verticalZoom,
      yZoom:terminalAutoScale?1:visualProfile.verticalZoom,fitAll:false,
    });
- },[symbol,tf,visualProfileKey,visualProfileCaptureVersion,visualProfile?.visibleBars,visualProfile?.verticalZoom,visualProfile?.autoPriceScale,visualProfile?.rightGapBars,!!candles.length,initialLogicalRange,terminalMode,terminalAutoScale]);
+ },[symbol,tf,visualProfileKey,visualProfileCaptureVersion,visualProfile?.visibleBars,visualProfile?.verticalZoom,visualProfile?.autoPriceScale,visualProfile?.rightGapBars,!!candles.length,initialLogicalRange,terminalMode,terminalAutoScale,visualCanvasWidth]);
  useLayoutEffect(()=>{if(visualProfile||rangeRestored.current||!candles.length||!initialLogicalRange)return;const width=ref.current?.getBoundingClientRect().width||800,restored=restoredHookViewport(candles.length,hookChartPlotWidth(width),initialLogicalRange);if(restored){rangeRestored.current=true;setVp({...restored,rightOffset:restored.rightOffset+Math.max(0,rightPaddingBars)+Math.max(0,rightPadding)/Math.max(3,restored.barWidth)})}},[candles.length,initialLogicalRange,rightPaddingBars,rightPadding,!!visualProfile]);
  const [draft,setDraft]=useState<{t:number,p:number}|null>(null),[selectedDrawingId,setSelectedDrawingId]=useState<string|null>(null),[editingDrawingId,setEditingDrawingId]=useState<string|null>(null);
  const [zoomPanelOpen,setZoomPanelOpen]=useState<boolean>(()=>false),[clockNow,setClockNow]=useState(()=>Date.now()),[jumpOpen,setJumpOpen]=useState(false),[jumpMode,setJumpMode]=useState<'day'|'time'>('day'),[jumpDate,setJumpDate]=useState(()=>zoneDateKey(Date.now(),timezone)),[jumpTime,setJumpTime]=useState('12:00'),[jumpBusy,setJumpBusy]=useState(false),[jumpMessage,setJumpMessage]=useState(''),[pendingJump,setPendingJump]=useState<{t:number,fitDay:boolean}|null>(null),[liqHudOpen,setLiqHudOpen]=useState<boolean>(()=>true);
