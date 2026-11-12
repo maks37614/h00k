@@ -3,7 +3,7 @@ import type { EarlyFormationCandidate, EarlyFormationStage } from './earlyFormat
 
 /** Keep standard filters untouched; early W/M gets its own independent settings. */
 export function createEarlyModeFilters(standard: ScreenerFilterState): ScreenerFilterState {
-  return { ...standard, category: 'all', status: 'all', densityConfirmedOnly: false };
+  return { ...standard, category: 'all', status: 'all', densityConfirmedOnly: false, roundNumberOnly: false };
 }
 
 export type EarlyStageFilter = 'all' | EarlyFormationStage;
@@ -33,8 +33,8 @@ export function getVisibleEarlyFormations(
   const result: EarlyFormationListItem[] = [];
   if (filters.category !== 'all' && filters.category !== 'reversal') return result;
   if (filters.status !== 'all' && filters.status !== 'forming') return result;
-  // Order-book density has not been verified for prospective structures.
-  if (filters.densityConfirmedOnly) return result;
+  // Round-number and order-book evidence from regular formations cannot filter prospective W/M structures.
+  if (filters.densityConfirmedOnly || filters.roundNumberOnly) return result;
 
   for (const coin of coins) {
     if (filters.exchange !== 'all' && coin.exchange !== filters.exchange) continue;
