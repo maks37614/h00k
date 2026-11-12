@@ -72,7 +72,9 @@ export function HookChartVisualPreview({
   const [drawings, setDrawings] = useState<Drawing[]>([]);
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const previewRef = useRef<HTMLDivElement>(null);
-  const useParentCandles = (candles?.length ?? 0) > 0;
+  // An attached live chart may still be waiting for its first candle. In that
+  // case don't make a redundant REST call just to fill the preview.
+  const useParentCandles = candles !== undefined;
 
   useEffect(() => {
     if (useParentCandles) return;
@@ -182,7 +184,9 @@ export function HookChartVisualPreview({
             ? 'Завантажуємо реальні свічки BTCUSDT…'
             : sampleError
               ? 'Немає доступу до котирувань BTCUSDT. Відкрий графік монети на Скрінері, Формаціях або в Терміналі.'
-              : 'Очікування свічок для графіка…'}
+              : useParentCandles
+                ? 'Очікуємо реальні свічки поточної монети…'
+                : 'Очікування біржових свічок для графіка…'}
         </div>
       )}
       <p className="hookchart-visual-preview-info">
