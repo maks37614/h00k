@@ -6,7 +6,7 @@ import type { DetectedFormation, ScannedCoin, ScreenerFilterState } from '../src
 const filters: ScreenerFilterState = {
   exchange: 'binance', marketType: 'futures', timeframe: '5m',
   category: 'all', bias: 'all', status: 'all', minVolumeUsd: 0,
-  densityConfirmedOnly: false, searchQuery: '', sortBy: 'confidence', sortOrder: 'desc'
+  densityConfirmedOnly: false, roundNumberOnly: false, searchQuery: '', sortBy: 'confidence', sortOrder: 'desc'
 };
 
 function pattern(id: string, options: Partial<DetectedFormation> = {}): DetectedFormation {
@@ -41,6 +41,28 @@ test('density-only filter rejects proximity to a round number without order-book
   const real = pattern('density', { roundNumberContext: { detected: true, distancePct: 0.1, step: 1, strength: 1, densityConfirmed: true, densityUsd: 100_000 } });
   const results = getVisibleFormations([coin('ZROUSDT', [round, real, pattern('missing')])], { ...filters, densityConfirmedOnly: true });
   assert.deepEqual(results.map(i => i.formation.id), ['density']);
+});
+
+test('round-number filter uses the same detected context as the ROUND badge, without requiring density', () => {
+  const round = pattern('round', { roundNumberContext: {
+    detected: true, level: 10, distancePct: 0.1, step: 1, strength: 85, densityConfirmed: false
+  } });
+  const far = pattern('far', { roundNumberContext: {
+    detected: false, level: 20, distancePct: 5, step: 10, strength: 0, densityConfirmed: false
+  } });
+  const combined = pattern('round-density', { roundNumberContext: {
+    detected: true, level: 10, distancePct: 0.02, step: 1, strength: 95,
+    densityConfirmed: true, densityUsd: 150_000
+  } });
+  const source = [coin('ZROUSDT', [round, far, combined, pattern('unknown')])];
+  const onlyRound = getVisibleFormations(source, { ...filters, roundNumberOnly: true });
+  assert.deepEqual(onlyRound.map(item => item.formation.id), ['round', 'round-density']);
+  assert.equal(groupVisibleFormations(onlyRound).length, 1);
+  const onlyDensity = getVisibleFormations(source, { ...filters, densityConfirmedOnly: true });
+  assert.deepEqual(onlyDensity.map(item => item.formation.id), ['round-density']);
+  const both = getVisibleFormations(source, { ...filters, densityConfirmedOnly: true, roundNumberOnly: true });
+  assert.deepEqual(both.map(item => item.formation.id), ['round-density']);
+  assert.equal(getVisibleFormations(source, filters).length, 4);
 });
 
 test('status, direction and category filters apply independently to each pattern', () => {
