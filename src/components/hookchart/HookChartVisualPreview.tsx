@@ -165,6 +165,7 @@ export function HookChartVisualPreview({
                 candleLongColor={longColor}
                 candleShortColor={shortColor}
                 visualProfile={profile}
+                rightPaddingBars={profile.rightGapBars}
                 visualProfileKey={previewKey}
                 visualProfileCaptureVersion={visualProfileCaptureVersion}
                 terminalMode={visualContext.startsWith('terminal')}
@@ -176,7 +177,7 @@ export function HookChartVisualPreview({
               tf={activeTimeframe}
               timezone={timezone}
               viewport={viewport}
-              rightPaddingBars={0}
+              rightPaddingBars={profile.rightGapBars}
             />
           </div>
           <div className="hookchart-visual-preview-actions">
