@@ -891,6 +891,7 @@ const HookChartCanvas = forwardRef<HookChartHandle, HookChartCanvasProps>(functi
         timeframes={availableTimeframes}
         timeframe={timeframe}
         disabled={replay && timeframeDisabled}
+        compactAvailable={topToolbarOpen && !integratedToolbar}
         onChange={selectTimeframe}
       />
     : <div className="hookchart-timeframes" role="group" aria-label="Таймфрейм">
@@ -908,8 +909,8 @@ const HookChartCanvas = forwardRef<HookChartHandle, HookChartCanvasProps>(functi
         type="button"
         className="topToolbarToggle"
         aria-expanded={topToolbarOpen}
-        aria-label={topToolbarOpen ? 'Згорнути верхні інструменти' : 'Розгорнути верхні інструменти'}
-        title={settings.tooltips !== false ? (topToolbarOpen ? 'Згорнути верхні інструменти' : 'Розгорнути верхні інструменти') : undefined}
+        aria-label={topToolbarOpen ? 'Згорнути панель інструментів HookChart' : 'Розгорнути панель інструментів HookChart'}
+        title={settings.tooltips !== false ? (topToolbarOpen ? 'Згорнути панель інструментів' : 'Розгорнути панель інструментів') : undefined}
         onClick={() => {
           if (replay) setReplayToolsOpen(current => !current);
           else if (integratedToolbar && terminalToolbarVisibility)
