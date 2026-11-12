@@ -84,39 +84,38 @@ export function EarlyFormationDetailsModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-4 md:p-6 bg-black/80 backdrop-blur-sm overflow-y-auto no-scrollbar" role="dialog" aria-modal="true" aria-label="Можлива формація">
       <div className="relative w-full max-w-6xl 2xl:max-w-7xl bg-slate-900 border-0 sm:border border-slate-800 rounded-none sm:rounded-3xl shadow-2xl overflow-hidden my-auto h-[100dvh] sm:h-auto sm:max-h-[95vh] flex flex-col">
-        {/* Mirrors the confirmed formation details header without claiming validation. */}
-        <div className="flex items-center justify-between gap-2 sm:gap-3 px-3 sm:px-6 py-2.5 sm:py-4 border-b border-slate-800 bg-slate-950/80 shrink-0">
-          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-            <div className="min-w-0">
-              <div className="flex items-center flex-wrap gap-1.5 sm:gap-2">
-                <div role="status" aria-label={liveConnected ? 'Котирування підключено' : 'Очікування котирування'}
-                  className={`flex items-center justify-center rounded-full border px-1.5 py-1 ${
-                    liveConnected ? 'bg-emerald-950/70 border-emerald-700/60' : 'bg-slate-800/80 border-slate-700'
-                  }`}>
-                  <span className={`h-2 w-2 rounded-full ${liveConnected ? 'bg-emerald-500' : 'bg-slate-500'}`} />
-                </div>
-                <h2 className="text-base sm:text-xl font-extrabold text-white font-mono tracking-wide">
-                  {coin.baseAsset}/{coin.quoteAsset}
-                </h2>
-                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg border text-[10px] sm:text-[11px] font-semibold ${
+        {/* Compact early-chart header: share the same responsive layout as confirmed formations. */}
+        <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1.5 border-b border-slate-800 bg-slate-950/80 px-3 py-2.5 shrink-0 sm:flex sm:justify-between sm:gap-3 sm:px-6 sm:py-4">
+          <div className="contents sm:flex sm:min-w-0 sm:flex-1 sm:flex-wrap sm:items-center sm:gap-2">
+            <div className="col-span-2 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 sm:gap-2">
+              <div role="status" aria-label={liveConnected ? 'Котирування підключено' : 'Очікування котирування'}
+                className={`flex shrink-0 items-center justify-center rounded-full border px-1.5 py-1 ${
+                  liveConnected ? 'bg-emerald-950/70 border-emerald-700/60' : 'bg-slate-800/80 border-slate-700'
+                }`}>
+                <span className={`h-2 w-2 rounded-full ${liveConnected ? 'bg-emerald-500' : 'bg-slate-500'}`} />
+              </div>
+              <h2 className="shrink-0 whitespace-nowrap text-base font-extrabold tracking-wide text-white font-mono sm:text-xl">
+                {coin.baseAsset}/{coin.quoteAsset}
+              </h2>
+              <div className="inline-flex shrink-0 items-baseline gap-1 whitespace-nowrap" aria-label="Поточна ціна та зміна за 24 години">
+                <span className="font-mono text-[11px] font-bold text-white sm:text-sm">{money(livePrice)}</span>
+                <span className={`text-[10px] font-semibold sm:text-xs ${isPositive ? 'text-emerald-400' : 'text-rose-400'}`}>
+                  ({isPositive ? '+' : ''}{coin.priceChange24h.toFixed(2)}%)
+                </span>
+              </div>
+              <span className="shrink-0 rounded border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-bold uppercase text-amber-300">{coin.exchange}</span>
+            </div>
+            <div className="col-start-1 row-start-2 min-w-0 max-w-full">
+                <span className={`inline-flex min-w-0 max-w-full items-center gap-1 px-2 py-0.5 rounded-lg border text-[10px] sm:text-[11px] font-semibold ${
                   candidate.bias === 'bullish'
                     ? 'bg-emerald-500/20 text-emerald-200 border-emerald-500/40'
                     : 'bg-rose-500/20 text-rose-200 border-rose-500/40'
                 }`} title="Попередня структура; підтвердження ще немає">
-                  Можлива формація: {candidate.name} · {candidate.bias === 'bullish' ? 'LONG?' : 'SHORT?'}
+                  <span className="truncate">Можлива формація: {candidate.name} · {candidate.bias === 'bullish' ? 'LONG?' : 'SHORT?'}</span>
                 </span>
-                <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/10 border border-amber-500/30 text-amber-300 uppercase font-bold">{coin.exchange}</span>
-                <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-300">{coin.marketType === 'futures' ? 'USDT-M' : 'Spot'}</span>
-              </div>
-              <p className="text-xs text-slate-400 mt-0.5">
-                <span className="font-mono text-white font-bold">{money(livePrice)}</span>
-                <span className={`ml-2 font-semibold ${isPositive ? 'text-emerald-400' : 'text-rose-400'}`}>
-                  ({isPositive ? '+' : ''}{coin.priceChange24h.toFixed(2)}%)
-                </span>
-              </p>
             </div>
           </div>
-          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+          <div className="col-start-2 row-start-2 flex shrink-0 items-center justify-self-end gap-1.5 sm:gap-2">
             {onOpenTelegramModal && (
               <button type="button"
                 onClick={() => onOpenTelegramModal({
