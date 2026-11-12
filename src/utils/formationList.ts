@@ -29,6 +29,8 @@ export function getVisibleFormations(
       if (filters.category !== 'all' && formation.category !== filters.category) continue;
       if (filters.bias !== 'all' && formation.bias !== filters.bias) continue;
       if (filters.status !== 'all' && formation.status !== filters.status) continue;
+      // ROUND matches the same proximity evidence shown on the formation card.
+      if (filters.roundNumberOnly && formation.roundNumberContext?.detected !== true) continue;
       // A round number without order-book evidence is not a confirmed density.
       if (filters.densityConfirmedOnly && formation.roundNumberContext?.densityConfirmed !== true) continue;
       if (!matchesRegularIndicatorFilters(coin, formation, regularIndicators)) continue;
