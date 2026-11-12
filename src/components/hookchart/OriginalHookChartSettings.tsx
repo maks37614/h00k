@@ -470,6 +470,7 @@ export function OriginalHookChartSettings({
   currentViewport,
   currentPlotWidth,
   onCaptureVisual,
+  onResetVisual,
 }: {
   open: boolean;
   prefs: HookChartPreferences;
@@ -488,6 +489,7 @@ export function OriginalHookChartSettings({
   currentViewport?: Viewport;
   currentPlotWidth?: number;
   onCaptureVisual?: (key: VisualProfileKey) => void;
+  onResetVisual?: (key: VisualProfileKey) => void;
 }) {
   const [tab, setTab] = useState<'main' | 'chart' | 'strategies' | 'hotkeys'>('main');
   const [visualContext, setVisualContext] = useState<VisualContextId>(activeVisualContext || 'screenerQuick');
@@ -771,7 +773,11 @@ export function OriginalHookChartSettings({
             onContextChange={setVisualContext}
             onDeviceChange={setVisualDevice}
             onProfileChange={delta => set('visualProfiles', patchVisualProfile(prefs.visualProfiles, makeVisualProfileKey(visualContext, visualDevice), delta))}
-            onReset={() => set('visualProfiles', patchVisualProfile(prefs.visualProfiles, makeVisualProfileKey(visualContext, visualDevice), null))}
+            onReset={() => {
+              const key = makeVisualProfileKey(visualContext, visualDevice);
+              set('visualProfiles', patchVisualProfile(prefs.visualProfiles, key, null));
+              onResetVisual?.(key);
+            }}
             onCapture={onCaptureVisual && activeVisualContext === visualContext && visualDevice === (typeof window === 'undefined' ? 'desktop' : visualDeviceForWidth(window.innerWidth)) && currentViewport && (currentPlotWidth || 0) > 100
               ? () => onCaptureVisual(makeVisualProfileKey(visualContext, visualDevice)) : undefined}
             live={!!currentViewport}
