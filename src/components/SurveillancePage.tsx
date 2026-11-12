@@ -459,7 +459,7 @@ export const SurveillancePage: React.FC<SurveillancePageProps> = ({
               </div>
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
-                  <h1 className="inline-block border-b border-cyan-400/60 pb-0.5 text-lg sm:text-xl font-black tracking-tight bg-gradient-to-r from-white via-cyan-100 to-sky-300 bg-clip-text text-transparent">Стеження за монетами</h1>
+                  <h1 className="inline-block text-lg sm:text-xl font-black tracking-tight bg-gradient-to-r from-white via-cyan-100 to-sky-300 bg-clip-text text-transparent">Стеження за монетами</h1>
                   <div className="relative inline-flex shrink-0 items-center" onMouseLeave={() => setIsMonitoringHelpOpen(false)}>
                     <button
                       type="button"
