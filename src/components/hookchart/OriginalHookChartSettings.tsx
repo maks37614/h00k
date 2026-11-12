@@ -374,7 +374,7 @@ function StrategySettings({ activeId, onSelect }: { activeId: string; onSelect: 
 function VisualProfileEditor({
   visualContext, visualDevice, selectedProfile, onContextChange, onDeviceChange,
   onProfileChange, onReset, onCapture, live, previewCandles, previewSymbol,
-  previewTimeframe, previewExchange, previewMarketType, previewTimezone, previewLongColor, previewShortColor,
+  previewTimeframe, previewExchange, previewMarketType, previewTimezone, previewLongColor, previewShortColor, saveStatus,
 }: {
   visualContext: VisualContextId;
   visualDevice: VisualDevice;
@@ -385,6 +385,7 @@ function VisualProfileEditor({
   onReset: () => void;
   onCapture?: () => void;
   live: boolean;
+  saveStatus?: 'idle' | 'saving' | 'saved' | 'error';
   previewCandles?: Candle[];
   previewSymbol?: string;
   previewTimeframe?: string;
@@ -422,6 +423,7 @@ function VisualProfileEditor({
         visualDevice={visualDevice}
         profile={selectedProfile}
         onChange={onProfileChange}
+        saveStatus={saveStatus}
       />
       <Setting label="Кількість видимих свічок" desc="Кількість на ширину графіка; на вузькому екрані обмежується мінімальною шириною свічки.">
         <div className="flex items-center gap-2">
@@ -480,6 +482,7 @@ export function OriginalHookChartSettings({
   currentPlotWidth,
   onCaptureVisual,
   onResetVisual,
+  saveStatus,
   previewCandles,
   previewSymbol,
   previewTimeframe,
@@ -507,6 +510,7 @@ export function OriginalHookChartSettings({
   currentPlotWidth?: number;
   onCaptureVisual?: (key: VisualProfileKey) => void;
   onResetVisual?: (key: VisualProfileKey) => void;
+  saveStatus?: 'idle' | 'saving' | 'saved' | 'error';
   /** Existing loaded HookChart candles; absent in standalone account editor. */
   previewCandles?: Candle[];
   previewSymbol?: string;
@@ -841,6 +845,7 @@ export function OriginalHookChartSettings({
             onCapture={onCaptureVisual && activeVisualContext === visualContext && visualDevice === (typeof window === 'undefined' ? 'desktop' : visualDeviceForWidth(window.innerWidth)) && currentViewport && (currentPlotWidth || 0) > 100
               ? () => onCaptureVisual(makeVisualProfileKey(visualContext, visualDevice)) : undefined}
             live={!!currentViewport}
+            saveStatus={saveStatus}
             previewCandles={previewCandles}
             previewSymbol={previewSymbol}
             previewTimeframe={previewTimeframe}
