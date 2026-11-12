@@ -125,6 +125,8 @@ test('saved chart visual profile overrides stale per-coin logical ranges', () =>
   assert.match(engine, /if\(visualProfile\|\|rangeRestored\.current\|\|!candles\.length\|\|!initialLogicalRange\)return/);
   assert.match(canvas, /initialLogicalRange=\{savedChartParams\?\.visibleRange\}/);
   assert.match(canvas, /visualProfile=\{activeVisualProfile\}/);
+  assert.match(preview, /rightPaddingBars=\{profile\.rightGapBars\}/);
+  assert.match(engine, /barWidth,rightOffset:0,autoY:priceAuto/);
 });
 
 test('wheel zoom is isolated between preview and its underlying live chart', () => {
