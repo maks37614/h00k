@@ -11,13 +11,13 @@ export const clampSentimentScore = (score: number): number =>
 
 // Visual-only segments: the market score still comes from the existing API.
 const SEGMENT_COLORS = [
-  '#fb4c61',
-  '#ff795e',
-  '#ffa44f',
-  '#ffde35',
-  '#a4ed5b',
-  '#33e8c4',
-  '#16ca92',
+  '#ff294e',
+  '#f43f5e',
+  '#fb5263',
+  '#ffb02e',
+  '#ffdf40',
+  '#6be785',
+  '#1ad6a8',
   '#0f946e',
 ] as const;
 
@@ -72,9 +72,9 @@ export const MarketSentimentScale: React.FC<MarketSentimentScaleProps> = ({ scor
         </div>
       </div>
       <div className="mt-1 flex items-center justify-between gap-2 text-[10px] font-medium text-slate-300 sm:text-[11px]" aria-hidden="true">
-        <span>Страх</span>
+        <span className="text-red-400">Страх</span>
         <span>Нейтрально</span>
-        <span>Жадібність</span>
+        <span className="text-emerald-400">Жадібність</span>
       </div>
     </div>
   );
