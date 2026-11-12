@@ -2,6 +2,7 @@ import {StrictMode, useEffect, useState} from 'react';
 import {createRoot} from 'react-dom/client';
 import App from './App.tsx';
 import { GuestLanding } from './components/GuestLanding';
+import { shouldShowGuestLanding } from './utils/guestEntry';
 import { LegalPage } from './components/LegalPage';
 import './index.css';
 import './components/replay/replayCoinPicker.css';
@@ -29,9 +30,7 @@ function Entry() {
     window.addEventListener('hashchange', sync);
     return () => window.removeEventListener('hashchange', sync);
   }, []);
-  const isInfoRoute = legalPath === '/welcome';
-  const isGuestHome = !user && (legalPath === '' || legalPath === '/') && (!hash || hash === '#welcome');
-  return isInfoRoute || isGuestHome ? <GuestLanding /> : <App />;
+  return shouldShowGuestLanding(legalPath, hash, Boolean(user)) ? <GuestLanding /> : <App />;
 }
 
 createRoot(document.getElementById('root')!).render(
