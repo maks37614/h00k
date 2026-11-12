@@ -334,7 +334,7 @@ export function Chart({candles,symbol,tf,tool,drawings,setDrawings,alerts,setAle
    setVp(previous=>previous.rightOffset===0&&previous.autoY&&previous.manualCenter===null&&previous.manualRange===null&&!previous.fitAll&&(previous.yZoom??1)===1
      ?previous:{...previous,rightOffset:0,autoY:true,manualCenter:null,manualRange:null,fitAll:false,yZoom:1});
  },[terminalAutoScale,symbol,tf,lastCandleTime]);
- useEffect(()=>{if(!visualProfile){visualAppliedRef.current=null;if(terminalMode) terminalNavigation.current=false}},[!!visualProfile,terminalMode]);
+ useEffect(()=>{if(!visualProfile){visualAppliedRef.current=null;if(terminalMode&&!terminalAutoScale) terminalNavigation.current=false}},[!!visualProfile,terminalMode,terminalAutoScale]);
  const rangeRestored=useRef(false);
  useLayoutEffect(()=>{
    if(!terminalMode||visualProfile||!candles.length||initialLogicalRange)return;
