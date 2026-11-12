@@ -1314,6 +1314,60 @@
   -webkit-overflow-scrolling:touch;
   overscroll-behavior:contain;
 }
+/* Profile chart help: anchored to the header, never clipped by its narrow mobile button. */
+.hookchart-root.profile-hookchart-settings .settingsHeader {
+  position:relative;
+  z-index:10;
+}
+.hookchart-root.profile-hookchart-settings .profileSettingsHelp {
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  margin-left:auto;
+  flex-shrink:0;
+}
+.hookchart-root.profile-hookchart-settings .profileSettingsHelpButton {
+  display:inline-flex;
+  width:32px;
+  height:32px;
+  align-items:center;
+  justify-content:center;
+  border:1px solid #256c83;
+  border-radius:50%;
+  background:#102b3b;
+  color:#8ee4ff;
+  font:700 15px/1 system-ui;
+  cursor:pointer;
+  touch-action:manipulation;
+}
+.hookchart-root.profile-hookchart-settings .profileSettingsHelpButton:hover,
+.hookchart-root.profile-hookchart-settings .profileSettingsHelpButton[aria-expanded="true"] {
+  border-color:#22d3ee;
+  background:#164455;
+  color:#effbff;
+}
+.hookchart-root.profile-hookchart-settings .profileSettingsHelpButton:focus-visible {
+  outline:2px solid #67e8f9;
+  outline-offset:3px;
+}
+.hookchart-root.profile-hookchart-settings .profileSettingsHelpPopover {
+  position:absolute;
+  z-index:20;
+  top:calc(100% + 2px);
+  right:10px;
+  box-sizing:border-box;
+  width:min(350px,calc(100% - 20px));
+  padding:12px 14px;
+  border:1px solid #277d95;
+  border-radius:10px;
+  background:#101e2c;
+  box-shadow:0 12px 30px #000b;
+  color:#dbeafe;
+  font:400 12px/1.6 system-ui;
+  white-space:normal;
+  text-align:left;
+  overflow-wrap:anywhere;
+}
 @media (max-width:600px) {
   .hookchart-root.profile-hookchart-settings .strategySettings .strategyCard { padding:12px; }
 }
