@@ -13,6 +13,7 @@ interface ExchangeCandlestickChartProps {
   timeframe: string;
   historyLimit?: number;
   terminalMode?: boolean;
+  terminalAutoScale?: boolean;
   visualContext?: VisualContextId;
   terminalToolbarVisibility?: TerminalToolbarVisibility;
   hookchartToolbarActions?: React.ReactNode;
@@ -23,13 +24,14 @@ interface ExchangeCandlestickChartProps {
 
 export const ExchangeCandlestickChart: React.FC<ExchangeCandlestickChartProps> = ({
   symbol, exchange, marketType, timeframe, historyLimit = 1000, onTimeframeChange,
-  terminalMode, visualContext, terminalToolbarVisibility, hookchartToolbarActions, hookchartToolbarOverlays, formation,
+  terminalMode, terminalAutoScale, visualContext, terminalToolbarVisibility, hookchartToolbarActions, hookchartToolbarOverlays, formation,
 }) => (
   <div className="h-full w-full min-h-0" role="group" aria-label={`Графік ${symbol}`}>
     <TradingViewChart
       key={`${exchange}:${marketType}:${symbol}:${timeframe}`}
       klines={EMPTY_HISTORY}
       terminalMode={terminalMode}
+      terminalAutoScale={terminalAutoScale}
       visualContext={visualContext}
       terminalToolbarVisibility={terminalToolbarVisibility}
       hookchartToolbarActions={hookchartToolbarActions}
