@@ -16,7 +16,7 @@ export function terminalCandlePriceRange(
   const gapPx = Math.min(14, Math.max(8, height * .05));
   // Keep the lower wick above both the volume band and a clear visual gap.
   const volumeBandPx = showVolumes ? Math.max(56, Math.min(108, height * .14)) + 3 : 0;
-  const reservedFraction = Math.min(.70, (volumeBandPx + gapPx) / height);
+  const reservedFraction = Math.min(.88, (volumeBandPx + gapPx) / height);
   const bottomPadding = reservedFraction * (spread + topPadding) / (1 - reservedFraction);
   return { low: low - bottomPadding, high: high + topPadding };
 }
