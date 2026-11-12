@@ -697,9 +697,13 @@ export default function App() {
     const currentHash = window.location.hash;
     if (!readChartPageHash(currentHash)) {
       chartNavigation.current = { enteredFromApp: true, scrollY: window.scrollY };
-      saveChartReturnHash(window.sessionStorage, uid, safeReturnHash(currentHash));
+      try {
+        saveChartReturnHash(window.sessionStorage, uid, safeReturnHash(currentHash));
+      } catch { /* Storage access may be blocked by the browser. */ }
     }
-    saveChartPageSnapshot(window.sessionStorage, uid, route, snapshot);
+    try {
+      saveChartPageSnapshot(window.sessionStorage, uid, route, snapshot);
+    } catch { /* A restricted iOS storage session still opens the chart. */ }
     setChartRoute(route);
     setChartRouteError(null);
     setChartRouteLoading(false);
@@ -757,14 +761,16 @@ export default function App() {
   // instrument, timeframe and structure. Recalculate its levels on each refresh;
   // close the old preview immediately when the setup disappears or invalidates.
   useEffect(() => {
-    if (!selectedEarly) return;
+    // The historical early candidate is pinned to the open chart page; an
+    // unrelated Screener refresh must not close the user's active chart.
+    if (!selectedEarly || chartPageActive) return;
     const current = findCurrentEarlyFormation(selectedEarly, earlyMode ? (fullEarlyScan?.data ?? []) : coins);
     if (!current) {
       setSelectedEarly(null);
     } else if (current.coin !== selectedEarly.coin || current.candidate !== selectedEarly.candidate) {
       setSelectedEarly(current);
     }
-  }, [coins, earlyMode, fullEarlyScan?.data, selectedEarly]);
+  }, [coins, chartPageActive, earlyMode, fullEarlyScan?.data, selectedEarly]);
 
   const handleOpenEarly = useCallback((coin: ScannedCoin, candidate: EarlyFormationCandidate) => {
     if (!user) { handleOpenAuthModal('signin', 'chart'); return; }
