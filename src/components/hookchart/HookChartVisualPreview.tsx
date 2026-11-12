@@ -65,6 +65,7 @@ export function HookChartVisualPreview({
   const [sample, setSample] = useState<Candle[]>(EMPTY_CANDLES);
   const [sampleLoading, setSampleLoading] = useState(false);
   const [sampleError, setSampleError] = useState(false);
+  const [visualProfileCaptureVersion, setVisualProfileCaptureVersion] = useState(0);
   const [viewport, setViewport] = useState<Viewport>({
     barWidth: 9, rightOffset: 0, autoY: true,
     manualCenter: null, manualRange: null, fitAll: false,
@@ -115,7 +116,11 @@ export function HookChartVisualPreview({
     const naturalRange = Number.isFinite(lo) && Number.isFinite(hi)
       ? Math.max(hi - lo, Math.abs(hi) * .01, 1e-10) * (visualContext.startsWith('terminal') ? 1.32 : 1.16)
       : undefined;
-    onChange(captureVisualProfile(profile, plotWidth, viewport, naturalRange));
+    const captured = captureVisualProfile(profile, plotWidth, viewport, naturalRange);
+    // Save the actual gesture-adjusted viewport without forcing this preview
+    // to jump back to the profile's reconstructed initial position.
+    onChange(captured);
+    setVisualProfileCaptureVersion(version => version + 1);
   }, [activeCandles, viewport, profile, visualContext, onChange]);
 
   return (
@@ -161,6 +166,7 @@ export function HookChartVisualPreview({
                 candleShortColor={shortColor}
                 visualProfile={profile}
                 visualProfileKey={previewKey}
+                visualProfileCaptureVersion={visualProfileCaptureVersion}
                 terminalMode={visualContext.startsWith('terminal')}
                 onViewportChange={setViewport}
               />
