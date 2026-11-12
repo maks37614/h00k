@@ -1,4 +1,4 @@
-import { exchangeFetch } from './exchangeHttp';
+import { ExchangeBudgetError, exchangeFetch } from './exchangeHttp';
 import type { ExchangeId, MarketType } from '../src/types';
 
 export interface RawTicker {
@@ -42,6 +42,9 @@ interface FeedEntry {
 }
 
 const FRESH_MS = 15_000;
+// Bybit tickers are REST-only and the browser polls every 30 seconds.
+// Do not flag a successful REST snapshot as stale between scheduled polls.
+const BYBIT_REST_FRESH_MS = 45_000;
 const STALE_MS = 120_000;
 
 /** Shares requests across screener, sentiment and formation scans. */
@@ -77,10 +80,12 @@ export class MarketTickerFeed {
     // A failed once-per-minute REST reconciliation must not mark the screener
     // stale while validated live miniTicker frames are still arriving.
     const wsFresh = entry.streamAt !== undefined && now - entry.streamAt >= 0 && now - entry.streamAt < FRESH_MS;
+    const freshnessWindow = exchange === 'bybit' && entry.streamAt === undefined
+      ? BYBIT_REST_FRESH_MS : FRESH_MS;
     const effectiveError = wsFresh ? undefined : entry.error;
     return {
       exchange, marketType: market,
-      status: age < FRESH_MS && !effectiveError ? 'live' : age < STALE_MS ? 'stale' : 'unavailable',
+      status: age < freshnessWindow && !effectiveError ? 'live' : age < STALE_MS ? 'stale' : 'unavailable',
       updatedAt: entry.updatedAt,
       ...(effectiveError ? { error: effectiveError } : {}),
       ...(effectiveError && entry.httpStatus ? { httpStatus: entry.httpStatus } : {}),
@@ -197,9 +202,11 @@ export class MarketTickerFeed {
         if (!response.ok) {
           httpStatus = response.status;
           failureDetail = `HTTP ${response.status} from ${new URL(url).hostname}`;
-          error = response.status === 403 || response.status === 451
-            ? `Біржа обмежила доступ із регіону сервера (HTTP ${response.status})`
-            : response.status === 429
+          error = response.status === 403
+            ? 'Біржа відхилила запит (HTTP 403: IP-ліміт або обмеження доступу)'
+            : response.status === 451
+              ? 'Біржа обмежила доступ із регіону сервера (HTTP 451)'
+              : response.status === 429
               ? 'Перевищено ліміт запитів біржі (HTTP 429)'
               : `Помилка біржі (HTTP ${response.status})`;
           // Do not retry denied or rate-limited requests through another hostname.
@@ -217,6 +224,7 @@ export class MarketTickerFeed {
         const json = await response.json();
         if (exchange === 'bybit' && json?.retCode !== 0) {
           error = `Помилка API Bybit (код ${json?.retCode ?? 'невідомий'})`;
+          failureDetail = `Bybit retCode ${json?.retCode ?? 'unknown'} from ${new URL(url).hostname}`;
           if (json?.retCode === 10006) { retryMs = 60_000; break; }
           continue;
         }
@@ -237,6 +245,11 @@ export class MarketTickerFeed {
           .filter(t => Number.isFinite(t.price) && t.price > 0 && Number.isFinite(t.volumeUsd) && t.volumeUsd >= 0
             && Number.isFinite(t.change24h) && Number.isFinite(t.high24h) && Number.isFinite(t.low24h))
           .sort((a, b) => b.volumeUsd - a.volumeUsd);
+        if (!data.length) {
+          error = 'Біржа повернула дані без коректних USDT-котирувань';
+          failureDetail = `No valid USDT tickers from ${new URL(url).hostname}`;
+          continue;
+        }
         if (overlay?.size) {
           const latest = new Map(data.map(t => [t.symbol, t]));
           for (const [symbol, tick] of overlay) {
@@ -259,6 +272,12 @@ export class MarketTickerFeed {
         // Never expose backend addresses, credentials or request headers.
         const reason = cause instanceof Error ? `${cause.name}: ${cause.message}` : String(cause);
         failureDetail = `${new URL(url).hostname}: ${reason}`.slice(0, 240);
+        if (cause instanceof ExchangeBudgetError) {
+          // A shared-IP cooldown cannot be solved by trying another hostname.
+          error = 'Сервер тимчасово призупинив запити до біржі (ліміт або обмеження доступу)';
+          retryMs = 60_000;
+          break;
+        }
       }
     }
     if (entry.inFlightWsUpdates === overlay) entry.inFlightWsUpdates = undefined;
