@@ -5,7 +5,7 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { OriginalHookChartSettings, normalizeOriginalHookChartPreferences } from '../src/components/hookchart/OriginalHookChartSettings';
 import {
-  VISUAL_CONTEXTS, captureVisualProfile, getVisualProfile, makeVisualProfileKey,
+  VISUAL_CONTEXTS, applyVisualDefaultsForDevice, captureVisualProfile, getVisualProfile, makeVisualProfileKey,
   normalizeVisualProfile, normalizedVisualProfiles, patchVisualProfile, visualContextForTerminalWidth,
   visualDeviceForWidth,
 } from '../src/components/hookchart/visualProfiles';
@@ -144,4 +144,21 @@ test('visual zoom and right-side padding accept expanded finite ranges', () => {
   assert.equal(invalid.rightGapBars, base.rightGapBars);
   assert.equal(normalizeVisualProfile({ ...base, verticalZoom: 100000, rightGapBars: 999999 }, 'terminalCompact').verticalZoom, 100);
   assert.equal(normalizeVisualProfile({ ...base, verticalZoom: 100000, rightGapBars: 999999 }, 'terminalCompact').rightGapBars, 2000);
+});
+
+
+test('making the selected visual scale default applies to seven chart types on just one device', () => {
+  const desktop = makeVisualProfileKey('formationsFull', 'desktop');
+  const original = patchVisualProfile(undefined, desktop,
+    { visibleBars: 123, rightGapBars: 88, verticalZoom: 3 });
+  const chosen = { visibleBars: 44, verticalZoom: 1.75, autoPriceScale: false, rightGapBars: 35 };
+  const defaults = applyVisualDefaultsForDevice(original, 'mobile', chosen);
+  for (const context of VISUAL_CONTEXTS) {
+    assert.deepEqual(defaults[makeVisualProfileKey(context.id, 'mobile')], chosen);
+  }
+  assert.equal(defaults[desktop]?.visibleBars, 123, 'desktop preferences must remain unchanged');
+  assert.equal(defaults[desktop]?.rightGapBars, 88);
+  const code = src('../src/components/hookchart/OriginalHookChartSettings.tsx');
+  assert.match(code, /applyVisualDefaultsForDevice\(prefs\.visualProfiles, visualDevice, selected\)/);
+  assert.match(code, /Зробити типовими для всіх графіків цього пристрою/);
 });

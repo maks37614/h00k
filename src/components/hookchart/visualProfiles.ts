@@ -101,6 +101,17 @@ export function patchVisualProfile(
   return result;
 }
 
+/** Make this device's chosen view the default for every Screener, Formation and Terminal chart. */
+export function applyVisualDefaultsForDevice(
+  source: VisualProfiles | undefined,
+  device: VisualDevice,
+  selected: VisualChartProfile,
+): VisualProfiles {
+  return VISUAL_CONTEXTS.reduce<VisualProfiles>((acc, context) =>
+    patchVisualProfile(acc, makeVisualProfileKey(context.id, device), selected),
+  { ...(source || {}) });
+}
+
 export function captureVisualProfile(
   current: VisualChartProfile,
   plotWidth: number,

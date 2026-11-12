@@ -21,7 +21,7 @@ import { hookChartHorizontalRange, hookChartIndexAtTime, hookChartTimeAtIndex, r
 import { drawHookTimeMarkers, type HookTimeMarker } from './timeMarkers';
 import { terminalCandlePriceRange } from './terminalAutoScale';
 import { HOOKCHART_PRICE_SCALE_WIDTH, HOOKCHART_PRICE_LABEL_HEIGHT, hookChartPlotWidth, layoutPriceScaleLabels } from './priceScale';
-export interface HookChartHandle { takeScreenshot(): string | null; fitContent(): void; zoomToLatest(): void; zoom(factor: number): void; }
+export interface HookChartHandle { takeScreenshot(): string | null; fitContent(): void; zoomToLatest(): void; focusLatest(): void; zoom(factor: number): void; }
 export type Candle={t:number,o:number,h:number,l:number,c:number,v:number,n:number,tb?:number};
 
 export type Density={id:string,side:'ASK'|'BID',p:number,q:number,usd:number,peakUsd:number,first:number,last:number,active:boolean,reacted?:boolean,reaction?:number,touches:number,lastTouch:number,replenishments:number,updates:number,score:number,mmScore:number;reactionScore?:number;reactionTier?:'strong'|'potential';executedUsd90s?:number;lastAbsorptionAt?:number;unexplainedReductions?:number};
@@ -314,14 +314,25 @@ export function ChartTimeAxis({candles,tf,timezone,language='uk',viewport,rightP
 }
 
 export type Viewport={barWidth:number;rightOffset:number;autoY:boolean;manualCenter:number|null;manualRange:number|null;fitAll?:boolean;yZoom?:number};
+export type ViewportGesture='pan'|'zoom'|'price'|'focus';
 
-export function Chart({candles,symbol,tf,tool,drawings,setDrawings,alerts,setAlerts,onCreatePriceAlert,onSelectPriceAlert,densities,marketPrints,liquidations,autoLevels,levelLabelMode,levelLabelColor='#2090F0',levelLabelSize=11,levelLabelStyle='text',levelLineStyle='solid',crosshairLineWidth=DEFAULT_CROSSHAIR_LINE_WIDTH,rightPadding=0,rightPaddingBars=0,roundGrid=false,roundness=2,gridHorizontal=false,gridVertical=false,showMarketPrintSums=false,showVolumes=true,showLiquidations=true,showLiquidationLong=true,showLiquidationShort=true,sessionLiquidationsUsd=0,cascadeRisk,liquidationCut=0,liquidationSource='',liquidationStreamLive=false,liquidationLastEventAt=null,timezone='Europe/Warsaw',language='uk',showDensityLines=true,showDensityLabels=true,showDensityAmounts=true,highlightDensityReaction=false,autoSR=false,showSRLabels=true,autoPrevDay=false,autoDayOpen=false,autoVWAP=false,autoLocalHL=false,autoRoundLevels=false,autoPOC=false,autoChannel=false,autoStops=false,showLiqRiskBlock=true,channelModel=null,strategyResult=null,hideTimeJump=false,hideBarCountdown=hideTimeJump,controlsContainer,countdownContainer,candleLongColor='#0ECB81',candleShortColor='#F6465D',densityLineColor='#7B61FF',densityLabelColor='#C4B5FD',densityLineWidth=.5,densityLineStyle='solid',densityLabelSize=8,onViewportChange,onCrosshairChange,onCrosshairPriceChange,onNeedHistory,markers=[],timeMarkers=[],splitVolumes=false,transientRuler=false,backgroundColor=CHART_THEME.bg,gridColor,controlRef,initialViewport,initialLogicalRange,visualProfile,visualProfileKey,visualProfileCaptureVersion=0,terminalMode=false,terminalAutoScale=false,expandPriceScaleToMarkers=false,focusFormation,textLabel='Нотатка'}:{candles:Candle[],symbol:string,tf:string,tool:string,drawings:Drawing[],setDrawings:React.Dispatch<React.SetStateAction<Drawing[]>>,alerts:Alert[],setAlerts:React.Dispatch<React.SetStateAction<Alert[]>>,onCreatePriceAlert?:(price:number)=>void,onSelectPriceAlert?:(markerId:string)=>void,densities:Density[],marketPrints:MarketPrint[],liquidations:Liquidation[],autoLevels:AutoLevel[],levelLabelMode:'always'|'hover'|'off',levelLabelColor?:string,levelLabelSize?:number,levelLabelStyle?:'text'|'filled'|'outline',levelLineStyle?:'solid'|'dash'|'dot',crosshairLineWidth?:number,rightPadding?:number,rightPaddingBars?:number,roundGrid?:boolean,roundness?:number,gridHorizontal?:boolean,gridVertical?:boolean,showMarketPrintSums?:boolean,showVolumes?:boolean,showLiquidations?:boolean,showLiquidationLong?:boolean,showLiquidationShort?:boolean,sessionLiquidationsUsd?:number,cascadeRisk:CascadeRisk,liquidationCut?:number,liquidationSource?:string,liquidationStreamLive?:boolean,liquidationLastEventAt?:number|null,timezone?:string,language?:SupportedLanguage,showDensityLines?:boolean,showDensityLabels?:boolean,showDensityAmounts?:boolean,highlightDensityReaction?:boolean,autoSR?:boolean,showSRLabels?:boolean,autoPrevDay?:boolean,autoDayOpen?:boolean,autoVWAP?:boolean,autoLocalHL?:boolean,autoRoundLevels?:boolean,autoPOC?:boolean,autoChannel?:boolean,autoStops?:boolean,showLiqRiskBlock?:boolean,channelModel?:AutoChannelModel|null,strategyResult?:StrategyResult|null,hideTimeJump?:boolean,hideBarCountdown?:boolean,controlsContainer?:HTMLElement|null,countdownContainer?:HTMLElement|null,candleLongColor?:string,candleShortColor?:string,densityLineColor?:string,densityLabelColor?:string,densityLineWidth?:number,densityLineStyle?:'solid'|'dash'|'dot',densityLabelSize?:number,onViewportChange?:(v:Viewport)=>void,onCrosshairChange?:(position:CrosshairPosition|null)=>void,onCrosshairPriceChange?:(price:number)=>void,onNeedHistory?:(targetTs:number)=>Promise<boolean>;markers?:ChartMarkerInfo[];timeMarkers?:HookTimeMarker[];splitVolumes?:boolean;transientRuler?:boolean;backgroundColor?:string;gridColor?:string;controlRef?:React.Ref<HookChartHandle>;initialViewport?:Viewport;initialLogicalRange?:{from:number;to:number};visualProfile?:VisualChartProfile;visualProfileKey?:string;visualProfileCaptureVersion?:number;terminalMode?:boolean;terminalAutoScale?:boolean;expandPriceScaleToMarkers?:boolean;focusFormation?:DetectedFormation|null;textLabel?:string}){
+export function Chart({candles,symbol,tf,tool,drawings,setDrawings,alerts,setAlerts,onCreatePriceAlert,onSelectPriceAlert,densities,marketPrints,liquidations,autoLevels,levelLabelMode,levelLabelColor='#2090F0',levelLabelSize=11,levelLabelStyle='text',levelLineStyle='solid',crosshairLineWidth=DEFAULT_CROSSHAIR_LINE_WIDTH,rightPadding=0,rightPaddingBars=0,roundGrid=false,roundness=2,gridHorizontal=false,gridVertical=false,showMarketPrintSums=false,showVolumes=true,showLiquidations=true,showLiquidationLong=true,showLiquidationShort=true,sessionLiquidationsUsd=0,cascadeRisk,liquidationCut=0,liquidationSource='',liquidationStreamLive=false,liquidationLastEventAt=null,timezone='Europe/Warsaw',language='uk',showDensityLines=true,showDensityLabels=true,showDensityAmounts=true,highlightDensityReaction=false,autoSR=false,showSRLabels=true,autoPrevDay=false,autoDayOpen=false,autoVWAP=false,autoLocalHL=false,autoRoundLevels=false,autoPOC=false,autoChannel=false,autoStops=false,showLiqRiskBlock=true,channelModel=null,strategyResult=null,hideTimeJump=false,hideBarCountdown=hideTimeJump,controlsContainer,countdownContainer,candleLongColor='#0ECB81',candleShortColor='#F6465D',densityLineColor='#7B61FF',densityLabelColor='#C4B5FD',densityLineWidth=.5,densityLineStyle='solid',densityLabelSize=8,onViewportChange,onViewportGesture,onCrosshairChange,onCrosshairPriceChange,onNeedHistory,markers=[],timeMarkers=[],splitVolumes=false,transientRuler=false,backgroundColor=CHART_THEME.bg,gridColor,controlRef,initialViewport,initialLogicalRange,visualProfile,visualProfileKey,visualProfileCaptureVersion=0,terminalMode=false,terminalAutoScale=false,expandPriceScaleToMarkers=false,focusFormation,textLabel='Нотатка'}:{candles:Candle[],symbol:string,tf:string,tool:string,drawings:Drawing[],setDrawings:React.Dispatch<React.SetStateAction<Drawing[]>>,alerts:Alert[],setAlerts:React.Dispatch<React.SetStateAction<Alert[]>>,onCreatePriceAlert?:(price:number)=>void,onSelectPriceAlert?:(markerId:string)=>void,densities:Density[],marketPrints:MarketPrint[],liquidations:Liquidation[],autoLevels:AutoLevel[],levelLabelMode:'always'|'hover'|'off',levelLabelColor?:string,levelLabelSize?:number,levelLabelStyle?:'text'|'filled'|'outline',levelLineStyle?:'solid'|'dash'|'dot',crosshairLineWidth?:number,rightPadding?:number,rightPaddingBars?:number,roundGrid?:boolean,roundness?:number,gridHorizontal?:boolean,gridVertical?:boolean,showMarketPrintSums?:boolean,showVolumes?:boolean,showLiquidations?:boolean,showLiquidationLong?:boolean,showLiquidationShort?:boolean,sessionLiquidationsUsd?:number,cascadeRisk:CascadeRisk,liquidationCut?:number,liquidationSource?:string,liquidationStreamLive?:boolean,liquidationLastEventAt?:number|null,timezone?:string,language?:SupportedLanguage,showDensityLines?:boolean,showDensityLabels?:boolean,showDensityAmounts?:boolean,highlightDensityReaction?:boolean,autoSR?:boolean,showSRLabels?:boolean,autoPrevDay?:boolean,autoDayOpen?:boolean,autoVWAP?:boolean,autoLocalHL?:boolean,autoRoundLevels?:boolean,autoPOC?:boolean,autoChannel?:boolean,autoStops?:boolean,showLiqRiskBlock?:boolean,channelModel?:AutoChannelModel|null,strategyResult?:StrategyResult|null,hideTimeJump?:boolean,hideBarCountdown?:boolean,controlsContainer?:HTMLElement|null,countdownContainer?:HTMLElement|null,candleLongColor?:string,candleShortColor?:string,densityLineColor?:string,densityLabelColor?:string,densityLineWidth?:number,densityLineStyle?:'solid'|'dash'|'dot',densityLabelSize?:number,onViewportChange?:(v:Viewport)=>void,onViewportGesture?:(v:Viewport,kind:ViewportGesture)=>void,onCrosshairChange?:(position:CrosshairPosition|null)=>void,onCrosshairPriceChange?:(price:number)=>void,onNeedHistory?:(targetTs:number)=>Promise<boolean>;markers?:ChartMarkerInfo[];timeMarkers?:HookTimeMarker[];splitVolumes?:boolean;transientRuler?:boolean;backgroundColor?:string;gridColor?:string;controlRef?:React.Ref<HookChartHandle>;initialViewport?:Viewport;initialLogicalRange?:{from:number;to:number};visualProfile?:VisualChartProfile;visualProfileKey?:string;visualProfileCaptureVersion?:number;terminalMode?:boolean;terminalAutoScale?:boolean;expandPriceScaleToMarkers?:boolean;focusFormation?:DetectedFormation|null;textLabel?:string}){
  const ref=useRef<HTMLCanvasElement>(null),interactionRef=useRef<HTMLCanvasElement>(null),box=useRef<HTMLDivElement>(null);
  const [vp,setVp]=useState<Viewport>(()=>initialViewport||{barWidth:9,rightOffset:0,autoY:true,manualCenter:null,manualRange:null,fitAll:false});
  const visualAppliedRef=useRef<string|null>(null);
  const lastVisualCaptureRef=useRef(visualProfileCaptureVersion);
+ const lastVisualGapRef=useRef(rightPaddingBars);
  const [visualCanvasWidth,setVisualCanvasWidth]=useState(0);
- useEffect(()=>{onViewportChange?.(vp)},[vp,onViewportChange]);
+ const gestureKindRef=useRef<ViewportGesture|null>(null);
+ const setGestureVp=(update:React.SetStateAction<Viewport>,kind:ViewportGesture)=>{
+   gestureKindRef.current=kind;
+   setVp(update);
+ };
+ useEffect(()=>{
+   onViewportChange?.(vp);
+   const kind=gestureKindRef.current;
+   if(kind){gestureKindRef.current=null;onViewportGesture?.(vp,kind)}
+ },[vp,onViewportChange,onViewportGesture]);
  const terminalNavigation=useRef(false),terminalFocusKey=useRef<string|null>(null);
  const autoFollowCandleRef=useRef<string|null>(null);
  const lastCandleTime=candles.at(-1)?.t;
@@ -377,10 +388,16 @@ export function Chart({candles,symbol,tf,tool,drawings,setDrawings,alerts,setAle
    if(lastVisualCaptureRef.current!==visualProfileCaptureVersion){
      lastVisualCaptureRef.current=visualProfileCaptureVersion;
      visualAppliedRef.current=signature;
+     // During gesture capture, preserve candle positions when the empty
+     // right-hand slots are converted into a saved profile value.
+     const gapDelta=rightPaddingBars-lastVisualGapRef.current;
+     lastVisualGapRef.current=rightPaddingBars;
+     if(gapDelta)setVp(current=>({...current,rightOffset:current.rightOffset+gapDelta}));
      return;
    }
    if(visualAppliedRef.current===signature)return;
    visualAppliedRef.current=signature;
+   lastVisualGapRef.current=rightPaddingBars;
    terminalNavigation.current=true;
    const plotWidth=hookChartPlotWidth(width);
    // A saved request for hundreds of visible candles needs sub-3px bars.
@@ -516,23 +533,23 @@ export function Chart({candles,symbol,tf,tool,drawings,setDrawings,alerts,setAle
    if(k){const vals=[k.o,k.h,k.l,k.c];const q=vals.reduce((a,b)=>Math.abs(g.y(b)-y)<Math.abs(g.y(a)-y)?b:a);if(Math.abs(g.y(q)-y)<12)p=q}
    return{t,p}
  };
- const zoomX=(factor:number,anchorX:number,g:any)=>setVp(v=>{
+ const zoomX=(factor:number,anchorX:number,g:any)=>setGestureVp(v=>{
    const old=v.fitAll?Math.max(.001,g.step):Math.max(terminalMode ? .12 : 3,v.barWidth),nw=Math.max(.12,Math.min(34,old*factor));
    const anchorFromRight=(g.plotW-anchorX)/old+v.rightOffset;
    const nr=anchorFromRight-(g.plotW-anchorX)/nw;
    return{...v,barWidth:nw,rightOffset:nr,fitAll:false}
- });
- const zoomY=(factor:number,anchorY:number,g:any)=>setVp(v=>{
+ },'zoom');
+ const zoomY=(factor:number,anchorY:number,g:any)=>setGestureVp(v=>{
    const range=v.autoY?(g.hi-g.lo):(v.manualRange||g.hi-g.lo),anchor=g.p(anchorY),nr=Math.max(1e-14,range/factor);
    const ratio=(anchorY/g.plotH)-.5,nc=anchor+ratio*nr;
    return{...v,autoY:false,manualRange:nr,manualCenter:nc}
- });
- const panXWheel=(pixels:number)=>setVp(v=>({
+ },'price');
+ const panXWheel=(pixels:number)=>setGestureVp(v=>({
    ...v,
    // Same direction as TradingView-style time navigation:
    // positive wheel motion moves the visible range toward older bars.
    rightOffset:v.rightOffset+pixels/(v.fitAll?Math.max(.001,geom.current?.step||1):Math.max(terminalMode ? .12 : 3,v.barWidth)),fitAll:false
- }));
+ }),'pan');
  const scheduleDraw=(scene=true)=>frames.current?.request(scene);
  const profileData=(d:Drawing,g:any)=>{
   if(d.type!=='profile'||!d.pts[1]||!candles.length)return null;
@@ -944,7 +961,7 @@ export function Chart({candles,symbol,tf,tool,drawings,setDrawings,alerts,setAle
      suppressTouchClick.current=true;
      mouseRef.current={x:z.x,y:z.y};
      pointers.current.set(e.pointerId,{x:z.x,y:z.y});
-     drag.current={kind:'touchCursor',x:z.x,y:z.y,vp:{...vp},g:z.g,panning:false,inspecting:true};
+     drag.current={kind:'touchCursor',x:z.x,y:z.y,vp:{...vp},g:z.g,panning:false,inspecting:true,startRightPaddingBars:rightPaddingBars};
      scheduleDraw();
      return;
    }
@@ -969,7 +986,7 @@ export function Chart({candles,symbol,tf,tool,drawings,setDrawings,alerts,setAle
    if((e.pointerType==='touch'||e.pointerType==='pen')&&tool==='cursor'){
      touchHold.current?.start(e.pointerId,{x:z.x,y:z.y},position=>{
        if(pointers.current.size!==1||!pointers.current.has(e.pointerId))return;
-       drag.current={kind:'touchCursor',x:position.x,y:position.y,vp:{...vp},g:z.g,panning:false,inspecting:true};
+       drag.current={kind:'touchCursor',x:position.x,y:position.y,vp:{...vp},g:z.g,panning:false,inspecting:true,startRightPaddingBars:rightPaddingBars};
        magnifierPointer.current=null;
        touchCursorVisible.current=true;suppressTouchClick.current=true;
        mouseRef.current={x:position.x,y:position.y};
@@ -988,11 +1005,11 @@ export function Chart({candles,symbol,tf,tool,drawings,setDrawings,alerts,setAle
    if(editingDrawingId){const ed=drawings.find(d=>d.id===editingDrawingId&&(d.type==='trend'||d.type==='ruler'||d.type==='fib'||d.type==='profile')&&d.pts[1]);if(ed){if(ed.type==='profile'){const pd=profileData(ed,z.g);if(pd){const x0=z.g.x(ed.pts[0].t),x1=z.g.x(ed.pts[1].t),insideY=z.y>=pd.yTop-12&&z.y<=pd.yBottom+12,d0=insideY?Math.abs(z.x-x0):999,d1=insideY?Math.abs(z.x-x1):999;if(Math.min(d0,d1)<=12){drag.current={kind:'editDrawingPoint',drawingId:ed.id,pointIndex:d0<=d1?0:1};return}}}else{const pts=ed.pts.slice(0,2).map(p=>({x:z.g.x(p.t),y:z.g.y(p.p)})),d0=Math.hypot(z.x-pts[0].x,z.y-pts[0].y),d1=Math.hypot(z.x-pts[1].x,z.y-pts[1].y);if(Math.min(d0,d1)<=12){drag.current={kind:'editDrawingPoint',drawingId:ed.id,pointIndex:d0<=d1?0:1};return}}}}
    const zn=zone(z.x,z.y,z.g);
    if((e.pointerType==='touch'||e.pointerType==='pen')&&tool==='cursor'&&zn==='plot'){
-     drag.current={kind:'touchCursor',x:z.x,y:z.y,vp:{...vp},g:z.g,panning:false,inspecting:!!resumeCursor};
+     drag.current={kind:'touchCursor',x:z.x,y:z.y,vp:{...vp},g:z.g,panning:false,inspecting:!!resumeCursor,startRightPaddingBars:rightPaddingBars};
      if(resumeCursor&&transientRuler)transient.current={t:z.g.timeAtX(z.x),p:z.g.p(z.y)};
      return;
    }
-   drag.current={kind:zn,x:z.x,y:z.y,vp:{...vp},g:z.g,baseCenter:(z.g.hi+z.g.lo)/2,baseRange:z.g.hi-z.g.lo};
+   drag.current={kind:zn,x:z.x,y:z.y,vp:{...vp},g:z.g,baseCenter:(z.g.hi+z.g.lo)/2,baseRange:z.g.hi-z.g.lo,startRightPaddingBars:rightPaddingBars};
  };
  const handlePointerMove=(e:React.PointerEvent<HTMLElement>)=>{
    if(!pointers.current.has(e.pointerId)&&isChartControlTarget(e.target))return;
@@ -1011,13 +1028,14 @@ export function Chart({candles,symbol,tf,tool,drawings,setDrawings,alerts,setAle
    if(touchHold.current?.move(e.pointerId,{x:z.x,y:z.y}))return;
    if(transient.current){e.preventDefault();return}
    const d=drag.current;if(!d)return;
+   const gestureUpdate=(update:React.SetStateAction<Viewport>)=>setGestureVp(update,d.kind==='pinch'||d.kind==='time'?'zoom':d.kind==='price'?'price':'pan');
    if(d.kind==='editDrawingPoint'){const p=snap(z.x,z.y,z.g);setDrawings(list=>list.map(item=>item.id!==d.drawingId?item:{...item,pts:item.pts.map((pt,i)=>i===d.pointIndex?p:pt)}));return}
    if(tool!=='cursor')return;
    if(d.kind==='pinch'&&pointers.current.size>=2){
      const a=[...pointers.current.values()],distX=Math.max(1,Math.abs(a[0].x-a[1].x)),ratio=terminalMode?distX/(d.distX||1):Math.max(.35,Math.min(3.2,distX/(d.distX||1)));
      const barWidth=Math.max(.12,Math.min(34,d.bar*ratio));
      const midX=(a[0].x+a[1].x)/2;
-     setVp(v=>({...v,fitAll:false,barWidth,...(terminalMode?{rightOffset:candles.length+rightPaddingBars+rightPadding/barWidth-d.anchor-(z.g.plotW-midX)/barWidth}:{})}));return
+     gestureUpdate(v=>({...v,fitAll:false,barWidth,...(terminalMode?{rightOffset:candles.length+rightPaddingBars+rightPadding/barWidth-d.anchor-(z.g.plotW-midX)/barWidth}:{})}));return
    }
    if(d.kind==='touchCursor'){
      const dx=z.x-d.x,dy=z.y-d.y;
@@ -1026,22 +1044,22 @@ export function Chart({candles,symbol,tf,tool,drawings,setDrawings,alerts,setAle
      if(!d.panning&&Math.hypot(dx,dy)>=5){d.panning=true;cancelTouchHold();suppressTouchClick.current=true}
      if(d.panning){
        const center=d.g.p(d.g.plotH/2-dy);
-       setVp(v=>({...v,rightOffset:d.vp.rightOffset+dx/Math.max(.001,d.g.step),autoY:false,manualCenter:center,manualRange:d.vp.manualRange||d.g.hi-d.g.lo,fitAll:false}))
+       gestureUpdate(v=>({...v,rightOffset:d.vp.rightOffset+dx/Math.max(.001,d.g.step)+rightPaddingBars-(d.startRightPaddingBars??rightPaddingBars),autoY:false,manualCenter:center,manualRange:d.vp.manualRange||d.g.hi-d.g.lo,fitAll:false}))
      }
      return
    }
    if(d.kind==='plot'){
-     const dx=z.x-d.x,dy=z.y-d.y,nextOffset=d.vp.rightOffset+dx/Math.max(.001,d.vp.fitAll?d.g.step:d.vp.barWidth);
+     const dx=z.x-d.x,dy=z.y-d.y,nextOffset=d.vp.rightOffset+dx/Math.max(.001,d.vp.fitAll?d.g.step:d.vp.barWidth)+rightPaddingBars-(d.startRightPaddingBars??rightPaddingBars);
      const movedY=Math.abs(dy)>1.5||!d.vp.autoY;
      if(movedY){
        const center=d.baseCenter+(dy/Math.max(1,d.g.plotH))*d.baseRange;
-       setVp(v=>({...v,rightOffset:nextOffset,autoY:false,manualCenter:center,manualRange:d.vp.manualRange||d.baseRange,fitAll:false}))
-     }else setVp(v=>({...v,rightOffset:nextOffset,fitAll:false}))
+       gestureUpdate(v=>({...v,rightOffset:nextOffset,autoY:false,manualCenter:center,manualRange:d.vp.manualRange||d.baseRange,fitAll:false}))
+     }else gestureUpdate(v=>({...v,rightOffset:nextOffset,fitAll:false}))
    }else if(d.kind==='time'){
-     const dx=z.x-d.x,baseBar=d.vp.fitAll?Math.max(.001,d.g.step):d.vp.barWidth;setVp(v=>({...v,fitAll:false,barWidth:Math.max(.12,Math.min(34,baseBar*Math.exp(dx/180)))}))
+     const dx=z.x-d.x,baseBar=d.vp.fitAll?Math.max(.001,d.g.step):d.vp.barWidth;gestureUpdate(v=>({...v,fitAll:false,barWidth:Math.max(.12,Math.min(34,baseBar*Math.exp(dx/180)))}))
    }else if(d.kind==='price'){
      const dy=z.y-d.y,base=d.vp.autoY?(d.g.hi-d.g.lo):(d.vp.manualRange||d.g.hi-d.g.lo),nr=Math.max(1e-9,base*Math.exp(dy/180)),anchorY=Math.max(0,Math.min(d.g.plotH,d.y)),anchorPrice=d.g.p(anchorY),anchorRatio=anchorY/Math.max(1,d.g.plotH)-.5,center=anchorPrice+anchorRatio*nr;
-     setVp(v=>({...v,autoY:false,manualCenter:center,manualRange:nr}))
+     gestureUpdate(v=>({...v,autoY:false,manualCenter:center,manualRange:nr}))
    }
  };
  const handlePointerUp=(e:React.PointerEvent<HTMLElement>)=>{
@@ -1181,11 +1199,11 @@ export function Chart({candles,symbol,tf,tool,drawings,setDrawings,alerts,setAle
    if(!draft){setDraft(p);setSelectedDrawingId(null)}else{const id=symbol+':'+uid();setDrawings(a=>[...a,{id,type:tool,pts:[draft,p]}]);setDraft(null);setSelectedDrawingId(tool==='trend'||tool==='profile'||tool==='ruler'||tool==='fib'?id:null);setEditingDrawingId(null)}
  };
  const reset=()=>{terminalNavigation.current=true;setVp(terminalMode?terminalHookViewport(candles,hookChartPlotWidth(ref.current?.getBoundingClientRect().width||800),focusFormation,rightPaddingBars):{barWidth:9,rightOffset:0,autoY:true,manualCenter:null,manualRange:null,fitAll:false})};
- const fitAllHistory=()=>{terminalNavigation.current=true;setVp(v=>({...v,rightOffset:0,autoY:true,manualCenter:null,manualRange:null,fitAll:true}))};
- const zoomButton=(factor:number)=>{terminalNavigation.current=true;const g=geometry();setVp(v=>{const base=v.fitAll?Math.max(.001,g?.step||3):Math.max(terminalMode ? .12 : 3,v.barWidth);return{...v,fitAll:false,barWidth:Math.max(.12,Math.min(34,base*factor))}})};
+ const fitAllHistory=()=>{terminalNavigation.current=true;setGestureVp(v=>({...v,rightOffset:0,autoY:true,manualCenter:null,manualRange:null,fitAll:true}),'focus')};
+ const zoomButton=(factor:number)=>{terminalNavigation.current=true;const g=geometry();setGestureVp(v=>{const base=v.fitAll?Math.max(.001,g?.step||3):Math.max(terminalMode ? .12 : 3,v.barWidth);return{...v,fitAll:false,barWidth:Math.max(.12,Math.min(34,base*factor))}},'zoom')};
  const handleDoubleClick=(e:React.MouseEvent<HTMLElement>)=>{const g=geometry();if(!g)return;const x=e.clientX-g.r.left,y=e.clientY-g.r.top;if(x<0||x>g.r.width||y<0||y>g.r.height)return;if(zone(x,y,g)==='price')setVp(v=>({...v,autoY:true,manualCenter:null,manualRange:null}));else reset()};
  const handleTouchEnd=(e:React.PointerEvent<HTMLElement>)=>{if(e.pointerType==='mouse'||drag.current?.kind==='pinch'||drag.current?.panning||drag.current?.inspecting){handlePointerUp(e);return}const now=Date.now();if(now-lastTap.current<320){const g=geometry();if(g){const x=e.clientX-g.r.left,y=e.clientY-g.r.top;if(zone(x,y,g)==='price')setVp(v=>({...v,autoY:true,manualCenter:null,manualRange:null}))}}lastTap.current=now;handlePointerUp(e)};
- useImperativeHandle(controlRef,()=>({takeScreenshot:()=>{try{return ref.current?.toDataURL('image/png')||null}catch{return null}},fitContent:fitAllHistory,zoomToLatest:reset,zoom:zoomButton}),[candles,vp]);
+ useImperativeHandle(controlRef,()=>({takeScreenshot:()=>{try{return ref.current?.toDataURL('image/png')||null}catch{return null}},fitContent:fitAllHistory,zoomToLatest:reset,focusLatest:()=>setVp(v=>({...v,rightOffset:0,autoY:true,manualCenter:null,manualRange:null,fitAll:false})),zoom:zoomButton}),[candles,vp]);
  const barCountdown=!hideBarCountdown?<div className="barCountdown" role="timer" aria-label="Час до закриття бару" title={`До закриття свічки ${tf}`}><b>{formatBarLeft(barLeftMs)}</b></div>:null;
  const scaleControls=(<div role="toolbar" aria-label="Керування масштабом графіка" className={'chartScaleDock '+(zoomPanelOpen?'expanded':'collapsed')}>
    {countdownContainer===undefined&&barCountdown}

@@ -26,7 +26,7 @@ function buildEffect(needle: string) {
   const callback = found!.getText(ast);
   const vars = [
     'visualProfile','visualProfileKey','visualProfileCaptureVersion','lastVisualCaptureRef',
-    'visualAppliedRef','ref','initialLogicalRange','candles','symbol','tf','terminalMode',
+    'visualAppliedRef','lastVisualGapRef','ref','initialLogicalRange','candles','symbol','tf','terminalMode',
     'terminalNavigation','terminalAutoScale','setVp','hookChartPlotWidth','rangeRestored',
     'restoredHookViewport','rightPaddingBars','rightPadding',
     'ResizeObserver','setVisualCanvasWidth',
@@ -58,6 +58,7 @@ function fixture() {
     visualProfileCaptureVersion: 0,
     lastVisualCaptureRef: { current: 0 },
     visualAppliedRef: { current: null },
+    lastVisualGapRef: { current: 0 },
     ref: { current: { getBoundingClientRect: () => ({ width: 600 }) } },
     initialLogicalRange: null, candles, symbol: 'BTCUSDT', tf: '1h',
     terminalMode: false, terminalAutoScale: false, terminalNavigation: { current: false },
@@ -65,7 +66,10 @@ function fixture() {
     rangeRestored: { current: false },
     restoredHookViewport: () => ({ barWidth: 3, rightOffset: 88, autoY: true }),
     rightPaddingBars: 0, rightPadding: 0,
-    setVp(value: Record<string, any>) { viewport = value; updates.push(value); },
+    setVp(value: Record<string, any> | ((prev: Record<string, any>) => Record<string, any>)) {
+      viewport = typeof value === 'function' ? value(viewport!) : value;
+      updates.push(viewport);
+    },
   };
   return { env, updates, getViewport: () => viewport };
 }
