@@ -987,9 +987,8 @@
 }
 
 /* Timeframe buttons must not consume the space needed to scroll extra tools in
- * narrow charts. Only while those tools are expanded, show the selected TF in
- * a compact native selector. Wide charts and collapsed toolbars keep all
- * timeframe buttons visible. The right-side chart actions stay fixed. */
+ * narrow charts. Expanded toolbars use a compact, custom dark dropdown instead
+ * of the white iOS native select. Wide charts keep all timeframe buttons. */
 .hookchart-root .hookchart-timeframes-buttons {
   display:flex;
   align-items:center;
@@ -1004,26 +1003,89 @@
     display:none;
   }
   .hookchart-root:not(.hookchart-terminal)[data-extra-tools-open="true"] .hookchart-timeframes-compact {
-    display:block;
+    display:inline-flex;
     flex:0 0 auto;
     box-sizing:border-box;
-    min-width:54px;
+    align-items:center;
+    justify-content:space-between;
+    gap:4px;
+    width:59px;
+    min-width:59px;
     max-width:66px;
-    height:23px;
-    padding:0 3px;
+    height:25px;
+    padding:0 5px;
     border:1px solid #34618b;
     border-radius:4px;
     color:#eef7ff;
     background:#193c5b;
-    font:700 10px system-ui,sans-serif;
-    color-scheme:dark;
+    font:700 11px system-ui,sans-serif;
     cursor:pointer;
+    touch-action:manipulation;
   }
+  .hookchart-root .hookchart-timeframes-compact > svg { flex-shrink:0; }
   .hookchart-root:not(.hookchart-terminal)[data-extra-tools-open="true"] .hookchart-timeframes {
     flex:0 0 auto;
     min-width:0;
     margin-right:2px;
   }
+}
+
+/* Portal menu must be global: HookChart's toolbar and chart canvas clip overflow. */
+.hookchart-timeframe-menu {
+  position:fixed;
+  z-index:2147482000;
+  box-sizing:border-box;
+  display:flex;
+  flex-direction:column;
+  gap:2px;
+  padding:6px;
+  overflow-x:hidden;
+  overflow-y:auto;
+  overscroll-behavior:contain;
+  -webkit-overflow-scrolling:touch;
+  border:1px solid #26364b;
+  border-radius:12px;
+  background:#060b1f;
+  box-shadow:0 16px 36px rgba(0,0,0,.65);
+  color:#9aabc3;
+}
+.hookchart-timeframe-menu .hookchart-timeframe-option {
+  box-sizing:border-box;
+  display:flex;
+  align-items:center;
+  gap:8px;
+  flex:0 0 41px;
+  width:100%;
+  min-height:41px;
+  padding:0 12px;
+  border:0;
+  border-radius:9px;
+  background:transparent;
+  color:#a4b4ca;
+  font:500 15px/1.25 system-ui,sans-serif;
+  text-align:left;
+  cursor:pointer;
+  touch-action:manipulation;
+}
+.hookchart-timeframe-menu .hookchart-timeframe-option:hover,
+.hookchart-timeframe-menu .hookchart-timeframe-option:focus-visible {
+  background:#17243a;
+  color:#e2ecf6;
+  outline:none;
+}
+.hookchart-timeframe-menu .hookchart-timeframe-option.selected {
+  background:#1e2b41;
+  color:#59d9ec;
+  font-weight:650;
+}
+.hookchart-timeframe-menu .hookchart-timeframe-option-check {
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  flex:0 0 18px;
+  width:18px;
+  height:18px;
+  color:#59d9ec;
 }
 
 /* Chart price alerts: confirmation is anchored inside the plot, not a tooltip
