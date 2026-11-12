@@ -4,10 +4,21 @@ export interface MagnifierLayout {
   sourceX: number; sourceY: number; sourceSize: number;
 }
 
-export function touchMagnifierLayout(width: number, height: number, point: MagnifierPoint): MagnifierLayout | null {
+export const TOUCH_MAGNIFIER_DEFAULT_ZOOM = 2;
+
+/** Dragging upward on the right-hand price scale zooms the lens in, downward zooms out. */
+export function magnifierZoomFromPriceDrag(initialZoom: number, deltaY: number): number {
+  const start = Number.isFinite(initialZoom) ? initialZoom : TOUCH_MAGNIFIER_DEFAULT_ZOOM;
+  const delta = Number.isFinite(deltaY) ? deltaY : 0;
+  return Math.max(1.25, Math.min(6, start * Math.exp(-delta / 150)));
+}
+
+export function touchMagnifierLayout(width: number, height: number, point: MagnifierPoint, zoom = TOUCH_MAGNIFIER_DEFAULT_ZOOM): MagnifierLayout | null {
   if (![width, height, point.x, point.y].every(Number.isFinite) || width < 64 || height < 64) return null;
   const radius = Math.min(58, (width - 12) / 2, (height - 12) / 2);
-  const size = radius * 2, sourceSize = size / 2;
+  const size = radius * 2;
+  const safeZoom = Number.isFinite(zoom) ? Math.max(1.25, Math.min(6, zoom)) : TOUCH_MAGNIFIER_DEFAULT_ZOOM;
+  const sourceSize = size / safeZoom;
   const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
   const selectedX = clamp(point.x, 0, width), selectedY = clamp(point.y, 0, height);
   // The touch stays on the selected candle/crosshair, but the magnifier
@@ -43,8 +54,9 @@ export function drawTouchMagnifier(
   sample: HTMLCanvasElement, width: number, height: number, point: MagnifierPoint,
   backgroundColor = '#131722',
   paintSourceOverlay?: (context: CanvasRenderingContext2D) => void,
+  zoom = TOUCH_MAGNIFIER_DEFAULT_ZOOM,
 ): void {
-  const layout = touchMagnifierLayout(width, height, point);
+  const layout = touchMagnifierLayout(width, height, point, zoom);
   if (!layout) return;
   const { x, y, radius, size, sourceX, sourceY, sourceSize } = layout;
   const scaleX = chart.width / width, scaleY = chart.height / height;
