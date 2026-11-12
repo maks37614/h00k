@@ -957,6 +957,39 @@ export default function App() {
     }
   }, [user?.uid]);
 
+  const selectFavoriteOnChartPage = useCallback((favorite: ScannedCoin) => {
+    if (!chartRoute) return;
+    const quotePrice = Number.isFinite(favorite.currentPrice) ? favorite.currentPrice : 0;
+    const chosen: ScannedCoin = {
+      symbol: favorite.symbol, baseAsset: favorite.baseAsset, quoteAsset: favorite.quoteAsset,
+      exchange: favorite.exchange, marketType: favorite.marketType,
+      timeframe: chartRoute.timeframe, currentPrice: quotePrice,
+      priceChange24h: favorite.priceChange24h || 0,
+      volume24hUsd: favorite.volume24hUsd || 0,
+      highPrice24h: favorite.highPrice24h ?? favorite.high24h ?? quotePrice,
+      lowPrice24h: favorite.lowPrice24h ?? favorite.low24h ?? quotePrice,
+      lastUpdated: favorite.lastUpdated || Date.now(), formations: [],
+      exchangeUrl: favorite.exchangeUrl || '',
+    };
+    setSelectedEarly(null);
+    setSelectedArchivedItem(null);
+    setSelectedPair({ coin: chosen });
+    openChartPage({
+      exchange: chosen.exchange, marketType: chosen.marketType,
+      symbol: chosen.symbol.toUpperCase(), timeframe: chosen.timeframe, kind: 'coin',
+    }, { coin: chosen }, true);
+  }, [chartRoute, openChartPage]);
+
+  const changeStandaloneChartTimeframe = useCallback((timeframe: ScannedCoin['timeframe']) => {
+    if (!chartRoute || !selectedPair) return;
+    const coin = { ...selectedPair.coin, timeframe };
+    setSelectedPair({ ...selectedPair, coin });
+    openChartPage({
+      exchange: coin.exchange, marketType: coin.marketType,
+      symbol: coin.symbol.toUpperCase(), timeframe, kind: 'coin',
+    }, { coin }, true);
+  }, [chartRoute, selectedPair, openChartPage]);
+
   // Play a gentle alert tone using Web Audio API
   const playAlertSound = useCallback(() => {
     if (!soundEnabled) return;
@@ -1320,6 +1353,7 @@ export default function App() {
               onSendMetaScalp={handleSendToMetaScalp}
               metaScalpBinding={metaScalpSettings.binding}
               onClose={closeChartPage}
+              onPageCoinChange={selectFavoriteOnChartPage}
             />
           ) : activeSelectedPair?.formation && chartRoute?.kind !== 'early' ? (
             <FormationDetailsModal
@@ -1361,6 +1395,8 @@ export default function App() {
                 coin={selectedPair.coin}
                 formation={null}
                 currentTimeframe={chartRoute?.timeframe || selectedPair.coin.timeframe || preferences.defaultTimeframe}
+                onPageCoinChange={selectFavoriteOnChartPage}
+                onPageTimeframeChange={changeStandaloneChartTimeframe}
                 livePrice={selectedPair.coin.currentPrice}
                 allCoins={coins}
                 watchlist={watchlist}
