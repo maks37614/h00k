@@ -120,7 +120,7 @@ export function ProfileHookChartSettings() {
 
   return <section className="hookchart-root profile-hookchart-settings" data-hookchart-language={siteLanguage} lang={siteLanguage} aria-label="Налаштування HookChart у профілі">
     <div className="mb-3 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-300">
-      <p>Єдині налаштування для всіх HookChart: скрінер, термінал, відтворення та повноекранні графіки.</p>
+      <p>Налаштування HookChart для Скрінера, Формацій і Термінала. Візуальні профілі телефона, комп’ютера й різних розмірів графіка зберігаються окремо; «Відтворення» не змінюється.</p>
       <span role="status" aria-live="polite" className={error ? 'text-rose-300' : saving ? 'text-cyan-300' : 'text-emerald-300'}>
         {error ? 'Помилка збереження' : saving ? 'Зберігаємо…' : 'Автозбереження'}
       </span>
