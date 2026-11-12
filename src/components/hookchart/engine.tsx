@@ -1090,6 +1090,10 @@ export function Chart({candles,symbol,tf,tool,drawings,setDrawings,alerts,setAle
      if(!target?.closest)return;
      const surface=target.closest('.chartStage,.chartWrap,.chartTimeAxis');
      if(!surface||!host.contains(surface))return;
+     // The preview and its parent chart share a .hookchart-root. Route wheel
+     // events to exactly ONE engine; otherwise both charts zoom together.
+     const ownPreview=box.current?.closest('.hookchart-visual-preview');
+     if(ownPreview ? !ownPreview.contains(surface) : !!surface.closest('.hookchart-visual-preview'))return;
      if(target.closest('input,textarea,select,[contenteditable],.floatingDrawTools,.indicatorDrawer,.timeJumpPopover,.densityQuickPopup'))return;
      // The interactive HookChart *inside* settings must accept wheel zoom.
      // Other modal controls remain excluded from the global wheel listener.
