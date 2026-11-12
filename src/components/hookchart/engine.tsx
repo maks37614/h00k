@@ -4,7 +4,7 @@ import type { SupportedLanguage } from '../../locales';
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState, useImperativeHandle, useId } from 'react';
 import { createPortal } from 'react-dom';
 import { CalendarDays } from 'lucide-react';
-import { drawTouchMagnifier } from './touchMagnifier';
+import { drawTouchMagnifier, magnifierZoomFromPriceDrag, TOUCH_MAGNIFIER_DEFAULT_ZOOM } from './touchMagnifier';
 import { createChartFrameScheduler } from './frameScheduler';
 import { DEFAULT_CROSSHAIR_LINE_WIDTH, paintChartCrosshair, paintChartRuler } from './chartCursor';
 import { createChartTouchHold, isChartControlTarget } from './touchHold';
@@ -334,6 +334,8 @@ export function Chart({candles,symbol,tf,tool,drawings,setDrawings,alerts,setAle
  const touchHold=useRef<ReturnType<typeof createChartTouchHold>|null>(null),touchCursorVisible=useRef(false),suppressTouchClick=useRef(false);
  if(!touchHold.current)touchHold.current=createChartTouchHold();
  const magnifierPointer=useRef<number|null>(null),magnifierSample=useRef<HTMLCanvasElement|null>(null);
+ const magnifierZoom=useRef(TOUCH_MAGNIFIER_DEFAULT_ZOOM);
+ const magnifierPriceDrag=useRef<{id:number;startY:number;startZoom:number}|null>(null);
  const cancelTouchHold=()=>touchHold.current?.cancel();
 
  const lastCrosshair=useRef<CrosshairPosition|null>(null);
@@ -343,7 +345,7 @@ export function Chart({candles,symbol,tf,tool,drawings,setDrawings,alerts,setAle
  if(!frames.current)frames.current=createChartFrameScheduler({scene:()=>drawRef.current(),interaction:()=>interactionDrawRef.current()});
  const resetInteraction=()=>{
    const owner=box.current,ids=[...pointers.current.keys()];
-   cancelTouchHold();magnifierPointer.current=null;touchCursorVisible.current=false;suppressTouchClick.current=false;
+   cancelTouchHold();magnifierPointer.current=null;magnifierPriceDrag.current=null;magnifierZoom.current=TOUCH_MAGNIFIER_DEFAULT_ZOOM;touchCursorVisible.current=false;suppressTouchClick.current=false;
    mouseRef.current=null;transient.current=null;drag.current=null;geom.current=null;lastTap.current=0;pointers.current.clear();
    // Clear ownership before releasing capture: a lost-capture event must not
    // revive an interaction belonging to a previous coin, timeframe or tool.
@@ -484,7 +486,7 @@ export function Chart({candles,symbol,tf,tool,drawings,setDrawings,alerts,setAle
    }
    const mouse=mouseRef.current;
    const cursorVisible=!!mouse&&mouse.x>=0&&mouse.x<g.plotW&&mouse.y>=0&&mouse.y<g.plotH&&drag.current?.kind!=='pinch'&&!(drag.current?.kind==='touchCursor'&&drag.current.panning);
-   const magnifierVisible=!!mouse&&magnifierPointer.current!==null&&pointers.current.has(magnifierPointer.current)&&pointers.current.size===1&&drag.current?.kind==='touchCursor'&&drag.current.inspecting;
+   const magnifierVisible=!!mouse&&magnifierPointer.current!==null&&pointers.current.has(magnifierPointer.current)&&(pointers.current.size===1||magnifierPriceDrag.current!==null)&&drag.current?.kind==='touchCursor'&&drag.current.inspecting;
    const rulerAnchor=transient.current;
    const cursorPosition=cursorVisible?{x:mouse!.x,time:g.timeAtX(mouse!.x)}:null;
    if(cursorPosition?.x!==lastCrosshair.current?.x||cursorPosition?.time!==lastCrosshair.current?.time){lastCrosshair.current=cursorPosition;onCrosshairChange?.(cursorPosition)}
@@ -509,7 +511,7 @@ export function Chart({candles,symbol,tf,tool,drawings,setDrawings,alerts,setAle
      magnifierSample.current??=document.createElement('canvas');
      // Sample the clean scene, then add pointer guides to the small lens buffer.
      // Never sample this layer: doing so would magnify the lens itself.
-     drawTouchMagnifier(source,context,magnifierSample.current,w,h,mouse!,backgroundColor,paintPointer);
+     drawTouchMagnifier(source,context,magnifierSample.current,w,h,mouse!,backgroundColor,paintPointer,magnifierZoom.current);
    }
  };
  interactionDrawRef.current=drawInteraction;
@@ -819,6 +821,19 @@ export function Chart({candles,symbol,tf,tool,drawings,setDrawings,alerts,setAle
    terminalNavigation.current=true;
    if(terminalMode||e.pointerType==='touch'||e.pointerType==='pen')e.preventDefault();
    e.currentTarget.setPointerCapture(e.pointerId);
+   // A second finger on the right price scale adjusts ONLY the active lens.
+   // Keep the first finger's crosshair and the main chart viewport untouched.
+   if(e.pointerType==='touch'&&magnifierPointer.current!==null
+      &&pointers.current.has(magnifierPointer.current)&&pointers.current.size===1
+      &&drag.current?.kind==='touchCursor'&&drag.current.inspecting
+      &&zone(z.x,z.y,z.g)==='price'){
+     cancelTouchHold();
+     magnifierPriceDrag.current={id:e.pointerId,startY:z.y,startZoom:magnifierZoom.current};
+     pointers.current.set(e.pointerId,{x:z.x,y:z.y});
+     suppressTouchClick.current=true;
+     scheduleDraw();
+     return;
+   }
    cancelTouchHold();
    const previousCursor=mouseRef.current;
    const resumeCursor=tool==='cursor'&&zone(z.x,z.y,z.g)==='plot'&&(e.pointerType==='pen'||(e.pointerType==='touch'&&touchCursorVisible.current&&previousCursor&&(Math.abs(z.x-previousCursor.x)<=24||Math.abs(z.y-previousCursor.y)<=24)));
@@ -858,6 +873,14 @@ export function Chart({candles,symbol,tf,tool,drawings,setDrawings,alerts,setAle
  const handlePointerMove=(e:React.PointerEvent<HTMLElement>)=>{
    if(!pointers.current.has(e.pointerId)&&isChartControlTarget(e.target))return;
    const z=point(e);if(!z)return;
+   const priceGesture=magnifierPriceDrag.current;
+   if(priceGesture?.id===e.pointerId){
+     e.preventDefault();
+     pointers.current.set(e.pointerId,{x:z.x,y:z.y});
+     magnifierZoom.current=magnifierZoomFromPriceDrag(priceGesture.startZoom,z.y-priceGesture.startY);
+     scheduleDraw();
+     return;
+   }
    if(transientRuler&&e.shiftKey&&!transient.current){const m=mouseRef.current||z;transient.current={t:z.g.timeAtX(m.x),p:z.g.p(m.y)}}
    mouseRef.current={x:z.x,y:z.y};scheduleDraw(!!draft||levelLabelMode==='hover'||timeMarkers.length>0);
    if(pointers.current.has(e.pointerId))pointers.current.set(e.pointerId,{x:z.x,y:z.y});
@@ -898,16 +921,37 @@ export function Chart({candles,symbol,tf,tool,drawings,setDrawings,alerts,setAle
    }
  };
  const handlePointerUp=(e:React.PointerEvent<HTMLElement>)=>{
-   if(magnifierPointer.current===e.pointerId)magnifierPointer.current=null;
-   transient.current=null;scheduleDraw();cancelTouchHold();
-   if(e.type==='pointercancel'||e.type==='lostpointercapture'){touchCursorVisible.current=false;mouseRef.current=null;transient.current=null;scheduleDraw()}
+   const wasLensPointer=magnifierPointer.current===e.pointerId;
+   const wasPriceGesture=magnifierPriceDrag.current?.id===e.pointerId;
+   if(wasLensPointer){
+     magnifierPointer.current=null;
+     magnifierPriceDrag.current=null;
+     magnifierZoom.current=TOUCH_MAGNIFIER_DEFAULT_ZOOM;
+     touchCursorVisible.current=false;
+   }else if(wasPriceGesture){
+     magnifierPriceDrag.current=null;
+   }
+   transient.current=null;cancelTouchHold();
+   if(e.type==='pointercancel'||e.type==='lostpointercapture'){
+     touchCursorVisible.current=false;mouseRef.current=null;transient.current=null;
+   }
    pointers.current.delete(e.pointerId);
    if(e.currentTarget.hasPointerCapture?.(e.pointerId))e.currentTarget.releasePointerCapture(e.pointerId);
    if(!pointers.current.size)drag.current=null;
-   else if(drag.current?.kind==='pinch'&&pointers.current.size===1){
+   else if(wasLensPointer){
+     // Lifting the inspecting finger ends the lens even if the scale finger remains.
+     // Suppress incidental cursor drawing until the remaining finger is released.
+     drag.current={kind:'pinch'};
+     mouseRef.current=null;
+   }else if(wasPriceGesture){
+     // The price finger can be lifted and used again without losing lens zoom.
+     const selected=magnifierPointer.current===null?null:pointers.current.get(magnifierPointer.current);
+     if(selected)mouseRef.current={...selected};
+   }else if(drag.current?.kind==='pinch'&&pointers.current.size===1){
      const p=[...pointers.current.values()][0],g=geometry();
      drag.current=g?{kind:'touchCursor',x:p.x,y:p.y,vp:{...vp},g,panning:true,inspecting:false}:null;
    }
+   scheduleDraw();
  };
  const focusChart=()=>{const canvas=ref.current;if(canvas&&document.activeElement!==canvas)canvas.focus({preventScroll:true})};
  const handleWheel=(e:WheelEvent)=>{
@@ -1038,7 +1082,7 @@ export function Chart({candles,symbol,tf,tool,drawings,setDrawings,alerts,setAle
   {controlsContainer?createPortal(scaleControls,controlsContainer):controlsContainer===undefined?scaleControls:null}
   {countdownContainer&&createPortal(barCountdown,countdownContainer)}
   <div className="chartCanvasSurface">
-  <canvas ref={ref} style={{WebkitTouchCallout:'none'}} tabIndex={0} aria-label={`Графік ${symbol}`} aria-description="Рух пальцем — перетягнути графік. Утримуйте палець для перехрестя й лупи в області свічок, обсягів або шкали ціни. Лупа показується вище пальця і зникає після відпускання. Унизу — дата й час вибраної точки. Два пальці — масштаб." onMouseEnter={focusChart} onPointerEnter={focusChart}/>
+  <canvas ref={ref} style={{WebkitTouchCallout:'none'}} tabIndex={0} aria-label={`Графік ${symbol}`} aria-description="Рух пальцем — перетягнути графік. Утримуйте палець для перехрестя й лупи в області свічок, обсягів або шкали ціни. Лупа показується вище пальця; другим пальцем проведіть по правій шкалі цін, щоб змінити масштаб у лупі. Лупа зникає після відпускання. Унизу — дата й час вибраної точки. Два пальці — масштаб." onMouseEnter={focusChart} onPointerEnter={focusChart}/>
    <canvas ref={interactionRef} className="chartInteractionCanvas" width={1} height={1} aria-hidden="true"/>
   </div>
  </div>
