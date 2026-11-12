@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { OriginalHookChartSettings, normalizeOriginalHookChartPreferences } from '../src/components/hookchart/OriginalHookChartSettings';
+import { OriginalHookChartSettings, VisualContextPicker, normalizeOriginalHookChartPreferences } from '../src/components/hookchart/OriginalHookChartSettings';
 import {
   VISUAL_CONTEXTS, applyVisualDefaultsForDevice, captureVisualProfile, getVisualProfile, makeVisualProfileKey,
   normalizeVisualProfile, normalizedVisualProfiles, patchVisualProfile, visualContextForTerminalWidth,
@@ -161,4 +161,40 @@ test('making the selected visual scale default applies to seven chart types on j
   const code = src('../src/components/hookchart/OriginalHookChartSettings.tsx');
   assert.match(code, /applyVisualDefaultsForDevice\(prefs\.visualProfiles, visualDevice, selected\)/);
   assert.match(code, /Зробити типовими для всіх графіків цього пристрою/);
+});
+
+
+test('iOS chart-type picker replaces the native bright select without losing seven contexts', () => {
+  const markup = renderToStaticMarkup(React.createElement(VisualContextPicker, {
+    value: 'formationsQuick', onChange: () => {},
+  }));
+  assert.match(markup, /aria-label="Тип графіка для візуальних налаштувань"/);
+  assert.match(markup, /aria-haspopup="listbox"/);
+  assert.match(markup, /aria-expanded="false"/);
+  assert.match(markup, /Формації · Швидкий перегляд/);
+  assert.match(markup, /class="visualContextTrigger"/);
+  assert.doesNotMatch(markup, /<select|<option/);
+
+  const editor = src('../src/components/hookchart/OriginalHookChartSettings.tsx');
+  const styles = src('../src/components/hookchart/integration.css');
+  const chartEditor = editor.slice(editor.indexOf('function VisualProfileEditor'), editor.indexOf('export function OriginalHookChartSettings'));
+  assert.match(chartEditor, /<VisualContextPicker value=\{visualContext\} onChange=\{onContextChange\}/);
+  assert.doesNotMatch(chartEditor, /<select/);
+  assert.match(editor, /createPortal\(/);
+  assert.match(editor, /role="listbox"/);
+  assert.match(editor, /role="option" aria-selected=\{active\}/);
+  assert.match(editor, /VISUAL_CONTEXTS\.map\(\(context, index\)/);
+  assert.match(editor, /const group = index === 0 \? 'Скрінер' : index === 2 \? 'Формації' : index === 4 \? 'Термінал'/);
+  assert.match(editor, /onChange\(context\.id\)/);
+  assert.match(editor, /document\.addEventListener\('pointerdown', dismiss\)/);
+  assert.match(editor, /window\.addEventListener\('keydown', keydown, true\)/);
+  assert.match(editor, /event\.key === 'Escape'/);
+  assert.match(editor, /'ArrowUp', 'ArrowDown', 'Home', 'End'/);
+  assert.match(editor, /document\.querySelector\('\.hookchart-visual-context-menu'\)/);
+  assert.match(styles, /\.hookchart-visual-context-menu/);
+  assert.match(styles, /z-index:2147483500/);
+  assert.match(styles, /background:#0d1726/);
+  assert.match(styles, /min-height:48px/);
+  assert.doesNotMatch(styles, /\.settingControl select\.visualProfileSelect/);
+  assert.equal(VISUAL_CONTEXTS.length, 7);
 });
