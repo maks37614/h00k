@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Search,
   X,
@@ -213,6 +214,24 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({
     return result;
   }, [unifiedCoins, filterTab, selectedExchange, selectedMarket, selectedMinVolume, watchlist, search]);
 
+  // The modal is portaled to body, and the underlying Terminal should not scroll.
+  useEffect(() => {
+    if (!isOpen) return;
+    const originalBody = document.body.style.overflow;
+    const originalHtml = document.documentElement.style.overflow;
+    document.body.style.overflow = 'hidden';
+    document.documentElement.style.overflow = 'hidden';
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      document.body.style.overflow = originalBody;
+      document.documentElement.style.overflow = originalHtml;
+    };
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
   // Clean custom search ticker candidate
@@ -235,47 +254,51 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({
     onClose();
   };
 
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-150"
-      onClick={onClose}
+      className="fixed inset-0 z-[260] flex items-center justify-center overflow-x-hidden bg-black/80 p-2 backdrop-blur-sm sm:p-4"
+      onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}
     >
       <div
-        className="w-full max-w-4xl bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]"
-        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="terminal-add-chart-title"
+        className="terminal-add-chart-modal flex w-full min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl"
       >
         {/* Modal Header */}
-        <div className="flex items-center justify-between px-4 py-3.5 border-b border-slate-800 bg-slate-950/90">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400 shadow-inner">
+        <div className="flex min-w-0 shrink-0 items-start justify-between gap-2 border-b border-slate-800 bg-slate-950/90 px-3 py-3 sm:px-4 sm:py-3.5">
+          <div className="flex min-w-0 items-start gap-2.5">
+            <div className="w-8 h-8 shrink-0 rounded-xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400 shadow-inner">
               <Plus className="w-4 h-4" />
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="text-sm sm:text-base font-bold text-white flex items-center gap-2">
+            <div className="min-w-0">
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
+                <h3 id="terminal-add-chart-title" className="min-w-0 break-words text-sm font-bold leading-snug text-white sm:text-base">
                   Додати графік у термінал
                 </h3>
-                <span className="px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-300 border border-cyan-500/20 text-[10px] font-mono font-bold">
+                <span className="shrink-0 rounded-full border border-cyan-500/20 bg-cyan-500/10 px-2 py-0.5 font-mono text-[10px] font-bold text-cyan-300">
                   {unifiedCoins.length > 0 ? `${unifiedCoins.length.toLocaleString()} монет` : 'Завантаження...'}
                 </span>
               </div>
-              <p className="text-xs text-slate-400">
+              <p className="break-words text-[11px] leading-snug text-slate-400 sm:text-xs">
                 Повний список монет на біржі від $50k до $10B (Binance & Bybit, Futures & Spot)
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+            aria-label="Закрити вибір монети" className="shrink-0 cursor-pointer rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-800 hover:text-white"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
+        {/* Bounded scroll area: filters plus coin list. */}
+        <div className="terminal-add-chart-body flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         {/* Toolbar & Filter Parameters */}
-        <div className="p-3 sm:p-4 border-b border-slate-800/80 bg-slate-950/50 space-y-3">
+        <div className="terminal-add-chart-filters min-h-0 min-w-0 shrink-0 space-y-3 overflow-x-hidden overflow-y-auto overscroll-contain border-b border-slate-800/80 bg-slate-950/50 p-3 sm:p-4">
           {/* Search Bar */}
-          <div className="relative">
+          <div className="relative min-w-0">
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
               type="text"
@@ -285,8 +308,7 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({
                 setDisplayCount(80);
               }}
               placeholder="Пошук за символом монети (напр. BTC, ETH, SOL, PEPE, WIF, RENDER, SUI, DOGE, TAO...)"
-              autoFocus
-              className="w-full pl-9 pr-8 py-2 bg-slate-900 border border-slate-800 rounded-xl text-xs sm:text-sm text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500/30"
+              className="block w-full min-w-0 rounded-xl border border-slate-800 bg-slate-900 py-2 pl-9 pr-8 text-base text-white placeholder-slate-500 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500/30 sm:text-sm"
             />
             {search && (
               <button
@@ -331,7 +353,7 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({
           )}
 
           {/* Category Tabs */}
-          <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto no-scrollbar pb-1 flex-nowrap sm:flex-wrap">
+          <div className="flex min-w-0 flex-wrap items-center gap-1.5 pb-1 sm:gap-2">
             <span className="text-[11px] text-slate-400 font-semibold mr-1 flex items-center gap-1 shrink-0">
               <SlidersHorizontal className="w-3.5 h-3.5 text-cyan-400" />
               Вкладка:
@@ -410,9 +432,9 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({
           </div>
 
           {/* Secondary Filters: Exchange, Market, Volume Range */}
-          <div className="flex flex-wrap items-center justify-between gap-2 text-xs pt-1 border-t border-slate-800/60">
+          <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 border-t border-slate-800/60 pt-1 text-xs">
             {/* Exchange Selector */}
-            <div className="flex items-center gap-1 bg-slate-900 p-0.5 rounded-lg border border-slate-800 text-[11px]">
+            <div className="flex min-w-0 max-w-full flex-wrap items-center gap-1 rounded-lg border border-slate-800 bg-slate-900 p-0.5 text-[11px]">
               <span className="text-slate-500 px-1 font-semibold">Біржа:</span>
               <button
                 onClick={() => setSelectedExchange('all')}
@@ -441,7 +463,7 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({
             </div>
 
             {/* Market Type Selector */}
-            <div className="flex items-center gap-1 bg-slate-900 p-0.5 rounded-lg border border-slate-800 text-[11px]">
+            <div className="flex min-w-0 max-w-full flex-wrap items-center gap-1 rounded-lg border border-slate-800 bg-slate-900 p-0.5 text-[11px]">
               <span className="text-slate-500 px-1 font-semibold">Ринок:</span>
               <button
                 onClick={() => setSelectedMarket('all')}
@@ -464,7 +486,7 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({
             </div>
 
             {/* Volume Range Selector ($50k - $10B) */}
-            <div className="flex items-center bg-slate-900 px-2 py-1 rounded-lg border border-slate-800 text-[11px] text-slate-300">
+            <div className="flex min-w-0 max-w-full flex-wrap items-center rounded-lg border border-slate-800 bg-slate-900 px-2 py-1 text-[11px] text-slate-300">
               <span className="text-slate-500 mr-1.5 font-semibold">Обсяг 24h:</span>
               <select
                 value={selectedMinVolume}
@@ -472,7 +494,7 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({
                   setSelectedMinVolume(Number(e.target.value));
                   setDisplayCount(80);
                 }}
-                className="bg-transparent border-none text-slate-200 focus:outline-none cursor-pointer font-medium"
+                className="min-w-0 max-w-full flex-1 cursor-pointer border-none bg-transparent font-medium text-slate-200 focus:outline-none"
               >
                 <option value={50000} className="bg-slate-900 text-white">Всі ($50K - $10B)</option>
                 <option value={100000} className="bg-slate-900 text-white">&gt; $100K</option>
@@ -490,7 +512,7 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({
             {/* Timeframe Selector */}
             <div className="flex items-center gap-1.5">
               <span className="text-slate-400 text-[11px] font-semibold">Таймфрейм:</span>
-              <div className="flex items-center bg-slate-900 p-0.5 rounded-lg border border-slate-800 font-mono text-[11px]">
+              <div className="flex min-w-0 max-w-full flex-wrap items-center rounded-lg border border-slate-800 bg-slate-900 p-0.5 font-mono text-[11px]">
                 {(['1m', '5m', '15m', '1h', '4h', '1d'] as Timeframe[]).map((tf) => (
                   <button
                     key={tf}
@@ -511,7 +533,7 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({
         </div>
 
         {/* Coins List (Virtualized / Paginated) */}
-        <div className="flex-1 overflow-y-auto p-3 divide-y divide-slate-800/60 max-h-[500px] touch-scroll">
+        <div className="terminal-add-chart-list min-h-0 min-w-0 flex-1 divide-y divide-slate-800/60 overflow-x-hidden overflow-y-auto overscroll-contain p-3 touch-scroll">
           {isLoadingAllCoins && marketCoins.length === 0 ? (
             <div className="py-16 text-center text-slate-400 space-y-3">
               <Loader2 className="w-8 h-8 mx-auto text-cyan-400 animate-spin" />
@@ -526,7 +548,7 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({
             </div>
           ) : (
             <>
-              <div className="text-[11px] text-slate-500 px-3 py-1 flex items-center justify-between">
+              <div className="flex min-w-0 flex-wrap items-center justify-between gap-1 px-2 py-1 text-[11px] text-slate-500">
                 <span>Знайдено: <strong className="text-white font-mono">{filteredCoins.length.toLocaleString()}</strong> монет</span>
                 <span>Діапазон обсягу: <strong className="text-cyan-400 font-mono">${(selectedMinVolume / 1000).toFixed(0)}K - $10B</strong></span>
               </div>
@@ -543,15 +565,15 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({
                       onAddChart(coin, selectedTimeframe, firstFormation?.id);
                       onClose();
                     }}
-                    className="py-2.5 px-3 rounded-xl hover:bg-slate-800/60 transition-colors flex items-center justify-between gap-3 cursor-pointer group"
+                    className="terminal-add-chart-coin-row group flex min-w-0 cursor-pointer items-center justify-between gap-3 rounded-xl px-2 py-2.5 transition-colors hover:bg-slate-800/60 sm:px-3"
                   >
-                    <div className="flex items-center gap-3 min-w-0">
+                    <div className="terminal-add-chart-coin-main flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
                       <div className="w-9 h-9 rounded-xl bg-slate-800 border border-slate-700/50 flex items-center justify-center font-bold text-xs font-mono text-white group-hover:bg-cyan-600/20 group-hover:text-cyan-300 group-hover:border-cyan-500/40 transition-colors shrink-0 shadow-sm">
                         {coin.baseAsset.slice(0, 3)}
                       </div>
                       <div className="min-w-0">
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className="font-mono font-bold text-sm text-white group-hover:text-cyan-300 transition-colors">
+                          <span className="min-w-0 break-all font-mono text-sm font-bold text-white transition-colors group-hover:text-cyan-300">
                             {coin.symbol}
                           </span>
                           <span
@@ -575,7 +597,7 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({
                         </div>
 
                         {/* Volume and Details */}
-                        <div className="flex items-center gap-2 mt-0.5 text-[11px] text-slate-400">
+                        <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-2 text-[11px] text-slate-400">
                           <span>
                             Обсяг 24h: <strong className="text-slate-300 font-mono">{formatVolume(coin.volume24hUsd || 0)}</strong>
                           </span>
@@ -589,7 +611,7 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-3.5 shrink-0">
+                    <div className="terminal-add-chart-coin-action flex min-w-0 shrink-0 items-center gap-2 sm:gap-3.5">
                       <div className="text-right">
                         <div className="font-mono font-bold text-xs sm:text-sm text-white">
                           ${formatCryptoPrice(coin.currentPrice)}
@@ -633,8 +655,10 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({
             </>
           )}
         </div>
+        </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 
