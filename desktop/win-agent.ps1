@@ -90,5 +90,5 @@ while ($true) {
     [Console]::Out.Flush()
   }
   if ($Once) { break }
-  Start-Sleep -Milliseconds 650
+  Start-Sleep -Milliseconds 160
 }
