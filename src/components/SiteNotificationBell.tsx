@@ -4,7 +4,9 @@ import { Bell, CheckCheck, Trash2, X, Settings2, TrendingUp, TrendingDown, Shiel
 import { useOptionalSiteNotifications } from '../context/SiteNotificationsContext';
 import type { SiteNotificationItem } from '../utils/siteNotifications';
 
-const iconFor = (item: SiteNotificationItem) => item.kind === 'impulse'
+const iconFor = (item: SiteNotificationItem) => item.kind === 'volatility'
+  ? <Activity className="h-4 w-4 text-amber-300" />
+  : item.kind === 'impulse'
   ? item.changePct !== undefined && item.changePct < 0 ? <TrendingDown className="h-4 w-4 text-rose-400" /> : <TrendingUp className="h-4 w-4 text-emerald-400" />
   : item.kind === 'price' ? <Target className="h-4 w-4 text-cyan-400" />
   : item.kind === 'surveillance' ? <ShieldAlert className="h-4 w-4 text-violet-400" />
@@ -84,6 +86,10 @@ export const SiteNotificationBell: React.FC<{ onOpenSettings?: () => void }> = (
                       <span className={'mt-1 inline-block rounded-md px-2 py-0.5 font-mono text-xs font-bold ' +
                         ((item.changePct || 0) >= 0 ? 'bg-emerald-500/15 text-emerald-300' : 'bg-rose-500/15 text-rose-300')}>
                         {(item.changePct || 0) > 0 ? '+' : ''}{item.changePct?.toFixed(2)}%
+                      </span>}
+                    {item.kind === 'volatility' && Number.isFinite(item.rangePct) &&
+                      <span className="mt-1 inline-block rounded-md bg-amber-500/15 px-2 py-0.5 font-mono text-xs font-bold text-amber-300">
+                        Діапазон {item.rangePct?.toFixed(2)}%
                       </span>}
                   </div>
                 </article>
