@@ -3,12 +3,15 @@ import type { EarlyFormationCandidate } from './earlyFormations';
 
 /** Dedicated in-app page: hash routing works with the current SPA deployment. */
 export type ChartPageKind = 'coin' | 'archive' | 'early';
+/** Which page opened the chart; independent of whether the coin has a formation. */
+export type ChartPageOrigin = 'screener' | 'formations';
 export interface ChartPageRoute {
   exchange: ExchangeId;
   marketType: MarketType;
   symbol: string;
   timeframe: Timeframe;
   kind: ChartPageKind;
+  origin?: ChartPageOrigin;
   formationId?: string;
 }
 export interface ChartPageSnapshot {
@@ -27,6 +30,7 @@ export function chartPageHash(route: ChartPageRoute): string {
   const params = new URLSearchParams();
   if (route.kind !== 'coin') params.set('kind',route.kind);
   if (route.formationId) params.set('formation',route.formationId);
+  if (route.origin) params.set('origin',route.origin);
   return CHART_PREFIX + [
     route.exchange,route.marketType,encodeURIComponent(route.symbol.toUpperCase()),route.timeframe,
   ].join('/') + (params.size ? '?' + params.toString() : '');
@@ -47,17 +51,36 @@ export function readChartPageHash(hash: string): ChartPageRoute | null {
   const kindParam = params.get('kind');
   const kind: ChartPageKind = kindParam === 'archive' || kindParam === 'early' ? kindParam : 'coin';
   const formationId = params.get('formation')?.slice(0,200) || undefined;
+  const originParam = params.get('origin');
+  const origin: ChartPageOrigin | undefined = originParam === 'screener' || originParam === 'formations'
+    ? originParam : undefined;
   return {
     exchange, marketType, symbol, timeframe: timeframe as Timeframe, kind,
     ...(formationId ? { formationId } : {}),
+    ...(origin ? { origin } : {}),
   };
 }
 
 export function sameChartPageRoute(a: ChartPageRoute | null, b: ChartPageRoute | null): boolean {
   return a?.exchange === b?.exchange && a?.marketType === b?.marketType &&
     a?.symbol === b?.symbol && a?.timeframe === b?.timeframe &&
-    a?.kind === b?.kind && a?.formationId === b?.formationId;
+    a?.kind === b?.kind && a?.formationId === b?.formationId &&
+    chartPageVisualOrigin(a) === chartPageVisualOrigin(b);
 }
+/** Legacy chart URLs remain valid: plain coin links are Screener charts.
+ * Early detection and archives continue to use Formation profiles by default. */
+export function chartPageVisualOrigin(route: ChartPageRoute | null): ChartPageOrigin {
+  if (route?.origin) return route.origin;
+  return route?.kind === 'archive' || route?.kind === 'early' ? 'formations' : 'screener';
+}
+
+/** Page origin, not formation existence, controls the visible and full-screen scales. */
+export function chartPageVisualContext(route: ChartPageRoute | null, expanded: boolean) {
+  const origin = chartPageVisualOrigin(route);
+  if (origin === 'screener') return expanded ? 'screenerFull' : 'screenerQuick';
+  return expanded ? 'formationsFull' : 'formationsQuick';
+}
+
 export function chartPageSnapshotKey(route: ChartPageRoute, uid: string): string {
   return SNAPSHOT_PREFIX + uid + ':' + chartPageHash(route);
 }
