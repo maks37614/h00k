@@ -134,9 +134,9 @@ test('only verified OI and confirmed retests can trigger corresponding alerts', 
   const events = scanNotificationSignals([unavailable], settings, [], 905_000);
   assert.ok(!events.some(e => e.kind === 'openInterest'));
   assert.ok(!events.some(e => e.kind === 'composite' && e.description.includes('OI')));
-  const stale = coin(50_000);
-  stale.lastUpdated = 900_000; // quote fresh, OI period stale
-  const staleEvents = scanNotificationSignals([stale], settings, [], 905_000);
+  const stale = coin(1_000_000);
+  stale.lastUpdated = 10_000_000; // quote fresh, OI period more than two intervals old
+  const staleEvents = scanNotificationSignals([stale], settings, [], 10_005_000);
   assert.ok(!staleEvents.some(e => e.kind === 'openInterest'));
   assert.ok(!staleEvents.some(e => e.kind === 'composite' && e.description.includes('OI')));
   const confirmed = coin(900_000);
