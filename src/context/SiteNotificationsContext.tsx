@@ -345,7 +345,8 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
         : (outcome.durationSeconds / 60).toFixed(1) + ' хв';
       emit({
         id: outcome.kind + ':' + config.impulseExchange + ':' + config.impulseMarket + ':' + symbol + ':' + now,
-        kind: outcome.kind, symbol,
+        kind: outcome.kind, symbol, exchange: config.impulseExchange,
+        marketType: config.impulseMarket, timeframe: config.impulseWindowMinutes + 'm',
         changePct: outcome.kind === 'impulse' ? outcome.changePct : undefined,
         rangePct: outcome.kind === 'volatility' ? outcome.rangePct : undefined,
         title: outcome.kind === 'volatility'
@@ -431,12 +432,13 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
         url.searchParams.set('exchange', exchange);
         url.searchParams.set('symbol', symbol);
         socket = new WebSocket(url);
-        socket.onopen = () => { attempt = 0; };
+        socket.onopen = () => { /* Reset failure count only after valid live data arrives. */ };
         socket.onmessage = message => {
           if (stopped) return;
           try {
             const data = JSON.parse(String(message.data));
             if (data.type !== 'liquidation' || !data.event) return;
+            attempt = 0;
             const signal = liquidationNotificationSignal(data.event, settingsRef.current,
               { symbol, exchange, marketType: 'futures' });
             if (signal) emit(signal);
