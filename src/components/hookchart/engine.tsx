@@ -12,6 +12,7 @@ import { createChartTouchHold, isChartControlTarget } from './touchHold';
 import { CrosshairTimeLabel } from './CrosshairTimeLabel';
 import type { ChartCrosshairStore, CrosshairPosition } from './crosshairState';
 import { quantile, atr, formatUsd, type AutoLevel, type MarketPrint } from './marketAnalytics';
+import { aggregateMarketPrintsByCandle } from './marketPrintBuckets';
 import { supportResistanceLevels } from './supportResistance';
 import type { StrategyResult } from './strategyEngine';
 import { INDICATOR_META, indicatorData, type IndicatorId, type OIPoint } from './indicatorEngine';
@@ -778,7 +779,44 @@ export function Chart({candles,symbol,tf,tool,drawings,setDrawings,alerts,setAle
        q.fillText(txt,lx,Math.max(12,yy-5));q.globalAlpha=1;
      }
    });
-  if(showMarketPrintSums){const printsByCandle=new Map<number,MarketPrint[]>();for(const m of marketPrints){const xx=g.x(m.t);if(xx<0||xx>g.plotW)continue;const ci=g.nearestIndex(m.t);const arr=printsByCandle.get(ci)||[];arr.push(m);printsByCandle.set(ci,arr)}for(const [ci,items0] of printsByCandle){const c=candles[ci];if(!c)continue;const items=[...items0].sort((a,b)=>b.usd-a.usd).slice(0,3),xx=g.x(c.t),anchorY=Math.max(1,Math.min(g.plotH-2,g.y(c.l))),baseY=Math.max(12,Math.min(anchorY+16,g.plotH-8-(items.length-1)*14));items.forEach((m,row)=>{const buy=m.side==='BUY',text=`$${formatUsd(m.usd)}`;q.font='700 11px system-ui';const tw=q.measureText(text).width,tx=Math.max(2,Math.min(g.plotW-tw-2,xx-tw/2)),ty=Math.max(12,Math.min(g.plotH-6,baseY+row*14)),col=buy?candleLongColor:candleShortColor;q.strokeStyle=col;q.lineWidth=1;q.globalAlpha=.95;q.beginPath();q.moveTo(xx,Math.min(g.plotH-2,anchorY+1));q.lineTo(xx,Math.max(2,Math.min(g.plotH-10,ty-11)));q.stroke();q.globalAlpha=1;q.lineWidth=3;q.strokeStyle=CHART_THEME.bg;q.strokeText(text,tx,ty);q.fillStyle=col;q.fillText(text,tx,ty)})}};
+  if(showMarketPrintSums && marketPrints.length){
+    // One per-candle summary, not the three largest individual bursts.
+    // Keep BUY and SELL separate inside the same label and avoid text collisions
+    // on compressed Terminal grids. Bucketing uses the candle open/close, not
+    // nearest-index snapping (which misassigned end-of-candle executions).
+    q.save();
+    q.font='700 10px system-ui';
+    const buckets=aggregateMarketPrintsByCandle(candles,marketPrints,intervalMs);
+    const placed:{x:number,y:number,width:number}[]=[];
+    const candidates=buckets.map(bucket=>{
+      const candle=candles[bucket.index],x=g.x(candle.t);
+      const parts=[
+        ...(bucket.buyUsd>0?[{text:'B $'+formatUsd(bucket.buyUsd),color:candleLongColor}]:[]),
+        ...(bucket.sellUsd>0?[{text:'S $'+formatUsd(bucket.sellUsd),color:candleShortColor}]:[]),
+      ];
+      const width=parts.reduce((sum,part)=>sum+q.measureText(part.text).width,0)+(parts.length-1)*7;
+      const anchorY=Math.max(1,Math.min(g.plotH-2,g.y(candle.l)));
+      const y=Math.max(12,Math.min(g.plotH-7,anchorY+17));
+      return {bucket,x,anchorY,y,parts,width};
+    }).filter(item=>item.x>=0&&item.x<=g.plotW&&item.width>0)
+      .sort((a,b)=>b.bucket.totalUsd-a.bucket.totalUsd);
+    for(const item of candidates){
+      const x=Math.max(item.width/2+2,Math.min(g.plotW-item.width/2-2,item.x));
+      if(placed.some(other=>Math.abs(other.x-x)<(other.width+item.width)/2+5&&Math.abs(other.y-item.y)<13))continue;
+      placed.push({x,y:item.y,width:item.width});
+      q.strokeStyle=item.bucket.buyUsd>=item.bucket.sellUsd?candleLongColor:candleShortColor;
+      q.lineWidth=1;q.beginPath();q.moveTo(item.x,item.anchorY+1);
+      q.lineTo(item.x,Math.max(item.anchorY+2,item.y-12));q.stroke();
+      let textX=x-item.width/2;
+      for(const part of item.parts){
+        q.lineWidth=3;q.strokeStyle=CHART_THEME.bg;
+        q.strokeText(part.text,textX,item.y);
+        q.fillStyle=part.color;q.fillText(part.text,textX,item.y);
+        textX+=q.measureText(part.text).width+7;
+      }
+    }
+    q.restore();
+  }
   if(showLiquidations){
     // The feed contains events passing each side's own display preference/threshold.
     // Bucket real exchange events into their actual candle and show observed notional below it.
