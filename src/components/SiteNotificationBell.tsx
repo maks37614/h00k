@@ -1,8 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Bell, CheckCheck, Trash2, X, Settings2, TrendingUp, TrendingDown, ShieldAlert, Target, Activity } from 'lucide-react';
+import { Bell, CheckCheck, Trash2, X, Settings2, TrendingUp, TrendingDown, ShieldAlert, Target, Activity, Copy, Check } from 'lucide-react';
 import { useOptionalSiteNotifications } from '../context/SiteNotificationsContext';
 import type { SiteNotificationItem } from '../utils/siteNotifications';
+import { notificationCoinTitleParts } from '../utils/notificationChartLink';
+import { copyTextToClipboard } from '../utils/copyTextToClipboard';
 
 const iconFor = (item: SiteNotificationItem) => item.kind === 'volatility'
   ? <Activity className="h-4 w-4 text-amber-300" />
@@ -12,7 +14,10 @@ const iconFor = (item: SiteNotificationItem) => item.kind === 'volatility'
   : item.kind === 'surveillance' ? <ShieldAlert className="h-4 w-4 text-violet-400" />
   : <Activity className="h-4 w-4 text-amber-300" />;
 
-export const SiteNotificationBell: React.FC<{ onOpenSettings?: () => void }> = ({ onOpenSettings }) => {
+export const SiteNotificationBell: React.FC<{
+  onOpenSettings?: () => void;
+  onOpenChart?: (item: SiteNotificationItem) => void;
+}> = ({ onOpenSettings, onOpenChart }) => {
   const context = useOptionalSiteNotifications();
   const items = context?.items ?? [];
   const unreadCount = context?.unreadCount ?? 0;
@@ -20,6 +25,15 @@ export const SiteNotificationBell: React.FC<{ onOpenSettings?: () => void }> = (
   const markAllRead = () => context?.markAllRead();
   const clear = () => context?.clear();
   const [open, setOpen] = useState(false);
+  const [copyStatus, setCopyStatus] = useState<{ id: string; success: boolean } | null>(null);
+  const copyReset = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (copyReset.current) clearTimeout(copyReset.current); }, []);
+  const copySymbol = async (item: SiteNotificationItem, symbol: string) => {
+    const success = await copyTextToClipboard(symbol);
+    if (copyReset.current) clearTimeout(copyReset.current);
+    setCopyStatus({ id: item.id, success });
+    copyReset.current = setTimeout(() => setCopyStatus(null), 1800);
+  };
   useEffect(() => {
     if (!open) return;
     const onKeyDown = (event: KeyboardEvent) => {
@@ -70,13 +84,46 @@ export const SiteNotificationBell: React.FC<{ onOpenSettings?: () => void }> = (
             <div className="min-h-0 flex-1 space-y-1 overflow-y-auto p-2">
               {!items.length ? <div className="px-3 py-12 text-center text-sm text-slate-400">
                 Нових сповіщень поки немає. Створіть ціновий алерт або налаштуйте пошук імпульсів у профілі.
-              </div> : items.map(item => (
+              </div> : items.map(item => {
+                const { label, symbol } = notificationCoinTitleParts(item);
+                return (
                 <article key={item.id} className={'flex gap-2.5 rounded-xl border p-3 ' +
                   (!item.read ? 'border-cyan-600/30 bg-cyan-950/25' : 'border-transparent bg-slate-900/50')}>
                   <div className="mt-0.5 shrink-0">{iconFor(item)}</div>
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-start justify-between gap-1">
-                      <h3 className="break-words text-xs font-semibold text-slate-100">{item.title}</h3>
+                      <h3 className="flex flex-wrap items-center gap-x-1 gap-y-1 break-words text-xs font-semibold text-slate-100">
+                        <span>{label}</span>
+                        {symbol && (
+                          <span className="inline-flex max-w-full items-center gap-1">
+                            {onOpenChart ? (
+                              <button type="button"
+                                onClick={() => { setOpen(false); onOpenChart(item); }}
+                                aria-label={'Відкрити повний графік ' + symbol}
+                                title={'Відкрити графік ' + symbol}
+                                className="min-h-7 rounded px-1 font-mono font-bold text-cyan-200 underline decoration-cyan-600/50 underline-offset-2 hover:bg-cyan-950/60 hover:text-cyan-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400">
+                                {symbol}
+                              </button>
+                            ) : (
+                              <span className="font-mono text-cyan-200">{symbol}</span>
+                            )}
+                            <button type="button"
+                              onClick={event => { event.stopPropagation(); void copySymbol(item, symbol); }}
+                              aria-label={'Скопіювати ' + symbol}
+                              title={'Скопіювати лише ' + symbol}
+                              className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-slate-700/70 text-slate-400 hover:border-cyan-600/70 hover:text-cyan-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400">
+                              {copyStatus?.id === item.id && copyStatus.success
+                                ? <Check aria-hidden="true" className="h-3.5 w-3.5 text-emerald-400" />
+                                : <Copy aria-hidden="true" className="h-3.5 w-3.5" />}
+                            </button>
+                            {copyStatus?.id === item.id && (
+                              <span role="status" className="sr-only">
+                                {copyStatus.success ? 'Скопійовано ' + symbol : 'Не вдалося скопіювати ' + symbol}
+                              </span>
+                            )}
+                          </span>
+                        )}
+                      </h3>
                       <time className="whitespace-nowrap text-[10px] text-slate-500">
                         {new Date(item.timestamp).toLocaleString('uk-UA', { dateStyle: 'short', timeStyle: 'short' })}
                       </time>
@@ -93,7 +140,8 @@ export const SiteNotificationBell: React.FC<{ onOpenSettings?: () => void }> = (
                       </span>}
                   </div>
                 </article>
-              ))}
+                );
+              })}
             </div>
             <footer className="border-t border-slate-800 px-4 py-2 text-[10px] text-slate-500">
               Історія подій на цьому пристрої; історія цінових алертів також відновлюється із сервера.
