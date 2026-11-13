@@ -14,6 +14,7 @@ const delivery = await import('../server/telegramDelivery');
 const users = await import('../server/userTelegram');
 const links = await import('../server/telegramLinkService');
 const alerts = await import('../server/alertService');
+const sitePreferences = await import('../server/siteNotificationPrefs');
 const { formatTelegramMessages, telegramPlainText } = await import('../server/telegramFormat');
 const { locales, telegramText } = await import('../src/locales');
 const originalFetch = globalThis.fetch;
@@ -72,6 +73,10 @@ test('legacy destinations require explicit confirmation and language sync cannot
 test('two users with the same alert ID receive only their own price alerts and history', async () => {
   connectUser('price-alice', '3001');
   connectUser('price-bob', '3002');
+  for (const userId of ['price-alice', 'price-bob']) {
+    sitePreferences.saveUserSiteNotificationSettings(userId,
+      { optedIn: true, enabled: true, price: true, telegramEnabled: true });
+  }
   alerts.saveAlerts([]);
   for (const userId of ['price-alice', 'price-bob']) alerts.createAlert({ id: 'same-id', userId, symbol: 'BTCUSDT',
     exchange: 'binance', marketType: 'futures', targetPrice: 100, condition: 'gte', note: `${userId}: <keep & safe>`,
