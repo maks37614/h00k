@@ -21,10 +21,11 @@ interface ExchangeCandlestickChartProps {
   hookchartToolbarOverlays?: React.ReactNode;
   formation?: DetectedFormation | null;
   onTimeframeChange?: (timeframe: Timeframe) => void;
+  onLivePriceUpdate?: (price: number) => void;
 }
 
 export const ExchangeCandlestickChart: React.FC<ExchangeCandlestickChartProps> = ({
-  symbol, exchange, marketType, timeframe, historyLimit = 1000, onTimeframeChange,
+  symbol, exchange, marketType, timeframe, historyLimit = 1000, onTimeframeChange, onLivePriceUpdate,
   terminalMode, terminalAutoScale, terminalInitialView, visualContext, terminalToolbarVisibility, hookchartToolbarActions, hookchartToolbarOverlays, formation,
 }) => (
   <div className="h-full w-full min-h-0" role="group" aria-label={`Графік ${symbol}`}>
@@ -44,6 +45,7 @@ export const ExchangeCandlestickChart: React.FC<ExchangeCandlestickChartProps> =
       marketType={marketType}
       timeframe={timeframe}
       onTimeframeChange={onTimeframeChange}
+      onLivePriceUpdate={onLivePriceUpdate}
       historyLimit={historyLimit}
       fullHeight
       showNavigationControls={false}
