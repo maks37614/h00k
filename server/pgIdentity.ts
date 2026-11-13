@@ -32,7 +32,6 @@ const SESSION_DAYS = 30;
 const HASH_LENGTH = 64;
 const SCRYPT_COST = 32768;
 const SCRYPT_OPTIONS = { N: SCRYPT_COST, r: 8, p: 1, maxmem: 64 * 1024 * 1024 };
-export const usePostgresAuth = () => process.env.H00K_AUTH_BACKEND === 'postgres';
 export const COOKIE_NAME = process.env.NODE_ENV === 'production' ? '__Host-h00k-session' : 'h00k-session';
 
 export class AuthFailure extends Error {
@@ -60,7 +59,6 @@ function database(): Pool {
 export function identityPool() { return database(); }
 
 export async function initializeIdentity() {
-  if (!usePostgresAuth()) return;
   if (!initialized) initialized = (async () => {
     const schema = readFileSync(new URL('./migrations/001_identity.sql', import.meta.url), 'utf8');
     const client = await database().connect();
