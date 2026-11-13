@@ -25,7 +25,7 @@ button.danger{background:#38212b;border-color:#833b4c;color:#ffced8}
 #feedback{font-size:12px;color:#79e7c7;min-height:20px}
 @media(max-width:600px){.stack,.checks{grid-template-columns:1fr}.tabs button{font-size:11px}.grid label{font-size:11px;padding:7px 3px}}
 </style></head><body>
-<header><div><h1>h00k <span style="color:#fff">Desktop</span></h1><small>Smart Dock · Windows</small></div><button class="action" id="standalone">Увесь сайт ↗</button></header>
+<header><div><h1>h00k <span style="color:#fff">Desktop</span></h1><small>Smart Dock · Windows</small></div><div class="row" style="margin:0"><button class="action" id="standalone">Окреме вікно</button><button class="action" id="browser">У браузері ↗</button></div></header>
 <section><h2>1. Торговий термінал</h2><div class="tabs" id="tabs"></div><p>Для кожного термінала окремі налаштування. Можна прикріпити h00k до декількох терміналів одночасно.</p>
 <div id="status">Шукаю запущені термінали…</div>
 <label for="target"><small>Вибрати конкретне вікно вручну</small></label><select id="target"><option value="">Автоматичний пошук</option></select>
@@ -120,6 +120,7 @@ byId('attach').onclick=async()=>{try{snap=await api.save(active,form());snap=awa
 byId('detach').onclick=async()=>{try{snap=await api.detach(active);render();byId('feedback').textContent='Відкріплено';}catch(e){error(e);}};
 byId('target').onchange=async e=>{try{snap=await api.pick(active,e.target.value);drawStatus();}catch(err){error(err);}};
 byId('standalone').onclick=async()=>{try{await api.openStandalone();}catch(e){error(e);}};
+byId('browser').onclick=async()=>{try{await api.openBrowser();}catch(e){error(e);}};
 api.onSelectProvider(provider=>{if(providers.some(([id])=>id===provider)){active=provider;render();}});
 api.onSnapshot(value=>{snap=value;drawStatus();});
 api.snapshot().then(value=>{snap=value;render();}).catch(error);
