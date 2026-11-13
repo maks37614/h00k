@@ -117,6 +117,7 @@ function makeContentWindow(provider, id, mode = 'full') {
   win.__h00kMode = mode === 'floating' ? 'floating' : 'docked';
   win.__h00kUrl = webURL(id);
   win.__h00kLoaded = false; // Never load a scanner for a panel without display space.
+  win.__nextLoadAt = 0;
   win.__autoPlacing = false;
   guardWebsite(win);
   attachDockToolbar(win, provider);
@@ -282,9 +283,14 @@ function applyBounds(win, bounds, alwaysOnTop) {
     win.__autoPlaceReset = setTimeout(() => { win.__autoPlacing = false; }, 320);
   }
   if (win.isAlwaysOnTop() !== alwaysOnTop) win.setAlwaysOnTop(alwaysOnTop);
-  if (!win.__h00kLoaded) {
+  if (!win.__h00kLoaded && Date.now() >= win.__nextLoadAt) {
     win.__h00kLoaded = true;
-    win.loadURL(win.__h00kUrl).catch(err => console.warn('h00k load error:', err.message));
+    win.loadURL(win.__h00kUrl).catch(err => {
+      if (win.isDestroyed()) return;
+      win.__h00kLoaded = false;
+      win.__nextLoadAt = Date.now() + 15_000; // bounded retry; never flood h00k.top on outage
+      console.warn('h00k load error (retry in 15s):', err.message);
+    });
   }
   if (!win.isVisible()) win.showInactive();
 }
@@ -459,6 +465,10 @@ function registerIpc() {
     settings.profiles[provider].enabled = false;
     manualAttached.delete(provider);
     closeProvider(provider); saveSettings(); pushSnapshot(); return snapshot();
+  });
+  ipcMain.handle('desktop:open-browser',event => {
+    verifySettingsSender(event);
+    return shell.openExternal(WEBSITE); // Never accept an arbitrary URL from the renderer.
   });
   ipcMain.handle('desktop:standalone',event => {
     verifySettingsSender(event);
