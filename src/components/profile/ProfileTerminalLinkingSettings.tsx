@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { CheckCircle2, AlertCircle, Info, Save, PlugZap, RefreshCw } from 'lucide-react';
+import { CheckCircle2, AlertCircle, Info, Save, PlugZap, RefreshCw, BookOpen, ExternalLink } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { findActiveMetaScalpPort, getUserMetaScalpSettings, type MetaScalpSettings } from '../../utils/metaScalpService';
 import {
@@ -49,7 +49,7 @@ export const ProfileTerminalLinkingSettings: React.FC = () => {
       return;
     }
     if (draft.provider === 'tiger' && !normalizeTigerGroup(draft.tigerGroup)) {
-      setMessage({ ok: false, text: 'Група Tiger: вкажіть A–Z або 0–11.' });
+      setMessage({ ok: false, text: 'Група Tiger: вкажіть A–Z або 0–18.' });
       return;
     }
     if (draft.provider === 'tiger' && (!Number.isInteger(draft.tigerPort) || draft.tigerPort < 1 || draft.tigerPort > 65535)) {
@@ -177,12 +177,12 @@ export const ProfileTerminalLinkingSettings: React.FC = () => {
                     <input type="number" min="1" max="65535" className={inputClass + ' w-full'} value={draft.tigerPort}
                       onChange={e => change({ tigerPort: Number(e.target.value) })} />
                   </label>
-                  <label className="space-y-1 text-xs text-slate-300">Група за замовчуванням (A–Z, 0–11)
+                  <label className="space-y-1 text-xs text-slate-300">Група за замовчуванням (A–Z, 0–18)
                     <input type="text" maxLength={2} className={inputClass + ' w-full'} value={draft.tigerGroup}
                       onChange={e => change({ tigerGroup: e.target.value.toUpperCase() })} />
                   </label>
                 </div>
-                <p className="text-[11px] text-slate-400">У Tiger: Налаштування → Локальний сервер сигналів → Увімкнути → Зберегти.</p>
+                <p className="text-[11px] text-slate-400">У Tiger потрібно увімкнути локальний сервер сигналів. Покрокова інструкція нижче.</p>
               </>
             ) : (
               <div className="flex gap-2 rounded-lg border border-amber-600/40 bg-amber-950/20 p-3 text-xs text-amber-200">
@@ -205,6 +205,50 @@ export const ProfileTerminalLinkingSettings: React.FC = () => {
               </div>
             )}
           </section>
+
+          {ready && (
+            <details key={selected} defaultOpen className="group rounded-xl border border-cyan-800/40 bg-slate-950/60 p-4">
+              <summary className="flex cursor-pointer list-none items-center gap-2 text-sm font-semibold text-cyan-200 [&::-webkit-details-marker]:hidden">
+                <BookOpen size={17} className="shrink-0" />
+                <span className="flex-1">Як підключити {selected === 'tiger' ? 'Tiger' : 'MetaScalp'} до h00k.top</span>
+                <span className="text-[11px] font-normal text-slate-400 group-open:hidden">Показати кроки</span>
+                <span className="hidden text-[11px] font-normal text-slate-400 group-open:inline">Згорнути</span>
+              </summary>
+              <div className="mt-3 space-y-3 border-t border-slate-800 pt-3">
+                {selected === 'metascalp' ? (
+                  <>
+                    <ol className="list-decimal space-y-2 pl-5 text-xs leading-relaxed text-slate-300 marker:font-semibold marker:text-cyan-400">
+                      <li>Запустіть MetaScalp на тому самому комп'ютері, де відкрито h00k.top, та підключіть потрібну біржу (Binance або Bybit).</li>
+                      <li>У MetaScalp призначте стакану або графіку групу лінковки, наприклад 001 (доступні групи 001–500).</li>
+                      <li>У h00k.top виберіть MetaScalp, введіть ту саму групу та залиште порт 17845, якщо його не змінювали. API запускається разом із MetaScalp; h00k шукає активний порт у діапазоні 17845–17855.</li>
+                      <li>Увімкніть лінковку та натисніть «Перевірити з'єднання», потім «Тест BTCUSDT». Переконайтеся, що інструмент змінився у вікнах потрібної групи.</li>
+                    </ol>
+                    <a href="https://download.metascalp.io/MetaScalp-Api.html" target="_blank" rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-xs font-semibold text-cyan-300 underline underline-offset-2 hover:text-cyan-100">
+                      Офіційна документація MetaScalp API <ExternalLink size={12}/>
+                    </a>
+                  </>
+                ) : (
+                  <>
+                    <ol className="list-decimal space-y-2 pl-5 text-xs leading-relaxed text-slate-300 marker:font-semibold marker:text-cyan-400">
+                      <li>Запустіть Tiger.com Windows на тому самому комп'ютері, де відкрито h00k.top, та переконайтеся, що потрібні ринки доступні в терміналі.</li>
+                      <li>У Tiger відкрийте «Настройки» → «Локальный сервер сигналов» → увімкніть «Включить сервер сигналов» → натисніть «Сохранить».</li>
+                      <li>Залиште стандартний порт 7819 або вкажіть однаковий власний порт у Tiger та h00k.top. Опцію «Разрешить торговлю» для лінковки вмикати не потрібно.</li>
+                      <li>У стакані та/або графіку Tiger виберіть групу лінковки (кольорову літеру A–Z або число 0–18), наприклад A. У h00k.top виберіть ту саму групу.</li>
+                      <li>Увімкніть лінковку, натисніть «Перевірити з'єднання», потім «Тест BTCUSDT» і перевірте зміну інструмента в прив'язаних вікнах Tiger.</li>
+                    </ol>
+                    <a href="https://support.tiger.com/razrabotka-dlya-tiger.trade-windows/tiger-api" target="_blank" rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-xs font-semibold text-cyan-300 underline underline-offset-2 hover:text-cyan-100">
+                      Офіційна документація Tiger API <ExternalLink size={12}/>
+                    </a>
+                  </>
+                )}
+                <p className="rounded-lg border border-slate-700/70 bg-slate-900/60 px-3 py-2 text-[11px] leading-relaxed text-slate-400">
+                  Якщо з'єднання не знайдено, перевірте, чи запущений термінал, чи збігаються порт і група та чи браузер дозволив локальне підключення. Для прямої лінковки браузер і термінал мають працювати на одному комп'ютері.
+                </p>
+              </div>
+            </details>
+          )}
 
           <section className="space-y-3 rounded-xl border border-slate-800 bg-slate-950/60 p-4">
             <h4 className="text-sm font-semibold text-slate-100">3. Що дозволено передавати</h4>
@@ -298,7 +342,7 @@ export const ProfileTerminalLinkingSettings: React.FC = () => {
       )}
       <button type="button" onClick={save} disabled={busy || !user}
         className="flex items-center justify-center gap-2 rounded-lg bg-cyan-600 px-5 py-2.5 text-xs font-bold text-white hover:bg-cyan-500 disabled:opacity-50">
-        <Save size={15}/>{busy ? 'Збереження…' : 'Зберегти налаштування лінковки'}
+        <Save size={15}/>{busy ? 'Збереження…' : 'Зберегти налаштування'}
       </button>
     </div>
   );
