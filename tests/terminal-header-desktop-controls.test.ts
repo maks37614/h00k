@@ -6,35 +6,48 @@ const source = readFileSync(new URL('../src/components/TerminalPage.tsx', import
 const header = source.slice(source.indexOf('{/* Block count, centered clock'), source.indexOf('</header>'));
 const secondRow = header.slice(header.lastIndexOf('grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]'));
 
-test('wide Terminal header groups layouts and autoscale before timeframes, presets and plus after', () => {
-  assert.match(secondRow, /contents lg:col-start-2 lg:row-start-1 lg:flex/);
-  const layout = secondRow.indexOf('title="1 Графік (на весь екран)"');
-  const autoScale = secondRow.indexOf('{renderAutoScaleButton()}');
-  const timeframe = secondRow.indexOf('{/* Timeframe Selector */}');
-  const presets = secondRow.indexOf('ref={presetsButtonRef}');
-  const plus = secondRow.indexOf('aria-label="Додати графік"');
-  assert.ok(layout !== -1 && layout < autoScale && autoScale < timeframe &&
-    timeframe < presets && presets < plus);
-  assert.match(secondRow, /Монет: \{terminalCoinCount\}/);
-  assert.equal((secondRow.match(/title="4 Колонки"/g) || []).length, 1);
+test('desktop clock is centered above the timeframe, not above the whole control group', () => {
+  assert.equal((header.match(/grid-cols-\[minmax\(0,1fr\)_auto_minmax\(0,1fr\)\]/g) ?? []).length, 2);
+  assert.match(header, /<TerminalClock timeZone=\{profile\?\.timeZone\}/);
+  assert.match(secondRow, /col-start-2 row-start-1 flex shrink-0 items-center justify-self-center/);
+  assert.doesNotMatch(secondRow, /contents lg:col-start-2 lg:row-start-1 lg:flex/);
 });
 
-test('smaller Terminal layouts keep their original grid and autoscale position', () => {
+test('on wide screens autoscale comes before 1x–4x on the left, presets and plus after timeframe', () => {
+  const counter = secondRow.indexOf('Монет: {terminalCoinCount}');
+  const auto = secondRow.indexOf('{renderAutoScaleButton()}');
+  const one = secondRow.indexOf('title="1 Графік (на весь екран)"');
+  const four = secondRow.indexOf('title="4 Колонки"');
+  const timeframe = secondRow.indexOf('{/* Timeframe Selector */}');
+  const preset = secondRow.indexOf('ref={presetsButtonRef}');
+  const add = secondRow.indexOf('aria-label="Додати графік"');
+  assert.ok(counter >= 0 && counter < auto && auto < one && one < four &&
+    four < timeframe && timeframe < preset && preset < add);
+  assert.match(secondRow, /hidden shrink-0 items-center lg:ml-auto lg:flex/);
+  assert.match(secondRow, /col-start-3 row-start-1 flex items-center justify-self-start/);
+  assert.equal((secondRow.match(/title="4 Колонки"/g) ?? []).length, 1);
+});
+
+test('top-right shortcuts are anchored to the right and bordered on desktop', () => {
+  assert.match(header, /col-start-3 row-start-1 flex shrink-0 items-center justify-self-end/);
+  for (const label of [
+    'Створити сповіщення в Telegram', 'Надіслати в MetaScalp',
+    'Налаштування робочого простору', 'На весь екран браузера', 'Закрити термінал',
+  ]) assert.ok(header.includes(label));
+  assert.equal((header.match(/lg:h-8 lg:w-8 lg:rounded-lg lg:border/g) ?? []).length, 5);
+  assert.match(header, /lg:border-sky-500\/35/);
+  assert.match(header, /lg:border-amber-500\/35/);
+});
+
+test('smaller screens keep the original positions and all actions remain connected', () => {
   assert.match(header, /justify-self-start lg:hidden/);
-  assert.match(header, /grid-cols-\[minmax\(0,1fr\)_auto_minmax\(0,1fr\)\]/);
-  assert.match(secondRow, /className="contents lg:col-start-2/);
+  assert.equal((header.match(/\{renderAutoScaleButton\(\)\}/g) ?? []).length, 2);
+  assert.equal((source.match(/onClick=\{\(\) => setAutoScaleCharts\(enabled => !enabled\)\}/g) ?? []).length, 1);
   assert.match(secondRow, /col-start-1 row-start-1/);
   assert.match(secondRow, /col-start-2 row-start-1/);
   assert.match(secondRow, /col-start-3 row-start-1/);
-  assert.equal((header.match(/\{renderAutoScaleButton\(\)\}/g) || []).length, 2);
-  assert.equal((source.match(/onClick=\{\(\) => setAutoScaleCharts\(enabled => !enabled\)\}/g) || []).length, 1);
-});
-
-test('layout presets, timeframes and add-chart actions retain their existing behavior', () => {
-  for (const value of ['1x', '2x', '3x', '4x']) assert.match(secondRow, new RegExp(value));
   assert.match(secondRow, /handleApplyGlobalTimeframe\(tf\)/);
   assert.match(secondRow, /setShowCoinPresets\(true\)/);
   assert.match(secondRow, /setIsAddModalOpen\(true\)/);
-  assert.match(source, /aria-label="Автоматичний масштаб свічок усіх графіків"/);
-  assert.match(secondRow, /ref=\{presetsButtonRef\}/);
+  assert.match(header, /onClick=\{onReturnToPatterns\}/);
 });

@@ -760,7 +760,7 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
             onOpenChange={setShowTradingSessions} onOpen={() => setShowCoinPresets(false)} />
 
           {/* Telegram, MetaScalp, Settings, Fullscreen */}
-          <div className="flex shrink-0 items-center justify-self-end gap-0 min-[375px]:gap-0.5 sm:gap-2">
+          <div className="col-start-3 row-start-1 flex shrink-0 items-center justify-self-end gap-0 min-[375px]:gap-0.5 sm:gap-2">
             {/* Telegram Alert shortcut */}
             {onOpenTelegramAlerts && (
               <button
@@ -774,7 +774,7 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
                     formationName: formation?.name,
                   })
                 }
-                className="flex h-7 w-6 shrink-0 items-center justify-center p-0 sm:h-auto sm:w-auto sm:p-2 rounded-xl bg-sky-500/10 hover:bg-sky-500/20 text-sky-300 border-0 transition-all active:scale-95 cursor-pointer"
+                className="flex h-7 w-6 shrink-0 items-center justify-center p-0 sm:h-auto sm:w-auto sm:p-2 rounded-xl bg-sky-500/10 hover:bg-sky-500/20 text-sky-300 border-0 lg:h-8 lg:w-8 lg:rounded-lg lg:border lg:border-sky-500/35 transition-all active:scale-95 cursor-pointer"
                 title="Створити сповіщення в Telegram"
                 aria-label="Створити сповіщення в Telegram"
               >
@@ -786,7 +786,7 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
             {onSendMetaScalp && (
               <button
                 onClick={() => onSendMetaScalp(activeCoin)}
-                className="flex h-7 w-6 shrink-0 items-center justify-center p-0 sm:h-auto sm:w-auto sm:p-2 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border-0 transition-all active:scale-95 cursor-pointer"
+                className="flex h-7 w-6 shrink-0 items-center justify-center p-0 sm:h-auto sm:w-auto sm:p-2 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border-0 lg:h-8 lg:w-8 lg:rounded-lg lg:border lg:border-amber-500/35 transition-all active:scale-95 cursor-pointer"
                 title={`Надіслати в обраний термінал (Група ${metaScalpBinding})`}
                 aria-label={`Надіслати в обраний термінал (Група ${metaScalpBinding})`}
               >
@@ -797,7 +797,7 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
             {/* Settings Drawer */}
             <button
               onClick={() => setIsSettingsOpen(true)}
-              className="flex h-7 w-6 shrink-0 items-center justify-center p-0 sm:h-auto sm:w-auto sm:p-2 rounded-xl bg-slate-900 hover:bg-slate-800 border-0 text-slate-300 hover:text-white transition-colors cursor-pointer"
+              className="flex h-7 w-6 shrink-0 items-center justify-center p-0 sm:h-auto sm:w-auto sm:p-2 rounded-xl bg-slate-900 hover:bg-slate-800 border-0 lg:h-8 lg:w-8 lg:rounded-lg lg:border lg:border-slate-700 text-slate-300 hover:text-white transition-colors cursor-pointer"
               title="Налаштування робочого простору"
             >
               <SlidersHorizontal className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-cyan-400" />
@@ -806,7 +806,7 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
             {/* Browser Fullscreen Button */}
             <button
               onClick={toggleBrowserFullscreen}
-              className="flex h-7 w-6 shrink-0 items-center justify-center p-0 sm:h-auto sm:w-auto sm:p-2 rounded-xl bg-slate-900 hover:bg-slate-800 border-0 text-slate-300 hover:text-white transition-colors cursor-pointer"
+              className="flex h-7 w-6 shrink-0 items-center justify-center p-0 sm:h-auto sm:w-auto sm:p-2 rounded-xl bg-slate-900 hover:bg-slate-800 border-0 lg:h-8 lg:w-8 lg:rounded-lg lg:border lg:border-slate-700 text-slate-300 hover:text-white transition-colors cursor-pointer"
               title={isBrowserFullscreen ? 'Вийти з повноекранного режиму' : 'На весь екран браузера'}
             >
               {isBrowserFullscreen ? <Minimize2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> : <Maximize2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />}
@@ -816,7 +816,7 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
             {onReturnToPatterns && (
               <button
                 onClick={onReturnToPatterns}
-                className="flex h-7 w-6 shrink-0 items-center justify-center p-0 sm:h-auto sm:w-auto sm:p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 border-0 transition-colors cursor-pointer"
+                className="flex h-7 w-6 shrink-0 items-center justify-center p-0 sm:h-auto sm:w-auto sm:p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 border-0 lg:h-8 lg:w-8 lg:rounded-lg lg:border lg:border-slate-700 transition-colors cursor-pointer"
                 title="Закрити термінал (повернутися до скрінера)"
                 aria-label="Закрити термінал"
               >
@@ -827,8 +827,8 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
         </div>
 
         <div className="grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-1 sm:gap-2">
-          {/* Layout Grid Switcher (1x1, 2x1, 2x2, 3 cols) */}
-          <div className="col-start-1 row-start-1 flex min-w-0 items-center justify-self-start gap-1 sm:gap-2">
+          {/* Keep both rows' center columns aligned: the clock sits directly above timeframes. */}
+          <div className="col-start-1 row-start-1 flex w-full min-w-0 items-center justify-self-stretch gap-1 sm:gap-2">
             <span
               title="Кількість відкритих блоків монет"
               aria-label={`Відкритих блоків монет: ${terminalCoinCount}`}
@@ -836,12 +836,9 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
             >
               Монет: {terminalCoinCount}
             </span>
-
+          <div className="hidden shrink-0 items-center lg:ml-auto lg:flex">
+            {renderAutoScaleButton()}
           </div>
-
-          {/* On desktop, controls form one compact line around the timeframe.
-              Display:contents preserves the original mobile/tablet grid layout. */}
-          <div className="contents lg:col-start-2 lg:row-start-1 lg:flex lg:min-w-0 lg:items-center lg:justify-self-center lg:gap-1.5">
             <div className="hidden shrink-0 items-center bg-slate-900 p-0.5 lg:flex rounded-xl border border-slate-800 text-xs font-mono">
             <button
               onClick={() => {
@@ -908,9 +905,7 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
               4x
             </button>
             </div>
-            <div className="hidden shrink-0 items-center lg:flex">
-              {renderAutoScaleButton()}
-            </div>
+          </div>
 
           {/* Timeframe Selector */}
           <div className="col-start-2 row-start-1 flex shrink-0 items-center justify-self-center bg-slate-900 p-0.5 rounded-xl border border-slate-800 text-xs font-mono">
@@ -933,7 +928,7 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
             ))}
           </div>
 
-          <div className="col-start-3 row-start-1 flex items-center justify-self-end gap-1 sm:gap-2">
+          <div className="col-start-3 row-start-1 flex items-center justify-self-start gap-1 sm:gap-2">
             <button
               ref={presetsButtonRef}
               type="button"
@@ -961,7 +956,6 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
             >
               <Plus className="w-4 h-4" />
             </button>
-          </div>
           </div>
         </div>
       </header>
