@@ -28,6 +28,8 @@ test('surveillance presence does not force SSE and redundant polling for passive
   assert.match(surveillance, /if \(streamConnected\.current \|\| \(typeof document !== 'undefined' && document\.hidden\)\) return/);
   assert.match(surveillance, /streamConnected\.current = true/);
   assert.match(surveillance, /streamConnected\.current = false/);
+  assert.match(surveillance, /now - lastIdlePollRef\.current < 5 \* 60_000/);
+  assert.match(surveillance, /activeMonitorsRef\.current/);
 });
 test('independent Telegram pages retain their own controls', () => {
   const surveillancePage=read('../src/components/SurveillancePage.tsx');

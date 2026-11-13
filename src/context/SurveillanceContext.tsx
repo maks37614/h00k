@@ -94,13 +94,23 @@ export const SurveillanceProvider: React.FC<{ children: React.ReactNode }> = ({ 
   // Use the existing authenticated event stream when available; a second
   // periodic GET every minute would duplicate the same snapshots for every user.
   const streamConnected = useRef(false);
+  const hasActiveMonitors = coins.some(coin => coin.isActive);
+  const activeMonitorsRef = useRef(hasActiveMonitors);
+  activeMonitorsRef.current = hasActiveMonitors;
+  const lastIdlePollRef = useRef(0);
   useEffect(() => {
     streamConnected.current = false;
+    lastIdlePollRef.current = Date.now();
     setCoins([]);
     setLoading(true);
     void fetchCoins();
     const interval = setInterval(() => {
       if (streamConnected.current || (typeof document !== 'undefined' && document.hidden)) return;
+      // Inactive accounts do not need a full surveillance snapshot each minute.
+      // Freshly added/edited coins are refreshed immediately by their handlers.
+      const now = Date.now();
+      if (!activeMonitorsRef.current && now - lastIdlePollRef.current < 5 * 60_000) return;
+      lastIdlePollRef.current = now;
       void fetchCoins();
     }, 60000);
     return () => { clearInterval(interval); streamConnected.current = false; };
@@ -108,7 +118,6 @@ export const SurveillanceProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
   // Use SSE only for accounts with active personal surveillance. Users who
   // never added active monitors should not occupy a persistent VPS connection.
-  const hasActiveMonitors = coins.some(coin => coin.isActive);
   useEffect(() => {
     if (!user || (user as { isLocalUser?: boolean }).isLocalUser || !hasActiveMonitors) {
       streamConnected.current = false;
