@@ -47,7 +47,7 @@ import { surveillanceManager } from './server/surveillance/surveillanceManager';
 import { surveillanceReplayEngine } from './server/surveillance/replayEngine';
 import { fetchHookChartOIHistory } from './server/hookchartOI';
 import { requireUserAuth } from './server/userAuth';
-import { getUserSiteNotificationSettings, saveUserSiteNotificationSettings } from './server/siteNotificationPrefs';
+import { getUserSiteNotificationSettings, saveUserSiteNotificationSettings, isUserTelegramCategoryAllowed } from './server/siteNotificationPrefs';
 import { sendUserTelegramMessage, startTelegramDeliveryWorker } from './server/telegramDelivery';
 import { installPaperFeed } from './server/paperFeed';
 import { installMonMarketFeed } from './server/monMarketFeed';
@@ -124,7 +124,14 @@ async function startServer() {
     try {
       const { userId, symbol, note, language } = req.body;
       const testSymbol = (symbol || 'BTCUSDT').toUpperCase();
-      const userTg = getUserTelegram(userId);
+      const allowed = isUserTelegramCategoryAllowed(res.locals.userId, {
+        source: 'PRICE_ALERT', eventType: 'PRICE_ALERT',
+        symbol: testSymbol, exchange: 'binance', marketType: 'futures',
+      });
+      if (!allowed) return res.status(403).json({
+        success: false, error: 'У профілі увімкніть сповіщення, категорію «Цінові алерти» та доставку Telegram.',
+      });
+      const userTg = getUserTelegram(res.locals.userId);
       const selectedLanguage = normalizeLanguage(language || userTg?.language);
       const effectiveToken = userTg?.botToken;
       const effectiveChat = userTg?.chatId;
@@ -145,7 +152,7 @@ async function startServer() {
         time: timeStr,
       });
 
-      const tgResult = await sendUserTelegramMessage(userId, testMsg);
+      const tgResult = await sendUserTelegramMessage(res.locals.userId, testMsg);
 
       res.json({
         success: tgResult.success,
