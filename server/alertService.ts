@@ -659,10 +659,42 @@ async function checkAlertsInternal(userId?: string) {
 
   let updated = false;
 
+  // Price-alert cycles run every six seconds. Index the *current* in-memory
+  // collections once, instead of scanning all users' alerts and history for
+  // every candidate (quadratic work when many users configure alerts).
+  // Rebuild after a concurrent API mutation replaces the collection, so an
+  // alert deleted/paused while awaiting prices cannot be sent accidentally.
+  let alertList: PriceAlert[] | undefined;
+  let alertByIdentity = new Map<string, PriceAlert>();
+  const currentAlert = (candidate: PriceAlert): PriceAlert | undefined => {
+    const list = loadAlerts();
+    if (list !== alertList) {
+      alertList = list;
+      alertByIdentity = new Map<string, PriceAlert>(list.map(alert =>
+        [JSON.stringify([alert.userId, alert.id]), alert]));
+    }
+    return alertByIdentity.get(JSON.stringify([candidate.userId, candidate.id]));
+  };
+  let recordedHistory: AlertHistoryItem[] | undefined;
+  let processedByIdentity = new Map<string, AlertHistoryItem>();
+  const processedAlert = (alert: PriceAlert): AlertHistoryItem | undefined => {
+    const history = loadHistory();
+    if (history !== recordedHistory) {
+      recordedHistory = history;
+      processedByIdentity = new Map();
+      for (const record of history) {
+        const key = JSON.stringify([record.userId, record.alertId, record.deliveryEpoch ?? 0]);
+        // Retain the same first-match semantics as findProcessedAlertHistory.
+        if (!processedByIdentity.has(key)) processedByIdentity.set(key, record);
+      }
+    }
+    return processedByIdentity.get(JSON.stringify([alert.userId, alert.id, alert.deliveryEpoch ?? 0]));
+  };
+
   for (const candidate of activeAlerts) {
-    const alert = loadAlerts().find((a) => a.id === candidate.id && a.userId === candidate.userId);
+    const alert = currentAlert(candidate);
     if (!alert || !alert.isActive || alert.triggered) continue;
-    const prior = findProcessedAlertHistory(alert);
+    const prior = processedAlert(alert);
     if (prior) {
       alert.triggered = true;
       alert.isActive = false;
