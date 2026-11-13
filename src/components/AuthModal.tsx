@@ -1,547 +1,218 @@
-import React, { useState } from 'react';
-import {
-  X,
-  LogIn,
-  UserPlus,
-  Mail,
-  Lock,
-  User as UserIcon,
-  Eye,
-  EyeOff,
-  AlertCircle,
-  CheckCircle2,
-  ShieldCheck,
-  Send,
-  Sliders,
-  Sparkles,
-  ExternalLink,
-  Key,
-  ShieldAlert,
-  ChevronDown,
-  ChevronUp,
-} from 'lucide-react';
-import { InstallAppButton } from './InstallAppButton';
+import React, { useEffect, useState } from 'react';
+import { X, LogIn, UserPlus, Mail, Lock, UserRound, Eye, EyeOff, AlertCircle, CheckCircle2, ShieldCheck, KeyRound, ArrowLeft } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import { AUTHOR_TELEGRAM_CHANNEL_URL, AUTHOR_TELEGRAM_USERNAME } from '../utils/accessCodes';
 
 export type AuthPromptReason = 'chart' | 'alerts' | 'linking' | 'general' | null;
-
 interface AuthModalProps {
   isOpen: boolean;
   onClose: () => void;
   initialMode?: 'signin' | 'signup';
   onSuccess?: () => void;
-  isRestrictedMode?: boolean; // When true, modal cannot be closed by unregistered user
+  isRestrictedMode?: boolean;
   promptReason?: AuthPromptReason;
 }
+type Mode = 'signin' | 'signup' | 'forgot' | 'reset';
 
 export const AuthModal: React.FC<AuthModalProps> = ({
-  isOpen,
-  onClose,
-  initialMode = 'signin',
-  onSuccess,
-  isRestrictedMode = false,
-  promptReason = null,
+  isOpen, onClose, initialMode = 'signin', onSuccess, isRestrictedMode = false, promptReason = null,
 }) => {
-  const { user, signInWithGoogle, signInWithEmail, registerWithEmail, authError, authErrorCode, clearAuthError } = useAuth();
-
-  const [mode, setMode] = useState<'signin' | 'signup'>(initialMode);
+  const {
+    signInWithEmail, registerWithEmail, resendVerification, requestPasswordReset, resetPassword,
+    resetToken, authError, authErrorCode, authNotice, clearAuthError,
+  } = useAuth();
+  const [mode, setMode] = useState<Mode>(resetToken ? 'reset' : initialMode);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
-  const [inviteCode, setInviteCode] = useState('');
+  const [remember, setRemember] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [validationError, setValidationError] = useState<string | null>(null);
-  const [showInstructions, setShowInstructions] = useState(false);
-
-  React.useEffect(() => {
+  const [busy, setBusy] = useState(false);
+  const [localError, setLocalError] = useState<string | null>(null);
+  useEffect(() => {
     if (isOpen) {
-      setMode(initialMode);
+      setMode(resetToken ? 'reset' : initialMode);
+      setPassword('');
+      setLocalError(null);
       clearAuthError();
-      setValidationError(null);
     }
-  }, [isOpen, initialMode]);
+  }, [isOpen, initialMode, resetToken]);
 
   if (!isOpen) return null;
-
-  const handleModeSwitch = (newMode: 'signin' | 'signup') => {
-    setMode(newMode);
+  const changeMode = (next: Mode) => {
+    setMode(next);
+    setPassword('');
+    setLocalError(null);
     clearAuthError();
-    setValidationError(null);
   };
-
-  const handleGoogleAuth = async () => {
-    setIsSubmitting(true);
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setLocalError(null);
     clearAuthError();
-    setValidationError(null);
-
-    if (mode === 'signup') {
-      const cleanCode = inviteCode.trim();
-      if (!cleanCode) {
-        setValidationError('Будь ласка, введіть спеціальний код доступу з Telegram для реєстрації через Gmail');
-        setIsSubmitting(false);
-        return;
-      }
+    if (mode !== 'reset' && !email.trim()) { setLocalError('Введіть адресу email.'); return; }
+    if (['signin', 'signup', 'reset'].includes(mode) && !password) {
+      setLocalError('Введіть пароль.'); return;
     }
-
-    try {
-      await signInWithGoogle(inviteCode.trim() || undefined, mode === 'signup');
-      onSuccess?.();
-      onClose();
-    } catch {
-      // Handled in context
-    } finally {
-      setIsSubmitting(false);
+    if (['signup', 'reset'].includes(mode) && password.length < 12) {
+      setLocalError('Пароль має містити щонайменше 12 символів.'); return;
     }
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    clearAuthError();
-    setValidationError(null);
-
-    const cleanEmail = email.trim();
-    if (!cleanEmail) {
-      setValidationError('Введіть адресу електронної пошти або логін');
-      return;
-    }
-    if (!password) {
-      setValidationError('Введіть пароль');
-      return;
-    }
-    if (password.length < 6) {
-      setValidationError('Пароль повинен містити не менше 6 символів');
-      return;
-    }
-
-    setIsSubmitting(true);
+    setBusy(true);
     try {
       if (mode === 'signin') {
-        await signInWithEmail(cleanEmail, password);
+        await signInWithEmail(email.trim(), password, remember);
+        setPassword('');
+        onSuccess?.();
+        onClose();
+      } else if (mode === 'signup') {
+        await registerWithEmail(email.trim(), password, displayName);
+        setPassword('');
+      } else if (mode === 'forgot') {
+        await requestPasswordReset(email.trim());
       } else {
-        await registerWithEmail(cleanEmail, password, displayName, inviteCode.trim());
+        await resetPassword(password);
+        setPassword('');
+        setMode('signin');
       }
-      onSuccess?.();
-      onClose();
     } catch {
-      // Handled in context
-    } finally {
-      setIsSubmitting(false);
-    }
+      // AuthContext provides localized error and error code.
+    } finally { setBusy(false); }
   };
-
-  const isOperationNotAllowed =
-    authErrorCode === 'auth/operation-not-allowed' ||
-    Boolean(authError && (authError.includes('operation-not-allowed') || authError.includes('Firebase Console')));
-
-  const displayedError = validationError || authError;
+  const sendAgain = async () => {
+    setBusy(true);
+    try { await resendVerification(email); } catch {} finally { setBusy(false); }
+  };
+  const title = mode === 'signup' ? 'Безкоштовна реєстрація' :
+    mode === 'forgot' ? 'Відновлення доступу' :
+    mode === 'reset' ? 'Новий пароль' : 'Вхід до h00k';
+  const explanation = mode === 'signup'
+    ? 'Створіть акаунт без коду запрошення та без оплати.'
+    : mode === 'forgot'
+      ? 'Надішлемо посилання для відновлення на ваш email.'
+      : mode === 'reset'
+        ? 'Створіть новий надійний пароль для свого акаунта.'
+        : promptReason === 'alerts'
+          ? 'Увійдіть, щоб увімкнути персональні сповіщення.'
+          : 'Ваші налаштування, архів і обрані монети будуть доступні між пристроями.';
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-200 overflow-y-auto cursor-default"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) {
-          onClose();
-        }
-      }}
+      className="fixed inset-0 z-[110] flex items-center justify-center overflow-y-auto bg-slate-950/90 p-3 backdrop-blur-md sm:p-5"
+      role="presentation"
+      onMouseDown={(event) => { if (!isRestrictedMode && event.target === event.currentTarget) onClose(); }}
     >
-      <div
-        className="relative w-full max-w-md rounded-2xl bg-slate-900 border border-slate-800 shadow-2xl shadow-cyan-950/30 overflow-hidden flex flex-col max-h-[94vh] my-auto"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800/80 bg-slate-950/60">
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 flex items-center justify-center shadow-sm">
-              {mode === 'signin' ? <LogIn className="w-4 h-4" /> : <UserPlus className="w-4 h-4" />}
-            </div>
+      <div role="dialog" aria-modal="true" aria-label={title}
+        className="my-auto flex max-h-[94dvh] w-full max-w-md flex-col overflow-hidden rounded-2xl border border-cyan-500/20 bg-slate-900 shadow-2xl shadow-cyan-950/40">
+        <div className="flex shrink-0 items-start justify-between border-b border-slate-800 bg-slate-950/60 px-5 py-4">
+          <div className="flex items-start gap-3">
+            <span className="rounded-xl border border-cyan-500/30 bg-cyan-500/15 p-2 text-cyan-300">
+              {mode === 'signup' ? <UserPlus size={19}/> : <LogIn size={19}/>}
+            </span>
             <div>
-              <h2 className="text-sm font-bold text-white tracking-wide">
-                {mode === 'signin' ? 'Вхід у скрінер' : 'Реєстрація у скрінері'}
-              </h2>
-              <p className="text-[11px] text-slate-400">
-                {mode === 'signin'
-                  ? 'Особисті сповіщення, MetaScalp та обране'
-                  : 'Без підтвердження пошти — миттєвий доступ'}
-              </p>
+              <h2 className="text-base font-bold text-white">{title}</h2>
+              <p className="mt-1 text-xs leading-relaxed text-slate-400">{explanation}</p>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
-          >
-            <X className="w-4 h-4" />
-          </button>
+          {!isRestrictedMode && <button type="button" onClick={onClose} aria-label="Закрити"
+            className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-800 hover:text-white"><X size={18}/></button>}
         </div>
-
-        {/* Tab switchers */}
-        <div className="grid grid-cols-2 p-1.5 bg-slate-950/90 border-b border-slate-800 text-xs">
-          <button
-            type="button"
-            onClick={() => handleModeSwitch('signin')}
-            className={`py-2 rounded-lg font-semibold transition-all flex items-center justify-center gap-1.5 ${
-              mode === 'signin'
-                ? 'bg-slate-800 text-cyan-300 shadow-sm'
-                : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            <LogIn className="w-3.5 h-3.5" />
-            <span>Вхід</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => handleModeSwitch('signup')}
-            className={`py-2 rounded-lg font-semibold transition-all flex items-center justify-center gap-1.5 ${
-              mode === 'signup'
-                ? 'bg-slate-800 text-cyan-300 shadow-sm'
-                : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            <UserPlus className="w-3.5 h-3.5" />
-            <span>Реєстрація (за кодом)</span>
-          </button>
-        </div>
-
-        {/* Form Body */}
-        <div className="p-5 sm:p-6 space-y-4 overflow-y-auto">
-          {/* Guest restriction reason alert */}
-          {promptReason && (
-            <div className="p-3.5 rounded-xl bg-gradient-to-r from-amber-950/40 via-amber-900/20 to-slate-900 border border-amber-500/40 text-amber-200 text-xs flex items-start gap-2.5 shadow-sm">
-              <Lock className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-              <div className="space-y-1">
-                <div className="font-bold text-amber-300 text-xs">
-                  {promptReason === 'chart'
-                    ? 'Графіки доступні зареєстрованим користувачам'
-                    : promptReason === 'alerts'
-                    ? 'Сповіщення доступні зареєстрованим користувачам'
-                    : promptReason === 'linking'
-                    ? 'Лінковка MetaScalp доступна після реєстрації'
-                    : 'Доступ для зареєстрованих користувачів'}
-                </div>
-                <div className="text-[11px] text-amber-200/80 leading-relaxed">
-                  {promptReason === 'chart'
-                    ? 'Гостям дозволено перегляд списку монет. Для відкриття інтерактивного графіку, технічного аналізу та стакана увійдіть або зареєструйтесь.'
-                    : promptReason === 'alerts'
-                    ? 'Гостям дозволено перегляд котирувань. Для налаштування сповіщень та цінових алертів увійдіть або створіть акаунт.'
-                    : promptReason === 'linking'
-                    ? 'Гостям дозволено перегляд списку монет. Для швидкої лінковки стакана та графіку в MetaScalp увійдіть або зареєструйтесь.'
-                    : 'Гостям дозволено перегляд списку монет на сторінці Скрінер. Для доступу до графіків, сповіщень, лінковки та терміналу увійдіть в акаунт.'}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Telegram Channel CTA Banner for Invite Code */}
-          {mode === 'signup' && (
-            <div className="p-3.5 rounded-xl bg-gradient-to-r from-sky-950/40 to-slate-950 border border-sky-500/30 space-y-2 text-xs">
-              <div className="flex items-start gap-2">
-                <Send className="w-4 h-4 text-sky-400 shrink-0 mt-0.5" />
-                <div className="space-y-1">
-                  <span className="font-bold text-sky-200 block text-xs">
-                    Де взяти спеціальний код доступу?
-                  </span>
-                  <p className="text-[11px] text-slate-300 leading-relaxed">
-                    Коди для реєстрації видаються виключно в офіційному <strong>Telegram каналі автора</strong>. Реєстрація через Gmail або пошту за кодом — без підтвердження пошти, миттєвий доступ до всіх функцій!
-                  </p>
-                </div>
-              </div>
-              <a
-                href={AUTHOR_TELEGRAM_CHANNEL_URL}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="w-full py-2 px-3 rounded-lg bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold text-xs transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-sm shadow-sky-500/20"
-              >
-                <Send className="w-3.5 h-3.5" />
-                <span>Отримати код у Telegram каналі автора ({AUTHOR_TELEGRAM_USERNAME})</span>
-                <ExternalLink className="w-3 h-3 ml-auto opacity-75" />
-              </a>
-            </div>
-          )}
-
-          {/* Standard error notification */}
-          {displayedError && !isOperationNotAllowed && (
-            <div className="p-3 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs flex items-start gap-2 animate-in fade-in">
-              <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
-              <span>{displayedError}</span>
-            </div>
-          )}
-
-          {/* Operation Not Allowed Help Card if email provider is disabled */}
-          {isOperationNotAllowed && (
-            <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-200 text-xs space-y-2 animate-in fade-in">
-              <div className="flex items-start gap-2">
-                <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-                <div className="space-y-1">
-                  <p className="font-semibold text-white text-xs">
-                    Локальна авторизація активована
-                  </p>
-                  <p className="text-[11px] text-amber-200/90 leading-relaxed">
-                    Ви можете увійти за допомогою кнопки Google або ввести Email/пароль нижче — акаунт збережеться для вашого пристрою автоматично!
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* SIGNUP MODE: Invite code required FIRST */}
-          {mode === 'signup' && (
-            <div className="space-y-3">
-              <div>
-                <label className="block text-xs font-bold text-amber-300 mb-1 flex items-center justify-between">
-                  <span className="flex items-center gap-1">
-                    <Key className="w-3.5 h-3.5 text-amber-400" />
-                    Спеціальний код доступу з Telegram *
-                  </span>
-                  <span className="text-[10px] text-amber-400/80 font-normal">
-                    Обов'язково
-                  </span>
-                </label>
-                <div className="relative">
-                  <Key className="w-4 h-4 text-amber-400 absolute left-3 top-2.5" />
-                  <input
-                    type="text"
-                    required
-                    value={inviteCode}
-                    onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
-                    placeholder="КОД-ДОСТУПУ"
-                    className="w-full bg-slate-950 border-2 border-amber-500/50 focus:border-amber-400 rounded-xl pl-9 pr-3 py-2 text-xs text-amber-200 font-mono font-bold tracking-wider placeholder:text-slate-600 focus:outline-none transition-colors shadow-inner"
-                  />
-                </div>
-              </div>
-
-              {/* 1-Click Registration with Gmail using the Special Code */}
-              <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-2">
-                <button
-                  type="button"
-                  onClick={handleGoogleAuth}
-                  disabled={isSubmitting}
-                  className="w-full py-2.5 px-4 rounded-xl bg-white hover:bg-slate-100 text-slate-900 text-xs font-bold transition-all flex items-center justify-center gap-2.5 shadow-md shadow-white/5 disabled:opacity-50 cursor-pointer"
-                >
-                  <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
-                    <path
-                      fill="#4285F4"
-                      d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                    />
-                    <path
-                      fill="#34A853"
-                      d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                    />
-                    <path
-                      fill="#FBBC05"
-                      d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
-                    />
-                    <path
-                      fill="#EA4335"
-                      d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
-                    />
-                  </svg>
-                  <span>Зареєструватися через Gmail (за кодом)</span>
+        <div className="overflow-y-auto px-5 py-4">
+          {(mode === 'signin' || mode === 'signup') && (
+            <div role="tablist" aria-label="Авторизація" className="mb-5 flex rounded-xl border border-slate-700 bg-slate-950/60 p-1">
+              {(['signin', 'signup'] as const).map(option => (
+                <button key={option} role="tab" aria-selected={mode === option}
+                  type="button" onClick={() => changeMode(option)}
+                  className={'flex-1 rounded-lg py-2 text-xs font-bold transition-colors ' +
+                    (mode === option ? 'bg-cyan-600 text-white shadow' : 'text-slate-400 hover:text-white')}>
+                  {option === 'signin' ? 'Увійти' : 'Зареєструватися'}
                 </button>
-              </div>
-
-              <div className="relative flex items-center justify-center my-2">
-                <div className="border-t border-slate-800 w-full" />
-                <span className="bg-slate-900 px-3 text-[11px] text-slate-500 font-medium uppercase tracking-wider absolute">
-                  або реєстрація через пароль
-                </span>
-              </div>
+              ))}
             </div>
           )}
-
-          {/* SIGNIN MODE: Google Sign In */}
-          {mode === 'signin' && (
-            <>
-              <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 space-y-2">
-                <button
-                  type="button"
-                  onClick={handleGoogleAuth}
-                  disabled={isSubmitting}
-                  className="w-full py-2.5 px-4 rounded-xl bg-white hover:bg-slate-100 text-slate-900 text-xs font-bold transition-all flex items-center justify-center gap-2.5 shadow-md shadow-white/5 disabled:opacity-50 cursor-pointer"
-                >
-                  <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
-                    <path
-                      fill="#4285F4"
-                      d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                    />
-                    <path
-                      fill="#34A853"
-                      d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                    />
-                    <path
-                      fill="#FBBC05"
-                      d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
-                    />
-                    <path
-                      fill="#EA4335"
-                      d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
-                    />
-                  </svg>
-                  <span>Швидкий вхід через Google</span>
-                </button>
-              </div>
-
-              <div className="relative flex items-center justify-center my-2">
-                <div className="border-t border-slate-800 w-full" />
-                <span className="bg-slate-900 px-3 text-[11px] text-slate-500 font-medium uppercase tracking-wider absolute">
-                  або вхід через email
-                </span>
-              </div>
-            </>
+          {(localError || authError) && (
+            <div role="alert" className="mb-4 flex items-start gap-2 rounded-lg border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-200">
+              <AlertCircle size={16} className="mt-0.5 shrink-0"/>
+              <span>{localError || authError}</span>
+            </div>
           )}
-
-          {/* Email & Password Form */}
-          <form onSubmit={handleSubmit} className="space-y-3">
+          {authNotice && (
+            <div role="status" className="mb-4 flex items-start gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs text-emerald-200">
+              <CheckCircle2 size={16} className="mt-0.5 shrink-0"/>
+              <span>{authNotice}</span>
+            </div>
+          )}
+          <form onSubmit={submit} className="space-y-3">
             {mode === 'signup' && (
-              <>
-                {/* Special Access Code Input (REQUIRED) */}
-                <div>
-                  <label className="block text-xs font-bold text-amber-300 mb-1 flex items-center justify-between">
-                    <span className="flex items-center gap-1">
-                      <Key className="w-3.5 h-3.5 text-amber-400" />
-                      Спеціальний код доступу *
-                    </span>
-                    <span className="text-[10px] text-amber-400/80 font-normal">
-                      З Telegram каналу
-                    </span>
-                  </label>
-                  <div className="relative">
-                    <Key className="w-4 h-4 text-amber-400 absolute left-3 top-2.5" />
-                    <input
-                      type="text"
-                      required
-                      value={inviteCode}
-                      onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
-                    placeholder="КОД-ДОСТУПУ"
-                      className="w-full bg-slate-950 border-2 border-amber-500/50 focus:border-amber-400 rounded-xl pl-9 pr-3 py-2 text-xs text-amber-200 font-mono font-bold tracking-wider placeholder:text-slate-600 focus:outline-none transition-colors shadow-inner"
-                    />
-                  </div>
-                  <p className="text-[10px] text-slate-400 mt-1">
-                    Отримайте код у Telegram: <a href={AUTHOR_TELEGRAM_CHANNEL_URL} target="_blank" rel="noreferrer" className="text-sky-400 hover:underline">{AUTHOR_TELEGRAM_USERNAME}</a>
-                  </p>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-1">
-                    Ім'я або позивний
-                  </label>
-                  <div className="relative">
-                    <UserIcon className="w-4 h-4 text-slate-500 absolute left-3 top-2.5" />
-                    <input
-                      type="text"
-                      value={displayName}
-                      onChange={(e) => setDisplayName(e.target.value)}
-                      placeholder="Наприклад: Alex Scalper"
-                      className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-3 py-2 text-xs text-white placeholder:text-slate-600 focus:outline-none focus:border-cyan-500 transition-colors"
-                    />
-                  </div>
-                </div>
-              </>
+              <label className="block text-xs font-medium text-slate-300">
+                Ім'я або позивний
+                <span className="relative mt-1 block">
+                  <UserRound size={16} className="absolute left-3 top-2.5 text-slate-500"/>
+                  <input type="text" maxLength={80} autoComplete="nickname" value={displayName}
+                    onChange={event => setDisplayName(event.target.value)} placeholder="Наприклад: Alex Scalper"
+                    className="w-full rounded-xl border border-slate-700 bg-slate-950 py-2.5 pl-10 pr-3 text-sm text-white outline-none focus:border-cyan-400"/>
+                </span>
+              </label>
             )}
-
-            <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1">
-                Електронна пошта (Email)
+            {mode !== 'reset' && (
+              <label className="block text-xs font-medium text-slate-300">
+                Електронна пошта
+                <span className="relative mt-1 block">
+                  <Mail size={16} className="absolute left-3 top-2.5 text-slate-500"/>
+                  <input type="email" required autoComplete="email" maxLength={254} value={email}
+                    onChange={event => setEmail(event.target.value)} placeholder="name@example.com"
+                    className="w-full rounded-xl border border-slate-700 bg-slate-950 py-2.5 pl-10 pr-3 text-sm text-white outline-none focus:border-cyan-400"/>
+                </span>
               </label>
-              <div className="relative">
-                <Mail className="w-4 h-4 text-slate-500 absolute left-3 top-2.5" />
-                <input
-                  type="email"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="name@example.com"
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-3 py-2 text-xs text-white placeholder:text-slate-600 focus:outline-none focus:border-cyan-500 transition-colors"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-slate-300 mb-1">
-                Пароль
+            )}
+            {mode !== 'forgot' && (
+              <label className="block text-xs font-medium text-slate-300">
+                {mode === 'reset' ? 'Новий пароль' : 'Пароль'}
+                <span className="relative mt-1 block">
+                  <Lock size={16} className="absolute left-3 top-2.5 text-slate-500"/>
+                  <input type={showPassword ? 'text' : 'password'} required
+                    minLength={mode === 'signin' ? 1 : 12} maxLength={128}
+                    autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
+                    value={password} onChange={event => setPassword(event.target.value)}
+                    placeholder={mode === 'signin' ? 'Ваш пароль' : 'Щонайменше 12 символів'}
+                    className="w-full rounded-xl border border-slate-700 bg-slate-950 py-2.5 pl-10 pr-11 text-sm text-white outline-none focus:border-cyan-400"/>
+                  <button type="button" aria-label={showPassword ? 'Приховати пароль' : 'Показати пароль'}
+                    onClick={() => setShowPassword(value => !value)}
+                    className="absolute right-2 top-1.5 rounded-lg p-1.5 text-slate-400 hover:text-white">
+                    {showPassword ? <EyeOff size={17}/> : <Eye size={17}/>}
+                  </button>
+                </span>
               </label>
-              <div className="relative">
-                <Lock className="w-4 h-4 text-slate-500 absolute left-3 top-2.5" />
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Мінімум 6 символів"
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-9 py-2 text-xs text-white placeholder:text-slate-600 focus:outline-none focus:border-cyan-500 transition-colors"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-2.5 text-slate-500 hover:text-slate-300 transition-colors"
-                >
-                  {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                </button>
+            )}
+            {mode === 'signin' && (
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <label className="inline-flex cursor-pointer items-center gap-2 text-xs text-slate-300">
+                  <input type="checkbox" checked={remember} onChange={event => setRemember(event.target.checked)}
+                    className="accent-cyan-500"/> Запам'ятати мене
+                </label>
+                <button type="button" onClick={() => changeMode('forgot')}
+                  className="text-xs text-cyan-300 hover:text-cyan-200">Забули пароль?</button>
               </div>
-            </div>
-
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="w-full mt-2 py-2.5 px-4 rounded-xl bg-gradient-to-r from-cyan-600 to-indigo-600 hover:from-cyan-500 hover:to-indigo-500 text-white font-semibold text-xs transition-all shadow-lg shadow-cyan-900/30 disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2"
-            >
-              {isSubmitting ? (
-                <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-              ) : mode === 'signin' ? (
-                <>
-                  <LogIn className="w-4 h-4" />
-                  <span>Увійти у скрінер</span>
-                </>
-              ) : (
-                <>
-                  <Key className="w-4 h-4 text-amber-300" />
-                  <span>Активувати профіль за кодом</span>
-                </>
-              )}
+            )}
+            <button type="submit" disabled={busy}
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-cyan-600 px-4 py-3 text-sm font-bold text-white transition-colors hover:bg-cyan-500 disabled:opacity-50">
+              {mode === 'reset' ? <KeyRound size={17}/> : <ShieldCheck size={17}/>}
+              {busy ? 'Обробка…' : mode === 'signup' ? 'Зареєструватися безкоштовно' :
+                mode === 'forgot' ? 'Надіслати посилання' : mode === 'reset' ? 'Змінити пароль' : 'Увійти'}
             </button>
           </form>
-
-          {/* Guests can still learn how to install H00K without creating an account. */}
-          <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-cyan-500/20 bg-slate-950 p-3">
-            <span className="text-xs text-slate-300">H00K як програма на вашому пристрої</span>
-            <InstallAppButton />
-          </div>
-
-          {/* Benefits pill & Isolation Guarantee */}
-          <div className="p-3 rounded-xl bg-slate-950 border border-slate-800/80 space-y-1.5 text-xs text-slate-300">
-            <div className="text-[11px] font-bold text-cyan-400 uppercase tracking-wider flex items-center gap-1">
-              <ShieldCheck className="w-3.5 h-3.5" />
-              <span>Повна ізоляція профілю</span>
-            </div>
-            <ul className="space-y-1 text-[11px] text-slate-400 pl-1">
-              <li className="flex items-center gap-1.5">
-                <CheckCircle2 className="w-3 h-3 text-emerald-400 shrink-0" />
-                <span>Особистий список обраних монет для кожного акаунта</span>
-              </li>
-              <li className="flex items-center gap-1.5">
-                <Send className="w-3 h-3 text-sky-400 shrink-0" />
-                <span>Індивідуальні Telegram сповіщення та бот</span>
-              </li>
-              <li className="flex items-center gap-1.5">
-                <Sliders className="w-3 h-3 text-amber-400 shrink-0" />
-                <span>Індивідуальна лінковка та група MetaScalp</span>
-              </li>
-            </ul>
-          </div>
-
-          {/* Footer toggle prompt */}
-          <div className="text-center pt-1">
-            <p className="text-xs text-slate-400">
-              {mode === 'signin' ? 'Ще не зареєстровані?' : 'Вже маєте обліковий запис?'}{' '}
-              <button
-                type="button"
-                onClick={() => handleModeSwitch(mode === 'signin' ? 'signup' : 'signin')}
-                className="text-cyan-400 font-semibold hover:underline cursor-pointer ml-1"
-              >
-                {mode === 'signin' ? 'Зареєструватися за кодом' : 'Увійти'}
-              </button>
-            </p>
-          </div>
+          {authErrorCode === 'EMAIL_UNVERIFIED' && (
+            <button type="button" disabled={busy} onClick={sendAgain}
+              className="mt-3 w-full rounded-lg border border-amber-500/30 px-3 py-2 text-xs font-semibold text-amber-300 hover:bg-amber-950/30 disabled:opacity-50">
+              Надіслати лист підтвердження ще раз
+            </button>
+          )}
+          {(mode === 'forgot' || mode === 'reset') && (
+            <button type="button" onClick={() => changeMode('signin')}
+              className="mt-4 inline-flex items-center gap-2 text-xs font-medium text-slate-400 hover:text-cyan-300">
+              <ArrowLeft size={15}/> Повернутися до входу
+            </button>
+          )}
+          <p className="mt-5 text-center text-[11px] leading-relaxed text-slate-500">
+            Безкоштовний акаунт · Захищені сесії · Підтвердження email
+          </p>
         </div>
       </div>
     </div>
