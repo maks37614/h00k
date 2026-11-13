@@ -209,7 +209,8 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
     // Persist the deny before any asynchronous profile/Telegram work. Other
     // tabs and in-flight callbacks check this marker before sending anything.
     if (disabling) {
-      try { localStorage.setItem(siteNotificationMuteKey(currentUid), String(Date.now())); } catch {}
+      try { localStorage.setItem(siteNotificationMuteKey(currentUid),
+        String(Math.max(Date.now(), settingsRef.current.enabledAt + 1))); } catch {}
       soundEnabledRef.current = false;
       updatePreferences({ soundAlertsEnabled: false });
       try { localStorage.setItem(soundStorageKey(currentUid), 'false'); } catch {}
@@ -255,15 +256,18 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
   }, [user?.uid, updateProfileData, updatePreferences]);
 
   const setSoundEnabled = useCallback(async (enabled: boolean) => {
-    updatePreferences({ soundAlertsEnabled: enabled });
-    setError(null);
     const currentUid = uidRef.current;
-    try { localStorage.setItem(soundStorageKey(currentUid), String(enabled)); } catch {}
+    const allowed = Boolean(enabled && settingsRef.current.optedIn && settingsRef.current.enabled
+      && !(locallyMutedAt(currentUid) > 0 && settingsRef.current.enabledAt <= locallyMutedAt(currentUid)));
+    updatePreferences({ soundAlertsEnabled: allowed });
+    soundEnabledRef.current = allowed;
+    setError(null);
+    try { localStorage.setItem(soundStorageKey(currentUid), String(allowed)); } catch {}
     if (user?.uid === currentUid) {
       changePendingCount(pendingSoundWrites.current, currentUid, 1);
       const previous = soundSaveQueue.current.get(currentUid) ?? Promise.resolve();
       const task: Promise<void> = previous.catch(() => {}).then(async () => {
-        if (uidRef.current === currentUid) await updateProfileData({ soundAlertsEnabled: enabled });
+        if (uidRef.current === currentUid) await updateProfileData({ soundAlertsEnabled: allowed });
       }).catch(() => {
         if (uidRef.current === currentUid) setError('Не вдалося зберегти налаштування звуку в профілі.');
       }).finally(() => {
@@ -276,6 +280,11 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
   }, [user?.uid, updatePreferences, updateProfileData]);
 
   const emit = useCallback((event: NewSiteNotification) => {
+    // A different tab can disable everything while this callback is still
+    // processing market data. The persisted deny takes precedence over stale
+    // React state and even a granted browser Notification permission.
+    const mutedAt = locallyMutedAt(uidRef.current);
+    if (mutedAt > 0 && settingsRef.current.enabledAt <= mutedAt) return;
     if (!notificationEnabled(settingsRef.current, event.kind)) return;
     if (!event.id || !event.title) return;
     const streamEvent = event.kind === 'price' || event.kind === 'liquidations'
@@ -305,6 +314,8 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
   }, []);
 
   const processScan = useCallback((coins: readonly ScannedCoin[], favorites: readonly string[] = []) => {
+    const mutedAt = locallyMutedAt(uidRef.current);
+    if (mutedAt > 0 && settingsRef.current.enabledAt <= mutedAt) return;
     if (!settingsRef.current.optedIn || !settingsRef.current.enabled) return;
     favoritesRef.current = [...favorites];
     const currentUid = uidRef.current;
