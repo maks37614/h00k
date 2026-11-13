@@ -651,16 +651,30 @@ export default function App() {
         return;
       }
       const now = Date.now();
-      const key = [user.uid, terminalLinkSettings.provider, coin.exchange, coin.marketType, coin.symbol].join(':');
+      const key = [user.uid, terminalLinkSettings.provider, source, coin.exchange, coin.marketType, coin.symbol].join(':');
       if (terminalLinkSettings.cooldownMs > 0
         && lastTerminalCommand.current.key === key
         && now - lastTerminalCommand.current.at < terminalLinkSettings.cooldownMs) return;
       lastTerminalCommand.current = { key, at: now };
       const quality = coin.bestFormation?.confidence ?? coin.formations?.[0]?.confidence;
-      const res = await sendToSelectedTerminal(
-        coin.symbol, coin.exchange, coin.marketType, source,
-        terminalLinkSettings, metaScalpSettings, quality
-      );
+      let res;
+      try {
+        res = await sendToSelectedTerminal(
+          coin.symbol, coin.exchange, coin.marketType, source,
+          terminalLinkSettings, metaScalpSettings, quality
+        );
+      } catch {
+        // Allow immediate retry and report a failure instead of leaving an unhandled rejection.
+        if (lastTerminalCommand.current.key === key) lastTerminalCommand.current = { key: '', at: 0 };
+        if (metaScalpUserIdRef.current === user.uid) setMetaScalpToast({
+          id: Date.now(), type: 'error', title: terminalLabel(terminalLinkSettings.provider),
+          ticker: coin.symbol, binding: '',
+          message: 'Не вдалося надіслати тикер. Перевірте з’єднання з локальним терміналом.',
+        });
+        return;
+      }
+      if (!res.success && lastTerminalCommand.current.key === key)
+        lastTerminalCommand.current = { key: '', at: 0 };
       if (metaScalpUserIdRef.current !== user.uid) return;
       if (res.success && metaScalpSettings.soundFeedback) playMetaScalpClickSound();
       setMetaScalpToast({
@@ -716,6 +730,7 @@ export default function App() {
     const isNew = !!item?.id && cursor.id !== item.id;
     cursor.id = item?.id ?? null;
     if (!isNew || !item || !terminalLinkSettings.autoSignals ||
+      terminalLinkSettings.provider === 'vataga' ||
       !notificationCenter?.settings.enabled || !notificationCenter.settings.optedIn ||
       item.read || Date.now() - item.timestamp > 12000 || !canLinkNotification(item)) return;
     handleLinkNotification(item);
