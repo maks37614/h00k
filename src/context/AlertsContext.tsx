@@ -122,6 +122,8 @@ export const AlertsProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         new CustomEvent('signalhook:alert-triggered', {
           detail: {
             symbol: serverAlert.symbol,
+            exchange: serverAlert.exchange,
+            marketType: serverAlert.marketType,
             alertId: serverAlert.id + ':' + String(serverAlert.deliveryEpoch ?? 0),
             targetPrice: serverAlert.targetPrice,
             condition: serverAlert.condition,
