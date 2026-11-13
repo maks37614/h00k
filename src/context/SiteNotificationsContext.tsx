@@ -149,6 +149,25 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
     try { localStorage.setItem(siteNotificationSettingsKey(uid), JSON.stringify(remote)); } catch {}
   }, [uid, profile?.siteNotificationSettings]);
 
+  // A second open tab must stop showing browser notifications immediately.
+  // The storage event fires in the OTHER tabs; the initiating tab updates its
+  // own settingsRef synchronously in updateSettings.
+  useEffect(() => {
+    const onStorage = (event: StorageEvent) => {
+      if (event.key !== siteNotificationMuteKey(uid)
+        && event.key !== siteNotificationSettingsKey(uid)) return;
+      const fromStorage = loadSettings(uid, null);
+      settingsRef.current = fromStorage;
+      setSettingsState({ uid, settings: fromStorage });
+      if (!fromStorage.enabled) {
+        soundEnabledRef.current = false;
+        updatePreferences({ soundAlertsEnabled: false });
+      }
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, [uid, updatePreferences]);
+
   // Restore authenticated server delivery permissions after sign-in or deployment.
   // Never inherit unversioned legacy settings as consent.
   useEffect(() => {
