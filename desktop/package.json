@@ -1,6 +1,6 @@
 {
   "name": "h00k-desktop",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "h00k Smart Dock for Windows trading terminals",
   "private": true,
   "main": "main.cjs",
@@ -23,7 +23,8 @@
       "layout.cjs",
       "settings.html",
       "toolbar.html",
-      "toolbar-preload.cjs"
+      "toolbar-preload.cjs",
+      "workspace.cjs"
     ],
     "extraResources": [
       {
