@@ -200,10 +200,22 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
 
   const updateSettings = useCallback(async (patch: Partial<SiteNotificationSettings>) => {
     const currentUid = uidRef.current;
+    const disabling = patch.enabled === false;
+    const enabling = patch.enabled === true;
     const next = normalizeSiteNotificationSettings({ ...settingsRef.current, ...patch,
-      optedIn: settingsRef.current.optedIn || patch.enabled === true,
-      enabledAt: patch.enabled === true && !settingsRef.current.enabled
+      optedIn: settingsRef.current.optedIn || enabling,
+      enabledAt: enabling && !settingsRef.current.enabled
         ? Date.now() : settingsRef.current.enabledAt });
+    // Persist the deny before any asynchronous profile/Telegram work. Other
+    // tabs and in-flight callbacks check this marker before sending anything.
+    if (disabling) {
+      try { localStorage.setItem(siteNotificationMuteKey(currentUid), String(Date.now())); } catch {}
+      soundEnabledRef.current = false;
+      updatePreferences({ soundAlertsEnabled: false });
+      try { localStorage.setItem(soundStorageKey(currentUid), 'false'); } catch {}
+    } else if (enabling) {
+      try { localStorage.removeItem(siteNotificationMuteKey(currentUid)); } catch {}
+    }
     settingsRef.current = next;
     setSettingsState({ uid: currentUid, settings: next });
     try { localStorage.setItem(siteNotificationSettingsKey(currentUid), JSON.stringify(next)); } catch {}
@@ -214,8 +226,9 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
       const previous = settingsSaveQueue.current.get(currentUid) ?? Promise.resolve();
       const task: Promise<void> = previous.catch(() => {}).then(async () => {
         if (uidRef.current !== currentUid) return;
-        await updateProfileData({ siteNotificationSettings: next });
-        if (uidRef.current !== currentUid) return;
+        // Critical: mute the server BEFORE waiting for Firestore writes,
+        // otherwise automatic Telegram alerts can keep arriving while
+        // the profile spinner still says "off".
         if (!(user as any)?.isLocalUser) {
           const res = await apiFetch('/api/notification-preferences', {
             method: 'PUT', headers: { 'Content-Type': 'application/json' },
@@ -223,8 +236,15 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
           });
           if (!res.ok) throw new Error('Сервер відхилив налаштування доставки');
         }
+        if (uidRef.current !== currentUid) return;
+        await updateProfileData({
+          siteNotificationSettings: next,
+          ...(disabling ? { soundAlertsEnabled: false } : {}),
+        });
       }).catch(() => {
-        if (uidRef.current === currentUid) setError('Не вдалося синхронізувати серверні сповіщення. Локальні налаштування збережено, але Telegram може не запрацювати.');
+        if (uidRef.current === currentUid) setError(
+          'Не вдалося синхронізувати налаштування із сервером. Сповіщення цього браузера вимкнено, але Telegram може продовжувати надсилати повідомлення. Перевірте підключення та повторіть вимкнення.'
+        );
       }).finally(() => {
         changePendingCount(pendingSettingsWrites.current, currentUid, -1);
         if (settingsSaveQueue.current.get(currentUid) === task) settingsSaveQueue.current.delete(currentUid);
@@ -232,7 +252,7 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
       settingsSaveQueue.current.set(currentUid, task);
       await task;
     }
-  }, [user?.uid, updateProfileData]);
+  }, [user?.uid, updateProfileData, updatePreferences]);
 
   const setSoundEnabled = useCallback(async (enabled: boolean) => {
     updatePreferences({ soundAlertsEnabled: enabled });
