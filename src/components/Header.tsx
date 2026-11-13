@@ -31,6 +31,9 @@ interface HeaderProps {
   bearishCount: number;
   watchlistCount: number;
   archiveCount?: number;
+  /** Legacy external callers may still pass these; the bell now opens the notification center. */
+  soundEnabled?: boolean;
+  onToggleSound?: () => void;
   onRefresh: () => void;
   onOpenWatchlist: () => void;
   onOpenArchive?: () => void;
