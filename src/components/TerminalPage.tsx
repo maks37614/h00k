@@ -1203,6 +1203,7 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
                 visualContext="terminalLarge"
                 symbol={activeCoin.symbol}
                 terminalAutoScale={autoScaleCharts && chartProvider === 'hookchart'}
+                terminalInitialView={config.initialChartView}
                 exchange={activeCoin.exchange}
                 marketType={activeCoin.marketType}
                 timeframe={timeframe}
@@ -1245,6 +1246,7 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
                       key={block.id}
                       block={block}
                       terminalAutoScale={autoScaleCharts && chartProvider === 'hookchart'}
+                      terminalInitialView={config.initialChartView}
                       coin={coinData}
                       allCoins={coins}
                       isSingleBlock={blocks.length === 1}
