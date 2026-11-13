@@ -1,4 +1,4 @@
-export type SiteNotificationKind = 'price' | 'formation' | 'impulse' | 'surveillance';
+export type SiteNotificationKind = 'price' | 'formation' | 'impulse' | 'volatility' | 'surveillance';
 export type SiteNotificationSound = 'chime' | 'soft' | 'pulse';
 export type ImpulseExchange = 'binance' | 'bybit';
 export type ImpulseMarket = 'futures' | 'spot';
@@ -25,6 +25,7 @@ export interface SiteNotificationItem {
   timestamp: number;
   symbol?: string;
   changePct?: number;
+  rangePct?: number;
   read: boolean;
 }
 
@@ -82,7 +83,7 @@ export function notificationEnabled(settings: SiteNotificationSettings, kind: Si
   if (!settings.enabled) return false;
   return kind === 'price' ? settings.price
     : kind === 'formation' ? settings.formations
-    : kind === 'impulse' ? settings.impulses
+    : kind === 'impulse' || kind === 'volatility' ? settings.impulses
     : settings.surveillance;
 }
 
@@ -94,13 +95,15 @@ export function readNotificationItems(raw: string | null): SiteNotificationItem[
     return parsed.filter((item): item is SiteNotificationItem =>
       item && typeof item.id === 'string' && typeof item.title === 'string'
       && typeof item.description === 'string' && Number.isFinite(item.timestamp)
-      && ['price', 'formation', 'impulse', 'surveillance'].includes(item.kind)
+      && ['price', 'formation', 'impulse', 'volatility', 'surveillance'].includes(item.kind)
     ).slice(0, 100).map(item => ({ ...item, read: item.read === true }));
   } catch { return []; }
 }
 
 export interface ImpulseDetection {
+  kind: 'impulse' | 'volatility';
   changePct: number;
+  rangePct: number;
   baselinePrice: number;
   currentPrice: number;
   durationSeconds: number;
@@ -128,11 +131,22 @@ export class ImpulseTracker {
     const duration = now - oldest.timestamp;
     if (duration < 10_000 || !Number.isFinite(thresholdPct) || thresholdPct <= 0) return null;
     const change = (price / oldest.price - 1) * 100;
-    if (Math.abs(change) + 1e-8 < thresholdPct) return null;
+    // A fast up-and-down swing is volatility even when the net change is small.
+    let low = Infinity;
+    let high = 0;
+    for (const point of this.points) {
+      low = Math.min(low, point.price);
+      high = Math.max(high, point.price);
+    }
+    const rangePct = low > 0 ? (high / low - 1) * 100 : 0;
+    const directional = Math.abs(change) + 1e-8 >= thresholdPct;
+    if (!directional && rangePct + 1e-8 < thresholdPct) return null;
     if (this.lastFired && now - this.lastFired < windowMs) return null;
     this.lastFired = now;
     return {
+      kind: directional ? 'impulse' : 'volatility',
       changePct: Math.round(change * 100) / 100,
+      rangePct: Math.round(rangePct * 100) / 100,
       baselinePrice: oldest.price,
       currentPrice: price,
       durationSeconds: Math.round(duration / 1000),
