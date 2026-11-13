@@ -79,6 +79,20 @@ function DemoChart({ compact = false }: { compact?: boolean }) {
     <text x="20" y="18" fontSize="11" fill="#94a3b8" fontFamily="monospace">BTC/USDT · 15m</text>
   </svg>;
 }
+type ScreenerCapture = 'table' | 'overview' | 'mobile';
+const screenerShots: Record<ScreenerCapture, { src: string; title: string; description: string }> = {
+  table: { src: '/guest-shots/screener-table.png', title: 'Скрінер · список монет', description: 'Реальна таблиця, Binance / Bybit, фільтри, ціни, зміна та обсяги' },
+  overview: { src: '/guest-shots/screener-overview.png', title: 'Скрінер · огляд ринку', description: 'Реальні блоки настрою ринку, новин, фільтрів і котирувань' },
+  mobile: { src: '/guest-shots/screener-mobile.png', title: 'Скрінер · смартфон', description: 'Автентичний вигляд мобільної сторінки h00k.top' },
+};
+function RealScreenerShot({ variant = 'table' }: { variant?: ScreenerCapture }) {
+  const shot = screenerShots[variant];
+  return <figure className={`gl-real-capture gl-real-capture-${variant}`}>
+    <div className="gl-real-capture-top"><span><span className="gl-status-light"/> СПРАВЖНІЙ ЗНІМОК h00k.top</span><span>13.11.2026</span></div>
+    <img src={shot.src} alt={`${shot.title} — справжній знімок екрана h00k.top`} loading={variant==='table'?'eager':'lazy'}/>
+    <figcaption><strong>{shot.title}</strong><span>{shot.description}. Ціни на знімку історичні, не онлайн.</span></figcaption>
+  </figure>;
+}
 function DemoWindow({ tab }: { tab: DemoTab }) {
   return <div className="gl-window" aria-label="Ілюстративний макет торгового інтерфейсу h00k">
     <div className="gl-window-top"><div className="gl-dots"><i/><i/><i/></div><span>h00k.top / {tab}</span><span className="gl-window-live"><i/> ДЕМО</span></div>
@@ -104,7 +118,7 @@ function DemoWindow({ tab }: { tab: DemoTab }) {
   </div>;
 }
 export function GuestLanding() {
-  const [tab, setTab] = useState<DemoTab>('chart');
+  const [tab, setTab] = useState<DemoTab>('screener');
   const [featureCategory, setFeatureCategory] = useState<FeatureCategory>('discover');
   const selectedFeatureCategory = featureCategories.find(category => category.id === featureCategory)!;
   const visibleFeatures = features.filter((_, index) => featureCategory === 'all' || selectedFeatureCategory.indexes.includes(index));
@@ -136,9 +150,9 @@ export function GuestLanding() {
         </div>
         <div className="gl-hero-display">
           <div className="gl-hero-terminal-head"><span><span className="gl-status-light"/> ІНТЕРФЕЙС ПЛАТФОРМИ</span><span>01 / 04 · {demoTabs.find(t => t.id === tab)?.label.toUpperCase()}</span></div>
-          <DemoWindow tab={tab}/>
+          {tab === 'screener' ? <RealScreenerShot variant="table"/> : <DemoWindow tab={tab}/>}
           <div className="gl-hero-switcher" role="group" aria-label="Показати інструмент у демонстрації">{demoTabs.map((item, index) => <button type="button" key={item.id} className={tab===item.id?'gl-hero-switch-active':''} onClick={() => setTab(item.id)} aria-pressed={tab===item.id}><span>0{index + 1}</span> {item.label}</button>)}</div>
-          <div className="gl-floating-tag"><Sparkles size={15}/> Ілюстративна демонстрація</div>
+          <div className="gl-floating-tag"><Sparkles size={15}/> {tab === 'screener' ? 'Справжній скриншот' : 'Ілюстративний макет'}</div>
         </div>
       </section>
       <section className="gl-benefits gl-container" aria-label="Переваги платформи">
@@ -147,12 +161,16 @@ export function GuestLanding() {
         <div><Target size={22}/><strong>Сигнал з контекстом</strong><span>Формації, підтвердження та оцінка до 100 балів</span></div>
         <div><Bell size={22}/><strong>Персональні сповіщення</strong><span>Налаштовуйте події, які важливі саме вам</span></div>
       </section>
+      <section className="gl-authentic gl-container" aria-label="Справжні фотографії інтерфейсу h00k">
+        <div className="gl-authentic-heading"><div><span className="gl-kicker">НЕ МАКЕТ. СПРАВЖНІЙ САЙТ.</span><h2>Ось як h00k <em>виглядає насправді.</em></h2><p>Без штучних цін і вигаданих кнопок — скриншоти відкритої версії Скрінера, зроблені безпосередньо на h00k.top.</p></div><span className="gl-authentic-note"><Check size={15}/> Оригінальні скриншоти · 13.11.2026</span></div>
+        <div className="gl-authentic-grid"><RealScreenerShot variant="overview"/><RealScreenerShot variant="mobile"/></div>
+      </section>
       <section id="gl-platform" className="gl-section gl-container">
         <div className="gl-section-top"><div><span className="gl-kicker">ПЛАТФОРМА В ДІЇ</span><h2>Одна платформа. <em>Повна картина ринку.</em></h2><p>Оберіть вкладку, щоб подивитися, як організовані головні робочі розділи.</p></div></div>
         <div className="gl-tabbar" role="tablist" aria-label="Демонстрація розділів">
           {demoTabs.map(t=><button type="button" role="tab" aria-selected={tab===t.id} onClick={()=>setTab(t.id)} key={t.id} className={tab===t.id?'gl-tab-active':''}>{t.label}</button>)}
         </div>
-        <div className="gl-platform-preview"><DemoWindow tab={tab}/><div className="gl-platform-caption"><span><Sparkles size={16}/> Зрозумілий інтерфейс для практичного аналізу</span><button type="button" onClick={enterScreener}>Відкрити живий скрінер <ArrowRight size={16}/></button></div></div>
+        <div className="gl-platform-preview">{tab === 'screener' ? <RealScreenerShot variant="overview"/> : <DemoWindow tab={tab}/>}<div className="gl-platform-caption"><span><Sparkles size={16}/> {tab === 'screener' ? 'Справжнє фото Скрінера з h00k.top' : 'Ілюстрація функцій — для реальних знімків потрібен вхід'}</span><button type="button" onClick={enterScreener}>Відкрити живий скрінер <ArrowRight size={16}/></button></div></div>
       </section>
       <section className="gl-spotlight gl-container"><div className="gl-spotlight-copy"><span className="gl-kicker">HOOKCHART</span><h2>Рух ціни — лише <em>частина історії.</em></h2><p>Не просто свічки. Додавайте рівні підтримки й опору, щільності заявок зі стакана, ліквідації та інші доступні підтвердження. Налаштовуйте відображення, масштаб, кольори й підписи під свою торгову систему.</p><div className="gl-tags"><span>Підтримка / опір</span><span>Щільності BID / ASK</span><span>Long / Short Liq</span><span>ROUND</span><span>TP / SL</span><span>Мультитаймфрейм</span></div></div><div className="gl-spotlight-visual"><DemoChart/><div className="gl-diagram-key"><span><i className="gl-key-amber"/> Рівні</span><span><i className="gl-key-cyan"/> Зони ліквідності</span><span><i className="gl-key-green"/> Свічки</span></div></div></section>
       <section id="gl-functions" className="gl-section gl-container">
