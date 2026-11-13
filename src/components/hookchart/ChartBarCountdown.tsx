@@ -4,7 +4,9 @@ import { useSharedChartClock } from './useSharedChartClock';
 export function countdownBarLeftMs(now: number, intervalMs: number, lastBarStart?: number): number {
   if (!Number.isFinite(now) || !Number.isFinite(intervalMs) || intervalMs <= 0) return 0;
   const currentBarStart = Math.floor(now / intervalMs) * intervalMs;
-  const barStart = lastBarStart && lastBarStart <= now && now - lastBarStart < intervalMs * 2
+  // The countdown must roll forward at the candle boundary even if the
+  // next Kline packet arrives late. It must not freeze at 00:00 for a bar.
+  const barStart = lastBarStart != null && lastBarStart <= now && now - lastBarStart < intervalMs
     ? lastBarStart : currentBarStart;
   return Math.max(0, barStart + intervalMs - now);
 }
