@@ -148,9 +148,24 @@ function syncWindows() {
     const target = findTarget(provider);
     if (!ready) { closeProvider(provider); lastDockStatus[provider] = 'Вимкнено'; continue; }
     if (!target) {
+      if (profile.mode === 'floating') {
+        // Truly independent floating panels can be launched without a terminal.
+        const ids = availablePanels(profile);
+        const group = ensureContentWindows(provider, ids);
+        const work = screen.getPrimaryDisplay().workArea;
+        const boxes = floatingRects(null, work, profile.width, profile.height, ids.length, profile.side);
+        ids.forEach((id, index) => {
+          const win = group.get(id);
+          if (!win || win.isDestroyed()) return;
+          if (win.isVisible() && !profile.follow) return; // preserve user drag
+          applyBounds(win, boxes[index], profile.alwaysOnTop);
+        });
+        lastDockStatus[provider] = 'Плаваючі панелі без термінала';
+        continue;
+      }
       // Keep detached full windows open if the terminal closes; never pretend they are docked.
       const group = windows.get(provider);
-      if (group) for (const win of group.values()) if (!win.isDestroyed() && profile.mode !== 'floating') win.hide();
+      if (group) for (const win of group.values()) if (!win.isDestroyed()) win.hide();
       lastDockStatus[provider] = 'Термінал не знайдено';
       continue;
     }
