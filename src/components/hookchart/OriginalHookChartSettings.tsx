@@ -505,7 +505,7 @@ export function VisualContextPicker({ value, onChange }: {
 function VisualProfileEditor({
   visualContext, visualDevice, selectedProfile, onContextChange, onDeviceChange,
   onProfileChange, onReset, onApplyToAll, onCapture, live, previewCandles, previewSymbol,
-  previewTimeframe, previewExchange, previewMarketType, previewTimezone, previewLongColor, previewShortColor, saveStatus,
+  previewTimeframe, previewExchange, previewMarketType, previewTimezone, previewLongColor, previewShortColor, marketDefaults, chartPreferences, saveStatus,
 }: {
   visualContext: VisualContextId;
   visualDevice: VisualDevice;
@@ -526,9 +526,11 @@ function VisualProfileEditor({
   previewTimezone?: string;
   previewLongColor?: string;
   previewShortColor?: string;
+  marketDefaults?: { exchange?: ExchangeId; marketType?: MarketType; timeframe?: Timeframe };
+  chartPreferences?: HookChartPreferences;
 }) {
   return <div className="visualProfileEditor space-y-4">
-    <Section title="Візуальні налаштування">
+    <Section title="Реальний HookChart · масштаб і відступи">
       <div className="settingsHint">
         Окремі профілі для Скрінера, Формацій і Термінала, а також для телефона й комп’ютера.
         Зміна повзунків відразу застосовується до відкритого графіка відповідного типу та зберігається в профілі користувача.
@@ -548,6 +550,8 @@ function VisualProfileEditor({
         timezone={previewTimezone}
         longColor={previewLongColor}
         shortColor={previewShortColor}
+        marketDefaults={marketDefaults}
+        chartPreferences={chartPreferences}
         visualContext={visualContext}
         visualDevice={visualDevice}
         profile={selectedProfile}
@@ -630,6 +634,7 @@ export function OriginalHookChartSettings({
   previewTimezone,
   previewLongColor,
   previewShortColor,
+  marketDefaults,
 }: {
   open: boolean;
   prefs: HookChartPreferences;
@@ -659,6 +664,7 @@ export function OriginalHookChartSettings({
   previewTimezone?: string;
   previewLongColor?: string;
   previewShortColor?: string;
+  marketDefaults?: { exchange?: ExchangeId; marketType?: MarketType; timeframe?: Timeframe };
 }) {
   const [tab, setTab] = useState<'main' | 'chart' | 'strategies' | 'hotkeys'>('main');
   const [visualContext, setVisualContext] = useState<VisualContextId>(activeVisualContext || 'screenerQuick');
@@ -999,6 +1005,8 @@ export function OriginalHookChartSettings({
             previewTimezone={previewTimezone}
             previewLongColor={previewLongColor}
             previewShortColor={previewShortColor}
+            marketDefaults={marketDefaults}
+            chartPreferences={prefs}
           />
         ) : tab === 'strategies' ? (
           <StrategySettings activeId={prefs.strategyId || ''} onSelect={onApplyStrategy} />
