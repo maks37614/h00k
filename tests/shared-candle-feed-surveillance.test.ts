@@ -9,7 +9,7 @@ test('one instrument has exactly one OHLCV event handler, shared across all user
   assert.match(shared,/const candleFeeds = new Map<string,SharedCandleEntry>\(\)/);
   assert.match(shared,/const key=\x60\$\{exchange\}:\$\{market\}:\$\{clean\}\x60/);
   assert.match(shared,/source\.on\('trade',\(trade:RawTradeEvent\)=>/);
-  assert.match(shared,/if\(created\.initialized\) created\.engine\.updateWithTrade\(trade\)/);
+  assert.match(shared,/if\(created\.initialized\) \{\s*created\.engine\.updateWithTrade\(trade\);\s*created\.revision\+\+;/);
   assert.match(shared,/entry\.refs\+\+/);
   assert.match(shared,/if\(--current\.refs===0/);
   assert.doesNotMatch(worker,/this\.mtfEngine\.updateWithTrade\(trade\)/);
