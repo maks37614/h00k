@@ -11,7 +11,6 @@ import {
   CheckCircle2,
   AlertCircle,
   Shield,
-  Key,
   MonitorSmartphone,
   Target,
   ChartCandlestick,
@@ -181,12 +180,6 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                 <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
                   ПРОФІЛЬ
                 </span>
-                {profile?.inviteCode && (
-                  <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-amber-500/20 text-amber-300 border border-amber-500/30 flex items-center gap-1">
-                    <Key className="w-2.5 h-2.5" />
-                    <span>КОД: {profile.inviteCode}</span>
-                  </span>
-                )}
               </div>
               <p className="text-[11px] text-slate-400">{user.email}</p>
             </div>

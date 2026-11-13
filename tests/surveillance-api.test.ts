@@ -7,9 +7,10 @@ import { spawn, ChildProcess } from 'node:child_process';
 import { once } from 'node:events';
 import { createTestSession } from './fixtures/user-session';
 
-test('HTTP tracking is explicit; deleting the last coin stays empty after refresh and restart', async (t) => {
+test('HTTP tracking is explicit; deleting the last coin stays empty after refresh and restart',
+  { skip: process.env.H00K_PG_INTEGRATION_TEST !== '1' }, async (t) => {
   const root = process.cwd();
-  const session = createTestSession();
+  const session = await createTestSession();
   const fixture = fs.mkdtempSync(path.join(root, '.test-surveillance-api-'));
   fs.mkdirSync(path.join(fixture, 'server/data'), { recursive: true });
   const config = { timeframe: '4h', triggerModes: ['bar_close'], levelsEnabled: true, structureEnabled: true,
@@ -117,6 +118,7 @@ test('HTTP tracking is explicit; deleting the last coin stays empty after refres
   } finally {
     await stop();
     fs.rmSync(fixture, { recursive: true, force: true });
+    await session.cleanup();
   }
 });
 

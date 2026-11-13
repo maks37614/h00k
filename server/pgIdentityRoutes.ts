@@ -1,8 +1,8 @@
 import type { Express, Request, Response, NextFunction } from 'express';
 import {
-  AuthFailure, COOKIE_NAME, usePostgresAuth, registerAccount, checkCredentials,
+  AuthFailure, COOKIE_NAME, initializeIdentity, registerAccount, checkCredentials,
   verifyEmailToken, resendVerification, sendReset, changePasswordWithToken, readAccount,
-  createSession, currentSession, revokeSession, revokeAllSessions, listSessions,
+  createSession, cookieToken, currentSession, revokeSession, revokeAllSessions, listSessions,
   updateAccountProfile, loadArchive, saveArchive, deleteArchive, clearArchive, touchSession,
 } from './pgIdentity';
 
@@ -87,13 +87,22 @@ export async function requirePostgresSession(req: Request, res: Response, next: 
 }
 
 export function installPostgresIdentityRoutes(app: Express) {
-  if (!usePostgresAuth()) return;
   // Schema initialization is shared and idempotent; startServer awaits it first.
   app.disable('x-powered-by');
   app.get('/api/auth/config', (_req, res) => res.setHeader('Cache-Control', 'no-store').json({ backend: 'postgres' }));
   app.use(['/api/auth', '/api/account'], (_req, res, next) => {
     res.setHeader('Cache-Control', 'no-store');
     next();
+  });
+  // Lazy and retryable schema readiness: auth errors never stop public market routes.
+  app.use(['/api/auth', '/api/account'], (req, res, next) => {
+    // Guest visitors have no account cookie: /session must not depend on the DB.
+    // Otherwise a DB outage would hold the entire screener behind the login splash.
+    if (req.method === 'GET' && req.originalUrl.split('?')[0] === '/api/auth/session' && !cookieToken(req)) {
+      next();
+      return;
+    }
+    void initializeIdentity().then(() => next(), error => failed(res, error));
   });
 
   app.post('/api/auth/register', protectOrigin, wrap(async (req, res) => {

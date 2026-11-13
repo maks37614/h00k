@@ -32,7 +32,6 @@ const SESSION_DAYS = 30;
 const HASH_LENGTH = 64;
 const SCRYPT_COST = 32768;
 const SCRYPT_OPTIONS = { N: SCRYPT_COST, r: 8, p: 1, maxmem: 64 * 1024 * 1024 };
-export const usePostgresAuth = () => process.env.H00K_AUTH_BACKEND === 'postgres';
 export const COOKIE_NAME = process.env.NODE_ENV === 'production' ? '__Host-h00k-session' : 'h00k-session';
 
 export class AuthFailure extends Error {
@@ -43,6 +42,7 @@ export class AuthFailure extends Error {
 
 let pool: Pool | undefined;
 let initialized: Promise<void> | undefined;
+let retryAfter = 0;
 function database(): Pool {
   if (!process.env.DATABASE_URL && !(process.env.PGHOST && process.env.PGUSER && process.env.PGPASSWORD && process.env.PGDATABASE)) {
     throw new Error('Set DATABASE_URL or PGHOST, PGUSER, PGPASSWORD, PGDATABASE for PostgreSQL auth');
@@ -60,7 +60,10 @@ function database(): Pool {
 export function identityPool() { return database(); }
 
 export async function initializeIdentity() {
-  if (!usePostgresAuth()) return;
+  // Cap retry frequency when the database is offline to protect the 2-vCPU VPS.
+  if (!initialized && Date.now() < retryAfter) {
+    throw new AuthFailure(503, 'База акаунтів тимчасово недоступна. Повторіть спробу.', 'DATABASE_OFFLINE');
+  }
   if (!initialized) initialized = (async () => {
     const schema = readFileSync(new URL('./migrations/001_identity.sql', import.meta.url), 'utf8');
     const client = await database().connect();
@@ -75,7 +78,7 @@ export async function initializeIdentity() {
     } finally {
       client.release();
     }
-  })().catch(error => { initialized = undefined; throw error; });
+  })().catch(error => { retryAfter = Date.now() + 5000; initialized = undefined; throw error; });
   await initialized;
 }
 

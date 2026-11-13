@@ -61,7 +61,6 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     env:
-      H00K_AUTH_BACKEND: postgres
       H00K_PG_INTEGRATION_TEST: '1'
       PGHOST: localhost
       PGUSER: h00k_test
@@ -77,3 +76,5 @@ jobs:
         run: npm ci
       - name: PostgreSQL identity integration
         run: node --import tsx --test tests/postgres-auth-integration.test.ts
+      - name: Surveillance HTTP regression with PostgreSQL sessions
+        run: node --import ./tests/fixtures/offline-network.mjs --import tsx --test tests/surveillance-api.test.ts

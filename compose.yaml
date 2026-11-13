@@ -8,15 +8,11 @@ services:
     environment:
       NODE_ENV: production
       PORT: 3000
-      H00K_AUTH_BACKEND: postgres
       PGHOST: postgres
       PGDATABASE: h00k_users
       PGUSER: h00k
       PGPASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
       AUTH_TRUST_PROXY: ${AUTH_TRUST_PROXY:-1}
-    depends_on:
-      postgres:
-        condition: service_healthy
     ports:
       - "127.0.0.1:${APP_PORT:-3000}:3000"
     volumes:

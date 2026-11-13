@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
   validateEmail, validatePassword, hashPassword, checkPassword,
-  csrfForSession, cookieToken, COOKIE_NAME, usePostgresAuth,
+  csrfForSession, cookieToken, COOKIE_NAME,
 } from '../server/pgIdentity';
 
 test('PostgreSQL identity rejects malformed emails and short passwords', () => {
@@ -37,13 +37,12 @@ test('cookie parsing is exact, and request proof is bound to an opaque session s
   assert.equal(cookieToken({ get: () => COOKIE_NAME + '=bad' } as any), null);
 });
 
-test('auth schema preserves original UIDs and creates per-user archive access paths', () => {
+test('account schema isolates user archives and sessions', () => {
   const schema = readFileSync(new URL('../server/migrations/001_identity.sql', import.meta.url), 'utf8');
   assert.match(schema, /id TEXT PRIMARY KEY/);
   assert.match(schema, /token_hash TEXT NOT NULL UNIQUE/);
   assert.match(schema, /PRIMARY KEY \(user_id, id\)/);
   assert.match(schema, /CREATE INDEX IF NOT EXISTS auth_archives_recent_idx/);
-  assert.equal(typeof usePostgresAuth(), 'boolean');
 });
 
 

@@ -1,4 +1,4 @@
-import { usePostgresAuth, initializeIdentity } from './server/pgIdentity';
+import { initializeIdentity } from './server/pgIdentity';
 import { installPostgresIdentityRoutes } from './server/pgIdentityRoutes';
 import express from 'express';
 import path from 'path';
@@ -67,7 +67,11 @@ async function startServer() {
 
   app.set('trust proxy', process.env.AUTH_TRUST_PROXY === '1' ? 1 : 'loopback');
   app.use(express.json({ limit: '384kb' }));
-  if (usePostgresAuth()) await initializeIdentity();
+  // The public screener and market WebSockets must remain available if PostgreSQL is down.
+  // Account routes retry initialization independently; never block Node startup here.
+  void initializeIdentity().catch(error => {
+    console.error('[Account DB] Initialization unavailable (market routes remain online):', error instanceof Error ? error.message : String(error));
+  });
   installPostgresIdentityRoutes(app);
 
   // Read-only operator endpoint is disabled unless H00K_OPS_TOKEN is configured.
@@ -153,29 +157,6 @@ async function startServer() {
     } catch (err: any) {
       res.status(500).json({ success: false, error: err?.message || 'Помилка надсилання тесту' });
     }
-  });
-
-  // Keep registration codes on the server so they are not shipped in the browser bundle.
-  const AUTHOR_VALID_CODES = new Set(
-    (process.env.ACCESS_CODES || '')
-      .split(',')
-      .map((code) => code.trim().toUpperCase())
-      .filter(Boolean),
-  );
-
-  app.post('/api/auth/verify-code', (req, res) => {
-    const code = (req.body?.code || '').toString().trim().toUpperCase();
-    if (!code) {
-      return res.status(400).json({ valid: false, message: 'Код не вказано' });
-    }
-    const isValid = AUTHOR_VALID_CODES.has(code);
-    return res.json({
-      valid: isValid,
-      code,
-      message: isValid
-        ? 'Спеціальний код підтверджено'
-        : 'Недійсний код доступу. Отримайте дійсний код у Telegram каналі автора.',
-    });
   });
 
   // Dedicated full-universe early W/M scan: progressive, throttled and shared across clients.
