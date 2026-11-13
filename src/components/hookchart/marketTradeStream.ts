@@ -158,6 +158,7 @@ class SharedMarketTradeStream {
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private pending: MarketTrade[] = [];
   private buffering = true;
+  private liveWithoutSeed = false;
   private stopped = false;
   private retries = 0;
   private abort = new AbortController();
@@ -206,7 +207,16 @@ class SharedMarketTradeStream {
     if (this.stopped) return;
     if (this.buffering) {
       this.pending.push(trade);
-      if (this.pending.length > 20000) this.pending.splice(0, 5000);
+      if (this.pending.length > 20000) {
+        // A slow REST seed must never silently discard live execution amounts.
+        // Fall back to the already-buffered WS events and disregard the stale
+        // REST response when it eventually arrives.
+        this.liveWithoutSeed = true;
+        const buffered = this.pending.sort((a, b) => a.t - b.t);
+        this.pending = [];
+        this.buffering = false;
+        for (const item of buffered) this.accept(item);
+      }
     } else this.accept(trade);
   }
 
@@ -250,7 +260,7 @@ class SharedMarketTradeStream {
     } catch {
       // A temporary REST failure must not prevent the live public-trade stream.
     }
-    if (this.stopped) return;
+    if (this.stopped || this.liveWithoutSeed) return;
     history.sort((a, b) => a.t - b.t);
     this.tracker.seedThreshold(history);
     // REST and WebSocket overlap by design; merge in time order and deduplicate by trade ID.

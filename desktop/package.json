@@ -1,0 +1,43 @@
+{
+  "name": "h00k-desktop",
+  "version": "0.1.0",
+  "description": "h00k Smart Dock for Windows trading terminals",
+  "private": true,
+  "main": "main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --check main.cjs && node --check preload.cjs && node --test test/*.test.cjs",
+    "dist": "electron-builder --win nsis --x64 --publish never"
+  },
+  "devDependencies": {
+    "electron": "^45.0.0",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "top.h00k.desktop",
+    "productName": "h00k Desktop",
+    "files": [
+      "main.cjs",
+      "preload.cjs",
+      "profiles.cjs",
+      "layout.cjs",
+      "settings.html"
+    ],
+    "extraResources": [
+      {
+        "from": "win-agent.ps1",
+        "to": "win-agent.ps1"
+      }
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true
+    }
+  }
+}

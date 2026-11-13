@@ -65,7 +65,7 @@ test('more than 40 qualifying bursts in one candle are fully summed rather than 
   const now = Math.floor(Date.now() / 60_000) * 60_000;
   const tracker = new LargeMarketTradeTracker();
   tracker.seedThreshold(Array.from({ length: 30 }, (_, i) => ({
-    id: 'reference-' + i, t: now + 1000 + i, p: 10, q: 10, side: 'BUY' as const,
+    id: 'reference-' + i, t: now + 4000 + i, p: 10, q: 10, side: 'BUY' as const,
   })));
   for (let i = 0; i < 80; i++) {
     const trade = tracker.accept({

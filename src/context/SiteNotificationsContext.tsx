@@ -71,18 +71,21 @@ function changePendingCount(map: Map<string, number>, uid: string, delta: number
 }
 
 export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { user, profile, updateProfileData } = useAuth();
+  const { user, profile } = useAuth();
   const { history } = useAlerts();
   const { allEvents, coins: surveillanceCoins, loading: surveillanceLoading } = useSurveillance();
   const { preferences, updatePreferences } = useAppPreferences();
   const uid = user?.uid || 'guest';
 
+  // The browser is authoritative: never let a delayed legacy profile
+  // snapshot overwrite local opt-in/out and category selection.
   const loadSettings = (id: string, currentProfile: unknown): SiteNotificationSettings => {
-    let source = currentProfile;
-    if (!source) {
-      try { source = JSON.parse(localStorage.getItem(siteNotificationSettingsKey(id)) || 'null'); }
-      catch { source = null; }
-    }
+    let source: unknown = null;
+    try {
+      const stored = localStorage.getItem(siteNotificationSettingsKey(id));
+      if (stored !== null) source = JSON.parse(stored);
+    } catch { /* Private browsing can reject local storage. */ }
+    if (source === null) source = currentProfile ?? null;
     return applyLocalNotificationMute(normalizeSiteNotificationSettings(source), locallyMutedAt(id));
   };
   const [settingsState, setSettingsState] = useState<{ uid: string; settings: SiteNotificationSettings }>(
@@ -117,11 +120,6 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
   const soundEnabledRef = useRef(preferences.soundAlertsEnabled);
   soundEnabledRef.current = preferences.soundAlertsEnabled;
   const [error, setError] = useState<string | null>(null);
-  // Profile snapshots can arrive out of order while toggles are being saved.
-  const pendingSettingsWrites = useRef(new Map<string, number>());
-  const pendingSoundWrites = useRef(new Map<string, number>());
-  const settingsSaveQueue = useRef(new Map<string, Promise<void>>());
-  const soundSaveQueue = useRef(new Map<string, Promise<void>>());
   const visibleBrowserNotificationsRef = useRef(new Set<Notification>());
   const closeVisibleBrowserNotifications = useCallback(() => {
     for (const notification of visibleBrowserNotificationsRef.current) {
@@ -138,28 +136,35 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
     deliveredSeen.current = { uid, ids: loadSeen(uid) };
     setError(null);
     const currentSettings = loadSettings(uid, profile?.uid === uid ? profile.siteNotificationSettings : undefined);
-    const selectedSound = currentSettings.optedIn
-      ? (profile?.uid === uid && typeof profile.soundAlertsEnabled === 'boolean'
-        ? profile.soundAlertsEnabled : readStoredSound(uid))
-      : false;
+    // The sound is per device: old profile values are read only during the
+    // one-time local migration below.
+    const selectedSound = currentSettings.optedIn ? readStoredSound(uid) : false;
     updatePreferences({ soundAlertsEnabled: currentSettings.enabled ? selectedSound : false });
   }, [uid, updatePreferences, closeVisibleBrowserNotifications]);
 
+  // One-time migration from previously synchronized profile preferences.
+  // The first local choice always wins and future edits never hit any API.
   useEffect(() => {
-    if (profile?.uid !== uid || !settingsRef.current.optedIn || !settingsRef.current.enabled
-      || pendingSoundWrites.current.has(uid) || typeof profile.soundAlertsEnabled !== 'boolean') return;
-    try { localStorage.setItem(soundStorageKey(uid), String(profile.soundAlertsEnabled)); } catch {}
-    updatePreferences({ soundAlertsEnabled: profile.soundAlertsEnabled });
-  }, [uid, profile?.soundAlertsEnabled, updatePreferences]);
+    if (profile?.uid !== uid) return;
+    let localConfig: string | null = null;
+    let localSound: string | null = null;
+    try {
+      localConfig = localStorage.getItem(siteNotificationSettingsKey(uid));
+      localSound = localStorage.getItem(soundStorageKey(uid));
+    } catch { /* Storage may be restricted. */ }
 
-  useEffect(() => {
-    if (profile?.uid !== uid || pendingSettingsWrites.current.has(uid) || !profile.siteNotificationSettings) return;
-    const remote = loadSettings(uid, profile.siteNotificationSettings);
-    settingsRef.current = remote;
-    setSettingsState({ uid, settings: remote });
-    try { localStorage.setItem(siteNotificationSettingsKey(uid), JSON.stringify(remote)); } catch {}
-    if (!remote.enabled) closeVisibleBrowserNotifications();
-  }, [uid, profile?.siteNotificationSettings, closeVisibleBrowserNotifications]);
+    if (localConfig === null && profile.siteNotificationSettings) {
+      const migrated = loadSettings(uid, profile.siteNotificationSettings);
+      settingsRef.current = migrated;
+      setSettingsState({ uid, settings: migrated });
+      try { localStorage.setItem(siteNotificationSettingsKey(uid), JSON.stringify(migrated)); } catch {}
+    }
+    if (localSound === null && typeof profile.soundAlertsEnabled === 'boolean') {
+      try { localStorage.setItem(soundStorageKey(uid), String(profile.soundAlertsEnabled)); } catch {}
+      updatePreferences({ soundAlertsEnabled: settingsRef.current.enabled
+        && settingsRef.current.optedIn && profile.soundAlertsEnabled });
+    }
+  }, [uid, profile?.uid, profile?.siteNotificationSettings, profile?.soundAlertsEnabled, updatePreferences]);
 
   // A second open tab must stop showing browser notifications immediately.
   // The storage event fires in the OTHER tabs; the initiating tab updates its
@@ -198,14 +203,11 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
     const disabling = patch.enabled === false;
     const enabling = patch.enabled === true;
     const next = normalizeSiteNotificationSettings({ ...settingsRef.current, ...patch,
-      // Enabling Favorites must snapshot the real per-user watchlist immediately.
       ...(patch.onlyFavorites === true && patch.favoriteIds === undefined
         ? { favoriteIds: normalizeNotificationFavoriteIds(favoritesRef.current) } : {}),
       optedIn: settingsRef.current.optedIn || enabling,
       enabledAt: enabling && !settingsRef.current.enabled
         ? Date.now() : settingsRef.current.enabledAt });
-    // Persist local opt-out synchronously. Other tabs and in-flight callbacks
-    // consult the marker before showing a sound or browser notification.
     if (disabling) {
       closeVisibleBrowserNotifications();
       stopCustomNotificationSound();
@@ -219,58 +221,28 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
     }
     settingsRef.current = next;
     setSettingsState({ uid: currentUid, settings: next });
-    try { localStorage.setItem(siteNotificationSettingsKey(currentUid), JSON.stringify(next)); } catch {}
-    setError(null);
-    if (user?.uid === currentUid) {
-      changePendingCount(pendingSettingsWrites.current, currentUid, 1);
-      // Serialize writes per account: rapid toggles cannot complete in reverse order.
-      const previous = settingsSaveQueue.current.get(currentUid) ?? Promise.resolve();
-      const task: Promise<void> = previous.catch(() => {}).then(async () => {
-        if (uidRef.current !== currentUid) return;
-        // The local notification center never posts preferences to VPS.
-        // Profile synchronization (when supported) only restores UI preferences
-        // on the user's own devices; it does not create market-data workers.
-        if (uidRef.current !== currentUid) return;
-        await updateProfileData({
-          siteNotificationSettings: next,
-          ...(disabling ? { soundAlertsEnabled: false } : {}),
-        });
-      }).catch(() => {
-        if (uidRef.current === currentUid) setError(
-          'Не вдалося зберегти налаштування у профілі. Локальний вибір у цьому браузері збережено.'
-        );
-      }).finally(() => {
-        changePendingCount(pendingSettingsWrites.current, currentUid, -1);
-        if (settingsSaveQueue.current.get(currentUid) === task) settingsSaveQueue.current.delete(currentUid);
-      });
-      settingsSaveQueue.current.set(currentUid, task);
-      await task;
+    try {
+      localStorage.setItem(siteNotificationSettingsKey(currentUid), JSON.stringify(next));
+      setError(null);
+    } catch {
+      setError('Браузер не дозволяє зберегти налаштування. Перевірте доступ до локального сховища.');
     }
-  }, [user?.uid, updateProfileData, updatePreferences, closeVisibleBrowserNotifications]);
+  }, [updatePreferences, closeVisibleBrowserNotifications]);
 
   const setSoundEnabled = useCallback(async (enabled: boolean) => {
     const currentUid = uidRef.current;
+    const mutedAt = locallyMutedAt(currentUid);
     const allowed = Boolean(enabled && settingsRef.current.optedIn && settingsRef.current.enabled
-      && !(locallyMutedAt(currentUid) > 0 && settingsRef.current.enabledAt <= locallyMutedAt(currentUid)));
+      && !(mutedAt > 0 && settingsRef.current.enabledAt <= mutedAt));
     updatePreferences({ soundAlertsEnabled: allowed });
     soundEnabledRef.current = allowed;
-    setError(null);
-    try { localStorage.setItem(soundStorageKey(currentUid), String(allowed)); } catch {}
-    if (user?.uid === currentUid) {
-      changePendingCount(pendingSoundWrites.current, currentUid, 1);
-      const previous = soundSaveQueue.current.get(currentUid) ?? Promise.resolve();
-      const task: Promise<void> = previous.catch(() => {}).then(async () => {
-        if (uidRef.current === currentUid) await updateProfileData({ soundAlertsEnabled: allowed });
-      }).catch(() => {
-        if (uidRef.current === currentUid) setError('Не вдалося зберегти налаштування звуку в профілі.');
-      }).finally(() => {
-        changePendingCount(pendingSoundWrites.current, currentUid, -1);
-        if (soundSaveQueue.current.get(currentUid) === task) soundSaveQueue.current.delete(currentUid);
-      });
-      soundSaveQueue.current.set(currentUid, task);
-      await task;
+    try {
+      localStorage.setItem(soundStorageKey(currentUid), String(allowed));
+      setError(null);
+    } catch {
+      setError('Браузер не дозволяє зберегти вибір звуку на цьому пристрої.');
     }
-  }, [user?.uid, updatePreferences, updateProfileData]);
+  }, [updatePreferences]);
 
   const emit = useCallback((event: NewSiteNotification) => {
     // A different tab can disable everything while this callback is still
