@@ -6,7 +6,7 @@ import { useAppPreferences } from '../utils/userPreferences';
 import {
   DEFAULT_SITE_NOTIFICATIONS, ImpulseTracker, normalizeSiteNotificationSettings,
   notificationEnabled, readNotificationItems, siteNotificationSettingsKey, siteNotificationStorageKey,
-  siteNotificationClearedAtKey,
+  siteNotificationClearedAtKey, siteNotificationSeenKey,
   type SiteNotificationItem, type SiteNotificationKind, type SiteNotificationSettings, type SiteNotificationSound,
 } from '../utils/siteNotifications';
 import { playSiteNotificationSound } from '../utils/domSound';
@@ -49,6 +49,12 @@ function loadStoredItems(uid: string): SiteNotificationItem[] {
   catch { return []; }
 }
 
+function loadSeen(uid: string): Set<string> {
+  try {
+    const parsed: unknown = JSON.parse(localStorage.getItem(siteNotificationSeenKey(uid)) || '[]');
+    return new Set(Array.isArray(parsed) ? parsed.filter((v): v is string => typeof v === 'string').slice(-5000) : []);
+  } catch { return new Set(); }
+}
 function soundStorageKey(uid: string): string { return 'h00k_site_notification_sound_v1:' + uid; }
 function readStoredSound(uid: string): boolean {
   try { return localStorage.getItem(soundStorageKey(uid)) === 'true'; } catch { return false; }
@@ -87,6 +93,7 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
   const itemsRef = useRef(items);
   itemsRef.current = items;
   const surveillanceSeen = useRef<{ uid: string; initialized: boolean; ids: Set<string> }>({ uid, initialized: false, ids: new Set() });
+  const deliveredSeen = useRef<{ uid: string; ids: Set<string> }>({ uid, ids: loadSeen(uid) });
   const uidRef = useRef(uid);
   const favoritesRef = useRef<readonly string[]>([]);
   uidRef.current = uid;
@@ -100,6 +107,7 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
   useEffect(() => {
     setSettingsState({ uid, settings: loadSettings(uid, profile?.uid === uid ? profile.siteNotificationSettings : undefined) });
     setItemState({ uid, items: loadStoredItems(uid) });
+    deliveredSeen.current = { uid, ids: loadSeen(uid) };
     setError(null);
     const selectedSound = profile?.uid === uid && typeof profile.soundAlertsEnabled === 'boolean'
       ? profile.soundAlertsEnabled : readStoredSound(uid);
@@ -161,7 +169,12 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
     if (!notificationEnabled(settingsRef.current, event.kind)) return;
     if (!event.id || !event.title) return;
     if (event.kind !== 'system' && !matchesNotificationScope(settingsRef.current, event, favoritesRef.current)) return;
-    if (itemsRef.current.some(item => item.id === event.id)) return;
+    const owner = uidRef.current;
+    if (deliveredSeen.current.uid !== owner) deliveredSeen.current = { uid: owner, ids: loadSeen(owner) };
+    if (deliveredSeen.current.ids.has(event.id) || itemsRef.current.some(item => item.id === event.id)) return;
+    deliveredSeen.current.ids.add(event.id);
+    if (deliveredSeen.current.ids.size > 5000) deliveredSeen.current.ids = new Set(Array.from(deliveredSeen.current.ids).slice(-4000));
+    try { localStorage.setItem(siteNotificationSeenKey(owner), JSON.stringify([...deliveredSeen.current.ids])); } catch {}
     const notification: SiteNotificationItem = {
       ...event, timestamp: event.timestamp ?? Date.now(), read: false,
     };
