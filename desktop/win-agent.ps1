@@ -1,0 +1,80 @@
+# Read-only Win32 discovery. No DLL injection, keyboard emulation, or orders.
+# One persistent PowerShell process avoids repeatedly starting Windows PowerShell.
+$ErrorActionPreference = 'Stop'
+Add-Type -TypeDefinition @'
+using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Runtime.InteropServices;
+using System.Text;
+
+public sealed class WindowSnapshot {
+  public string id { get; set; }
+  public int pid { get; set; }
+  public string exe { get; set; }
+  public string title { get; set; }
+  public int left { get; set; }
+  public int top { get; set; }
+  public int width { get; set; }
+  public int height { get; set; }
+  public bool minimized { get; set; }
+}
+public static class H00kWindowAgent {
+  private delegate bool EnumWindowsProc(IntPtr hwnd, IntPtr lparam);
+  [StructLayout(LayoutKind.Sequential)] private struct RECT {
+    public int Left, Top, Right, Bottom;
+  }
+  [DllImport("user32.dll")] private static extern bool EnumWindows(EnumWindowsProc cb, IntPtr lp);
+  [DllImport("user32.dll")] private static extern bool IsWindowVisible(IntPtr hwnd);
+  [DllImport("user32.dll")] private static extern bool IsIconic(IntPtr hwnd);
+  [DllImport("user32.dll")] private static extern int GetWindowTextLengthW(IntPtr hwnd);
+  [DllImport("user32.dll", CharSet=CharSet.Unicode)] private static extern int GetWindowTextW(IntPtr hwnd, StringBuilder text, int max);
+  [DllImport("user32.dll")] private static extern bool GetWindowRect(IntPtr hwnd, out RECT rect);
+  [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr hwnd, out uint pid);
+  [DllImport("user32.dll")] private static extern IntPtr GetWindow(IntPtr hwnd, uint command);
+  [DllImport("user32.dll")] private static extern bool SetProcessDpiAwarenessContext(IntPtr value);
+
+  public static void EnablePhysicalDpi() {
+    try { SetProcessDpiAwarenessContext(new IntPtr(-4)); } catch { /* older Windows */ }
+  }
+  public static List<WindowSnapshot> Snapshot() {
+    var windows = new List<WindowSnapshot>();
+    EnumWindows((hwnd, _) => {
+      try {
+        if (!IsWindowVisible(hwnd) || GetWindow(hwnd, 4) != IntPtr.Zero) return true;
+        var len = GetWindowTextLengthW(hwnd);
+        if (len < 2 || len > 512) return true;
+        var title = new StringBuilder(len + 1);
+        GetWindowTextW(hwnd, title, title.Capacity);
+        if (!GetWindowRect(hwnd, out RECT bounds)) return true;
+        if (bounds.Right - bounds.Left < 140 || bounds.Bottom - bounds.Top < 80) return true;
+        GetWindowThreadProcessId(hwnd, out uint pid);
+        if (pid == 0 || pid == Process.GetCurrentProcess().Id) return true;
+        var process = Process.GetProcessById((int)pid);
+        windows.Add(new WindowSnapshot {
+          id = hwnd.ToInt64().ToString(),
+          pid = (int)pid, exe = process.ProcessName, title = title.ToString(),
+          left = bounds.Left, top = bounds.Top,
+          width = bounds.Right - bounds.Left, height = bounds.Bottom - bounds.Top,
+          minimized = IsIconic(hwnd)
+        });
+      } catch { /* windows may close during enumeration; protected processes may deny details */ }
+      return true;
+    }, IntPtr.Zero);
+    return windows;
+  }
+}
+'@
+[H00kWindowAgent]::EnablePhysicalDpi()
+while ($true) {
+  try {
+    $current = [H00kWindowAgent]::Snapshot()
+    $json = ConvertTo-Json -InputObject $current -Depth 4 -Compress
+    [Console]::Out.WriteLine($json)
+    [Console]::Out.Flush()
+  } catch {
+    [Console]::Out.WriteLine('[]')
+    [Console]::Out.Flush()
+  }
+  Start-Sleep -Milliseconds 650
+}

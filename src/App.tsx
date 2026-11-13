@@ -93,6 +93,15 @@ const DEFAULT_FILTERS: ScreenerFilterState = {
 
 const ignoreSiteNotification = (..._args: unknown[]): void => {};
 
+// Desktop page panels use the exact same route/components and authorization as the site.
+// This query changes presentation only; it does not expose local Desktop capabilities.
+const desktopPanel = typeof window !== 'undefined'
+  ? (() => {
+      const name = new URLSearchParams(window.location.search).get('desktopPanel');
+      return ['screener', 'formations', 'early', 'terminal', 'surveillance', 'replay'].includes(name || '') ? name : null;
+    })()
+  : null;
+
 export default function App() {
   // Routed charts are real SPA pages: the Screener is unmounted, not covered.
   const [chartRoute, setChartRoute] = useState<ChartPageRoute | null>(() =>
@@ -154,7 +163,8 @@ export default function App() {
   const [earlyMode, setEarlyMode] = useState(false);
   useEffect(() => {
     try {
-      setEarlyMode(localStorage.getItem('h00k-early-formations:' + (user?.uid || 'guest')) === '1');
+      setEarlyMode(desktopPanel === 'early' ? true : desktopPanel === 'formations' ? false
+        : localStorage.getItem('h00k-early-formations:' + (user?.uid || 'guest')) === '1');
     } catch { setEarlyMode(false); }
   }, [user?.uid]);
   const changeEarlyMode = (enabled: boolean) => {
@@ -1360,9 +1370,9 @@ export default function App() {
   return (
     <div className="min-h-screen bg-[#070a12] text-slate-100 flex flex-col selection:bg-cyan-500/20 selection:text-cyan-300">
       {/* First-visit installation tip remains available to guests on all devices. */}
-      <InstallAppButton variant="tip" />
+      {!desktopPanel && <InstallAppButton variant="tip" />}
       {/* Header */}
-      {!chartPageActive && <Header
+      {!chartPageActive && !desktopPanel && <Header
         isLoading={isLoading}
         totalCoins={coins.length}
         formationsCount={flattenedItems.length}
@@ -1414,10 +1424,21 @@ export default function App() {
         onPageChange={handlePageChange}
       />}
 
+      {desktopPanel && !chartPageActive && (
+        <div className="shrink-0 border-b border-slate-800/70 bg-slate-900/90 px-3 py-2 text-xs font-semibold text-cyan-300">
+          h00k Desktop · {({
+            screener: 'Скрінер', formations: 'Формації W/M', early: 'Раннє виявлення',
+            terminal: 'Термінал HookChart', surveillance: 'Спостереження', replay: 'Тестування',
+          } as Record<string, string>)[desktopPanel]}
+        </div>
+      )}
+
       {/* Main Content Area */}
       <main className={chartPageActive
         ? 'w-full min-w-0 flex-1'
-        : 'flex-1 max-w-[2560px] 3xl:max-w-[3440px] w-full mx-auto px-2 sm:px-4 lg:px-6 2xl:px-8 py-2 sm:py-4 space-y-3 sm:space-y-4'}>
+        : desktopPanel
+          ? 'flex-1 min-w-0 w-full px-2 py-2 space-y-3'
+          : 'flex-1 max-w-[2560px] 3xl:max-w-[3440px] w-full mx-auto px-2 sm:px-4 lg:px-6 2xl:px-8 py-2 sm:py-4 space-y-3 sm:space-y-4'}>
         {chartPageActive ? (
           !user ? (
             <section className="mx-auto flex min-h-[55vh] max-w-lg flex-col items-center justify-center gap-4 px-5 text-center">
@@ -1804,7 +1825,7 @@ export default function App() {
         )}
       </main>
 
-      {!chartPageActive && <SiteFooter />}
+      {!chartPageActive && !desktopPanel && <SiteFooter />}
 
       {/* Coin, archived and early charts now render inside the main route
           above. Nothing is mounted over a background Screener anymore. */}
