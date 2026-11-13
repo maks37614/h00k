@@ -78,3 +78,5 @@ jobs:
         run: node --import tsx --test tests/postgres-auth-integration.test.ts tests/postgres-mail-flow-integration.test.ts
       - name: Surveillance HTTP regression with PostgreSQL sessions
         run: node --import ./tests/fixtures/offline-network.mjs --import tsx --test tests/surveillance-api.test.ts
+      - name: Personal state indexed migration against PostgreSQL 16
+        run: node --import tsx --test tests/postgres-personal-state-integration.test.ts
