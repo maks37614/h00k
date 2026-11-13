@@ -87,7 +87,7 @@ test('Graph tab uses existing personal settings persistence and preview without 
   }));
   assert.match(html, />Графік<\/button>/);
   const settings = src('../src/components/hookchart/OriginalHookChartSettings.tsx');
-  assert.match(settings,/Візуальні налаштування/);
+  assert.match(settings,/Реальний HookChart · масштаб і відступи/);
   assert.match(settings,/Зберегти поточний вигляд графіка/);
   assert.match(settings,/Скинути цей профіль/);
   assert.match(settings,/Вертикальний зум/);
