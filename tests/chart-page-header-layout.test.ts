@@ -23,7 +23,7 @@ const earlyHeader = () => headerOnly(
 
 test('chart headers put price directly after coin name and remove the redundant USDT-M badge', () => {
   for (const header of [regularHeader(), earlyHeader()]) {
-    const coin = header.indexOf('{coin.baseAsset}/{coin.quoteAsset}');
+    const coin = header.indexOf('<CopyableCoinSymbol baseAsset={coin.baseAsset} quoteAsset={coin.quoteAsset} />');
     const price = Math.max(header.indexOf('formatPrice(livePrice)'), header.indexOf('money(livePrice)'));
     const exchange = header.indexOf('{coin.exchange}');
     const pattern = header.includes('Switching patterns') ? header.indexOf('Switching patterns') : header.indexOf('Можлива формація:');
@@ -41,6 +41,13 @@ test('chart headers put price directly after coin name and remove the redundant 
     assert.match(header, /sm:flex sm:justify-between/);
   }
   assert.match(regularHeader(), /col-start-1 row-start-2 flex min-w-0 max-w-full items-center gap-1[.]5/);
+});
+
+test('both chart headers copy the visible pair without changing their other controls', () => {
+  for (const header of [regularHeader(), earlyHeader()]) {
+    assert.match(header, /<CopyableCoinSymbol baseAsset=\{coin\.baseAsset\} quoteAsset=\{coin\.quoteAsset\} \/>/);
+    assert.match(header, /className="sm:hidden">Назад<\/span>/);
+  }
 });
 
 test('existing chart actions remain right-aligned and retain their handlers', () => {

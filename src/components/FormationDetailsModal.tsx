@@ -1,4 +1,5 @@
 import { normalizeExchangeSymbol } from '../utils/marketSymbols';
+import { CopyableCoinSymbol } from './CopyableCoinSymbol';
 import { useTelegram } from '../context/TelegramContext';
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
@@ -962,7 +963,7 @@ export const FormationDetailsModal: React.FC<FormationDetailsModalProps> = ({
                 {liveStatus.mode === 'ws' && <span aria-hidden="true" className="text-[10px] leading-none">⚡</span>}
               </div>
               <h2 className="shrink-0 whitespace-nowrap text-base font-extrabold tracking-wide text-white font-mono sm:text-xl">
-                {coin.baseAsset}/{coin.quoteAsset}
+                <CopyableCoinSymbol baseAsset={coin.baseAsset} quoteAsset={coin.quoteAsset} />
               </h2>
               <div className="inline-flex shrink-0 items-baseline gap-1 whitespace-nowrap" aria-label="Поточна ціна та зміна за 24 години">
                 <span className="font-mono text-[11px] font-bold text-white sm:text-sm">${formatPrice(livePrice)}</span>

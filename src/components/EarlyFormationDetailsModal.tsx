@@ -5,6 +5,7 @@ import type { EarlyFormationCandidate } from '../utils/earlyFormations';
 import { earlyFormationChartMarkers } from '../utils/earlyFormations';
 import { fetchDirectKlines } from '../utils/directExchangeClient';
 import { formatCryptoPrice } from '../utils/formatters';
+import { CopyableCoinSymbol } from './CopyableCoinSymbol';
 import { FullscreenChartModal } from './FullscreenChartModal';
 import { TradingViewChart } from './TradingViewChart';
 
@@ -95,7 +96,7 @@ export function EarlyFormationDetailsModal({
                 <span className={`h-2 w-2 rounded-full ${liveConnected ? 'bg-emerald-500' : 'bg-slate-500'}`} />
               </div>
               <h2 className="shrink-0 whitespace-nowrap text-base font-extrabold tracking-wide text-white font-mono sm:text-xl">
-                {coin.baseAsset}/{coin.quoteAsset}
+                <CopyableCoinSymbol baseAsset={coin.baseAsset} quoteAsset={coin.quoteAsset} />
               </h2>
               <div className="inline-flex shrink-0 items-baseline gap-1 whitespace-nowrap" aria-label="Поточна ціна та зміна за 24 години">
                 <span className="font-mono text-[11px] font-bold text-white sm:text-sm">{money(livePrice)}</span>
