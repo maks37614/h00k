@@ -44,8 +44,8 @@ test('rolling impulse detector uses observed short-window prices, both direction
   assert.equal(impulse?.changePct, 3);
   assert.equal(impulse?.baselinePrice, 100);
   assert.equal(tracker.push(96, 122_000, 2), null, 'no flood before cooldown');
-  assert.equal(tracker.push(100, 172_000, 2), null, 'old anchor expired');
-  const decline = tracker.push(97, 183_000, 2);
+  assert.equal(tracker.push(97, 172_000, 2), null, 'old anchor expired without reaching threshold');
+  const decline = tracker.push(92, 183_000, 2);
   assert.ok(decline);
   assert.ok((decline?.changePct || 0) < 0, 'downward impulse is recorded with a negative value');
   assert.equal(tracker.push(Number.NaN, 194_000, 2), null);
