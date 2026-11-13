@@ -143,6 +143,7 @@ test('workers with the same coin ID stay isolated by owner when updated, read, o
   const manager: any = Object.create(SurveillanceManager.prototype);
   const destroyed: string[] = [];
   const makeWorker = (userId: string) => ({ coin: { ...coin, id: 'shared-coin', userId },
+    matchesInstrument(next: any) { return this.coin.symbol === next.symbol && this.coin.exchange === next.exchange && this.coin.marketType === next.marketType && this.coin.baseAsset === next.baseAsset; },
     updateCoin(next: any) { this.coin = next; }, getSnapshot() { return { userId: this.coin.userId }; },
     destroy() { destroyed.push(userId); } });
   const alice = makeWorker('alice');
