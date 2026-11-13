@@ -10,16 +10,26 @@ import {
 test('notification categories have independent opt-out and a master disable', () => {
   const defaults = normalizeSiteNotificationSettings(null);
   assert.deepEqual(defaults, DEFAULT_SITE_NOTIFICATIONS);
-  assert.equal(notificationEnabled(defaults, 'price'), true);
-  assert.equal(notificationEnabled(defaults, 'formation'), true);
-  assert.equal(notificationEnabled(defaults, 'impulse'), false);
-  assert.equal(notificationEnabled(defaults, 'volatility'), false);
-  assert.equal(notificationEnabled(defaults, 'surveillance'), true);
-  const disabled = normalizeSiteNotificationSettings({ ...defaults, enabled: false, impulses: true });
-  for (const type of ['price', 'formation', 'impulse', 'volatility', 'surveillance'] as const)
-    assert.equal(notificationEnabled(disabled, type), false);
-  assert.equal(notificationEnabled({ ...defaults, price: false }, 'price'), false);
-  assert.equal(notificationEnabled({ ...defaults, price: false }, 'formation'), true);
+  assert.equal(defaults.enabled, false);
+  assert.equal(defaults.optedIn, false);
+  for (const type of ['price', 'formation', 'impulse', 'volatility', 'surveillance', 'density', 'round', 'composite', 'system'] as const)
+    assert.equal(notificationEnabled(defaults, type), false, 'all default categories must be silent');
+  const legacy = normalizeSiteNotificationSettings({ enabled: true, price: true, formations: true, impulses: true });
+  assert.equal(legacy.enabled, false, 'legacy implicit opt-in never turns notifications on');
+  assert.equal(notificationEnabled(legacy, 'price'), false);
+  const opted = normalizeSiteNotificationSettings({
+    optedIn: true, enabled: true, price: true, formations: true, impulses: true, surveillance: true,
+  });
+  assert.equal(notificationEnabled(opted, 'price'), true);
+  assert.equal(notificationEnabled(opted, 'formation'), true);
+  assert.equal(notificationEnabled(opted, 'impulse'), true);
+  assert.equal(notificationEnabled(opted, 'volatility'), true);
+  assert.equal(notificationEnabled(opted, 'surveillance'), true);
+  assert.equal(notificationEnabled({ ...opted, price: false }, 'price'), false);
+  assert.equal(notificationEnabled({ ...opted, price: false }, 'formation'), true);
+  const muted = normalizeSiteNotificationSettings({ ...opted, enabled: false });
+  for (const type of ['price', 'formation', 'impulse', 'surveillance'] as const)
+    assert.equal(notificationEnabled(muted, type), false);
 });
 
 test('impulse symbol and threshold inputs are normalized and bounded', () => {
