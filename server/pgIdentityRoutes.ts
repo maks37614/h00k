@@ -8,9 +8,9 @@ import {
 
 type SessionResponse = Response & { locals: { userId?: string; sessionId?: string } };
 
-const cookieOptions = (days: number) => ({
+const cookieOptions = (days: number, remember = true) => ({
   httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax' as const,
-  path: '/', maxAge: days * 24 * 60 * 60 * 1000,
+  path: '/', ...(remember ? { maxAge: days * 24 * 60 * 60 * 1000 } : {}),
 });
 function failed(res: Response, error: unknown) {
   const known = error instanceof AuthFailure;
@@ -109,7 +109,7 @@ export function installPostgresIdentityRoutes(app: Express) {
     rateLimit(req, 'login', 10, 15 * 60 * 1000);
     const account = await checkCredentials(req.body?.email, req.body?.password);
     const session = await createSession(account.user.uid, req, req.body?.remember !== false);
-    res.cookie(COOKIE_NAME, session.token, cookieOptions(session.days));
+    res.cookie(COOKIE_NAME, session.token, cookieOptions(session.days, req.body?.remember !== false));
     const current = await currentSessionFromToken(req, session.token);
     res.json({ success: true, ...account, csrf: current.csrf });
   }));
@@ -156,8 +156,9 @@ export function installPostgresIdentityRoutes(app: Express) {
   }));
   app.delete('/api/auth/sessions/:id', requirePostgresSession, wrap(async (req, res) => {
     await revokeSession(res.locals.userId, String(req.params.id));
-    if (req.params.id === res.locals.sessionId) res.clearCookie(COOKIE_NAME, { path: '/' });
-    res.json({ success: true });
+    const revokedCurrent = req.params.id === res.locals.sessionId;
+    if (revokedCurrent) res.clearCookie(COOKIE_NAME, { path: '/' });
+    res.json({ success: true, revokedCurrent });
   }));
   app.patch('/api/account/profile', requirePostgresSession, wrap(async (req, res) => {
     const account = await updateAccountProfile(res.locals.userId, req.body);
