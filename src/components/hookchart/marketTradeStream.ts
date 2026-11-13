@@ -30,6 +30,7 @@ export class LargeMarketTradeTracker {
   private seen = new Map<string, number>();
   private seenPruneAt = 0;
   private sample: Array<{ t: number; usd: number }> = [];
+  private sampleHead = 0;
   private active: Burst | null = null;
   private prints = new Map<string, MarketPrint>();
   private cut = 0;
@@ -95,13 +96,16 @@ export class LargeMarketTradeTracker {
     while (this.seen.size > MAX_SEEN) this.seen.delete(this.seen.keys().next().value!);
     this.sample.push({ t: trade.t, usd });
     const windowStart = trade.t - 120_000;
-    if (this.sample.length > MAX_SAMPLE || (this.sample[0] && this.sample[0].t < windowStart)) {
-      let start = 0;
-      while (start < this.sample.length && this.sample[start].t < windowStart) start++;
-      this.sample = this.sample.slice(Math.max(start, this.sample.length - MAX_SAMPLE));
+    while (this.sampleHead < this.sample.length &&
+      (this.sampleHead < this.sample.length - MAX_SAMPLE ||
+        this.sample[this.sampleHead].t < windowStart)) this.sampleHead++;
+    // Compact in blocks, not an 8192-element copy for every busy BTC tick.
+    if (this.sampleHead > 1024) {
+      this.sample = this.sample.slice(this.sampleHead);
+      this.sampleHead = 0;
     }
     if (!this.cut || trade.t - this.cutAt > 3000) {
-      this.cut = adaptiveCut(this.sample.map(row => row.usd), .95, .995, 2.8);
+      this.cut = adaptiveCut(this.sample.slice(this.sampleHead).map(row => row.usd), .95, .995, 2.8);
       this.cutAt = trade.t;
     }
     const second = Math.floor(trade.t / 1000) * 1000;
@@ -147,6 +151,7 @@ class SharedMarketTradeStream {
   readonly tracker = new LargeMarketTradeTracker();
   readonly listeners = new Set<Listener>();
   private recent: AggressiveMarketTrade[] = [];
+  private recentHead = 0;
   private socket: WebSocket | null = null;
   private ping: ReturnType<typeof setInterval> | null = null;
   private publishTimer: ReturnType<typeof setTimeout> | null = null;
@@ -161,7 +166,10 @@ class SharedMarketTradeStream {
 
   subscribe(listener: Listener): () => void {
     this.listeners.add(listener);
-    for (const trade of this.recent) if (trade.t >= Date.now() - 300_000) listener.onTrade(trade);
+    for (let i = this.recentHead; i < this.recent.length; i++) {
+      const trade = this.recent[i];
+      if (trade.t >= Date.now() - 300_000) listener.onTrade(trade);
+    }
     if (listener.wantsPrints?.() !== false) listener.onPrints(this.tracker.snapshot());
     return () => this.listeners.delete(listener);
   }
@@ -185,7 +193,11 @@ class SharedMarketTradeStream {
     const accepted = this.tracker.accept(trade);
     if (!accepted) return;
     this.recent.push(accepted);
-    if (this.recent.length > 2500) this.recent.splice(0, this.recent.length - 2500);
+    if (this.recent.length - this.recentHead > 2500) this.recentHead++;
+    if (this.recentHead > 512) {
+      this.recent = this.recent.slice(this.recentHead);
+      this.recentHead = 0;
+    }
     for (const listener of this.listeners) listener.onTrade(accepted);
     if (revision !== this.tracker.revision) this.publish();
   }
@@ -194,7 +206,7 @@ class SharedMarketTradeStream {
     if (this.stopped) return;
     if (this.buffering) {
       this.pending.push(trade);
-      if (this.pending.length > 20000) this.pending.shift();
+      if (this.pending.length > 20000) this.pending.splice(0, 5000);
     } else this.accept(trade);
   }
 
