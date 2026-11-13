@@ -1,0 +1,38 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+
+const client = readFileSync(new URL('../src/context/AlertsContext.tsx', import.meta.url), 'utf8');
+const server = readFileSync(new URL('../server/alertService.ts', import.meta.url), 'utf8');
+const app = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
+
+test('alert sync is adaptive and no network request runs in a background tab', () => {
+  assert.match(client, /document\.hidden\)\) return/);
+  assert.match(client, /hasPendingAlerts \? 30_000 : 120_000/);
+  assert.match(client, /now - lastPolledAt < minimumInterval/);
+  assert.match(client, /const interval = setInterval\(\(\) => \{ void pollSync\(\); \}, 10_000\)/);
+  assert.match(client, /document\.addEventListener\('visibilitychange', onVisible\)/);
+  assert.match(client, /document\.removeEventListener\('visibilitychange', onVisible\)/);
+  assert.doesNotMatch(client, /setInterval\(pollSync, 5000\)/);
+});
+
+test('unchanged client alert snapshots do not re-mirror Firestore or rewrite local storage', () => {
+  const sync = client.slice(client.indexOf('const pollSync = async'), client.indexOf('// Migrate local alerts'));
+  assert.match(sync, /const changed = JSON\.stringify\(alertsRef\.current\) !== JSON\.stringify\(data\.alerts\)/);
+  assert.match(sync, /if \(changed\) \{\s*setAlerts\(data\.alerts\)/);
+  assert.match(sync, /if \(isLocal\) \{[\s\S]*?localStorage\.setItem/);
+  assert.match(sync, /mirrorServerAlerts\(currentUser\.uid, data\.alerts, currentAlertsList\)/);
+});
+
+test('unchanged server alert sync returns user data without rewriting global alert file', () => {
+  const sync = server.slice(server.indexOf('export function syncUserAlerts'), server.indexOf('// Delete alert'));
+  assert.match(sync, /mergedUserAlerts\.length !== existingUserAlerts\.size/);
+  assert.match(sync, /JSON\.stringify\(previous\) !== JSON\.stringify\(alert\)/);
+  assert.match(sync, /if \(changed\) \{[\s\S]*?saveAlerts\(\[\.\.\.mergedUserAlerts, \.\.\.otherAlerts\]\)/);
+  assert.match(server, /export function startAlertMonitor\(intervalMs: number = 6000\)/);
+});
+
+test('hidden tabs do not run the periodic screener scan, explicit manual refresh remains available', () => {
+  assert.match(app, /if \(typeof document !== 'undefined' && document\.hidden\) return;\s*fetchScreenerData\(\)/);
+  assert.match(app, /onRefresh=\{\(\) => earlyMode && activePage === 'screener' \? refreshFullEarlyScan\(\) : fetchScreenerData\(\)\}/);
+});

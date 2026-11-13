@@ -1225,6 +1225,9 @@ export default function App() {
   useEffect(() => {
     if (chartPageActive || (earlyMode && activePage === 'screener')) return;
     const interval = setInterval(() => {
+      // Do not rescan the exchange for a hidden/background tab. A returning
+      // visitor receives the next periodic refresh or can refresh manually.
+      if (typeof document !== 'undefined' && document.hidden) return;
       fetchScreenerData();
     }, 60000);
     return () => clearInterval(interval);

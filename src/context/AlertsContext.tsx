@@ -321,14 +321,22 @@ export const AlertsProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     return () => unsubscribe();
   }, [user?.uid]);
 
-  // Active client-side CRON polling to sync with server alerts monitor every 5 seconds
+  // Adaptive UI sync only. The server monitors and delivers price alerts 24/7
+  // independently: this request only refreshes the currently open page.
+  // Keep idle users from submitting unchanged alert arrays every five seconds.
   useEffect(() => {
     if (!user?.uid) return;
 
     let disposed = false;
     let inFlight = false;
+    let lastPolledAt = Date.now();
     const pollSync = async () => {
-      if (inFlight || disposed) return;
+      if (inFlight || disposed || (typeof document !== 'undefined' && document.hidden)) return;
+      const hasPendingAlerts = alertsRef.current.some(alert => alert.isActive && !alert.triggered);
+      const minimumInterval = hasPendingAlerts ? 30_000 : 120_000;
+      const now = Date.now();
+      if (now - lastPolledAt < minimumInterval) return;
+      lastPolledAt = now;
       inFlight = true;
       try {
         const currentUser = userRef.current;
@@ -366,17 +374,17 @@ export const AlertsProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             }
           });
 
+          const changed = JSON.stringify(alertsRef.current) !== JSON.stringify(data.alerts);
           alertsRef.current = data.alerts;
-          setAlerts((prev) => {
-            if (JSON.stringify(prev) === JSON.stringify(data.alerts)) return prev;
-            return data.alerts;
-          });
-          if (isLocal) {
-            try {
-              localStorage.setItem(`signalhook_user_alerts_${currentUser.uid}`, JSON.stringify(data.alerts));
-            } catch {}
-          } else {
-            mirrorServerAlerts(currentUser.uid, data.alerts, currentAlertsList);
+          if (changed) {
+            setAlerts(data.alerts);
+            if (isLocal) {
+              try {
+                localStorage.setItem(`signalhook_user_alerts_${currentUser.uid}`, JSON.stringify(data.alerts));
+              } catch {}
+            } else {
+              mirrorServerAlerts(currentUser.uid, data.alerts, currentAlertsList);
+            }
           }
 
           if (hasNewlyTriggered) {
@@ -390,8 +398,16 @@ export const AlertsProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       }
     };
 
-    const interval = setInterval(pollSync, 5000);
-    return () => { disposed = true; clearInterval(interval); };
+    // The timer is cheap and does not itself request data. Foregrounding the
+    // tab resumes a pending sync, respecting the same minimum interval.
+    const interval = setInterval(() => { void pollSync(); }, 10_000);
+    const onVisible = () => { if (!document.hidden) void pollSync(); };
+    if (typeof document !== 'undefined') document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      disposed = true;
+      clearInterval(interval);
+      if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', onVisible);
+    };
   }, [user?.uid]);
 
   // Migrate local alerts to user profile on first login if any

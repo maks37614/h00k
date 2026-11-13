@@ -499,9 +499,18 @@ export function syncUserAlerts(
     }
   }
 
-  const otherAlerts = all.filter((a) => a.userId !== userId);
-  const updatedAll = [...mergedUserAlerts, ...otherAlerts];
-  saveAlerts(updatedAll);
+  // Avoid rewriting the entire global alerts.json file for a no-op browser
+  // synchronization. A thousand idle users used to cause frequent synchronous
+  // filesystem writes even when their alert states had not changed.
+  const changed = mergedUserAlerts.length !== existingUserAlerts.size
+    || mergedUserAlerts.some(alert => {
+      const previous = existingUserAlerts.get(alert.id);
+      return !previous || JSON.stringify(previous) !== JSON.stringify(alert);
+    });
+  if (changed) {
+    const otherAlerts = all.filter((a) => a.userId !== userId);
+    saveAlerts([...mergedUserAlerts, ...otherAlerts]);
+  }
 
   return mergedUserAlerts;
 }
