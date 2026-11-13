@@ -1,12 +1,12 @@
 {
   "name": "h00k-desktop",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "h00k Smart Dock for Windows trading terminals",
   "private": true,
   "main": "main.cjs",
   "scripts": {
     "start": "electron .",
-    "test": "node --check main.cjs && node --check preload.cjs && node --test test/*.test.cjs",
+    "test": "node --check main.cjs && node --check preload.cjs && node --check toolbar-preload.cjs && node --test test/*.test.cjs",
     "dist": "electron-builder --win nsis --x64 --publish never"
   },
   "devDependencies": {
@@ -21,7 +21,9 @@
       "preload.cjs",
       "profiles.cjs",
       "layout.cjs",
-      "settings.html"
+      "settings.html",
+      "toolbar.html",
+      "toolbar-preload.cjs"
     ],
     "extraResources": [
       {
