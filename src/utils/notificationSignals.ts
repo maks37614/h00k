@@ -1,6 +1,6 @@
 import type { ScannedCoin, SurveillanceEvent, DetectedFormation } from '../types';
 import type { SiteNotificationKind, SiteNotificationSettings } from './siteNotifications';
-import { matchesNotificationScope, notificationEnabled } from './siteNotifications';
+import { DEFAULT_SITE_NOTIFICATIONS, matchesNotificationScope, notificationEnabled } from './siteNotifications';
 
 export interface MarketNotificationSignal {
   id: string;
@@ -21,13 +21,12 @@ const distance = (price: number, level: number) =>
   level > 0 && Number.isFinite(price) && price > 0 ? Math.abs(price / level - 1) * 100 : Infinity;
 
 function favoriteMatches(coin: ScannedCoin, favorites: readonly string[]): boolean {
-  return favorites.some(raw => {
-    const key = raw.toUpperCase().replace(/\s+/g, '');
-    return key.includes(coin.symbol.toUpperCase())
-      && (!key.includes(':') || (key.includes(coin.exchange.toUpperCase())
-        && key.includes(coin.marketType.toUpperCase())));
-  });
+  return matchesNotificationScope({ ...DUMMY_FAVORITES_SCOPE, onlyFavorites: true },
+    coin, favorites);
 }
+const DUMMY_FAVORITES_SCOPE: SiteNotificationSettings = {
+  ...DEFAULT_SITE_NOTIFICATIONS, scopeExchange: 'all', scopeMarket: 'all', scopeTimeframe: 'all',
+};
 
 export function surveillanceNotificationKind(event: SurveillanceEvent): SiteNotificationKind {
   const id = String(event.details?.notificationType || '').toUpperCase();
@@ -91,6 +90,12 @@ export function scanNotificationSignals(
   for (const coin of coins) {
     if (!matchesNotificationScope(settings, coin, favorites)) continue;
     if (!finite(coin.currentPrice) || coin.currentPrice <= 0) continue;
+    // Don't create trading signals from a known-stale market snapshot.
+    if (finite(coin.lastUpdated) && now - coin.lastUpdated > 5 * 60_000) {
+      emit(coin, 'system', 'stale-market', 'Застарілі котирування · ' + coin.symbol,
+        'Дані останнього сканування старші за 5 хвилин');
+      continue;
+    }
     const favorite = favoriteMatches(coin, favorites);
     for (const formation of coin.formations || []) {
       const formId = formation.id || formation.patternKey;
@@ -167,10 +172,6 @@ export function scanNotificationSignals(
         || oiFault === 'network-error' || oiFault === 'http-error')) {
       emit(coin, 'system', 'oi:' + oiFault, 'Дані OI недоступні · ' + coin.symbol,
         'Причина: ' + oiFault + ' · перевірка потоку даних потрібна');
-    }
-    if (Number.isFinite(coin.lastUpdated) && now - coin.lastUpdated > 5 * 60_000) {
-      emit(coin, 'system', 'stale-market', 'Застарілі котирування · ' + coin.symbol,
-        'Дані останнього сканування старші за 5 хвилин');
     }
     // These are exchange-data anomalies, not inferred position directions.
     if (coin.marketType === 'futures' && finite(i?.oiChangePct)
