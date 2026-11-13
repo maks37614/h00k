@@ -140,6 +140,14 @@ export function ProfileHookChartSettings() {
       onChange={changeSettings}
       onApplyStrategy={applyStrategy}
       saveStatus={error ? 'error' : saving ? 'saving' : saved ? 'saved' : 'idle'}
+      marketDefaults={{
+        exchange: profile.defaultExchange === 'all' ? undefined : profile.defaultExchange,
+        marketType: profile.defaultMarketType === 'all' ? undefined : profile.defaultMarketType,
+        timeframe: profile.defaultTimeframe,
+      }}
+      previewTimezone={profile.timeZone && profile.timeZone !== 'auto' ? profile.timeZone : 'Europe/Warsaw'}
+      previewLongColor={draft.candleLongColor}
+      previewShortColor={draft.candleShortColor}
       onClose={() => {}}
     />
   </section>;
