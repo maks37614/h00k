@@ -1,16 +1,17 @@
 import type { Express, Request, Response, NextFunction } from 'express';
 import {
-  AuthFailure, COOKIE_NAME, usePostgresAuth, initializeIdentity, registerAccount, checkCredentials,
+  AuthFailure, COOKIE_NAME, usePostgresAuth, registerAccount, checkCredentials,
   verifyEmailToken, resendVerification, sendReset, changePasswordWithToken, readAccount,
-  createSession, cookieToken, currentSession, revokeSession, revokeAllSessions, listSessions,
+  createSession, currentSession, revokeSession, revokeAllSessions, listSessions,
   updateAccountProfile, loadArchive, saveArchive, deleteArchive, clearArchive, touchSession,
 } from './pgIdentity';
-
-type SessionResponse = Response & { locals: { userId?: string; sessionId?: string } };
 
 const cookieOptions = (days: number, remember = true) => ({
   httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax' as const,
   path: '/', ...(remember ? { maxAge: days * 24 * 60 * 60 * 1000 } : {}),
+});
+const clearSessionCookie = (res: Response) => res.clearCookie(COOKIE_NAME, {
+  path: '/', httpOnly: true, sameSite: 'lax', secure: process.env.NODE_ENV === 'production',
 });
 function failed(res: Response, error: unknown) {
   const known = error instanceof AuthFailure;
@@ -130,7 +131,7 @@ export function installPostgresIdentityRoutes(app: Express) {
   app.post('/api/auth/reset-password', protectOrigin, wrap(async (req, res) => {
     rateLimit(req, 'password-reset', 8, 60 * 60 * 1000);
     await changePasswordWithToken(req.body?.token, req.body?.password);
-    res.clearCookie(COOKIE_NAME, { path: '/' });
+    clearSessionCookie(res);
     res.json({ success: true, message: 'Пароль змінено. Увійдіть повторно.' });
   }));
   app.get('/api/auth/session', wrap(async (req, res) => {
@@ -143,12 +144,12 @@ export function installPostgresIdentityRoutes(app: Express) {
   }));
   app.post('/api/auth/logout', requirePostgresSession, wrap(async (_req, res) => {
     await revokeSession(res.locals.userId, res.locals.sessionId);
-    res.clearCookie(COOKIE_NAME, { path: '/' });
+    clearSessionCookie(res);
     res.json({ success: true });
   }));
   app.post('/api/auth/logout-all', requirePostgresSession, wrap(async (_req, res) => {
     await revokeAllSessions(res.locals.userId);
-    res.clearCookie(COOKIE_NAME, { path: '/' });
+    clearSessionCookie(res);
     res.json({ success: true });
   }));
   app.get('/api/auth/sessions', requirePostgresSession, wrap(async (_req, res) => {
@@ -157,7 +158,7 @@ export function installPostgresIdentityRoutes(app: Express) {
   app.delete('/api/auth/sessions/:id', requirePostgresSession, wrap(async (req, res) => {
     await revokeSession(res.locals.userId, String(req.params.id));
     const revokedCurrent = req.params.id === res.locals.sessionId;
-    if (revokedCurrent) res.clearCookie(COOKIE_NAME, { path: '/' });
+    if (revokedCurrent) clearSessionCookie(res);
     res.json({ success: true, revokedCurrent });
   }));
   app.patch('/api/account/profile', requirePostgresSession, wrap(async (req, res) => {
