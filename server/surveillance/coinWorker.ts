@@ -5,7 +5,7 @@ import { createSetupAlertsGroup, getUserLanguage } from '../alertService';
 import type { RawDepthDelta, RawTradeEvent } from './exchangeStream';
 import { acquireExchangeStream, type SharedExchangeStreamHandle } from './sharedExchangeStream';
 import { publishSurveillance } from '../surveillanceEvents';
-import { sharedMarketAnalysis, candleFingerprint } from './sharedMarketAnalysis';
+import { sharedMarketAnalysis } from './sharedMarketAnalysis';
 import { acquireSharedCandleFeed, type SharedCandleFeedHandle } from './sharedCandleFeed';
 import { LevelsAndFormationsEngine } from './levelsAndFormationsEngine';
 import { MacroAndNewsEngine } from './macroAndNewsEngine';
@@ -258,7 +258,7 @@ export class CoinWorker {
     // thresholds, third-touch state, DOM mode and notification history stay local.
     const shared = sharedMarketAnalysis.get(
       `${this.coin.exchange}:${this.coin.marketType}:${this.coin.symbol}`,
-      candleFingerprint([candles1d, candles4h, candles1h, candles15m, this.mtfEngine.getCandles('5m')]),
+      this.candleFeed.fingerprint(),
       () => ({
         structures: this.mtfEngine.getMultiTimeframeStructures(price),
         zones: this.levelsEngine.findSupportResistanceZones(candles1d, candles4h, candles1h),

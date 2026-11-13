@@ -11,6 +11,8 @@ interface SharedCandleEntry {
   refs: number;
   engine: MultiTimeframeEngine;
   tradeWindow: SharedMarketTradeWindow;
+  generation: number;
+  revision: number;
   source: SharedExchangeStreamHandle;
   ready: Promise<void>;
   initialized: boolean;
@@ -18,6 +20,7 @@ interface SharedCandleEntry {
   pending: RawTradeEvent[];
 }
 const candleFeeds = new Map<string,SharedCandleEntry>();
+let nextFeedGeneration = 0;
 
 async function prime(entry: SharedCandleEntry, exchange: ExchangeId,
   market: MarketType, symbol: string): Promise<void> {
@@ -28,8 +31,10 @@ async function prime(entry: SharedCandleEntry, exchange: ExchangeId,
     const data = await Promise.all(frameSpecs.map(([tf,n])=>
       fetchKlines(exchange,market,symbol,tf,n).catch(()=>[])));
     if (entry.destroyed) return;
-    for (let i=0;i<frameSpecs.length;i++) if(data[i].length)
+    for (let i=0;i<frameSpecs.length;i++) if(data[i].length) {
       entry.engine.setCandles(frameSpecs[i][0],data[i]);
+      entry.revision++;
+    }
   } catch { /* Missing history must not prevent live candle updates. */ }
   finally {
     if (!entry.destroyed) {
@@ -39,7 +44,10 @@ async function prime(entry: SharedCandleEntry, exchange: ExchangeId,
       for (const trade of entry.pending) {
         // An initial historical request can complete after a newer candle.
         // Never replay older buffered trades backwards into the candle timeline.
-        if (trade.time >= lastSnapshotBucket) entry.engine.updateWithTrade(trade);
+        if (trade.time >= lastSnapshotBucket) {
+          entry.engine.updateWithTrade(trade);
+          entry.revision++;
+        }
       }
     }
     entry.pending.length=0;
@@ -50,6 +58,8 @@ export interface SharedCandleFeedHandle {
   readonly engine: MultiTimeframeEngine;
   readonly tradeWindow: SharedMarketTradeWindow;
   readonly ready: Promise<void>;
+  /** Cheap immutable version token shared by all subscribers of one OHLCV engine. */
+  fingerprint(): string;
   destroy(): void;
 }
 
@@ -65,14 +75,17 @@ export function acquireSharedCandleFeed(symbol: string,exchange: ExchangeId,
     const created:SharedCandleEntry={
       key,refs:0,source,engine:new MultiTimeframeEngine(),
       tradeWindow:new SharedMarketTradeWindow(),
+      generation:++nextFeedGeneration,revision:0,
       ready:Promise.resolve(),initialized:false,destroyed:false,pending:[],
     };
     candleFeeds.set(key,created);
     source.on('trade',(trade:RawTradeEvent)=>{
       if(created.destroyed) return;
       created.tradeWindow.addTrade(trade);
-      if(created.initialized) created.engine.updateWithTrade(trade);
-      else {
+      if(created.initialized) {
+        created.engine.updateWithTrade(trade);
+        created.revision++;
+      } else {
         if(created.pending.length>=5000) created.pending.shift();
         created.pending.push(trade);
       }
@@ -85,6 +98,7 @@ export function acquireSharedCandleFeed(symbol: string,exchange: ExchangeId,
   let released=false;
   return {
     engine:current.engine,tradeWindow:current.tradeWindow,ready:current.ready,
+    fingerprint() { return `${current.generation}:${current.revision}`; },
     destroy() {
       if(released) return;
       released=true;
