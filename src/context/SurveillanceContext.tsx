@@ -119,7 +119,7 @@ export const SurveillanceProvider: React.FC<{ children: React.ReactNode }> = ({ 
   // Use SSE only for accounts with active personal surveillance. Users who
   // never added active monitors should not occupy a persistent VPS connection.
   useEffect(() => {
-    if (!user || (user as { isLocalUser?: boolean }).isLocalUser || !hasActiveMonitors) {
+    if (!user || !hasActiveMonitors) {
       streamConnected.current = false;
       return;
     }
