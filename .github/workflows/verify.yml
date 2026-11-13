@@ -7,6 +7,11 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# Keep one verification for the latest main revision; avoid overlapping 20-minute runs.
+concurrency:
+  group: verify-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   verify:
     runs-on: ubuntu-latest
@@ -29,6 +34,9 @@ jobs:
         run: node --import tsx --test tests/hookchart-visual-profiles.test.ts tests/hookchart-real-visual-preview.test.ts tests/hookchart-visual-save-runtime.test.ts tests/hookchart-visual-persistence.test.ts tests/hookchart-chart-connection.test.ts
       - name: Site Notifications regression tests
         run: node --import tsx --test tests/site-notifications.test.ts tests/notification-signals.test.ts tests/site-notification-server.test.ts
+      - name: Watchlist / favorite quotes regression tests
+        timeout-minutes: 2
+        run: node --import ./tests/fixtures/offline-network.mjs --import tsx --test tests/watchlist-drawer-responsive.test.ts tests/watchlist-independent-market-quotes.test.ts
       - name: Build
         run: npm run build
       - name: Tests
