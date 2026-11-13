@@ -7,10 +7,11 @@ const router=read('../server/notificationRouter.ts');
 const worker=read('../server/surveillance/coinWorker.ts');
 const service=read('../server/surveillanceService.ts');
 
-test('Telegram route gates on the actual event timeframe, not configured chart default',()=>{
-  assert.match(router,/timeframe: params\.timeframe/);
-  assert.doesNotMatch(router,/timeframe: params\.coin\?\.config\?\.timeframe/);
+test('dedicated Telegram delivery keeps actual event timeframe without profile-side scope gates',()=>{
   assert.match(router,/timeframe: payload\.timeframe/);
+  assert.doesNotMatch(router,/timeframe: params\.coin\?\.config\?\.timeframe/);
+  assert.doesNotMatch(router,/isUserTelegramCategoryAllowed|matchesNotificationScope/);
+  assert.match(router,/params\.userId === 'guest'/);
   assert.equal((router.match(/timeframe\?: string;/g)||[]).length,2);
 });
 

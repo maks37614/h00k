@@ -742,7 +742,7 @@ async function checkAlertsInternal(userId?: string) {
         && telegramConfig?.chatId && telegramConfig?.confirmedAt);
       try {
         if (!userAllowedTelegram) {
-          telegramError = 'Telegram не підключено або не підтверджено';
+          telegramError = 'Налаштування Telegram не підключені або не підтверджені';
         } else {
         const sendRes = await sendUserTelegramMessage(alert.userId || '', message, `price:${alert.id}:epoch:${alert.deliveryEpoch ?? 0}`);
         telegramDeliveryId = sendRes.deliveryId;
