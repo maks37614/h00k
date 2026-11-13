@@ -124,7 +124,7 @@ test('profile chart tab stays in flow on mobile and fills a taller desktop panel
   assert.match(modal, /h-\[min\(92dvh,1000px\)\]/);
   assert.match(modal, /max-h-\[calc\(100dvh-32px\)\]/);
   assert.match(modal, /'min-h-0 flex-1 overflow-hidden p-0'/);
-  assert.doesNotMatch(modal, /overflow-y-auto p-3 sm:p-6 \$\\{/);
+  assert.ok(!modal.includes("activeProfileSection === 'chart' ? 'flex-1'"));
 
   const begin = styles.lastIndexOf('/* Profile-only embedded chart settings.');
   const end = styles.indexOf('/* Help beside the Long / Short controls;', begin);
@@ -140,7 +140,7 @@ test('profile chart tab stays in flow on mobile and fills a taller desktop panel
   assert.match(profileStyles, /border:0!important/);
   assert.match(profileStyles, /border-radius:0!important/);
   assert.match(profileStyles, /background:transparent!important/);
-  assert.match(profileStyles, /profile-hookchart-settings \\.originalSettingsPanel \\.settingsHeader/);
+  assert.ok(profileStyles.includes('.hookchart-root.profile-hookchart-settings .originalSettingsPanel .settingsHeader'));
   assert.match(profileStyles, /-webkit-overflow-scrolling:touch/);
   assert.doesNotMatch(profileStyles, /height:min\(65dvh,620px\)/);
 });
