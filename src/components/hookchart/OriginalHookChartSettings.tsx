@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import type { ExchangeId, HookChartPreferences, MarketType } from '../../types';
+import type { ExchangeId, HookChartPreferences, MarketType, Timeframe } from '../../types';
 import { clampHookChartHistory } from '../../utils/hookChartHistory';
 import { normalizeDensityDistance } from './marketAnalytics';
 import { applyVisualDefaultsForDevice, VISUAL_CONTEXTS, VISUAL_ZOOM_MIN, VISUAL_ZOOM_MAX, VISUAL_GAP_MAX, getVisualProfile, makeVisualProfileKey, normalizedVisualProfiles, patchVisualProfile, visualDeviceForWidth, type VisualContextId, type VisualDevice, type VisualProfileKey } from './visualProfiles';
