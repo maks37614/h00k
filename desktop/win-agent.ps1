@@ -1,3 +1,4 @@
+param([switch]$Once)
 # Read-only Win32 discovery. No DLL injection, keyboard emulation, or orders.
 # One persistent PowerShell process avoids repeatedly starting Windows PowerShell.
 $ErrorActionPreference = 'Stop'
@@ -76,5 +77,6 @@ while ($true) {
     [Console]::Out.WriteLine('[]')
     [Console]::Out.Flush()
   }
+  if ($Once) { break }
   Start-Sleep -Milliseconds 650
 }
