@@ -121,8 +121,16 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
   const settingsSaveQueue = useRef(new Map<string, Promise<void>>());
   const soundSaveQueue = useRef(new Map<string, Promise<void>>());
   const lastServerHydration = useRef(new Map<string, string>());
+  const visibleBrowserNotificationsRef = useRef(new Set<Notification>());
+  const closeVisibleBrowserNotifications = useCallback(() => {
+    for (const notification of visibleBrowserNotificationsRef.current) {
+      try { notification.close(); } catch { /* Browser already dismissed it. */ }
+    }
+    visibleBrowserNotificationsRef.current.clear();
+  }, []);
 
   useEffect(() => {
+    closeVisibleBrowserNotifications();
     setSettingsState({ uid, settings: loadSettings(uid, profile?.uid === uid ? profile.siteNotificationSettings : undefined) });
     setItemState({ uid, items: loadStoredItems(uid) });
     deliveredSeen.current = { uid, ids: loadSeen(uid) };
@@ -132,8 +140,8 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
       ? (profile?.uid === uid && typeof profile.soundAlertsEnabled === 'boolean'
         ? profile.soundAlertsEnabled : readStoredSound(uid))
       : false;
-    updatePreferences({ soundAlertsEnabled: selectedSound });
-  }, [uid, updatePreferences]);
+    updatePreferences({ soundAlertsEnabled: currentSettings.enabled ? selectedSound : false });
+  }, [uid, updatePreferences, closeVisibleBrowserNotifications]);
 
   useEffect(() => {
     if (profile?.uid !== uid || !settingsRef.current.optedIn || !settingsRef.current.enabled
@@ -148,7 +156,8 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
     settingsRef.current = remote;
     setSettingsState({ uid, settings: remote });
     try { localStorage.setItem(siteNotificationSettingsKey(uid), JSON.stringify(remote)); } catch {}
-  }, [uid, profile?.siteNotificationSettings]);
+    if (!remote.enabled) closeVisibleBrowserNotifications();
+  }, [uid, profile?.siteNotificationSettings, closeVisibleBrowserNotifications]);
 
   // A second open tab must stop showing browser notifications immediately.
   // The storage event fires in the OTHER tabs; the initiating tab updates its
@@ -161,13 +170,14 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
       settingsRef.current = fromStorage;
       setSettingsState({ uid, settings: fromStorage });
       if (!fromStorage.enabled) {
+        closeVisibleBrowserNotifications();
         soundEnabledRef.current = false;
         updatePreferences({ soundAlertsEnabled: false });
       }
     };
     window.addEventListener('storage', onStorage);
     return () => window.removeEventListener('storage', onStorage);
-  }, [uid, updatePreferences]);
+  }, [uid, updatePreferences, closeVisibleBrowserNotifications]);
 
   // Restore authenticated server delivery permissions after sign-in or deployment.
   // Never inherit unversioned legacy settings as consent.
@@ -210,6 +220,7 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
     // Persist the deny before any asynchronous profile/Telegram work. Other
     // tabs and in-flight callbacks check this marker before sending anything.
     if (disabling) {
+      closeVisibleBrowserNotifications();
       try { localStorage.setItem(siteNotificationMuteKey(currentUid),
         String(Math.max(Date.now(), settingsRef.current.enabledAt + 1))); } catch {}
       soundEnabledRef.current = false;
@@ -254,7 +265,7 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
       settingsSaveQueue.current.set(currentUid, task);
       await task;
     }
-  }, [user?.uid, updateProfileData, updatePreferences]);
+  }, [user?.uid, updateProfileData, updatePreferences, closeVisibleBrowserNotifications]);
 
   const setSoundEnabled = useCallback(async (enabled: boolean) => {
     const currentUid = uidRef.current;
@@ -306,7 +317,13 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
     if (soundEnabledRef.current) playSiteNotificationSound(settingsRef.current.sound);
     if (settingsRef.current.browserPush && typeof document !== 'undefined' && document.hidden
       && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
-      try { new Notification(event.title, { body: event.description, icon: '/favicon.ico' }); } catch {}
+      try {
+        const visible = new Notification(event.title, {
+          body: event.description, icon: '/favicon.ico',
+        });
+        visibleBrowserNotificationsRef.current.add(visible);
+        visible.onclose = () => { visibleBrowserNotificationsRef.current.delete(visible); };
+      } catch { /* Browser may forbid native notification displays. */ }
     }
   }, [replaceItems]);
 
