@@ -414,18 +414,19 @@ export const AlertsProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const deleteHistoryItem = useCallback(
     async (id: string): Promise<boolean> => {
       if (!user) return false;
-      setHistory((prev) => prev.filter((h) => h.id !== id));
-
-      // Delete on server
+      // Do not hide a history item until the server confirms its deletion.
       try {
-        await apiFetch(`/api/alerts/history/${encodeURIComponent(id)}?userId=${encodeURIComponent(user.uid)}`, {
+        const response = await apiFetch(`/api/alerts/history/${encodeURIComponent(id)}?userId=${encodeURIComponent(user.uid)}`, {
           method: 'DELETE',
         });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok || !result.success || userRef.current?.uid !== user.uid) return false;
+        setHistory((prev) => prev.filter((h) => h.id !== id));
+        return true;
       } catch (err) {
         console.error('Failed to delete history item on server:', err);
+        return false;
       }
-
-      return true;
     },
     [user]
   );
@@ -433,21 +434,15 @@ export const AlertsProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   // Clear entire history
   const clearHistory = useCallback(async (): Promise<number> => {
     if (!user) return 0;
-    const count = history.length;
+    const response = await apiFetch('/api/alerts/history/clear', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: user.uid }),
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || !result.success) throw new Error(result.error || 'Не вдалося очистити історію.');
+    if (userRef.current?.uid !== user.uid) return 0;
     setHistory([]);
-
-    // Clear on server
-    try {
-      await apiFetch('/api/alerts/history/clear', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: user.uid }),
-      });
-    } catch (err) {
-      console.error('Failed to clear history on server:', err);
-    }
-
-    return count;
+    return Number.isFinite(result.cleared) ? result.cleared : history.length;
   }, [user, history]);
 
   // Reactivate an alert from history or triggered list
