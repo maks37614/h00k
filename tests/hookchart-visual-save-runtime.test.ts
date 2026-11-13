@@ -176,14 +176,14 @@ test('144 visible candles, vertical zoom 0.4 and 81-bar gap update the preview i
   assert.equal(getViewport()!.autoY, false);
 });
 
-test('visual preview passes the same right margin to candles and time axis', () => {
+test('compact read-only preview follows the same saved gap slider without pointer editing', () => {
   const preview = readFileSync(new URL('../src/components/hookchart/HookChartVisualPreview.tsx', import.meta.url), 'utf8');
   const editor = readFileSync(new URL('../src/components/hookchart/OriginalHookChartSettings.tsx', import.meta.url), 'utf8');
   assert.match(preview, /const step = PLOT \/ \(visible \+ rightGap\)/);
   assert.match(preview, /profile\.rightGapBars/);
   assert.match(preview, /data-synthetic-hookchart/);
   assert.match(editor, /profile=\{selectedProfile\}/);
-  assert.match(editor, /onChange=\{onProfileChange\}/);
+  assert.doesNotMatch(editor, /<HookChartVisualPreview[\s\S]*?onChange=\{onProfileChange\}/);
   for (const key of ['visibleBars', 'verticalZoom', 'autoPriceScale', 'rightGapBars']) {
     assert.match(editor, new RegExp('onProfileChange\\(\\{ ' + key + ':'));
   }
