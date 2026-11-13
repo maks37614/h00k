@@ -26,7 +26,7 @@ export function formatCountdownBarLeft(ms: number): string {
  * Every HookChart may show a countdown, but no chart scene or indicators need
  * to execute React work for the passage of one wall-clock second.
  */
-export function ChartBarCountdown({ tf, intervalMs, lastBarStart }: {
+export const ChartBarCountdown = React.memo(function ChartBarCountdown({ tf, intervalMs, lastBarStart }: {
   tf: string;
   intervalMs: number;
   lastBarStart?: number;
@@ -36,4 +36,4 @@ export function ChartBarCountdown({ tf, intervalMs, lastBarStart }: {
   return <div className="barCountdown" role="timer" aria-label="Час до закриття бару" title={`До закриття свічки ${tf}`}>
     <b>{formatCountdownBarLeft(ms)}</b>
   </div>;
-}
+});
