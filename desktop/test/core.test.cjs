@@ -47,6 +47,7 @@ test('negative coordinates and floating bounds are valid for secondary monitors'
   const work = {x:-1920,y:0,width:1920,height:1080};
   const target = {x:-1600,y:160,width:1000,height:700};
   assert.equal(dockRects(target,work,'left',300,300,1).length,1);
+  assert.notDeepEqual(floatingRects(target,work,300,300,1,'left'), floatingRects(target,work,300,300,1,'right'));
   for(const bounds of floatingRects(target,work,500,300,4)) {
     assert.ok(bounds.x >= work.x && bounds.x+bounds.width <= work.x+work.width);
   }
