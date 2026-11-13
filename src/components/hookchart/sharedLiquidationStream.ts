@@ -60,10 +60,22 @@ export function createSharedLiquidationSubscriptions(connect: Connector = connec
       current.stop = connect({
         ...options,
         onSnapshot: (rows, connected) => {
-          current.rows.clear();
+          // A reconnect snapshot can lag behind a live cumulative Binance
+          // liquidation we already observed (for example after a server
+          // restart). Never roll an order's notional backwards or erase
+          // recent real events just because a snapshot is incomplete.
+          const previous = current.rows;
+          const merged = new Map<string, Liquidation>();
           for (const row of deduplicateLiquidations(rows)) {
-            current.rows.set(canonicalLiquidationId(row.id), row);
+            merged.set(canonicalLiquidationId(row.id), row);
           }
+          const oldest = Date.now() - RETAIN_MS;
+          for (const [id, row] of previous) {
+            if (row.t < oldest) continue;
+            const newer = merged.get(id);
+            if (!newer || row.usd > newer.usd) merged.set(id, row);
+          }
+          current.rows = merged;
           trim();
           current.hasSnapshot = true;
           current.connected = connected;
