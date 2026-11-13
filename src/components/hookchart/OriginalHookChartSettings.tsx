@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import type { ExchangeId, HookChartPreferences, MarketType, Timeframe } from '../../types';
+import type { ExchangeId, HookChartPreferences, MarketType } from '../../types';
 import { clampHookChartHistory } from '../../utils/hookChartHistory';
 import { normalizeDensityDistance } from './marketAnalytics';
 import { applyVisualDefaultsForDevice, VISUAL_CONTEXTS, VISUAL_ZOOM_MIN, VISUAL_ZOOM_MAX, VISUAL_GAP_MAX, getVisualProfile, makeVisualProfileKey, normalizedVisualProfiles, patchVisualProfile, visualDeviceForWidth, type VisualContextId, type VisualDevice, type VisualProfileKey } from './visualProfiles';
@@ -504,8 +504,8 @@ export function VisualContextPicker({ value, onChange }: {
 /** Real HookChart preview uses the current chart's candles, with optional one-time sample in profile settings. */
 function VisualProfileEditor({
   visualContext, visualDevice, selectedProfile, onContextChange, onDeviceChange,
-  onProfileChange, onReset, onApplyToAll, onCapture, live, previewCandles, previewSymbol,
-  previewTimeframe, previewExchange, previewMarketType, previewTimezone, previewLongColor, previewShortColor, marketDefaults, chartPreferences, saveStatus,
+  onProfileChange, onReset, onApplyToAll, onCapture, live, previewTimezone,
+  previewLongColor, previewShortColor, chartPreferences, saveStatus,
 }: {
   visualContext: VisualContextId;
   visualDevice: VisualDevice;
@@ -518,22 +518,17 @@ function VisualProfileEditor({
   onCapture?: () => void;
   live: boolean;
   saveStatus?: 'idle' | 'saving' | 'saved' | 'error';
-  previewCandles?: Candle[];
-  previewSymbol?: string;
-  previewTimeframe?: string;
-  previewExchange?: ExchangeId;
-  previewMarketType?: MarketType;
   previewTimezone?: string;
   previewLongColor?: string;
   previewShortColor?: string;
-  marketDefaults?: { exchange?: ExchangeId; marketType?: MarketType; timeframe?: Timeframe };
   chartPreferences?: HookChartPreferences;
 }) {
   return <div className="visualProfileEditor space-y-4">
-    <Section title="Реальний HookChart · масштаб і відступи">
+    <Section title="Штучний графік · точний масштаб і відступи">
       <div className="settingsHint">
-        Окремі профілі для Скрінера, Формацій і Термінала, а також для телефона й комп’ютера.
-        Зміна повзунків відразу застосовується до відкритого графіка відповідного типу та зберігається в профілі користувача.
+        Графік побудований зі штучних свічок і не підключається до бірж. Той самий рушій
+        HookChart застосовує налаштування масштабу та відступів. Окремі профілі для Скрінера,
+        Формацій, Термінала, телефона й комп’ютера зберігаються в профілі користувача.
         «Відтворення» не використовує ці налаштування.
       </div>
       <Setting label="Тип графіка">
@@ -542,15 +537,9 @@ function VisualProfileEditor({
       <Choice label="Пристрій" values={['mobile', 'desktop']} labels={['Телефон', 'Комп’ютер']}
         value={visualDevice} set={value => onDeviceChange(value as VisualDevice)} />
       <HookChartVisualPreview
-        candles={previewCandles}
-        symbol={previewSymbol}
-        timeframe={previewTimeframe}
-        exchange={previewExchange}
-        marketType={previewMarketType}
         timezone={previewTimezone}
         longColor={previewLongColor}
         shortColor={previewShortColor}
-        marketDefaults={marketDefaults}
         chartPreferences={chartPreferences}
         visualContext={visualContext}
         visualDevice={visualDevice}
@@ -626,15 +615,9 @@ export function OriginalHookChartSettings({
   onCaptureVisual,
   onResetVisual,
   saveStatus,
-  previewCandles,
-  previewSymbol,
-  previewTimeframe,
-  previewExchange,
-  previewMarketType,
   previewTimezone,
   previewLongColor,
   previewShortColor,
-  marketDefaults,
 }: {
   open: boolean;
   prefs: HookChartPreferences;
@@ -664,7 +647,6 @@ export function OriginalHookChartSettings({
   previewTimezone?: string;
   previewLongColor?: string;
   previewShortColor?: string;
-  marketDefaults?: { exchange?: ExchangeId; marketType?: MarketType; timeframe?: Timeframe };
 }) {
   const [tab, setTab] = useState<'main' | 'chart' | 'strategies' | 'hotkeys'>('main');
   const [visualContext, setVisualContext] = useState<VisualContextId>(activeVisualContext || 'screenerQuick');
@@ -997,15 +979,9 @@ export function OriginalHookChartSettings({
               ? () => onCaptureVisual(makeVisualProfileKey(visualContext, visualDevice)) : undefined}
             live={!!currentViewport}
             saveStatus={saveStatus}
-            previewCandles={previewCandles}
-            previewSymbol={previewSymbol}
-            previewTimeframe={previewTimeframe}
-            previewExchange={previewExchange}
-            previewMarketType={previewMarketType}
             previewTimezone={previewTimezone}
             previewLongColor={previewLongColor}
             previewShortColor={previewShortColor}
-            marketDefaults={marketDefaults}
             chartPreferences={prefs}
           />
         ) : tab === 'strategies' ? (
