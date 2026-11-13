@@ -7,7 +7,7 @@ Var /GLOBAL h00kShortcutWanted
 
 !macro customWelcomePage
   !define MUI_WELCOMEPAGE_TITLE "h00k Desktop"
-  !define MUI_WELCOMEPAGE_TEXT "Smart Dock$\r$\n$\r$\nConnect h00k to MetaScalp, Tiger.Trade, or Vataga.$\r$\n$\r$\nClick Next to continue."
+  !define MUI_WELCOMEPAGE_TEXT "Smart Dock$\r$\n$\r$\nПідключіть h00k до MetaScalp, Tiger.Trade або Vataga.$\r$\n$\r$\nНатисніть Далі, щоб продовжити."
   !insertmacro MUI_PAGE_WELCOME
 !macroend
 
@@ -29,11 +29,11 @@ Function h00kShortcutPageCreate
   ${If} $0 == error
     Abort
   ${EndIf}
-  ${NSD_CreateLabel} 0 2u 100% 24u "h00k Desktop - desktop shortcut"
+  ${NSD_CreateLabel} 0 2u 100% 24u "h00k Desktop - ярлик на робочому столі"
   Pop $1
-  ${NSD_CreateLabel} 0 27u 100% 30u "Choose whether to add the robot h00k icon to your Windows desktop."
+  ${NSD_CreateLabel} 0 27u 100% 30u "Виберіть, чи потрібно додати ярлик із роботом h00k на робочий стіл Windows."
   Pop $1
-  ${NSD_CreateCheckbox} 0 70u 100% 18u "Create a desktop shortcut (h00k)"
+  ${NSD_CreateCheckbox} 0 70u 100% 18u "Створити ярлик h00k на робочому столі"
   Pop $h00kShortcutCheck
   ${If} $h00kShortcutWanted == "1"
     ${NSD_Check} $h00kShortcutCheck
