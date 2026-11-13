@@ -78,3 +78,17 @@ test('desktop defers loading invisible webviews and frees hidden ones after a gr
   assert.match(main,/win\.on\('moved', persistManualBounds\)/);
   assert.match(main,/win\.on\('resized', persistManualBounds\)/);
 });
+
+test('failed panel loads back off; external browser action accepts no renderer-supplied URL',()=>{
+  const fs=require('node:fs');
+  const path=require('node:path');
+  const main=fs.readFileSync(path.join(__dirname,'..','main.cjs'),'utf8');
+  const preload=fs.readFileSync(path.join(__dirname,'..','preload.cjs'),'utf8');
+  const settings=fs.readFileSync(path.join(__dirname,'..','settings.html'),'utf8');
+  assert.match(main,/win\.__nextLoadAt = Date\.now\(\) \+ 15_000/);
+  assert.match(main,/ipcMain\.handle\('desktop:open-browser',event => \{/);
+  assert.match(main,/return shell\.openExternal\(WEBSITE\)/);
+  assert.match(preload,/openBrowser: \(\) => ipcRenderer\.invoke\('desktop:open-browser'\)/);
+  assert.match(settings,/byId\('browser'\)\.onclick/);
+  assert.match(settings,/api\.pick\(active,e\.target\.value\)/);
+});
