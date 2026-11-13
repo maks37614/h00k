@@ -1,111 +1,96 @@
-# h00k.top — PostgreSQL authentication rollout (staging first)
+# h00k.top — clean PostgreSQL-only registration
 
-## Status and safety boundary
+## Scope
 
-This branch is NOT a production-ready Firebase cutover until the migration and
-email verification tests below are complete. Do NOT merge or run the new Compose
-stack on the production h00k VPS just because CI builds successfully.
+The owner explicitly chose a **fresh start without migrating existing accounts**.
+No old login, user profile or archive is imported. Existing account holders must
+register anew with email + password and confirm the email address.
 
-The market-screener, terminal, replay and exchange WebSocket routes remain
-independent of account PostgreSQL. Existing server-side 24/7 alerts, Telegram
-linking and surveillance continue to use their own durable files and workers;
-preserving the existing \`h00k_app_data\` volume and user IDs is mandatory.
+The site continues to expose screener, terminal, chart, replay, formations,
+exchange WebSocket data, alerts, Telegram and surveillance routes. Personal
+features are available to **newly registered, verified PostgreSQL users**.
+The old authentication provider, browser SDK, obsolete access-code flow and
+cloud database rules have been removed from this branch.
 
-## Configuration (keep private)
+**This draft branch is NOT automatically live.** Test on staging first, including
+real SMTP message delivery, actual account registration and protected personal
+features. Do not replace production until all acceptance checks are green.
 
-1. Back up the entire VPS deployment, including \`h00k_app_data\`, current
-   source revision, Firestore exports and account data.
-2. Create a staging DNS name and use a staging SMTP sender.
-3. In an uncommitted \`.env\`, configure:
-   - \`POSTGRES_PASSWORD\`: \`openssl rand -hex 32\`
-   - \`PUBLIC_BASE_URL=https://STAGING_DOMAIN\`
-   - \`SMTP_HOST\`, \`SMTP_PORT\`, \`SMTP_USER\`, \`SMTP_PASSWORD\`, \`SMTP_FROM\`
-   - \`AUTH_TRUST_PROXY=1\` only when precisely one trusted reverse proxy
-     forwards to the loopback-only app.
-4. The Compose PostgreSQL service has **no published port**, a dedicated
-   persistent volume, maximum 30 connections, 64MB shared buffers, 512MiB
-   container RAM and 0.5 CPU. The auth Node pool is max 4 connections.
-5. Never commit \`.env\`, Firebase export files, session cookies or SMTP secrets.
+## Environment variables
 
-Run on the STAGING deployment only:
+For Docker Compose, configure a private .env file (never commit this file):
 
-    docker compose config --quiet
-    docker compose up -d --build
-    docker compose ps
-    curl -fsS http://127.0.0.1:3000/api/health
-    curl -fsS http://127.0.0.1:3000/api/auth/config
+```dotenv
+POSTGRES_PASSWORD=GENERATE_WITH_openssl_rand_hex_32
+PUBLIC_BASE_URL=https://h00k.top
+AUTH_TRUST_PROXY=1
+SMTP_HOST=YOUR_SMTP_HOST
+SMTP_PORT=587
+SMTP_USER=YOUR_SMTP_USER
+SMTP_PASSWORD=YOUR_SMTP_PASSWORD
+SMTP_FROM=YOUR_VERIFIED_SENDER
+```
 
-Do not expose PostgreSQL port 5432 or the Node port 3000 publicly.
+SMTP TLS is mandatory. Verification links last 24 hours; password reset
+links last 30 minutes. Without working SMTP, registration fails closed.
 
-## Existing account migration
+The Compose database is private (no published 5432 port), stores users and
+account settings in a persistent volume, and has 0.5 CPU / 512 MiB limits.
+The Node auth connection pool is capped at 4 clients. Password hashing
+concurrency is capped at 2 jobs so excessive logins cannot monopolize the VPS.
 
-The new identity table uses TEXT user IDs specifically to retain Firebase UIDs.
-Any account that changes UID would lose access to existing file-backed
-alerts/surveillance/favorites, so changing UID is prohibited.
+## Existing file-backed personal alerts
 
-Export using an authorized Firebase Admin client and normalize to:
+Existing `server/data` files and the Docker volume `h00k_app_data`
+may contain alerts and 24/7 monitors belonging to **former user IDs**.
+New PostgreSQL registrations get new user IDs. Orphan personal alert workers
+can still run independently if old server files are reused; they may continue
+sending notifications and wasting resources.
 
-    {
-      "users": [
-        {
-          "uid": "firebase-uid",
-          "email": "user@example.com",
-          "emailVerified": true,
-          "displayName": "Trader",
-          "profile": {"defaultExchange": "binance", "watchlist": []},
-          "archive": [{"id": "arch_example", "userId": "firebase-uid", "...": "..."}]
-        }
-      ]
-    }
+Before switching production:
+1. Make an encrypted backup of `h00k_app_data`, the current source revision,
+   current proxy configuration and all persistent user/surveillance files.
+2. In staging, identify which data files represent **personal alerts,
+   Telegram pairings, surveillance and history**, versus shared market caches.
+3. Archive and reset **only former-user personal state**, preserving shared
+   market data and caches. Explicitly verify old monitors stop.
+4. Never use `docker compose down -v` or delete the whole `h00k_app_data`
+   volume during rollback; this would also remove unrelated application data.
+5. Start fresh registrations and verify new per-user alerts, Telegram linking,
+   surveillance and archive storage.
 
-The importer runs in dry-run mode unless explicitly given \`--apply\`:
+The cleanup of old personal server files is an **operator staging action**
+and is not performed automatically by this branch.
 
-    docker cp /secure/firebase-normalized.json CONTAINER_NAME:/tmp/firebase-normalized.json
-    docker compose exec app node --import tsx scripts/import-firebase-users.ts --file /tmp/firebase-normalized.json
-    docker compose exec app node --import tsx scripts/import-firebase-users.ts --file /tmp/firebase-normalized.json --apply
+## Test and deploy on staging
 
-Importing creates password hashes that nobody knows; all existing users need a
-secure password-reset link. Never transfer raw Firebase passwords or publish
-password hashes. Importer intentionally does NOT delete or overwrite active
-PostgreSQL user accounts. Immediately remove the export from the container,
-host and backups once the migration has been validated under your retention policy.
+```bash
+docker compose config --quiet
+docker compose up -d --build
+docker compose ps
+curl -fsS http://127.0.0.1:3000/api/health
+curl -fsS http://127.0.0.1:3000/api/auth/config
+```
 
-**Not yet automated:** extracting Firebase Auth and Firestore data; migrating
-Firestore-only alert history and alert documents; reconciling archive
-per-user counts and user-linked caches. Existing \`server/data/alerts.json\`,
-\`alert_history.json\`, surveillance and Telegram files remain on the
-\`h00k_app_data\` volume and are not moved by the importer. Missing Cloud
-history must be migrated separately before Firebase is shut off.
+Run GitHub Actions and follow up with real browser smoke tests on desktop
+and mobile: register, receive/verify email, login, remember login, revoke
+sessions, password reset, edit profile, synchronize watchlist and HookChart
+settings, create/rearm/delete alerts, Telegram connect/test, start/stop
+24/7 surveillance, save/delete archived formations, screener, terminal,
+fullscreen chart, early W/M, replay and both exchange WebSocket streams.
 
-## Mandatory acceptance tests
+## Backup the new PostgreSQL database
 
-- Register a new address, verify via actual email, sign in/out, remember-login
-  across browser restart, revoke another session and logout-all.
-- Test invalid/expired/reused verification and password-reset links.
-- Ensure no cross-account archive, watchlist, alerts, Telegram or surveillance.
-- Compare pre/post-export counts and UID mapping for every migrated user.
-- Confirm triggered alerts remain triggered and cannot be re-armed by stale UI.
-- Test HookChart, terminal, full-screen charts, formations, early W/M, replay,
-  liquidation metrics and Binance/Bybit WebSockets without changes.
-- Check CPU, RAM, session query duration, active connections and auth rate-limit
-  activity on 2CPU/4GiB VPS during a staged login/load test.
-- Verify restore from PostgreSQL and app_data backup before production switch.
+```bash
+docker compose exec -T postgres pg_dump -U h00k -Fc h00k_users > h00k-users-$(date +%F).dump
+```
 
-## Backups
+Keep an encrypted and tested copy outside the VPS. PostgreSQL dumps do not
+include `h00k_app_data`; back it up separately.
 
-Use an encrypted and access-restricted PostgreSQL dump on a filesystem with
-sufficient free space. One possible manual command:
+## Shared h00k Community account (future)
 
-    docker compose exec -T postgres pg_dump -U h00k -Fc h00k_users > h00k-users-$(date +%F).dump
-
-Back up \`h00k_app_data\` separately (it contains market alerts and surveillance
-records). Never use \`docker compose down -v\` during migration or rollback.
-
-## h00k Community
-
-The future Community should authenticate through a dedicated, short-lived,
-single-use authorization-code exchange with the same central h00k identity
-provider, using separate client IDs/scopes and server-side session cookies.
-Do not copy the main-site cookie to wildcard \`*.h00k.top\`, and do not allow
-Community to read the private account database directly. The shared SSO
-protocol itself is a **separate integration step**, not implemented here.
+Community should use a dedicated authorization-code integration against
+the shared identity service, with separate roles and scopes. Do not reuse
+a parent-domain authentication cookie on wildcard user subdomains.
+**Community single-sign-on is not yet implemented by this change.**
