@@ -274,7 +274,7 @@ export const ProfileNotificationSettings: React.FC = () => {
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <button type="button" onClick={reset} className="inline-flex items-center gap-2 rounded-lg border border-rose-700/50 px-3 py-2 text-xs text-rose-300">
-          <BellOff className="h-4 w-4"/> Вимкнути абсолютно все на сайті
+          <BellOff className="h-4 w-4"/> Вимкнути всі сповіщення сайту
         </button>
         <span className="text-[10px] text-slate-500">Зміни зберігаються автоматично</span>
       </div>
