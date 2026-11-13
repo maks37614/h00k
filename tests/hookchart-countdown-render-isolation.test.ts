@@ -6,12 +6,14 @@ import { countdownBarLeftMs, formatCountdownBarLeft } from '../src/components/ho
 test('clock labels remain exact at 1-minute and 1-hour bar boundaries', () => {
   const start = 1710000000000;
   const minute = 60_000;
-  assert.equal(formatCountdownBarLeft(countdownBarLeftMs(start, minute, start)), '00:00');
-  assert.equal(formatCountdownBarLeft(countdownBarLeftMs(start + 1000, minute, start)), '00:00');
+  assert.equal(formatCountdownBarLeft(countdownBarLeftMs(start, minute, start)), '01:00');
+  assert.equal(formatCountdownBarLeft(countdownBarLeftMs(start + 1000, minute, start)), '00:59');
   const alignedStart = Math.floor(start / minute) * minute;
   assert.equal(formatCountdownBarLeft(countdownBarLeftMs(alignedStart, minute, alignedStart)), '01:00');
   assert.equal(formatCountdownBarLeft(countdownBarLeftMs(alignedStart + 59_000, minute, alignedStart)), '00:01');
-  assert.equal(formatCountdownBarLeft(countdownBarLeftMs(alignedStart + 60_000, minute, alignedStart)), '00:00');
+  assert.equal(formatCountdownBarLeft(countdownBarLeftMs(alignedStart + 60_000, minute, alignedStart)), '01:00',
+    'late exchange Kline must not hold the countdown at zero');
+  assert.equal(formatCountdownBarLeft(countdownBarLeftMs(alignedStart + 61_000, minute, alignedStart)), '00:59');
   const hour = 3600_000;
   assert.equal(formatCountdownBarLeft(countdownBarLeftMs(7200_000, hour, 7200_000)), '01:00:00');
   assert.equal(formatCountdownBarLeft(countdownBarLeftMs(7201_000, hour, 7200_000)), '59:59');
