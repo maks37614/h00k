@@ -4,7 +4,7 @@ export type SiteNotificationKind =
   | 'levels' | 'breakouts' | 'density' | 'round' | 'openInterest'
   | 'flow' | 'liquidations' | 'volume' | 'early' | 'quality'
   | 'favorites' | 'system' | 'composite';
-export type SiteNotificationSound = 'chime' | 'soft' | 'pulse';
+export type SiteNotificationSound = 'chime' | 'soft' | 'pulse' | 'custom';
 export type ImpulseExchange = 'binance' | 'bybit';
 export type ImpulseMarket = 'futures' | 'spot';
 export type NotificationCategoryKey = Exclude<SiteNotificationKind, 'volatility'>;
@@ -135,7 +135,7 @@ export function normalizeSiteNotificationSettings(input: unknown): SiteNotificat
     enabled: consent && d.enabled === true,
     enabledAt: typeof d.enabledAt === 'number' && Number.isFinite(d.enabledAt) && d.enabledAt > 0
       ? Math.floor(d.enabledAt) : 0,
-    sound: d.sound === 'soft' || d.sound === 'pulse' ? d.sound : 'chime',
+    sound: d.sound === 'soft' || d.sound === 'pulse' || d.sound === 'custom' ? d.sound : 'chime',
     // The master switch also revokes delivery channels; merely keeping a browser
     // permission granted is never consent to receive notifications.
     browserPush: consent && d.enabled === true && d.browserPush === true,
