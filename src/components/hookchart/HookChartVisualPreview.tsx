@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { HookChartPreferences } from '../../types';
 import { createSyntheticPreviewCandles } from './syntheticPreviewCandles';
 import {
@@ -11,7 +11,6 @@ import { captureVisualProfile, makeVisualProfileKey, VISUAL_GAP_MAX, type Visual
 const EMPTY_RISK: CascadeRisk = {
   score: 0, level: 'LOW', total5: 0, count5: 0, longUsd: 0, shortUsd: 0,
 };
-const OFFLINE_CANDLES = createSyntheticPreviewCandles(900);
 const EMPTY_DENSITIES: [] = [];
 const EMPTY_MARKET_PRINTS: [] = [];
 const EMPTY_LIQUIDATIONS: [] = [];
@@ -63,9 +62,9 @@ export function HookChartVisualPreview({
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const previewRef = useRef<HTMLDivElement>(null);
 
-  // Module-level deterministic data. No network call, per-candle subscription,
-  // interval or computation of live market indicators can be initiated here.
-  const activeCandles = OFFLINE_CANDLES;
+  // Create demo candles only when the editor actually mounts. Main charts pay
+  // no startup rendering or candle-generation cost while settings stay closed.
+  const activeCandles = useMemo(() => createSyntheticPreviewCandles(900), []);
   const activeSymbol = 'DEMO';
   const activeTimeframe = '15m';
   useEffect(() => {
