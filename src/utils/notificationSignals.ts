@@ -2,6 +2,55 @@ import type { ScannedCoin, SurveillanceEvent, DetectedFormation } from '../types
 import type { SiteNotificationKind, SiteNotificationSettings } from './siteNotifications';
 import { DEFAULT_SITE_NOTIFICATIONS, matchesNotificationScope, notificationEnabled } from './siteNotifications';
 
+export interface QualityTransition {
+  kind: 'reached' | 'crossed' | 'improved';
+  current: number;
+  previous: number | null;
+}
+type QualitySample = { latest: number; reference: number };
+/** Tracks the last observed/announced score so "improved" means a real increase. */
+export class QualityScoreTracker {
+  private readonly scores = new Map<string, QualitySample>();
+  constructor(snapshot: unknown = {}) {
+    if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot)) return;
+    for (const [id, value] of Object.entries(snapshot).slice(-2500)) {
+      if (!value || typeof value !== 'object') continue;
+      const item = value as Record<string, unknown>;
+      if (typeof item.latest === 'number' && Number.isFinite(item.latest)
+        && typeof item.reference === 'number' && Number.isFinite(item.reference)) {
+        this.scores.set(id, { latest: item.latest, reference: item.reference });
+      }
+    }
+  }
+  observe(id: string, score: number, threshold: number, improvement: number): QualityTransition | null {
+    if (!id || !Number.isFinite(score)) return null;
+    const prior = this.scores.get(id);
+    if (!prior) {
+      this.scores.set(id, { latest: score, reference: score });
+      return score >= threshold ? { kind: 'reached', current: score, previous: null } : null;
+    }
+    const previous = prior.latest;
+    prior.latest = score;
+    if (previous < threshold && score >= threshold) {
+      prior.reference = score;
+      return { kind: 'crossed', current: score, previous };
+    }
+    if (score < threshold) {
+      prior.reference = score;
+      return null;
+    }
+    if (score > previous && score - prior.reference >= improvement) {
+      const reference = prior.reference;
+      prior.reference = score;
+      return { kind: 'improved', current: score, previous: reference };
+    }
+    return null;
+  }
+  snapshot(): Record<string, QualitySample> {
+    return Object.fromEntries([...this.scores].slice(-2500));
+  }
+}
+
 export interface MarketNotificationSignal {
   id: string;
   kind: SiteNotificationKind;
@@ -66,6 +115,7 @@ export function scanNotificationSignals(
   settings: SiteNotificationSettings,
   favorites: readonly string[] = [],
   now = Date.now(),
+  qualityTracker?: QualityScoreTracker,
 ): MarketNotificationSignal[] {
   if (!settings.optedIn || !settings.enabled || !Array.isArray(coins)) return [];
   const result: MarketNotificationSignal[] = [];
@@ -135,12 +185,23 @@ export function scanNotificationSignals(
         emit(coin, 'density', formId, 'Підтверджена щільність · ' + coin.symbol,
           (ctx.side || 'BID/ASK') + ' · ' + formatPrice(ctx.densityUsd) + ' · ' + formation.name, true);
       }
+      const qualityKey = [coin.exchange, coin.marketType, coin.timeframe, coin.symbol, formId].join(':');
+      const transition = qualityTracker?.observe(qualityKey, score,
+        settings.minQualityScore, settings.qualityImprovement);
       if (score >= settings.minQualityScore) {
         emit(coin, 'formation', formId, 'Сильна формація · ' + coin.symbol,
           formation.name + ' · ' + score + '/100', true);
-        const scoreBand = Math.floor(score / Math.max(1, settings.qualityImprovement));
-        emit(coin, 'quality', formId + ':band' + scoreBand, 'Якість сигналу · ' + coin.symbol,
-          formation.name + ' · оцінка ' + score + '/100', true);
+        // Without prior samples, report reaching the threshold. In subsequent
+        // scans report only a real upward transition, never a downgrade.
+        if (!qualityTracker || transition) {
+          const newScore = transition?.current ?? score;
+          const improved = transition?.kind === 'improved';
+          emit(coin, 'quality', formId + ':score:' + newScore,
+            (improved ? 'Покращилася якість · ' : 'Досягнуто якості · ') + coin.symbol,
+            formation.name + ' · ' +
+              (improved && transition?.previous != null ? transition.previous + ' → ' : '') +
+              newScore + '/100', true);
+        }
         if (favorite) {
           emit(coin, 'favorites', formId, 'Формація з обраного · ' + coin.symbol,
             formation.name + ' · ' + score + '/100', true);
