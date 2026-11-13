@@ -67,7 +67,6 @@ function stripLegacySecrets(profile: UserProfile): UserProfile {
   delete clean.telegramBotToken;
   delete clean.telegramChatId;
   delete clean.telegramBotUsername;
-  delete clean.inviteCode;
   return clean;
 }
 function applySitePreferences(profile: UserProfile, uid: string) {
