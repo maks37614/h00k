@@ -19,6 +19,7 @@ interface NewSiteNotification {
   timestamp?: number;
   symbol?: string;
   changePct?: number;
+  rangePct?: number;
 }
 interface SiteNotificationsValue {
   settings: SiteNotificationSettings;
@@ -264,13 +265,22 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
       const outcome = tracker.push(price, now, config.impulseThresholdPct);
       if (!outcome) return;
       const sign = outcome.changePct >= 0 ? '+' : '';
+      const elapsed = outcome.durationSeconds < 60
+        ? outcome.durationSeconds + ' с'
+        : (outcome.durationSeconds / 60).toFixed(1) + ' хв';
       emit({
-        id: 'impulse:' + config.impulseExchange + ':' + config.impulseMarket + ':' + symbol + ':' + Date.now(),
-        kind: 'impulse', symbol, changePct: outcome.changePct,
-        title: (outcome.changePct >= 0 ? '▲ Імпульс зростання · ' : '▼ Імпульс падіння · ') + symbol,
-        description: sign + outcome.changePct.toFixed(2) + '% за ' +
-          config.impulseWindowMinutes + ' хв (вікно) · ' + config.impulseExchange.toUpperCase()
-          + ' · ' + config.impulseMarket,
+        id: outcome.kind + ':' + config.impulseExchange + ':' + config.impulseMarket + ':' + symbol + ':' + now,
+        kind: outcome.kind, symbol,
+        changePct: outcome.kind === 'impulse' ? outcome.changePct : undefined,
+        rangePct: outcome.kind === 'volatility' ? outcome.rangePct : undefined,
+        title: outcome.kind === 'volatility'
+          ? '≈ Сплеск волатильності · ' + symbol
+          : (outcome.changePct >= 0 ? '▲ Імпульс зростання · ' : '▼ Імпульс падіння · ') + symbol,
+        description: (outcome.kind === 'volatility'
+          ? 'Діапазон коливань ' + outcome.rangePct.toFixed(2) + '%'
+          : sign + outcome.changePct.toFixed(2) + '%')
+          + ' за ' + elapsed + ' (вікно ' + config.impulseWindowMinutes + ' хв) · '
+          + config.impulseExchange.toUpperCase() + ' · ' + config.impulseMarket,
       });
     };
     const connect = () => {
