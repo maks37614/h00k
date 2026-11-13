@@ -132,7 +132,7 @@ export function EarlyFormationDetailsModal({
             {onSendMetaScalp && (
               <button type="button" onClick={() => onSendMetaScalp(coin)}
                 className="flex items-center gap-1.5 p-2 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/40"
-                title={'MetaScalp · ' + metaScalpBinding} aria-label="Відкрити MetaScalp">
+                title={'Лінковка · ' + metaScalpBinding} aria-label="Відкрити MetaScalp">
                 <Zap className="w-4 h-4" />
                 <span className="hidden sm:inline font-mono text-[10px]">{metaScalpBinding}</span>
               </button>
