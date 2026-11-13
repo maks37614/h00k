@@ -22,9 +22,11 @@ export class AuthFailure extends Error {
 let pool: Pool | undefined;
 let initialized: Promise<void> | undefined;
 function database(): Pool {
-  if (!process.env.DATABASE_URL) throw new Error('DATABASE_URL is required for H00K_AUTH_BACKEND=postgres');
+  if (!process.env.DATABASE_URL && !(process.env.PGHOST && process.env.PGUSER && process.env.PGPASSWORD && process.env.PGDATABASE)) {
+    throw new Error('Set DATABASE_URL or PGHOST, PGUSER, PGPASSWORD, PGDATABASE for PostgreSQL auth');
+  }
   if (!pool) pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
+    connectionString: process.env.DATABASE_URL || undefined,
     max: 4,
     idleTimeoutMillis: 15_000,
     connectionTimeoutMillis: 4_000,
@@ -158,7 +160,7 @@ export async function registerAccount(emailInput: unknown, passwordInput: unknow
       [id, email, passwordHash, displayName, JSON.stringify({
         defaultExchange: 'all', defaultMarketType: 'all', defaultTimeframe: '1h',
         soundAlertsEnabled: true, marketSentimentExpanded: true,
-        watchlist: [], watchlistFolders: {}, metaScalpSettings: {},
+        watchlist: [], watchlistFolders: {},
         chartTradeMarkers: { showEntry: true, showTarget: true, showStop: true },
         chartLabelSettings: { entry: true, target: true, stop: true },
         terminalSettings: { columns: 2, blockHeight: 'medium', blocks: [] },
