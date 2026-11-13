@@ -1,17 +1,21 @@
 {
   "name": "h00k-desktop",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "h00k Smart Dock for Windows trading terminals",
   "private": true,
   "main": "main.cjs",
   "scripts": {
     "start": "electron .",
     "test": "node --check main.cjs && node --check preload.cjs && node --check toolbar-preload.cjs && node --test test/*.test.cjs",
-    "dist": "electron-builder --win nsis --x64 --publish never"
+    "dist": "electron-builder --win nsis --x64 --publish never",
+    "brand-assets": "node scripts/generate-installer-assets.cjs",
+    "pretest": "npm run brand-assets",
+    "predist": "npm run brand-assets"
   },
   "devDependencies": {
     "electron": "^45.0.0",
-    "electron-builder": "^26.0.12"
+    "electron-builder": "^26.0.12",
+    "sharp": "^0.34.5"
   },
   "build": {
     "appId": "top.h00k.desktop",
@@ -33,6 +37,7 @@
       }
     ],
     "win": {
+      "icon": "build/h00k.ico",
       "target": [
         "nsis"
       ]
@@ -40,7 +45,15 @@
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
-      "createDesktopShortcut": true
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "installerIcon": "build/h00k.ico",
+      "uninstallerIcon": "build/h00k.ico",
+      "installerSidebar": "build/installerSidebar.bmp",
+      "uninstallerSidebar": "build/uninstallerSidebar.bmp",
+      "installerHeader": "build/installerHeader.bmp",
+      "include": "build/installer.nsh",
+      "artifactName": "h00k Desktop Setup ${version}.${ext}"
     }
   }
 }
