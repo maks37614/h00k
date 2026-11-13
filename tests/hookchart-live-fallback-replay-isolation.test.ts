@@ -43,3 +43,10 @@ test('Replay never subscribes to live market or liquidation sessions', () => {
   assert.match(canvas, /liquidations=\{replay \? \[\] : liveFeed\.liquidations\}/);
   assert.match(canvas, /showLiqRiskBlock=\{!replay/);
 });
+
+test('native HookChart does not launch the unused legacy per-chart countdown interval', () => {
+  const chart = readFileSync(new URL('../src/components/TradingViewChart.tsx', import.meta.url), 'utf8');
+  assert.match(chart, /if \(chartProvider === 'hookchart'\) return;\s*const updateCountdown/);
+  assert.match(chart, /clearInterval\(interval\);\s*\}, \[timeframe, chartProvider\]\)/);
+  assert.match(chart, /fetchSharedLiveFallbackKline/);
+});
