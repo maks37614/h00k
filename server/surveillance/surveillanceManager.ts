@@ -51,8 +51,14 @@ export class SurveillanceManager {
   public startWorkerForCoin(coin: SurveillanceCoin): CoinWorker {
     const existing = this.workers.get(this.workerKey(coin.id, coin.userId));
     if (existing) {
-      existing.updateCoin(coin);
-      return existing;
+      if (existing.matchesInstrument(coin)) {
+        existing.updateCoin(coin);
+        return existing;
+      }
+      // The record ID is stable, but the instrument changed. The old sockets,
+      // density history, OI baseline and market timers must not follow it.
+      existing.destroy();
+      this.workers.delete(this.workerKey(coin.id, coin.userId));
     }
 
     console.log(`[SurveillanceManager] Spawning 24/7 worker for #${coin.symbol} (${coin.exchange.toUpperCase()} ${coin.marketType})`);
@@ -63,9 +69,12 @@ export class SurveillanceManager {
 
   public updateWorkerCoin(coin: SurveillanceCoin) {
     const worker = this.workers.get(this.workerKey(coin.id, coin.userId));
-    if (worker) {
-      worker.updateCoin(coin);
+    if (!worker) return;
+    if (!coin.isActive) {
+      this.stopWorkerForCoin(coin.id, coin.userId);
+      return;
     }
+    this.startWorkerForCoin(coin);
   }
 
   public stopWorkerForCoin(coinId: string, userId: string): boolean {

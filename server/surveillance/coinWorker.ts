@@ -1,4 +1,5 @@
 import { ExchangeId, MarketType, SurveillanceCoin, Timeframe } from '../../src/types';
+import { normalizeExchangeSymbol } from '../../src/utils/marketSymbols';
 import { sharedOiPoller } from './sharedOiPoller';
 import { notificationRouter } from '../notificationRouter';
 import { createSetupAlertsGroup, getUserLanguage } from '../alertService';
@@ -67,6 +68,8 @@ export class CoinWorker {
   private setupEngine: SetupEngine;
 
   private isDestroyed = false;
+  /** Immutable underlying market; user edits may mutate this.coin in place. */
+  private readonly marketIdentity: string;
   private slowAnalysisInterval: NodeJS.Timeout | null = null;
   private releaseOiSubscription: (() => void) | null = null;
   private lastWsOiAt = 0;
@@ -91,6 +94,7 @@ export class CoinWorker {
     private macroEngine: MacroAndNewsEngine,
     private alertManager: StateMachineAndAlerts
   ) {
+    this.marketIdentity = CoinWorker.marketKey(coin);
     this.streamClient = acquireExchangeStream(coin.symbol, coin.exchange, coin.marketType);
     this.orderBookEngine = new OrderBookEngine(coin.symbol, coin.exchange, coin.marketType);
     this.candleFeed = acquireSharedCandleFeed(coin.symbol, coin.exchange, coin.marketType);
@@ -103,8 +107,19 @@ export class CoinWorker {
     this.init().catch((err) => console.error(`[CoinWorker ${coin.symbol}] Initialization failed:`, err));
   }
 
+  public static marketKey(coin: SurveillanceCoin): string {
+    return `${coin.exchange}:${coin.marketType}:${normalizeExchangeSymbol(coin.symbol)}:${String(coin.baseAsset || '').toUpperCase()}`;
+  }
+
+  public matchesInstrument(coin: SurveillanceCoin): boolean {
+    return this.marketIdentity === CoinWorker.marketKey(coin);
+  }
+
   public updateCoin(coin: SurveillanceCoin) {
-    if (coin.id !== this.coin.id || coin.userId !== this.coin.userId) throw new Error('Cannot transfer a surveillance worker to another owner');
+    if (coin.id !== this.coin.id || coin.userId !== this.coin.userId)
+      throw new Error('Cannot transfer a surveillance worker to another owner');
+    if (!this.matchesInstrument(coin))
+      throw new Error('Cannot reuse a surveillance worker for a different market');
     this.coin = coin;
     this.orderBookEngine.updateConfig({
       mode: coin.config.densityMode ?? 'AUTO',
