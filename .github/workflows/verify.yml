@@ -76,3 +76,5 @@ jobs:
         run: npm ci
       - name: PostgreSQL identity integration
         run: node --import tsx --test tests/postgres-auth-integration.test.ts
+      - name: Surveillance HTTP regression with PostgreSQL sessions
+        run: node --import ./tests/fixtures/offline-network.mjs --import tsx --test tests/surveillance-api.test.ts
