@@ -15,12 +15,12 @@ async function openScreener(viewport) {
   page.on('pageerror', e => console.log('PAGE ERROR', String(e).slice(0,300)));
   page.on('response', r => { if (r.status()>=400 && r.url().includes('h00k.top')) console.log('HTTP ERROR',r.status(),r.url().slice(0,180)); });
   try {
-    await page.waitForFunction(() => /BTC\\s*\\/\\s*USDT|Знайдено:\\s*\\d+/.test(document.body?.innerText || ''), null, { timeout: 40000 });
+    await page.waitForFunction(() => /BTC\s*\/\s*USDT|Знайдено:\s*\d+/.test(document.body?.innerText || ''), null, { timeout: 40000 });
   } catch { console.log('Screener did not populate after 40s'); }
-  console.log('PAGE BODY', (await page.locator('body').innerText()).slice(0,1800).replaceAll('\\n',' | '));
+  console.log('PAGE BODY', (await page.locator('body').innerText()).slice(0,1800).replaceAll('\n',' | '));
   await page.waitForTimeout(5000);
   const text = await page.locator('body').innerText();
-  if (!text.includes('Знайдено:') || !/BTC\\s*\\/\\s*USDT/.test(text)) {
+  if (!text.includes('Знайдено:') || !/BTC\s*\/\s*USDT/.test(text)) {
     throw new Error('Live Screener is not visible; refusing to save a misleading screenshot');
   }
   return page;
