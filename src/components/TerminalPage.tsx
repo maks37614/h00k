@@ -779,8 +779,8 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
               <button
                 onClick={() => onSendMetaScalp(activeCoin)}
                 className="flex h-7 w-6 shrink-0 items-center justify-center p-0 sm:h-auto sm:w-auto sm:p-2 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border-0 transition-all active:scale-95 cursor-pointer"
-                title={`Надіслати в MetaScalp (Група ${metaScalpBinding})`}
-                aria-label={`Надіслати в MetaScalp (Група ${metaScalpBinding})`}
+                title={`Надіслати в обраний термінал (Група ${metaScalpBinding})`}
+                aria-label={`Надіслати в обраний термінал (Група ${metaScalpBinding})`}
               >
                 <Zap className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-400 fill-amber-400/20" />
               </button>
