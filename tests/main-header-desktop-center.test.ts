@@ -1,0 +1,36 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { readFileSync } from 'node:fs';
+
+const source = readFileSync(new URL('../src/components/Header.tsx', import.meta.url), 'utf8');
+const brand = source.slice(
+  source.indexOf('<div data-header-brand-row'),
+  source.indexOf('{/* Navigation Category Tabs */}'),
+);
+const desktop = source.slice(
+  source.indexOf('{/* Navigation Category Tabs */}'),
+  source.indexOf('id="refresh-screener-btn"'),
+);
+
+test('desktop header centers the existing logo, fullscreen and language controls', () => {
+  assert.match(source, /xl:relative xl:justify-between/);
+  assert.match(brand, /xl:absolute xl:left-1\/2 xl:top-1\/2 xl:z-10 xl:flex xl:w-auto xl:-translate-x-1\/2 xl:-translate-y-1\/2/);
+  assert.match(brand, /src="\/h00k-robot-logo\.svg"/);
+  assert.match(brand, /onClick=\{toggleFullScreen\}/);
+  assert.match(brand, /onChange=\{\(e\) => changeSiteLanguage\(e\.target\.value as SupportedLanguage\)\}/);
+  assert.equal((source.match(/data-header-brand-row/g) ?? []).length, 1);
+});
+
+test('mobile keeps its original symmetric brand grid and controls', () => {
+  assert.match(brand, /grid min-h-9 w-full min-w-0 grid-cols-\[minmax\(0,1fr\)_auto_minmax\(0,1fr\)\]/);
+  assert.match(brand, /sm:min-h-10 sm:gap-x-2/);
+  assert.match(brand, /xl:hidden/);
+  assert.match(brand, /<option value="uk">🇺🇦 UA<\/option>/);
+});
+
+test('desktop quick formation totals are removed without removing nav formation count', () => {
+  assert.doesNotMatch(source, /Quick Stats Bar|Формацій:|▲ \{bullishCount\}|▼ \{bearishCount\}/);
+  assert.doesNotMatch(desktop, /bullishCount|bearishCount/);
+  assert.match(source, /\{formationsCount\}/);
+  assert.match(source, /id="nav-category-patterns-btn"/);
+});
