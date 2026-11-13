@@ -1,6 +1,6 @@
 /**
  * User-selected notification audio. Audio bytes stay in IndexedDB on this
- * browser/device; never upload them to our server or put them in Firestore.
+ * browser/device; never upload them to the server or store them in a cloud profile.
  */
 export const MAX_CUSTOM_SOUND_BYTES = 2 * 1024 * 1024;
 export const MAX_CUSTOM_SOUND_SECONDS = 20;
