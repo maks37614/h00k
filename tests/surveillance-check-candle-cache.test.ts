@@ -52,5 +52,5 @@ test('surveillance monitor coalesces REST checks and skips overlapping passes', 
   assert.match(source,/surveillanceCheckCandleCache\.get\(coin\.exchange, coin\.marketType, coin\.symbol, tf,/);
   assert.match(source,/if \(monitorPassInFlight\) return;/);
   assert.match(source,/monitorPassInFlight = true;/);
-  assert.match(source,/finally \{ monitorPassInFlight = false; \}/);
+  assert.match(source,/finally \{[\s\S]*?monitorPassInFlight = false;/);
 });
