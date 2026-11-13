@@ -12,7 +12,7 @@ import {
 } from '../utils/siteNotifications';
 import { playSiteNotificationSound } from '../utils/domSound';
 import type { ScannedCoin } from '../types';
-import { scanNotificationSignals, marketSurveillanceSignal, liquidationNotificationSignal, LiquidationCascadeTracker } from '../utils/notificationSignals';
+import { scanNotificationSignals, marketSurveillanceSignal, liquidationNotificationSignal, LiquidationCascadeTracker, QualityScoreTracker, ProximityAlertTracker } from '../utils/notificationSignals';
 import { matchesNotificationScope } from '../utils/siteNotifications';
 
 interface NewSiteNotification {
@@ -97,6 +97,12 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
   const deliveredSeen = useRef<{ uid: string; ids: Set<string> }>({ uid, ids: loadSeen(uid) });
   const uidRef = useRef(uid);
   const favoritesRef = useRef<readonly string[]>([]);
+  const qualityRef = useRef<{ uid: string; tracker: QualityScoreTracker }>({
+    uid, tracker: new QualityScoreTracker(),
+  });
+  const proximityRef = useRef<{ uid: string; tracker: ProximityAlertTracker }>({
+    uid, tracker: new ProximityAlertTracker(),
+  });
   uidRef.current = uid;
   const soundEnabledRef = useRef(preferences.soundAlertsEnabled);
   soundEnabledRef.current = preferences.soundAlertsEnabled;
@@ -225,7 +231,11 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
   const emit = useCallback((event: NewSiteNotification) => {
     if (!notificationEnabled(settingsRef.current, event.kind)) return;
     if (!event.id || !event.title) return;
-    if (event.kind !== 'system' && !matchesNotificationScope(settingsRef.current, event, favoritesRef.current)) return;
+    const streamEvent = event.kind === 'price' || event.kind === 'liquidations'
+      || (event.kind === 'impulse' || event.kind === 'volatility')
+        && /^(?:impulse|volatility):/.test(event.id);
+    if (event.kind !== 'system' && !matchesNotificationScope(settingsRef.current,
+        event, favoritesRef.current, { timeframeIndependent: streamEvent })) return;
     const owner = uidRef.current;
     if (deliveredSeen.current.uid !== owner) deliveredSeen.current = { uid: owner, ids: loadSeen(owner) };
     if (deliveredSeen.current.ids.has(event.id) || itemsRef.current.some(item => item.id === event.id)) return;
@@ -250,7 +260,28 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
   const processScan = useCallback((coins: readonly ScannedCoin[], favorites: readonly string[] = []) => {
     if (!settingsRef.current.optedIn || !settingsRef.current.enabled) return;
     favoritesRef.current = [...favorites];
-    for (const event of scanNotificationSignals(coins, settingsRef.current, favorites)) emit(event);
+    const currentUid = uidRef.current;
+    if (qualityRef.current.uid !== currentUid) {
+      let saved: unknown = {};
+      try { saved = JSON.parse(localStorage.getItem('h00k_quality_history_v1:' + currentUid) || '{}'); } catch {}
+      qualityRef.current = { uid: currentUid, tracker: new QualityScoreTracker(saved) };
+    }
+    if (proximityRef.current.uid !== currentUid) {
+      let saved: unknown = {};
+      try { saved = JSON.parse(localStorage.getItem('h00k_proximity_history_v1:' + currentUid) || '{}'); } catch {}
+      proximityRef.current = { uid: currentUid, tracker: new ProximityAlertTracker(saved) };
+    }
+    const tracker = qualityRef.current.tracker;
+    const proximity = proximityRef.current.tracker;
+    if (deliveredSeen.current.uid !== currentUid)
+      deliveredSeen.current = { uid: currentUid, ids: loadSeen(currentUid) };
+    const wasDelivered = (id: string) => deliveredSeen.current.ids.has(id);
+    for (const event of scanNotificationSignals(coins, settingsRef.current, favorites,
+      Date.now(), tracker, proximity, wasDelivered)) emit(event);
+    try {
+      localStorage.setItem('h00k_quality_history_v1:' + currentUid, JSON.stringify(tracker.snapshot()));
+      localStorage.setItem('h00k_proximity_history_v1:' + currentUid, JSON.stringify(proximity.snapshot()));
+    } catch { /* Read-only browser mode. */ }
   }, [emit]);
 
   // The server owns actual price-alert delivery. This is a local on-site view only.
@@ -280,7 +311,7 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
     for (const h of history.slice(0, 80)) {
       if (h.userId !== uid || !Number.isFinite(h.triggeredAt)
           || h.triggeredAt <= Math.max(clearedAt, settings.enabledAt)) continue;
-      if (!matchesNotificationScope(settings, h, favoritesRef.current)) continue;
+      if (!matchesNotificationScope(settings, h, favoritesRef.current, { timeframeIndependent: true })) continue;
       const id = h.alertId ? 'price:' + h.alertId + ':' + String(h.deliveryEpoch ?? 0) : 'price-history:' + h.id;
       if (existing.has(id)) continue;
       existing.add(id);

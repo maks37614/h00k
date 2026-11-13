@@ -68,8 +68,10 @@ export interface ServerNotificationContext {
 }
 export function isUserNotificationCategoryAllowed(uid: string, params: ServerNotificationContext): boolean {
   const cfg = getUserSiteNotificationSettings(uid);
-  return notificationEnabled(cfg, categoryForServerEvent(params.eventType, params.source))
-    && matchesNotificationScope(cfg, params);
+  const kind = categoryForServerEvent(params.eventType, params.source);
+  return notificationEnabled(cfg, kind)
+    && matchesNotificationScope(cfg, params, [],
+      { timeframeIndependent: kind === 'price' });
 }
 export function isUserTelegramCategoryAllowed(uid: string, params: ServerNotificationContext): boolean {
   const cfg = getUserSiteNotificationSettings(uid);
