@@ -199,18 +199,27 @@ export function matchesNotificationScope(
   source: { symbol?: string; exchange?: string; marketType?: string; timeframe?: string },
   favoriteIds: readonly string[] = [],
 ): boolean {
-  if (settings.scopeExchange !== 'all' && source.exchange && source.exchange !== settings.scopeExchange) return false;
-  if (settings.scopeMarket !== 'all' && source.marketType && source.marketType !== settings.scopeMarket) return false;
-  if (settings.scopeTimeframe !== 'all' && source.timeframe && source.timeframe !== settings.scopeTimeframe) return false;
+  // When a specific filter is selected, missing source metadata must NOT bypass it.
+  if (settings.scopeExchange !== 'all' && source.exchange !== settings.scopeExchange) return false;
+  if (settings.scopeMarket !== 'all' && source.marketType !== settings.scopeMarket) return false;
+  if (settings.scopeTimeframe !== 'all' && source.timeframe !== settings.scopeTimeframe) return false;
   const symbol = (source.symbol || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
   if (settings.scopeSymbols) {
     if (!symbol || !settings.scopeSymbols.split(/,\s*/).includes(symbol)) return false;
   }
   if (settings.onlyFavorites) {
-    if (!symbol || !favoriteIds.some(id => {
-      const clean = id.toUpperCase();
-      return clean.includes(symbol) && (!source.exchange || clean.includes(source.exchange.toUpperCase()));
-    })) return false;
+    // Keys are "exchange:market:symbol". Legacy plain symbols mean Binance Futures,
+    // not any other exchange carrying the same instrument.
+    if (!symbol || !source.exchange || !source.marketType ||
+      !favoriteIds.some(id => {
+        if (typeof id !== 'string') return false;
+        const parts = id.trim().toLowerCase().split(':');
+        const exchange = parts.length >= 2 ? parts[0] : 'binance';
+        const marketType = parts.length >= 3 ? parts[1] : 'futures';
+        const coin = (parts.length >= 3 ? parts.slice(2).join(':')
+          : parts.length === 2 ? parts[1] : parts[0]).toUpperCase();
+        return exchange === source.exchange && marketType === source.marketType && coin === symbol;
+      })) return false;
   }
   return true;
 }
