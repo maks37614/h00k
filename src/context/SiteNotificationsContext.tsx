@@ -37,7 +37,7 @@ const Context = createContext<SiteNotificationsValue | null>(null);
 export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, profile, updateProfileData } = useAuth();
   const { history } = useAlerts();
-  const { allEvents, coins: surveillanceCoins } = useSurveillance();
+  const { allEvents, coins: surveillanceCoins, loading: surveillanceLoading } = useSurveillance();
   const { preferences, updatePreferences } = useAppPreferences();
   const uid = user?.uid || 'guest';
 
@@ -61,6 +61,7 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
     : readNotificationItems(localStorage.getItem(siteNotificationStorageKey(uid)));
   const itemsRef = useRef(items);
   itemsRef.current = items;
+  const surveillanceSeen = useRef<{ uid: string; initialized: boolean; ids: Set<string> }>({ uid, initialized: false, ids: new Set() });
   const uidRef = useRef(uid);
   uidRef.current = uid;
   const soundEnabledRef = useRef(preferences.soundAlertsEnabled);
@@ -147,16 +148,16 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
     return () => window.removeEventListener('signalhook:alert-triggered', onPrice);
   }, [emit]);
 
-  // Populate existing price and surveillance events without replaying sound.
+  // Backfill price alerts from server history after login, without sound.
   useEffect(() => {
-    if (uid === 'guest' || !settings.enabled) return;
+    if (uid === 'guest' || !settings.enabled || !settings.price) return;
     const existing = new Set(itemsRef.current.map(item => item.id));
     let clearedAt = 0;
     try { clearedAt = Number(localStorage.getItem(siteNotificationClearedAtKey(uid))) || 0; } catch {}
     const collected: SiteNotificationItem[] = [];
-    if (settings.price) for (const h of history.slice(0, 80)) {
+    for (const h of history.slice(0, 80)) {
       if (h.userId !== uid || !Number.isFinite(h.triggeredAt) || h.triggeredAt <= clearedAt) continue;
-      const id = 'price-history:' + h.id;
+      const id = h.alertId ? 'price:' + h.alertId + ':' + String(h.deliveryEpoch ?? 0) : 'price-history:' + h.id;
       if (existing.has(id)) continue;
       existing.add(id);
       collected.push({
@@ -165,24 +166,55 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
         timestamp: h.triggeredAt, read: true,
       });
     }
-    const ownedSurveillanceIds = new Set(surveillanceCoins.filter(coin => coin.userId === uid).map(coin => coin.id));
-    if (settings.surveillance) for (const event of allEvents.slice(0, 80)) {
-      if (!ownedSurveillanceIds.has(event.coinId)) continue;
-      if (!Number.isFinite(event.timestamp) || event.timestamp <= clearedAt) continue;
-      const id = 'surveillance:' + event.coinId + ':' + event.id;
-      if (existing.has(id)) continue;
-      existing.add(id);
-      collected.push({
+    if (collected.length) replaceItems([...itemsRef.current, ...collected].sort((a, b) => b.timestamp - a.timestamp));
+  }, [uid, settings.enabled, settings.price, history, replaceItems]);
+
+  // Existing surveillance events are read-only history; only genuinely new events
+  // generate a badge and optional sound after the first complete per-user fetch.
+  useEffect(() => {
+    if (uid === 'guest' || surveillanceLoading) return;
+    if (surveillanceSeen.current.uid !== uid) {
+      surveillanceSeen.current = { uid, initialized: false, ids: new Set() };
+    }
+    const owned = new Set(surveillanceCoins.filter(coin => coin.userId === uid).map(coin => coin.id));
+    const scoped = allEvents.filter(event => owned.has(event.coinId));
+    const previous = surveillanceSeen.current;
+    const events = scoped.map(event => ({ event, id: 'surveillance:' + event.coinId + ':' + event.id }));
+    if (!previous.initialized) {
+      previous.initialized = true;
+      for (const { id } of events) previous.ids.add(id);
+      if (!settings.enabled || !settings.surveillance) return;
+      let clearedAt = 0;
+      try { clearedAt = Number(localStorage.getItem(siteNotificationClearedAtKey(uid))) || 0; } catch {}
+      const stored = new Set(itemsRef.current.map(item => item.id));
+      const old: SiteNotificationItem[] = [];
+      for (const { event, id } of events.slice(0, 80)) {
+        if (!Number.isFinite(event.timestamp) || event.timestamp <= clearedAt || stored.has(id)) continue;
+        stored.add(id);
+        old.push({
+          id, kind: 'surveillance', symbol: event.symbol,
+          title: event.title || 'Нагляд · ' + event.symbol,
+          description: event.description || event.type,
+          timestamp: event.timestamp, read: true,
+        });
+      }
+      if (old.length) replaceItems([...itemsRef.current, ...old].sort((a, b) => b.timestamp - a.timestamp));
+      return;
+    }
+    for (const { event, id } of events) {
+      if (previous.ids.has(id)) continue;
+      previous.ids.add(id);
+      if (!Number.isFinite(event.timestamp) || Date.now() - event.timestamp > 3 * 60_000) continue;
+      emit({
         id, kind: 'surveillance', symbol: event.symbol,
         title: event.title || 'Нагляд · ' + event.symbol,
         description: event.description || event.type,
-        timestamp: event.timestamp, read: true,
+        timestamp: event.timestamp,
       });
     }
-    if (collected.length) {
-      replaceItems([...itemsRef.current, ...collected].sort((a, b) => b.timestamp - a.timestamp));
-    }
-  }, [uid, settings.enabled, settings.price, settings.surveillance, history, allEvents, surveillanceCoins, replaceItems]);
+    // Keep the memory bounded with the current recent-events batch.
+    if (previous.ids.size > 1000) previous.ids = new Set(events.map(item => item.id));
+  }, [uid, allEvents, surveillanceCoins, surveillanceLoading, settings.enabled, settings.surveillance, emit, replaceItems]);
 
   // One direct WS per selected coin, never a global ticker REST loop.
   useEffect(() => {
