@@ -524,12 +524,11 @@ function VisualProfileEditor({
   chartPreferences?: HookChartPreferences;
 }) {
   return <div className="visualProfileEditor space-y-4">
-    <Section title="Штучний графік · точний масштаб і відступи">
+    <Section title="Компактний перегляд масштабу">
       <div className="settingsHint">
-        Графік побудований зі штучних свічок і не підключається до бірж. Той самий рушій
-        HookChart застосовує налаштування масштабу та відступів. Окремі профілі для Скрінера,
-        Формацій, Термінала, телефона й комп’ютера зберігаються в профілі користувача.
-        «Відтворення» не використовує ці налаштування.
+        Невелика нерухома схема не завантажує ринкові дані та не запускає рушій графіка.
+        Редагування лише повзунками нижче: справжній HookChart застосує точні значення до
+        свого розміру. Профілі Скрінера, Формацій, Термінала, телефона й комп’ютера окремі.
       </div>
       <Setting label="Тип графіка">
         <VisualContextPicker value={visualContext} onChange={onContextChange} />
@@ -537,15 +536,9 @@ function VisualProfileEditor({
       <Choice label="Пристрій" values={['mobile', 'desktop']} labels={['Телефон', 'Комп’ютер']}
         value={visualDevice} set={value => onDeviceChange(value as VisualDevice)} />
       <HookChartVisualPreview
-        timezone={previewTimezone}
         longColor={previewLongColor}
         shortColor={previewShortColor}
-        chartPreferences={chartPreferences}
-        visualContext={visualContext}
-        visualDevice={visualDevice}
         profile={selectedProfile}
-        onChange={onProfileChange}
-        saveStatus={saveStatus}
       />
       <Setting label="Кількість видимих свічок" desc="Кількість на ширину графіка; на вузькому екрані обмежується мінімальною шириною свічки.">
         <div className="flex items-center gap-2">
