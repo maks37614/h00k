@@ -12,6 +12,7 @@ import { ArchiveProvider } from './context/ArchiveContext';
 import { SurveillanceProvider } from './context/SurveillanceContext';
 import { LanguageProvider } from './context/LanguageContext';
 import { TelegramProvider } from './context/TelegramContext';
+import { SiteNotificationsProvider } from './context/SiteNotificationsContext';
 import { installChunkRecovery } from './utils/chunkRecovery';
 
 installChunkRecovery(window);
@@ -27,7 +28,9 @@ createRoot(document.getElementById('root')!).render(
           <SurveillanceProvider>
             <LanguageProvider>
               <TelegramProvider>
-                {publicLegalPage ? <LegalPage page={publicLegalPage} /> : <App />}
+                <SiteNotificationsProvider>
+                  {publicLegalPage ? <LegalPage page={publicLegalPage} /> : <App />}
+                </SiteNotificationsProvider>
               </TelegramProvider>
             </LanguageProvider>
           </SurveillanceProvider>
