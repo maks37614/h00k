@@ -1,4 +1,47 @@
 // Web Audio API sound for price alerts.
+import type { SiteNotificationSound } from './siteNotifications';
+import { getCustomNotificationSound } from './customNotificationSound';
+
+let activeUserSound: HTMLAudioElement | null = null;
+let activeUserSoundUrl: string | null = null;
+
+/** Stop an ongoing user melody immediately when notification consent is revoked. */
+export function stopCustomNotificationSound(): void {
+  if (activeUserSound) {
+    activeUserSound.pause();
+    activeUserSound.removeAttribute('src');
+    activeUserSound = null;
+  }
+  if (activeUserSoundUrl) {
+    URL.revokeObjectURL(activeUserSoundUrl);
+    activeUserSoundUrl = null;
+  }
+}
+async function playPersonalSound(uid: string, allowed?: () => boolean): Promise<void> {
+  try {
+    const saved = await getCustomNotificationSound(uid);
+    if (allowed && !allowed()) return;
+    if (!saved) {
+      // The selection can be synchronized with the profile, but files are
+      // device-local. Use a quiet default instead of a broken player.
+      playAlertChime();
+      return;
+    }
+    stopCustomNotificationSound();
+    const url = URL.createObjectURL(saved.blob);
+    const audio = new Audio(url);
+    activeUserSound = audio;
+    activeUserSoundUrl = url;
+    audio.volume = 0.75;
+    const cleanup = () => { if (activeUserSound === audio) stopCustomNotificationSound(); };
+    audio.onended = cleanup;
+    audio.onerror = cleanup;
+    await audio.play();
+  } catch {
+    // Browsers (especially mobile Safari) may block unattended audio.
+    stopCustomNotificationSound();
+  }
+}
 
 let audioCtx: AudioContext | null = null;
 
@@ -58,7 +101,15 @@ export function playAlertChime(): void {
 
 
 /** Original, selectable sounds for on-site notifications. Call only after category and mute gates. */
-export function playSiteNotificationSound(preset: 'chime' | 'soft' | 'pulse' = 'chime'): void {
+export function playSiteNotificationSound(
+  preset: SiteNotificationSound = 'chime',
+  uid = '',
+  allowed?: () => boolean,
+): void {
+  if (preset === 'custom') {
+    void playPersonalSound(uid, allowed);
+    return;
+  }
   if (preset === 'chime') {
     playAlertChime();
     return;
