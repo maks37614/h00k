@@ -23,15 +23,16 @@ test('preference does not leak to a different account or signed-out guest', () =
 test('the screener writes expansion changes to its account profile', () => {
   const widget = readFileSync(new URL('../src/components/MarketSentimentWidget.tsx', import.meta.url), 'utf8');
   const auth = readFileSync(new URL('../src/context/AuthContext.tsx', import.meta.url), 'utf8');
+  const identity = readFileSync(new URL('../server/pgIdentity.ts', import.meta.url), 'utf8');
   assert.match(widget, /const \{ user, profile, updateProfileData \} = useAuth\(\)/);
   assert.match(widget, /getMarketSentimentExpanded\(accountUid, profile\)/);
   assert.match(widget, /updateProfileData\(\{ marketSentimentExpanded: next \}\)/);
   assert.match(widget, /onClick=\{toggleExpanded\}/);
   assert.match(widget, /aria-expanded=\{expanded\}/);
   assert.match(widget, /\{expanded && \(/);
-  assert.match(auth, /marketSentimentExpanded: true/);
-  const rules = readFileSync(new URL('../firestore.rules', import.meta.url), 'utf8');
-  assert.match(rules, /marketSentimentExpanded is bool/);
+  assert.match(identity, /marketSentimentExpanded: true/);
+  assert.match(identity, /'marketSentimentExpanded'/);
+  assert.match(auth, /updateAccountProfile|\/api\/account\/profile/);
 });
 
 test('refreshing and polling sentiment does not save or reset expansion settings', () => {
