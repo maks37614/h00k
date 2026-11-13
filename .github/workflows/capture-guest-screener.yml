@@ -6,6 +6,7 @@ on:
       - feature/guest-landing-onboarding-20261112
     paths:
       - .github/workflows/capture-guest-screener.yml
+      - scripts/capture-public-screener.mjs
 
 permissions:
   contents: write
