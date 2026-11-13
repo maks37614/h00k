@@ -47,8 +47,12 @@ export const DEFAULT_TERMINAL_LINK_SETTINGS: TerminalLinkSettings = {
 };
 
 export function normalizeTerminalLinkSettings(saved?: Partial<TerminalLinkSettings> | null): TerminalLinkSettings {
-  const validProviders = ['metascalp', 'tiger', 'vataga', 'none'];
-  const provider = validProviders.includes(saved?.provider || '') ? saved!.provider! : 'metascalp';
+  // Vataga is intentionally hidden until its documented local API is available.
+  // Existing saved Vataga choices fail closed instead of silently switching to MetaScalp.
+  const vatagaPaused = saved?.provider === 'vataga';
+  const validProviders = ['metascalp', 'tiger', 'none'];
+  const provider: TerminalProvider = vatagaPaused ? 'none'
+    : validProviders.includes(saved?.provider || '') ? saved!.provider! : 'metascalp';
   const port = Number(saved?.tigerPort);
   const quality = Number(saved?.minQuality);
   const cooldown = Number(saved?.cooldownMs);
@@ -57,9 +61,9 @@ export function normalizeTerminalLinkSettings(saved?: Partial<TerminalLinkSettin
   ) as Record<TerminalLinkSource, boolean>;
   return {
     ...DEFAULT_TERMINAL_LINK_SETTINGS, ...saved, provider, sources: boolSources,
-    enabled: saved?.enabled !== false,
+    enabled: !vatagaPaused && saved?.enabled !== false,
     switchOnChartOpen: saved?.switchOnChartOpen !== false,
-    autoSignals: saved?.autoSignals === true, // Explicit opt-in only.
+    autoSignals: !vatagaPaused && saved?.autoSignals === true, // Explicit opt-in only.
     minQuality: Number.isFinite(quality) ? Math.min(100, Math.max(0, Math.round(quality))) : 0,
     cooldownMs: Number.isFinite(cooldown) ? Math.max(0, Math.min(60000, Math.round(cooldown))) : 1200,
     tigerPort: Number.isInteger(port) && port > 0 && port < 65536 ? port : 7819,
