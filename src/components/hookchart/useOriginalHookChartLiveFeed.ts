@@ -11,6 +11,7 @@ import { connectSharedHookChartLiquidations } from './sharedLiquidationStream';
 import { HookChartDensityBook, type DensityAutoStats } from './densityBook';
 import { EMPTY_SESSION_LIQUIDATIONS, getSessionLiquidationTotals, recordSessionLiquidation, sessionLiquidationScope, subscribeSessionLiquidations } from './liquidationSession';
 import { canonicalLiquidationId, deduplicateLiquidations, filterVisibleLiquidations } from './liquidationDisplay';
+import { shouldPublishDepthView, shouldPublishLiquidationView } from './feedPublishPolicy';
 
 type BookLevel = { p: number; q: number };
 
@@ -21,6 +22,14 @@ type LiveFeedArgs = {
   settings: HookChartPreferences;
   candles: Candle[];
   replay?: boolean;
+};
+
+const EMPTY_DEPTH_BOOK: { b: BookLevel[]; a: BookLevel[] } = { b: [], a: [] };
+const EMPTY_DENSITIES: Density[] = [];
+const EMPTY_MARKET_PRINTS: MarketPrint[] = [];
+const EMPTY_LIQUIDATIONS: Liquidation[] = [];
+const EMPTY_AUTO_STATS: DensityAutoStats = {
+  baseline: 0, bidCut: 0, askCut: 0, buy5m: 0, sell5m: 0,
 };
 
 const BINANCE_FUTURES_API = 'https://fapi.binance.com';
@@ -49,17 +58,15 @@ export function useOriginalHookChartLiveFeed({
       snapshot: () => getSessionLiquidationTotals(liquidationScope),
     }), [liquidationScope, replay]);
   const sessionTotals = useSyncExternalStore(sessionSubscription.subscribe, sessionSubscription.snapshot, () => EMPTY_SESSION_LIQUIDATIONS);
-  const [densities, setDensities] = useState<Density[]>([]);
-  const [marketPrints, setMarketPrints] = useState<MarketPrint[]>([]);
-  const [liquidations, setLiquidations] = useState<Liquidation[]>([]);
+  const [densities, setDensities] = useState<Density[]>(EMPTY_DENSITIES);
+  const [marketPrints, setMarketPrints] = useState<MarketPrint[]>(EMPTY_MARKET_PRINTS);
+  const [liquidations, setLiquidations] = useState<Liquidation[]>(EMPTY_LIQUIDATIONS);
   const [liquidationCut, setLiquidationCut] = useState(0);
   const [liquidationStreamLive, setLiquidationStreamLive] = useState(false);
   const [liquidationLastEventAt, setLiquidationLastEventAt] = useState<number | null>(null);
   const [densityCut, setDensityCut] = useState(0);
-  const [densityAutoStats, setDensityAutoStats] = useState<DensityAutoStats>({
-    baseline: 0, bidCut: 0, askCut: 0, buy5m: 0, sell5m: 0,
-  });
-  const [book, setBook] = useState<{ b: BookLevel[]; a: BookLevel[] }>({ b: [], a: [] });
+  const [densityAutoStats, setDensityAutoStats] = useState<DensityAutoStats>(EMPTY_AUTO_STATS);
+  const [book, setBook] = useState<{ b: BookLevel[]; a: BookLevel[] }>(EMPTY_DEPTH_BOOK);
   const [fundingRate, setFundingRate] = useState(Number.NaN);
   const [fundingHistory, setFundingHistory] = useState<number[]>([]);
   const [depthReady, setDepthReady] = useState(false);
@@ -112,6 +119,13 @@ export function useOriginalHookChartLiveFeed({
     const applyBook = () => {
       if (dead) return false;
       const next = depthBook.read(settingsRef.current, atrRef.current);
+      const wasReady = depthScopeRef.current === depthScope;
+      if (!shouldPublishDepthView(next.depthReady, wasReady)) {
+        // We must still withdraw LIVE transport status if a snapshot was
+        // never accepted, without forcing new empty arrays each second.
+        setDepthStatus(current => current === 'live' ? 'reconnecting' : current);
+        return false;
+      }
       depthScopeRef.current = next.depthReady ? depthScope : '';
       if (next.price) priceRef.current = next.price;
       setDensities(next.densities);
@@ -215,6 +229,7 @@ export function useOriginalHookChartLiveFeed({
     let dead = false;
     let raw: Liquidation[] = [];
     let latestEventAt = 0;
+    let previouslyHadRows = false;
     let pendingLiquidationPublish: ReturnType<typeof setTimeout> | null = null;
     const publish = () => {
       if (dead) return;
@@ -226,6 +241,10 @@ export function useOriginalHookChartLiveFeed({
       raw.sort((a, b) => a.t - b.t);
       while (raw.length && now - raw[0].t > 30 * 60_000) raw.shift();
       if (raw.length > 1500) raw.splice(0, raw.length - 1500);
+      // No event means nothing changes with wall-clock time. Avoid sending
+      // a brand-new [] into React every two seconds for every idle chart.
+      if (!shouldPublishLiquidationView(raw.length, previouslyHadRows)) return;
+      previouslyHadRows = raw.length > 0;
       const values = raw.filter(row => now - row.t <= 15 * 60_000)
         .map(row => row.usd).filter(value => Number.isFinite(value) && value > 0);
       const adaptive = !values.length ? 0 : values.length < 6
@@ -257,7 +276,7 @@ export function useOriginalHookChartLiveFeed({
       scheduleLiquidationPublish();
     };
 
-    setLiquidations([]);
+    setLiquidations(EMPTY_LIQUIDATIONS);
     setLiquidationCut(0);
     setLiquidationLastEventAt(null);
     const stop = connectSharedHookChartLiquidations({
@@ -381,8 +400,8 @@ export function useOriginalHookChartLiveFeed({
     liquidationSource,
     cascadeRisk: risk,
     densityCut: currentDepth ? densityCut : 0,
-    densityAutoStats: currentDepth ? densityAutoStats : { baseline: 0, bidCut: 0, askCut: 0, buy5m: 0, sell5m: 0 },
-    book: currentDepth ? book : { b: [], a: [] },
+    densityAutoStats: currentDepth ? densityAutoStats : EMPTY_AUTO_STATS,
+    book: currentDepth ? book : EMPTY_DEPTH_BOOK,
     fundingRate,
     fundingHistory,
     depthReady: currentDepth,
