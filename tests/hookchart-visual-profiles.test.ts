@@ -87,7 +87,7 @@ test('Graph tab uses existing personal settings persistence and preview without 
   }));
   assert.match(html, />Графік<\/button>/);
   const settings = src('../src/components/hookchart/OriginalHookChartSettings.tsx');
-  assert.match(settings,/Штучний графік · точний масштаб і відступи/);
+  assert.match(settings,/Компактний перегляд масштабу/);
   assert.match(settings,/Зберегти поточний вигляд графіка/);
   assert.match(settings,/Скинути цей профіль/);
   assert.match(settings,/Вертикальний зум/);
@@ -110,8 +110,9 @@ test('Screener, Formations, Terminal carry visual contexts, Replay passes none',
   const terminal = src('../src/components/terminal/TerminalChartWidget.tsx');
   const terminalPage = src('../src/components/TerminalPage.tsx');
   const replay = src('../src/components/replay/ReplayChart.tsx');
-  assert.match(canvas,/const activeVisualProfile = replay \|\| !settings\.visualProfiles\?\.\[activeVisualKey\]/);
-  assert.match(canvas,/const rightPaddingBars = replay \? 10 : getVisualProfile\(settings, activeVisualContext, visualDevice\)\.rightGapBars/);
+  assert.match(canvas,/const activeVisualProfile = replay \? undefined/);
+  assert.match(canvas,/terminalMode && terminalInitialView/);
+  assert.match(canvas,/const rightPaddingBars = replay \? 10 : activeVisualProfile\?\.rightGapBars/);
   assert.doesNotMatch(canvas,/settings\.rightPaddingEnabled|settings\.rightPadding \?\?/);
   assert.match(canvas,/onResetVisual=\{key =>/);
   assert.match(canvas,/visualProfileKey=\{replay \? undefined : activeVisualKey\}/);
