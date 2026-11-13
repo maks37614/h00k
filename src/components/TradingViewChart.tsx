@@ -514,9 +514,11 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
         lastUiUpdateTimestampRef.current = now;
         const update = pendingUiPriceRef.current;
         if (update) {
-          setCurrentPrice(update.price);
-          if (update.direction !== 'neutral') {
-            setPriceDirection(update.direction);
+          // Compact Terminal charts have no price badge. Updating its hidden
+          // React state on every tick used to rerender the whole chart wrapper.
+          if (showNavigationControls && !hideSymbolAndPrice) {
+            setCurrentPrice(update.price);
+            if (update.direction !== 'neutral') setPriceDirection(update.direction);
           }
           onLivePriceUpdate?.(update.price);
         }
@@ -529,9 +531,9 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
           if (uNow - lastUiUpdateTimestampRef.current >= 80 && pendingUiPriceRef.current) {
             lastUiUpdateTimestampRef.current = uNow;
             const update = pendingUiPriceRef.current;
-            setCurrentPrice(update.price);
-            if (update.direction !== 'neutral') {
-              setPriceDirection(update.direction);
+            if (showNavigationControls && !hideSymbolAndPrice) {
+              setCurrentPrice(update.price);
+              if (update.direction !== 'neutral') setPriceDirection(update.direction);
             }
             onLivePriceUpdate?.(update.price);
             setIsLiveConnected(true);
@@ -540,7 +542,7 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
         });
       }
     },
-    [onLivePriceUpdate, chartProvider]
+    [onLivePriceUpdate, chartProvider, showNavigationControls, hideSymbolAndPrice]
   );
 
   // Initialize the selected renderer; both share the same exchange feeds.
