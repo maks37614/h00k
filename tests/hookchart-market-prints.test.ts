@@ -136,3 +136,52 @@ test('multiple HookCharts with same symbol share one exchange WebSocket and init
     globalThis.WebSocket = originalSocket;
   }
 });
+
+test('live candle subscribers ignore REST seed and receive only new deduplicated trades', async () => {
+  const oldFetch = globalThis.fetch;
+  const oldWebSocket = globalThis.WebSocket;
+  let onMessage: ((data: any) => void) | null = null;
+  let analytic = 0, live = 0;
+  let stopAnalytics: (() => void) | null = null;
+  let stopLive: (() => void) | null = null;
+  const at = Date.now();
+  class FakeSocket {
+    static OPEN = 1;
+    onmessage: ((event: any) => void) | null = null;
+    onopen: ((event: any) => void) | null = null;
+    onclose: ((event: any) => void) | null = null;
+    onerror: ((event: any) => void) | null = null;
+    constructor(_url: string) {
+      onMessage = payload => this.onmessage?.({ data: JSON.stringify(payload) });
+    }
+    close() {}
+    send(_text: string) {}
+  }
+  try {
+    globalThis.fetch = (async () => ({ ok: true, json: async () => [
+      { a: 1, T: at - 1000, p: '10', q: '20', m: false },
+    ] })) as typeof fetch;
+    globalThis.WebSocket = FakeSocket as unknown as typeof WebSocket;
+    const scope = { exchange: 'binance' as const, marketType: 'spot' as const,
+      symbol: 'LIVESEEDTESTUSDT' };
+    stopAnalytics = subscribeMarketTrades(scope, {
+      onTrade: () => { analytic++; }, onPrints: () => {},
+    });
+    stopLive = subscribeMarketTrades(scope, {
+      liveOnly: true, wantsPrints: () => false,
+      onTrade: () => { live++; }, onPrints: () => {},
+    });
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(analytic, 1, 'analytics still receives the recent REST trade');
+    assert.equal(live, 0, 'REST seed must never mutate a live candle');
+    onMessage?.({ a: 1, T: at - 1000, p: '10', q: '20', m: false });
+    assert.equal(live, 0, 'overlapping exchange IDs are deduplicated');
+    onMessage?.({ a: 2, T: at, p: '10', q: '25', m: false });
+    assert.equal(live, 1);
+    assert.equal(analytic, 2);
+  } finally {
+    stopLive?.(); stopAnalytics?.();
+    globalThis.fetch = oldFetch;
+    globalThis.WebSocket = oldWebSocket;
+  }
+});
