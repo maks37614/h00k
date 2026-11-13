@@ -212,7 +212,7 @@ export function scanNotificationSignals(
         ['Опір', formation.levels?.resistancePrice],
         ['Neckline', formation.levels?.necklinePrice],
       ];
-      if (notificationEnabled(settings, 'levels')) {
+      if (notificationEnabled(settings, 'levels') && (count.get('levels') || 0) < 3 && result.length < 25) {
         for (const [label, level] of levelFields) {
           if (!finite(level)) continue;
           const levelDistance = distance(coin.currentPrice, level);
@@ -242,7 +242,7 @@ export function scanNotificationSignals(
       // A stored ROUND badge can outlive a move away from its level. Check
       // the actual scan price, not the original badge distance.
       const roundDistance = finite(ctx?.level) ? distance(coin.currentPrice, ctx.level) : Infinity;
-      if (ctx?.detected === true && finite(ctx.level)) {
+      if (ctx?.detected === true && finite(ctx.level) && (count.get('round') || 0) < 3 && result.length < 25) {
         const near = roundDistance <= settings.roundDistancePct;
         const roundKey = [coin.exchange, coin.marketType, coin.timeframe, coin.symbol,
           formId, 'round', ctx.level].join(':');
@@ -258,14 +258,18 @@ export function scanNotificationSignals(
           (ctx.side || 'BID/ASK') + ' · ' + formatPrice(ctx.densityUsd) + ' · ' + formation.name, true);
       }
       const qualityKey = [coin.exchange, coin.marketType, coin.timeframe, coin.symbol, formId].join(':');
-      const transition = qualityTracker?.observe(qualityKey, score,
-        settings.minQualityScore, settings.qualityImprovement);
+      const qualityHasRoom = notificationEnabled(settings, 'quality')
+        && (count.get('quality') || 0) < 3 && result.length < 25;
+      const transition = qualityHasRoom
+        ? qualityTracker?.observe(qualityKey, score,
+          settings.minQualityScore, settings.qualityImprovement)
+        : null;
       if (score >= settings.minQualityScore) {
         emit(coin, 'formation', formId, 'Сильна формація · ' + coin.symbol,
           formation.name + ' · ' + score + '/100', true);
         // Without prior samples, report reaching the threshold. In subsequent
         // scans report only a real upward transition, never a downgrade.
-        if (!qualityTracker || transition) {
+        if (qualityHasRoom && (!qualityTracker || transition)) {
           const newScore = transition?.current ?? score;
           const improved = transition?.kind === 'improved';
           emit(coin, 'quality', formId + ':score:' + newScore,
