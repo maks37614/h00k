@@ -5,8 +5,8 @@ import { getSharedMarketPrints, subscribeMarketTrades } from './marketTradeStrea
 import { calcCascadeRisk, type Candle, type Density, type Liquidation } from './engine';
 import { normalizeExchangeSymbol } from '../../utils/marketSymbols';
 import type { ChartDepthStatus } from '../../utils/hookChartDepthProtocol';
-import { connectHookChartDepth } from './depthStream';
-import { connectHookChartLiquidations } from './liquidationStream';
+import { connectSharedHookChartDepth } from './sharedDepthStream';
+import { connectSharedHookChartLiquidations } from './sharedLiquidationStream';
 import { HookChartDensityBook, type DensityAutoStats } from './densityBook';
 import { EMPTY_SESSION_LIQUIDATIONS, getSessionLiquidationTotals, recordSessionLiquidation, sessionLiquidationScope, subscribeSessionLiquidations } from './liquidationSession';
 import { canonicalLiquidationId, deduplicateLiquidations, filterVisibleLiquidations } from './liquidationDisplay';
@@ -110,7 +110,7 @@ export function useOriginalHookChartLiveFeed({
     };
     applyBookRef.current = applyBook;
     clearDepth();
-    const stopDepth = connectHookChartDepth({
+    const stopDepth = connectSharedHookChartDepth({
       exchange, marketType, symbol,
       onBook: update => {
         if (dead || !depthBook.apply(update)) return false;
@@ -209,7 +209,7 @@ export function useOriginalHookChartLiveFeed({
     setLiquidations([]);
     setLiquidationCut(0);
     setLiquidationLastEventAt(null);
-    const stop = connectHookChartLiquidations({
+    const stop = connectSharedHookChartLiquidations({
       exchange, symbol,
       onSnapshot: (events, connected) => {
         if (dead) return;
