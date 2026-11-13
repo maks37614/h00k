@@ -1,5 +1,6 @@
 import { SurveillanceCoin } from '../src/types';
 import { getUserTelegram } from './userTelegram';
+import { isUserTelegramCategoryAllowed } from './siteNotificationPrefs';
 import { sendUserTelegramMessage, lastTelegramDeliveryAt } from './telegramDelivery';
 import { findSurveillanceCoinById } from './surveillanceService';
 
@@ -127,6 +128,13 @@ export class NotificationRouter {
     const scopedKey = this.buildScopedKey(params);
     const now = Date.now();
 
+    // Nothing is sent by a background job without explicit profile opt-in.
+    if (!isUserTelegramCategoryAllowed(params.userId, {
+      source: params.source, eventType: params.eventType, symbol: params.symbol,
+      exchange: params.exchange, marketType: params.marketType,
+      timeframe: params.coin?.config?.timeframe,
+    })) return { allowed: false, reason: 'user_notifications_disabled', scopedKey };
+
     // 1. If coin context provided, check active status & config toggles
     if (params.coin) {
       if (params.coin.userId && params.coin.userId !== params.userId) return { allowed: false, reason: 'owner_mismatch', scopedKey };
@@ -140,7 +148,7 @@ export class NotificationRouter {
       }
 
       // Central telegramEnabled gate (#3)
-      if (coin.config?.telegramEnabled !== true) {
+      if (coin.config?.telegramEnabled === false) {
         return { allowed: false, reason: 'telegram_disabled_for_coin', scopedKey };
       }
 
