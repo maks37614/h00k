@@ -187,6 +187,26 @@ test('price and live liquidation events have no chart-timeframe and must not be 
     { timeframeIndependent: true }), false);
 });
 
+test('new formations are not starved by the first three previously delivered coins', () => {
+  const now = 1_000_000;
+  const chosen = normalizeSiteNotificationSettings({
+    optedIn: true, enabled: true, formations: true, minQualityScore: 88,
+  });
+  const coins = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'XRPUSDT'].map(symbol => {
+    const snapshot = coin(now);
+    snapshot.symbol = symbol;
+    return snapshot;
+  });
+  const delivered = new Set<string>();
+  const first = scanNotificationSignals(coins, chosen, [], now, undefined, undefined,
+    id => delivered.has(id)).filter(e => e.kind === 'formation');
+  assert.equal(first.length, 3);
+  first.forEach(e => delivered.add(e.id));
+  const later = scanNotificationSignals(coins, chosen, [], now + 1000, undefined, undefined,
+    id => delivered.has(id)).filter(e => e.kind === 'formation');
+  assert.deepEqual(later.map(e => e.symbol), ['XRPUSDT']);
+});
+
 test('surveillance event classification is grounded in server notificationType', () => {
   const row = { id: 'ev1', type: 'level', title: 'Пробій 4H', description: 'Закрита свічка',
     price: 100, timestamp: 500_000, severity: 'warning',
