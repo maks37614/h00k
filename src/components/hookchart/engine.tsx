@@ -462,6 +462,12 @@ export function Chart({candles,symbol,tf,tool,drawings,setDrawings,alerts,setAle
  useEffect(()=>{const id=setInterval(()=>setClockNow(Date.now()),1000);return()=>clearInterval(id)},[]);
  useEffect(()=>{if(!jumpOpen)setJumpDate(zoneDateKey(Date.now(),timezone))},[timezone]);useEffect(()=>{if(hideTimeJump&&jumpOpen)setJumpOpen(false)},[hideTimeJump,jumpOpen]);
  const intervalMs=TF_MS[tf]||300000,lastBarStart=candles.at(-1)?.t||Math.floor(clockNow/intervalMs)*intervalMs,barStart=(lastBarStart<=clockNow&&clockNow-lastBarStart<intervalMs*2)?lastBarStart:Math.floor(clockNow/intervalMs)*intervalMs,barLeftMs=Math.max(0,barStart+intervalMs-clockNow);
+ // Bucket labels only when prints/candle data changes, not on every cursor
+ // frame or mouse movement while the chart is being drawn.
+ const marketPrintBuckets=useMemo(
+   ()=>showMarketPrintSums?aggregateMarketPrintsByCandle(candles,marketPrints,intervalMs):[],
+   [showMarketPrintSums,candles,marketPrints,intervalMs],
+ );
  const formatBarLeft=(ms:number)=>{const total=Math.max(0,Math.ceil(ms/1000)),h=Math.floor(total/3600),m=Math.floor((total%3600)/60),sec=total%60;return h>0?`${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`:`${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`};
  const axisTimeFmt=useMemo(()=>new Intl.DateTimeFormat(language,{timeZone:timezone,hour:'2-digit',minute:'2-digit',...(intervalMs<60000?{second:'2-digit' as const}:{}),hour12:false}),[timezone,language,intervalMs]);
  const axisDateFmt=useMemo(()=>new Intl.DateTimeFormat(language,{timeZone:timezone,day:'2-digit',month:'2-digit'}),[timezone,language]);
@@ -786,7 +792,7 @@ export function Chart({candles,symbol,tf,tool,drawings,setDrawings,alerts,setAle
     // nearest-index snapping (which misassigned end-of-candle executions).
     q.save();
     q.font='700 10px system-ui';
-    const buckets=aggregateMarketPrintsByCandle(candles,marketPrints,intervalMs);
+    const buckets=marketPrintBuckets;
     const placed:{x:number,y:number,width:number}[]=[];
     const candidates=buckets.map(bucket=>{
       const candle=candles[bucket.index],x=g.x(candle.t);
