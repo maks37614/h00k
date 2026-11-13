@@ -1,6 +1,6 @@
 import type { Express, Request, Response, NextFunction } from 'express';
 import {
-  AuthFailure, COOKIE_NAME, registerAccount, checkCredentials,
+  AuthFailure, COOKIE_NAME, initializeIdentity, registerAccount, checkCredentials,
   verifyEmailToken, resendVerification, sendReset, changePasswordWithToken, readAccount,
   createSession, currentSession, revokeSession, revokeAllSessions, listSessions,
   updateAccountProfile, loadArchive, saveArchive, deleteArchive, clearArchive, touchSession,
@@ -93,6 +93,10 @@ export function installPostgresIdentityRoutes(app: Express) {
   app.use(['/api/auth', '/api/account'], (_req, res, next) => {
     res.setHeader('Cache-Control', 'no-store');
     next();
+  });
+  // Lazy and retryable schema readiness: auth errors never stop public market routes.
+  app.use(['/api/auth', '/api/account'], (_req, res, next) => {
+    void initializeIdentity().then(() => next(), error => failed(res, error));
   });
 
   app.post('/api/auth/register', protectOrigin, wrap(async (req, res) => {
