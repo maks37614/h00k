@@ -50,7 +50,7 @@ test('assisted NSIS bitmaps use Windows compatible 24-bit RGB and correct dimens
   const header=read('installerHeader.bmp');
   // Bright turquoise strip at the bottom of the h00k branded header.
   const stride=((150*3+3)&~3);
-  const at=54+3*stride+18*3;
+  const at=54+0*stride+18*3;
   assert.ok(header[at] >= 150,'blue channel in cyan header accent');
   assert.ok(header[at+1]>=100,'green channel in cyan header accent');
 });
