@@ -26,7 +26,7 @@ export interface TpSlConstructorSettings {
   version: 1;
   enabled: boolean;
   rules: Record<string, TpSlRule>;
-  /** Optional symbol+pattern overrides; stored in rules._coins for deployed v1 Firestore compatibility. */
+  /** Optional symbol+pattern overrides; stored in rules._coins for legacy v1 compatibility. */
   coinRules?: Record<string, TpSlRule>;
 }
 export interface TpSlTouchState {
@@ -91,7 +91,7 @@ export function getTpSlRule(settings: TpSlConstructorSettings | undefined | null
   const raw = bySymbol || global;
   return raw && typeof raw === 'object' ? normalizeTpSlRule(raw) : undefined;
 }
-/** Firestore's deployed v1 root schema allows ONLY version/enabled/rules and <=32 root rules.
+/** The legacy v1 root settings schema allows ONLY version/enabled/rules and <=32 root rules.
  * Nest the bounded per-coin map under one reserved rules key, avoiding any migration/deploy. */
 export function serializeTpSlSettings(input: TpSlConstructorSettings): TpSlConstructorSettings {
   const safe = normalizeTpSlSettings(input);
