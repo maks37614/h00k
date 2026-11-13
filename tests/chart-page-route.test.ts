@@ -4,6 +4,7 @@ import {
   chartPageHash,readChartPageHash,sameChartPageRoute,
   saveChartPageSnapshot,readChartPageSnapshot,
   readChartReturnHash,saveChartReturnHash,safeReturnHash,
+  chartPageVisualOrigin,chartPageVisualContext,
 } from '../src/utils/chartPageRoute';
 import { marketQuoteToChartCoin } from '../src/utils/chartPageCoin';
 import type { ScannedCoin } from '../src/types';
@@ -85,4 +86,41 @@ test('a direct chart link uses only market quotes rather than a full-market scan
   assert.equal(coin.timeframe,'1h');
   assert.deepEqual(coin.formations,[]);
   assert.equal(coin.hasFormations,false);
+});
+
+
+test('chart visual profiles follow the opening page, not the presence of a formation',()=>{
+  const base = { exchange:'bybit' as const, marketType:'futures' as const,
+    symbol:'BTCUSDT', timeframe:'15m' as const, kind:'coin' as const, formationId:'breakout-001' };
+  const fromScreener = { ...base, origin:'screener' as const };
+  const fromFormations = { ...base, origin:'formations' as const };
+  assert.equal(chartPageVisualContext(fromScreener,false),'screenerQuick');
+  assert.equal(chartPageVisualContext(fromScreener,true),'screenerFull');
+  assert.equal(chartPageVisualContext(fromFormations,false),'formationsQuick');
+  assert.equal(chartPageVisualContext(fromFormations,true),'formationsFull');
+
+  for (const route of [fromScreener,fromFormations]) {
+    const decoded = readChartPageHash(chartPageHash(route));
+    assert.deepEqual(decoded,route,'origin survives copy/reload of the chart link');
+    assert.equal(chartPageVisualOrigin(decoded),route.origin);
+  }
+  assert.equal(sameChartPageRoute(fromScreener,fromFormations),false);
+  const st=storage();
+  saveChartPageSnapshot(st,'trader-A',fromScreener,{coin:btc,formation:{id:'breakout-001'} as any});
+  assert.equal(readChartPageSnapshot(st,'trader-A',fromFormations),null,
+    'different origin snapshots must not accidentally overwrite each other');
+});
+
+test('old chart links and independent early/archive views retain safe visual defaults',()=>{
+  const oldCoin=readChartPageHash('#/chart/bybit/futures/BTCUSDT/15m?formation=breakout-001');
+  assert.ok(oldCoin);
+  assert.equal(chartPageVisualOrigin(oldCoin),'screener',
+    'an old Screener chart URL with a detected formation still uses Screener visual settings');
+  assert.equal(chartPageVisualContext(oldCoin,false),'screenerQuick');
+  assert.equal(chartPageVisualContext(oldCoin,true),'screenerFull');
+  const early=readChartPageHash('#/chart/bybit/futures/BTCUSDT/15m?kind=early&formation=early-wm');
+  const archive=readChartPageHash('#/chart/bybit/futures/BTCUSDT/15m?kind=archive&formation=archive-id');
+  assert.equal(chartPageVisualContext(early,true),'formationsFull');
+  assert.equal(chartPageVisualContext(archive,false),'formationsQuick');
+  assert.equal(readChartPageHash('#/chart/bybit/futures/BTCUSDT/15m?origin=malicious')?.origin,undefined);
 });
