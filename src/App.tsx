@@ -25,6 +25,7 @@ import { UserProfileModal } from './components/UserProfileModal';
 import { ArchiveModal } from './components/ArchiveModal';
 import { AlertToast, AlertToastState } from './components/AlertToast';
 import { useAlerts } from './context/AlertsContext';
+import { useSiteNotifications } from './context/SiteNotificationsContext';
 import { useAuth } from './context/AuthContext';
 import { useArchive } from './context/ArchiveContext';
 import { useSurveillance } from './context/SurveillanceContext';
@@ -505,16 +506,6 @@ export default function App() {
     }
   }, [user?.uid, profile?.watchlistFolders]);
 
-  // Sound enabled
-  const [soundEnabled, setSoundEnabled] = useState<boolean>(() => {
-    const prefs = getStoredPreferences();
-    return prefs.soundAlertsEnabled;
-  });
-
-  useEffect(() => {
-    setSoundEnabled((prev) => (prev === preferences.soundAlertsEnabled ? prev : preferences.soundAlertsEnabled));
-  }, [preferences.soundAlertsEnabled]);
-
   const [selectedPair, setSelectedPair] = useState<{
     coin: ScannedCoin;
     formation?: DetectedFormation;
@@ -566,6 +557,8 @@ export default function App() {
 
   // Telegram price alerts state
   const { activeAlertsCount } = useAlerts();
+  const { emit: emitSiteNotification } = useSiteNotifications();
+  const seenStrongFormations = useRef(new Set<string>());
   const [isTelegramModalOpen, setIsTelegramModalOpen] = useState<boolean>(false);
   const [telegramPrefill, setTelegramPrefill] = useState<any>(null);
   const [alertToast, setAlertToast] = useState<AlertToastState | null>(null);
@@ -577,6 +570,7 @@ export default function App() {
 
   // Authentication & Profile modals
   const [isProfileModalOpen, setIsProfileModalOpen] = useState<boolean>(false);
+  const [profileInitialSection, setProfileInitialSection] = useState<'account' | 'chart' | 'notifications'>('account');
 
   // Auto-dismiss Alert toast
   useEffect(() => {
@@ -997,30 +991,25 @@ export default function App() {
     }, { coin }, true);
   }, [chartRoute, selectedPair, openChartPage]);
 
-  // Play a gentle alert tone using Web Audio API
-  const playAlertSound = useCallback(() => {
-    if (!soundEnabled) return;
-    try {
-      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
-      const osc = audioCtx.createOscillator();
-      const gain = audioCtx.createGain();
-
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(587.33, audioCtx.currentTime); // D5
-      osc.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.15); // A5
-
-      gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.3);
-
-      osc.connect(gain);
-      gain.connect(audioCtx.destination);
-
-      osc.start();
-      osc.stop(audioCtx.currentTime + 0.3);
-    } catch (e) {
-      console.warn('Audio playback not permitted yet:', e);
+  // Strong formations enter the on-site notification center once per unique setup.
+  // The id is stable across repeated scans and browser reloads (persisted by the center).
+  const reportStrongFormations = useCallback((scanned: ScannedCoin[]) => {
+    let reported = 0;
+    for (const coin of scanned) {
+      for (const formation of coin.formations) {
+        if (formation.confidence < 88) continue;
+        const id = ['formation', coin.exchange, coin.marketType, coin.timeframe, coin.symbol, formation.id].join(':');
+        if (seenStrongFormations.current.has(id)) continue;
+        seenStrongFormations.current.add(id);
+        if (reported++ >= 3) continue; // Never flood the user on a bulk scan.
+        emitSiteNotification({
+          id, kind: 'formation', symbol: coin.symbol,
+          title: 'Сильна формація · ' + coin.symbol,
+          description: formation.name + ' · оцінка ' + formation.confidence + '/100 · ' + coin.exchange.toUpperCase(),
+        });
+      }
     }
-  }, [soundEnabled]);
+  }, [emitSiteNotification]);
 
   // Fetch screener data from API
   const fetchScreenerData = useCallback(async (currentTf = filters.timeframe, currentExchange = filters.exchange, currentMarket = filters.marketType) => {
@@ -1052,12 +1041,7 @@ export default function App() {
               setLastUpdated(Date.now());
               dataLoaded = true;
 
-              const hasHighConfidence = data.data.some((c: ScannedCoin) =>
-                c.formations.some((f) => f.confidence >= 88)
-              );
-              if (hasHighConfidence) {
-                playAlertSound();
-              }
+              reportStrongFormations(data.data as ScannedCoin[]);
               // A server scan can succeed while the server's public IP is
               // blocked from futures OI. Refresh ONLY the missing regular OI
               // directly from the browser; do not rescan or change Entry/SL/TP.
@@ -1085,6 +1069,7 @@ export default function App() {
           if (requestId !== scanRequestRef.current) return;
           setCoins(directCoins);
           setLastUpdated(Date.now());
+          reportStrongFormations(directCoins);
           dataLoaded = true;
         }
       }
@@ -1094,7 +1079,7 @@ export default function App() {
       if (scanAbortRef.current === controller) scanAbortRef.current = null;
       if (requestId === scanRequestRef.current) setIsLoading(false);
     }
-  }, [chartPageActive, filters.timeframe, filters.exchange, filters.marketType, filters.minVolumeUsd, playAlertSound]);
+  }, [chartPageActive, filters.timeframe, filters.exchange, filters.marketType, filters.minVolumeUsd, reportStrongFormations]);
 
   // Abort an in-flight browser scan on route transition, not merely its timer.
   useEffect(() => {
@@ -1186,17 +1171,6 @@ export default function App() {
     updateProfileData({ watchlistFolders: folders }).catch(() => {});
   };
 
-  // Toggle sound
-  const handleToggleSound = () => {
-    setSoundEnabled((prev) => {
-      const next = !prev;
-      try {
-        localStorage.setItem('crypto_screener_sound', String(next));
-      } catch (e) {}
-      return next;
-    });
-  };
-
   // Strict user-bound opt-in projection. Disabled mode returns the exact original arrays.
   const constructorSettings = useMemo(() =>
     profile?.uid === user?.uid && profile?.tpSlConstructorSettings
@@ -1281,8 +1255,6 @@ export default function App() {
         bullishCount={bullishCount}
         bearishCount={bearishCount}
         watchlistCount={watchlistCount}
-        soundEnabled={soundEnabled}
-        onToggleSound={handleToggleSound}
         onRefresh={() => earlyMode && activePage === 'screener' ? refreshFullEarlyScan() : fetchScreenerData()}
         onOpenWatchlist={() => {
           if (!user) {
@@ -1313,7 +1285,8 @@ export default function App() {
         surveillanceCount={surveillanceActiveCount}
         lastUpdated={lastUpdated}
         onOpenAuth={() => handleOpenAuthModal('signin', null)}
-        onOpenProfile={() => setIsProfileModalOpen(true)}
+        onOpenProfile={() => { setProfileInitialSection('account'); setIsProfileModalOpen(true); }}
+        onOpenNotificationSettings={() => { setProfileInitialSection('notifications'); setIsProfileModalOpen(true); }}
         activePage={activePage}
         onPageChange={handlePageChange}
       />}
@@ -1795,6 +1768,7 @@ export default function App() {
       <UserProfileModal
         key={`profile-${user?.uid || 'guest'}`}
         isOpen={isProfileModalOpen}
+        initialSection={profileInitialSection}
         onClose={() => setIsProfileModalOpen(false)}
         onOpenAlerts={() => handleOpenTelegramAlerts()}
         onOpenArchive={() => setIsArchiveModalOpen(true)}
