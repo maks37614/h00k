@@ -12,7 +12,7 @@ import {
 } from '../utils/siteNotifications';
 import { playSiteNotificationSound } from '../utils/domSound';
 import type { ScannedCoin } from '../types';
-import { scanNotificationSignals, marketSurveillanceSignal, liquidationNotificationSignal, LiquidationCascadeTracker, QualityScoreTracker } from '../utils/notificationSignals';
+import { scanNotificationSignals, marketSurveillanceSignal, liquidationNotificationSignal, LiquidationCascadeTracker, QualityScoreTracker, ProximityAlertTracker } from '../utils/notificationSignals';
 import { matchesNotificationScope } from '../utils/siteNotifications';
 
 interface NewSiteNotification {
@@ -99,6 +99,9 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
   const favoritesRef = useRef<readonly string[]>([]);
   const qualityRef = useRef<{ uid: string; tracker: QualityScoreTracker }>({
     uid, tracker: new QualityScoreTracker(),
+  });
+  const proximityRef = useRef<{ uid: string; tracker: ProximityAlertTracker }>({
+    uid, tracker: new ProximityAlertTracker(),
   });
   uidRef.current = uid;
   const soundEnabledRef = useRef(preferences.soundAlertsEnabled);
@@ -263,10 +266,17 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
       try { saved = JSON.parse(localStorage.getItem('h00k_quality_history_v1:' + currentUid) || '{}'); } catch {}
       qualityRef.current = { uid: currentUid, tracker: new QualityScoreTracker(saved) };
     }
+    if (proximityRef.current.uid !== currentUid) {
+      let saved: unknown = {};
+      try { saved = JSON.parse(localStorage.getItem('h00k_proximity_history_v1:' + currentUid) || '{}'); } catch {}
+      proximityRef.current = { uid: currentUid, tracker: new ProximityAlertTracker(saved) };
+    }
     const tracker = qualityRef.current.tracker;
-    for (const event of scanNotificationSignals(coins, settingsRef.current, favorites, Date.now(), tracker)) emit(event);
+    const proximity = proximityRef.current.tracker;
+    for (const event of scanNotificationSignals(coins, settingsRef.current, favorites, Date.now(), tracker, proximity)) emit(event);
     try {
       localStorage.setItem('h00k_quality_history_v1:' + currentUid, JSON.stringify(tracker.snapshot()));
+      localStorage.setItem('h00k_proximity_history_v1:' + currentUid, JSON.stringify(proximity.snapshot()));
     } catch { /* Read-only browser mode. */ }
   }, [emit]);
 
