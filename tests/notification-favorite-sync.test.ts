@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { normalizeNotificationFavoriteIds, normalizeSiteNotificationSettings, matchesNotificationScope } from '../src/utils/siteNotifications';
 
 test('favorite scopes sync canonical exchange-market pairs, not untrusted keys', () => {
-  const input = ['BTCUSDT','bybit:spot:BTCUSDT','binance:futures:ETHUSDT','garbage:exploit','bybit:futures:BTCUSDT','binance:BAD'];
+  const input = ['BTCUSDT','bybit:spot:BTCUSDT','binance:futures:ETHUSDT','garbage:exploit','bybit:futures:BTCUSDT','binance:invalid-market:BAD'];
   const ids = normalizeNotificationFavoriteIds(input);
   assert.deepEqual(ids, ['binance:futures:BTCUSDT','bybit:spot:BTCUSDT',
     'binance:futures:ETHUSDT','bybit:futures:BTCUSDT']);
