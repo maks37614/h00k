@@ -29,6 +29,7 @@ function simulateDesktop() {
       created.push(this);
     }
     on(name, listener) { const list=this.events.get(name)||[];list.push(listener);this.events.set(name,list); }
+    loadURL(url){return this.webContents.loadURL(url);}
     emit(name) { for(const callback of this.events.get(name)||[]) callback(); }
     isDestroyed(){return this.dead;}
     getBounds(){return {...this.bounds};}
