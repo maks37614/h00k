@@ -1,0 +1,25 @@
+# Never send VPS secrets, local account state or backups to Docker's build context.
+.git
+.git/**
+node_modules
+**/node_modules
+dist
+**/dist
+coverage
+**/coverage
+.env
+.env.*
+**/.env
+**/.env.*
+!.env.example
+server/data
+server/data/**
+*.dump
+*.backup
+*.bak
+h00k-main*.zip
+backup*.zip
+*.backup.zip
+*.log
+npm-debug.log*
+.test-*

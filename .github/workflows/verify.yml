@@ -74,7 +74,7 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm ci
-      - name: PostgreSQL identity integration
-        run: node --import tsx --test tests/postgres-auth-integration.test.ts
+      - name: PostgreSQL identity and email recovery integration
+        run: node --import tsx --test tests/postgres-auth-integration.test.ts tests/postgres-mail-flow-integration.test.ts
       - name: Surveillance HTTP regression with PostgreSQL sessions
         run: node --import ./tests/fixtures/offline-network.mjs --import tsx --test tests/surveillance-api.test.ts

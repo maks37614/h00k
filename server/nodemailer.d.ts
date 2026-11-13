@@ -18,6 +18,9 @@ declare module 'nodemailer' {
       pool?: boolean;
       maxConnections?: number;
       maxMessages?: number;
+      connectionTimeout?: number;
+      greetingTimeout?: number;
+      socketTimeout?: number;
     }): Transport;
   };
   export default nodemailer;
