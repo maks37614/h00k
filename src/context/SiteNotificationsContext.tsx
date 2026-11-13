@@ -11,7 +11,7 @@ import {
   applyLocalNotificationMute,
   type SiteNotificationItem, type SiteNotificationKind, type SiteNotificationSettings, type SiteNotificationSound,
 } from '../utils/siteNotifications';
-import { playSiteNotificationSound } from '../utils/domSound';
+import { playSiteNotificationSound, stopCustomNotificationSound } from '../utils/domSound';
 import type { ScannedCoin } from '../types';
 import { scanNotificationSignals, marketSurveillanceSignal, liquidationNotificationSignal, LiquidationCascadeTracker, QualityScoreTracker, ProximityAlertTracker } from '../utils/notificationSignals';
 import { matchesNotificationScope } from '../utils/siteNotifications';
@@ -131,6 +131,7 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
 
   useEffect(() => {
     closeVisibleBrowserNotifications();
+    stopCustomNotificationSound();
     setSettingsState({ uid, settings: loadSettings(uid, profile?.uid === uid ? profile.siteNotificationSettings : undefined) });
     setItemState({ uid, items: loadStoredItems(uid) });
     deliveredSeen.current = { uid, ids: loadSeen(uid) };
@@ -171,6 +172,7 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
       setSettingsState({ uid, settings: fromStorage });
       if (!fromStorage.enabled) {
         closeVisibleBrowserNotifications();
+        stopCustomNotificationSound();
         soundEnabledRef.current = false;
         updatePreferences({ soundAlertsEnabled: false });
       }
@@ -221,6 +223,7 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
     // tabs and in-flight callbacks check this marker before sending anything.
     if (disabling) {
       closeVisibleBrowserNotifications();
+      stopCustomNotificationSound();
       try { localStorage.setItem(siteNotificationMuteKey(currentUid),
         String(Math.max(Date.now(), settingsRef.current.enabledAt + 1))); } catch {}
       soundEnabledRef.current = false;
@@ -314,7 +317,16 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
       ...event, timestamp: event.timestamp ?? Date.now(), read: false,
     };
     replaceItems([notification, ...itemsRef.current]);
-    if (soundEnabledRef.current) playSiteNotificationSound(settingsRef.current.sound);
+    if (soundEnabledRef.current) {
+      const soundOwner = uidRef.current;
+      const soundKind = event.kind;
+      playSiteNotificationSound(settingsRef.current.sound, soundOwner, () => {
+        const mutedAt = locallyMutedAt(soundOwner);
+        return uidRef.current === soundOwner && soundEnabledRef.current
+          && !(mutedAt > 0 && settingsRef.current.enabledAt <= mutedAt)
+          && notificationEnabled(settingsRef.current, soundKind);
+      });
+    }
     if (settingsRef.current.browserPush && typeof document !== 'undefined' && document.hidden
       && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
       try {
