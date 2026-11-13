@@ -4,11 +4,11 @@ import { adaptiveCut, type MarketPrint } from './marketAnalytics';
 /** One public-trade transport and one adaptive threshold per exchange/market/symbol per browser tab. */
 export type MarketTrade = { id: string; t: number; p: number; q: number; side: 'BUY' | 'SELL' };
 export type AggressiveMarketTrade = { id: string; t: number; p: number; usd: number; side: 'BUY' | 'SELL' };
-type Listener = { onTrade: (trade: AggressiveMarketTrade) => void; onPrints: (prints: MarketPrint[]) => void };
+type Listener = { onTrade: (trade: AggressiveMarketTrade) => void; onPrints: (prints: MarketPrint[]) => void; wantsPrints?: () => boolean };
 type Burst = {
   id: string; side: 'BUY' | 'SELL'; start: number; last: number;
   usd: number; weightedPrice: number; count: number;
-  seconds: Map<number, number>;
+  seconds: Map<number, { usd: number; count: number; accountedUsd: number; accountedCount: number }>;
 };
 
 const BINANCE_FUTURES_API = 'https://fapi.binance.com';
@@ -22,6 +22,8 @@ const BYBIT_WS = {
 } as const;
 const MAX_SAMPLE = 8192;
 const MAX_SEEN = 30000;
+const PRINT_HISTORY_MS = 60 * 60_000;
+const MAX_PRINT_SECONDS = 7200;
 
 /** Pure accumulator: skips overlapping REST/WS trade IDs before volume or threshold calculations. */
 export class LargeMarketTradeTracker {
@@ -48,16 +50,30 @@ export class LargeMarketTradeTracker {
   private commit() {
     const burst = this.active;
     if (!burst || !this.cut || burst.usd < this.cut) return;
-    const item: MarketPrint = {
-      id: burst.id, side: burst.side, t: burst.start,
-      p: burst.weightedPrice / burst.usd, usd: burst.usd,
-      count: burst.count, touches: 1, lastTouch: burst.last,
-      score: Math.min(100, Math.round(100 * burst.usd / Math.max(1, this.cut * 2))),
-      segments: [...burst.seconds].map(([t, usd]) => ({ t, usd })),
-    };
-    this.prints.set(item.id, item);
-    while (this.prints.size > 60) this.prints.delete(this.prints.keys().next().value!);
-    this.revision++;
+    // Preserve *all* qualifying volume in per-second accumulators, not only
+    // the last 40 individual bursts (which made busy BTC candles undercount).
+    for (const [second, segment] of burst.seconds) {
+      const delta = segment.usd - segment.accountedUsd;
+      const countDelta = segment.count - segment.accountedCount;
+      if (delta <= 0) continue;
+      const id = burst.side + ':' + second;
+      const previous = this.prints.get(id);
+      const newUsd = (previous?.usd || 0) + delta;
+      const weightedPrice = burst.weightedPrice / Math.max(burst.usd, 1);
+      const item: MarketPrint = {
+        id, side: burst.side, t: second,
+        p: previous ? (previous.p * previous.usd + weightedPrice * delta) / newUsd : weightedPrice,
+        usd: newUsd, count: (previous?.count || 0) + countDelta,
+        touches: 1, lastTouch: burst.last,
+        score: Math.min(100, Math.round(100 * newUsd / Math.max(1, this.cut * 2))),
+      };
+      this.prints.set(id, item);
+      segment.accountedUsd = segment.usd;
+      segment.accountedCount = segment.count;
+      this.revision++;
+    }
+    // Bound the lifetime and memory of accumulated second buckets.
+    while (this.prints.size > MAX_PRINT_SECONDS) this.prints.delete(this.prints.keys().next().value!);
   }
 
   accept(trade: MarketTrade): AggressiveMarketTrade | null {
@@ -96,14 +112,18 @@ export class LargeMarketTradeTracker {
         id: trade.side + ':' + trade.t + ':' + trade.id,
         side: trade.side, start: trade.t, last: trade.t,
         usd, weightedPrice: trade.p * usd, count: 1,
-        seconds: new Map([[second, usd]]),
+        seconds: new Map([[second, { usd, count: 1, accountedUsd: 0, accountedCount: 0 }]]),
       };
     } else {
       this.active.last = trade.t;
       this.active.usd += usd;
       this.active.weightedPrice += trade.p * usd;
       this.active.count++;
-      this.active.seconds.set(second, (this.active.seconds.get(second) || 0) + usd);
+      const segment = this.active.seconds.get(second) ||
+        { usd: 0, count: 0, accountedUsd: 0, accountedCount: 0 };
+      segment.usd += usd;
+      segment.count++;
+      this.active.seconds.set(second, segment);
     }
     // Publish the same group ID with its updated total, never append a second copy.
     this.commit();
@@ -111,9 +131,9 @@ export class LargeMarketTradeTracker {
   }
 
   snapshot(now = Date.now()): MarketPrint[] {
-    return [...this.prints.values()]
-      .filter(row => row.t >= now - 6 * 60 * 60_000)
-      .sort((a, b) => a.t - b.t).slice(-40);
+    const cutoff = now - PRINT_HISTORY_MS;
+    for (const [id, item] of this.prints) if (item.t < cutoff) this.prints.delete(id);
+    return [...this.prints.values()].sort((a, b) => a.t - b.t);
   }
 }
 
@@ -142,19 +162,22 @@ class SharedMarketTradeStream {
   subscribe(listener: Listener): () => void {
     this.listeners.add(listener);
     for (const trade of this.recent) if (trade.t >= Date.now() - 300_000) listener.onTrade(trade);
-    listener.onPrints(this.tracker.snapshot());
+    if (listener.wantsPrints?.() !== false) listener.onPrints(this.tracker.snapshot());
     return () => this.listeners.delete(listener);
   }
 
   private publish() {
-    if (this.publishTimer || this.stopped) return;
-    // One state update per 150ms per coin, not one render per incoming print.
+    if (this.publishTimer || this.stopped ||
+        ![...this.listeners].some(listener => listener.wantsPrints?.() !== false)) return;
+    // One bounded update per 500ms per coin, and none when all charts hide the labels.
     this.publishTimer = setTimeout(() => {
       this.publishTimer = null;
       if (this.stopped) return;
+      const watching = [...this.listeners].filter(listener => listener.wantsPrints?.() !== false);
+      if (!watching.length) return;
       const prints = this.tracker.snapshot();
-      for (const listener of this.listeners) listener.onPrints(prints);
-    }, 150);
+      for (const listener of watching) listener.onPrints(prints);
+    }, 500);
   }
 
   private accept(trade: MarketTrade) {
