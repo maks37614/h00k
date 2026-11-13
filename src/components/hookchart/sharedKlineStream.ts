@@ -146,7 +146,16 @@ export function createSharedKlineSubscriptions(socketFactory: SocketFactory = ur
         try {
           const candle = parseSharedKlineMessage(scope.exchange, JSON.parse(String(event.data)), symbol, scope.timeframe);
           if (!candle) return;
-          if (shared.last && candle.time < shared.last.time) return;
+          if (shared.last) {
+            if (candle.time < shared.last.time) return;
+            if (candle.time === shared.last.time) {
+              // Exchange kline volume is cumulative. Out-of-order events
+              // during reconnection may have older E/ts or a lower volume.
+              // Never broadcast those stale values to any chart.
+              if ((candle.eventTime ?? 0) < (shared.last.eventTime ?? 0)) return;
+              if (candle.volume < shared.last.volume) return;
+            }
+          }
           shared.last = candle;
           for (const sub of [...shared.listeners]) {
             try { sub.onCandle(candle); } catch {}
