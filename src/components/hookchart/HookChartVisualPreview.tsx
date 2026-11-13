@@ -1,9 +1,9 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import type { ExchangeId, MarketType, Timeframe, HookChartPreferences } from '../../types';
+import type { HookChartPreferences } from '../../types';
 import { createSyntheticPreviewCandles } from './syntheticPreviewCandles';
 import {
   Chart, ChartTimeAxis,
-  type Alert, type Candle, type CascadeRisk, type Drawing, type Viewport, type ViewportGesture, type HookChartHandle,
+  type Alert, type CascadeRisk, type Drawing, type Viewport, type ViewportGesture, type HookChartHandle,
 } from './engine';
 import { hookChartPlotWidth } from './priceScale';
 import { captureVisualProfile, makeVisualProfileKey, VISUAL_GAP_MAX, type VisualChartProfile, type VisualContextId, type VisualDevice } from './visualProfiles';
@@ -18,16 +18,10 @@ const EMPTY_LIQUIDATIONS: [] = [];
 const EMPTY_AUTO_LEVELS: [] = [];
 
 interface HookChartVisualPreviewProps {
-  /** Legacy live-chart props are accepted for compatibility but never used here. */
-  candles?: Candle[];
-  symbol?: string;
-  timeframe?: string;
-  exchange?: ExchangeId;
-  marketType?: MarketType;
+  /** All settings are applied only to deterministic offline candles. */
   timezone?: string;
   longColor?: string;
   shortColor?: string;
-  marketDefaults?: { exchange?: ExchangeId; marketType?: MarketType; timeframe?: Timeframe };
   chartPreferences?: HookChartPreferences;
   visualContext: VisualContextId;
   visualDevice: VisualDevice;
