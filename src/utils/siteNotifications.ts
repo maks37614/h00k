@@ -54,6 +54,7 @@ export interface SiteNotificationSettings {
   composite: boolean;
   sound: SiteNotificationSound;
   browserPush: boolean;
+  telegramEnabled: boolean;
   impulseSymbol: string;
   impulseThresholdPct: number;
   impulseWindowMinutes: 1 | 5 | 15;
@@ -98,7 +99,7 @@ export const DEFAULT_SITE_NOTIFICATIONS: SiteNotificationSettings = {
   levels: false, breakouts: false, density: false, round: false, openInterest: false,
   flow: false, liquidations: false, volume: false, early: false, quality: false,
   favorites: false, system: false, composite: false,
-  sound: 'chime', browserPush: false,
+  sound: 'chime', browserPush: false, telegramEnabled: false,
   impulseSymbol: '', impulseThresholdPct: 2, impulseWindowMinutes: 5,
   impulseExchange: 'binance', impulseMarket: 'futures',
   scopeExchange: 'all', scopeMarket: 'all', scopeTimeframe: 'all',
@@ -132,6 +133,7 @@ export function normalizeSiteNotificationSettings(input: unknown): SiteNotificat
     enabled: consent && d.enabled === true,
     sound: d.sound === 'soft' || d.sound === 'pulse' ? d.sound : 'chime',
     browserPush: consent && d.browserPush === true,
+    telegramEnabled: consent && d.telegramEnabled === true,
     impulseSymbol: normalizeImpulseSymbol(d.impulseSymbol || ''),
     impulseThresholdPct: bounded(d.impulseThresholdPct, 2, .1, 50),
     impulseWindowMinutes: d.impulseWindowMinutes === 1 || d.impulseWindowMinutes === 15 ? d.impulseWindowMinutes : 5,
