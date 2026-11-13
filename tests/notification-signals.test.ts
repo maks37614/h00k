@@ -21,7 +21,7 @@ const coin = (updatedAt = Date.now()): ScannedCoin => ({
   currentPrice: 100, priceChange24h: 1.3, highPrice24h: 108,
   lowPrice24h: 90, volume24hUsd: 2_000_000, lastUpdated: updatedAt,
   exchangeUrl: '',
-  regularIndicators: { atrPct: 1, rsi14: 60, oiChangePct: 4.1, oiAvailability: 'available', deltaPct: 7, cvd20Pct: 5 },
+  regularIndicators: { atrPct: 1, rsi14: 60, oiChangePct: 4.1, oiAvailability: 'available', oiUpdatedAt: updatedAt, deltaPct: 7, cvd20Pct: 5 },
   formations: [{
     id: 'f1', patternKey: 'test', name: 'Пробій опору', confidence: 92, bias: 'bullish',
     levels: { entryPrice: 100.3, stopLossPrice: 96, targetPrice: 108, supportPrice: 99.5 },
@@ -134,6 +134,11 @@ test('only verified OI and confirmed retests can trigger corresponding alerts', 
   const events = scanNotificationSignals([unavailable], settings, [], 905_000);
   assert.ok(!events.some(e => e.kind === 'openInterest'));
   assert.ok(!events.some(e => e.kind === 'composite' && e.description.includes('OI')));
+  const stale = coin(50_000);
+  stale.lastUpdated = 900_000; // quote fresh, OI period stale
+  const staleEvents = scanNotificationSignals([stale], settings, [], 905_000);
+  assert.ok(!staleEvents.some(e => e.kind === 'openInterest'));
+  assert.ok(!staleEvents.some(e => e.kind === 'composite' && e.description.includes('OI')));
   const confirmed = coin(900_000);
   confirmed.formations[0].status = 'retest';
   confirmed.formations[0].validation!.entryMode = 'RETEST';
