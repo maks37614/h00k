@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 
 const root = new URL('../', import.meta.url);
@@ -30,4 +31,27 @@ test('authentication only uses PostgreSQL and no Firebase files or imports survi
   }
   const dockerfile = readFileSync(new URL('../Dockerfile', import.meta.url), 'utf8');
   assert.doesNotMatch(dockerfile, /firebase|firestore/i);
+
+  // Generated dist once contained the old Firebase SDK even after source migration.
+  // Check tracked files, not only the working-tree dist, because npm run build regenerates it.
+  if (existsSync(new URL('../.git', import.meta.url))) {
+    const trackedDist = execFileSync('git', ['ls-files', '--cached', '--', 'dist/'], {
+      cwd: new URL(root).pathname, encoding: 'utf8',
+    }).trim();
+    assert.equal(trackedDist, '', 'dist is generated output and must not be tracked by Git');
+  }
+  const ignore = readFileSync(new URL('../.gitignore', import.meta.url), 'utf8');
+  assert.match(ignore, /^dist\/$/m);
+  assert.match(ignore, /^\.env$/m);
+});
+
+test('production JS build does not contain the removed Firebase SDK or Firestore runtime', () => {
+  const output = new URL('../dist/assets', import.meta.url).pathname;
+  if (!existsSync(output)) return; // npm test can run before npm run build.
+  for (const filename of readdirSync(output).filter(file => file.endsWith('.js'))) {
+    const content = readFileSync(path.join(output, filename), 'utf8');
+    assert.doesNotMatch(content,
+      /@firebase\/|__FIREBASE_DEFAULTS__|firestore\.googleapis\.com|firebaseapp\.com|firebase-auth/i,
+      'Firebase code must not ship in dist/assets/' + filename);
+  }
 });
