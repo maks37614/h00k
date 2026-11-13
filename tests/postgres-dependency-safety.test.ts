@@ -23,10 +23,11 @@ test('authentication only uses PostgreSQL and no Firebase files or imports survi
   assert.equal(manifest.dependencies.firebase, undefined);
   assert.equal(lock.packages[''].dependencies.firebase, undefined);
   assert.equal(Object.keys(lock.packages).some(name => name === 'node_modules/firebase' || name.startsWith('node_modules/@firebase/')), false);
-  for (const folder of ['src', 'server']) {
+  for (const folder of ['src', 'server', 'scripts', 'desktop']) {
     for (const filename of sourceFiles(path.join(new URL(root).pathname, folder))) {
       const source = readFileSync(filename, 'utf8');
       assert.doesNotMatch(source, /(?:from\s*['"][^'"]*firebase|import\s*\(['"][^'"]*firebase|require\(['"][^'"]*firebase)/i, 'Unexpected import in ' + filename);
+      assert.doesNotMatch(source, /firebase|firestore/i, 'Obsolete Firebase SDK references in ' + filename);
     }
   }
   const dockerfile = readFileSync(new URL('../Dockerfile', import.meta.url), 'utf8');
