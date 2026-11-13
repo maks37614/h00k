@@ -111,13 +111,16 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
     setItemState({ uid, items: loadStoredItems(uid) });
     deliveredSeen.current = { uid, ids: loadSeen(uid) };
     setError(null);
-    const selectedSound = profile?.uid === uid && typeof profile.soundAlertsEnabled === 'boolean'
-      ? profile.soundAlertsEnabled : readStoredSound(uid);
+    const currentSettings = loadSettings(uid, profile?.uid === uid ? profile.siteNotificationSettings : undefined);
+    const selectedSound = currentSettings.optedIn
+      ? (profile?.uid === uid && typeof profile.soundAlertsEnabled === 'boolean'
+        ? profile.soundAlertsEnabled : readStoredSound(uid))
+      : false;
     updatePreferences({ soundAlertsEnabled: selectedSound });
   }, [uid, updatePreferences]);
 
   useEffect(() => {
-    if (profile?.uid !== uid || pendingSoundWrites.current.has(uid) || typeof profile.soundAlertsEnabled !== 'boolean') return;
+    if (profile?.uid !== uid || !settingsRef.current.optedIn || pendingSoundWrites.current.has(uid) || typeof profile.soundAlertsEnabled !== 'boolean') return;
     try { localStorage.setItem(soundStorageKey(uid), String(profile.soundAlertsEnabled)); } catch {}
     updatePreferences({ soundAlertsEnabled: profile.soundAlertsEnabled });
   }, [uid, profile?.soundAlertsEnabled, updatePreferences]);
