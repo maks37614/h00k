@@ -3,7 +3,7 @@ import { CheckCircle2, AlertCircle, Info, Save, PlugZap, RefreshCw } from 'lucid
 import { useAuth } from '../../context/AuthContext';
 import { findActiveMetaScalpPort, getUserMetaScalpSettings, type MetaScalpSettings } from '../../utils/metaScalpService';
 import {
-  DEFAULT_TERMINAL_LINK_SETTINGS, getUserTerminalLinkSettings, LINK_SOURCES,
+  getUserTerminalLinkSettings, LINK_SOURCES,
   normalizeMetaScalpGroup, normalizeTigerGroup, normalizeTerminalLinkSettings, testTigerConnection,
   type TerminalLinkSettings, type TerminalProvider, type TerminalLinkSource,
 } from '../../utils/terminalLinkService';
@@ -57,7 +57,7 @@ export const ProfileTerminalLinkingSettings: React.FC = () => {
     try {
       await updateProfileData({
         terminalLinkSettings: next,
-        metaScalpSettings: { ...meta, binding: normalizeMetaScalpGroup(meta.binding) || '001' },
+        metaScalpSettings: { ...meta, autoSwitchOnClick: next.switchOnChartOpen, binding: normalizeMetaScalpGroup(meta.binding) || '001' },
       });
       setDraft(next);
       setMessage({ ok: true, text: 'Налаштування лінковки збережено в профілі.' });
@@ -233,11 +233,11 @@ export const ProfileTerminalLinkingSettings: React.FC = () => {
               </label>
             </div>
             <p className="text-[11px] text-slate-400">Якщо поріг якості вищий за 0, сигнали без достовірного бала блокуються. Жодні ордери не відкриваються.</p>
-            {selected === 'metascalp' && (
+            {(
               <label className="flex cursor-pointer items-center gap-2 text-xs text-slate-200">
                 <input type="checkbox" className="accent-cyan-500" checked={meta.soundFeedback ?? true}
                   onChange={e => setMeta(old => ({ ...old, soundFeedback: e.target.checked }))}/>
-                Звук після успішної лінковки
+                Звук після успішної лінковки в обраному терміналі
               </label>
             )}
           </section>
