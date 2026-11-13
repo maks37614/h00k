@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Bell, CheckCheck, Trash2, X, Settings2, TrendingUp, TrendingDown, ShieldAlert, Target, Activity } from 'lucide-react';
+import { Bell, CheckCheck, Trash2, X, Settings2, TrendingUp, TrendingDown, ShieldAlert, Target, Activity, Link2 } from 'lucide-react';
 import { useOptionalSiteNotifications } from '../context/SiteNotificationsContext';
 import type { SiteNotificationItem } from '../utils/siteNotifications';
 
@@ -12,7 +12,11 @@ const iconFor = (item: SiteNotificationItem) => item.kind === 'volatility'
   : item.kind === 'surveillance' ? <ShieldAlert className="h-4 w-4 text-violet-400" />
   : <Activity className="h-4 w-4 text-amber-300" />;
 
-export const SiteNotificationBell: React.FC<{ onOpenSettings?: () => void }> = ({ onOpenSettings }) => {
+export const SiteNotificationBell: React.FC<{
+  onOpenSettings?: () => void;
+  onLinkNotification?: (item: SiteNotificationItem) => void;
+  canLinkNotification?: (item: SiteNotificationItem) => boolean;
+}> = ({ onOpenSettings, onLinkNotification, canLinkNotification }) => {
   const context = useOptionalSiteNotifications();
   const items = context?.items ?? [];
   const unreadCount = context?.unreadCount ?? 0;
@@ -82,6 +86,16 @@ export const SiteNotificationBell: React.FC<{ onOpenSettings?: () => void }> = (
                       </time>
                     </div>
                     <p className="mt-1 break-words text-[11px] leading-relaxed text-slate-300">{item.description}</p>
+                    {onLinkNotification && item.symbol && (
+                      <button type="button" onClick={() => { onLinkNotification(item); setOpen(false); }}
+                        disabled={!canLinkNotification?.(item)}
+                        title={!canLinkNotification?.(item)
+                          ? 'Вкажіть біржу й ринок у події та увімкніть її категорію в Профіль → Лінковка'
+                          : 'Відкрити монету в обраному торговому терміналі'}
+                        className="mt-2 inline-flex items-center gap-1 rounded-md border border-cyan-600/40 bg-cyan-950/40 px-2 py-1 text-[11px] font-semibold text-cyan-200 hover:bg-cyan-900/50 disabled:cursor-not-allowed disabled:opacity-40">
+                        <Link2 size={12}/> У термінал
+                      </button>
+                    )}
                     {item.kind === 'impulse' && Number.isFinite(item.changePct) &&
                       <span className={'mt-1 inline-block rounded-md px-2 py-0.5 font-mono text-xs font-bold ' +
                         ((item.changePct || 0) >= 0 ? 'bg-emerald-500/15 text-emerald-300' : 'bg-rose-500/15 text-rose-300')}>
