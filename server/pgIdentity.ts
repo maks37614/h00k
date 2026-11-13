@@ -127,7 +127,9 @@ let mailer: ReturnType<typeof nodemailer.createTransport> | undefined;
 function mailTransport() {
   const host = process.env.SMTP_HOST;
   const from = process.env.SMTP_FROM;
-  if (!host || !from) throw new AuthFailure(503, 'Реєстрація тимчасово недоступна: пошта ще не налаштована.', 'MAIL_NOT_CONFIGURED');
+  if (!host || !from || (process.env.SMTP_USER && !process.env.SMTP_PASSWORD)) {
+    throw new AuthFailure(503, 'Реєстрація тимчасово недоступна: SMTP ще не налаштований.', 'MAIL_NOT_CONFIGURED');
+  }
   if (!mailer) mailer = nodemailer.createTransport({
     host,
     port: Number(process.env.SMTP_PORT || 587),
@@ -138,6 +140,9 @@ function mailTransport() {
     pool: true,
     maxConnections: 2,
     maxMessages: 50,
+    connectionTimeout: 8_000,
+    greetingTimeout: 8_000,
+    socketTimeout: 15_000,
   });
   return { transport: mailer, from };
 }
@@ -149,16 +154,30 @@ async function sendActionMail(email: string, purpose: 'verify-email' | 'reset-pa
   const text = purpose === 'verify-email'
     ? 'Підтвердіть email для h00k: ' + url.toString() + '\nПосилання дійсне 24 години.'
     : 'Відновіть пароль h00k: ' + url.toString() + '\nПосилання дійсне 30 хвилин. Якщо це не ви, проігноруйте лист.';
-  await transport.sendMail({ from, to: email, subject, text });
+  try {
+    await transport.sendMail({ from, to: email, subject, text });
+  } catch (error) {
+    // Do not leak email addresses or action tokens to logs.
+    console.error('[Auth email] SMTP delivery failed:', error instanceof Error ? error.name : 'transport error');
+    throw new AuthFailure(503, 'Не вдалося надіслати лист. Спробуйте повторно пізніше.', 'MAIL_DELIVERY_FAILED');
+  }
 }
 
 async function actionFor(userId: string, email: string, purpose: 'verify-email' | 'reset-password') {
   const token = randomToken();
   const hash = hashToken(token);
-  await database().query('DELETE FROM auth_action_tokens WHERE user_id = $1 AND purpose = $2', [userId, purpose]);
+  // Create a replacement token without invalidating the previous emailed link.
+  // A failed SMTP attempt must not break password recovery or email verification.
   await database().query('INSERT INTO auth_action_tokens (token_hash, user_id, purpose, expires_at) VALUES ($1, $2, $3, now() + make_interval(secs => $4::int))',
     [hash, userId, purpose, purpose === 'verify-email' ? 86400 : 1800]);
-  await sendActionMail(email, purpose, token);
+  try {
+    await sendActionMail(email, purpose, token);
+  } catch (error) {
+    await database().query('DELETE FROM auth_action_tokens WHERE token_hash = $1', [hash]).catch(() => {});
+    throw error;
+  }
+  await database().query('DELETE FROM auth_action_tokens WHERE user_id = $1 AND purpose = $2 AND token_hash <> $3',
+    [userId, purpose, hash]);
 }
 
 function accountShape(row: any) {
