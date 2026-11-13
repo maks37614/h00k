@@ -913,14 +913,17 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
       if (now < nextFallbackAt) return;
       // Exponential backoff + jitter prevents reconnect storms hitting VPS.
       const wait = wsConnected ? 30_000 :
-        Math.min(45_000, 4000 * 2 ** Math.min(4, fallbackFailures));
+        Math.min(20_000, 4000 * 2 ** Math.min(4, fallbackFailures));
       nextFallbackAt = now + wait + Math.floor(Math.random() * 1500);
       polling = true;
       try {
         const latest = await fetchSharedLiveFallbackKline(exchange, marketType, cleanSymbol, timeframe);
         if (disposed) return;
         if (!latest) { fallbackFailures++; return; }
-        fallbackFailures = 0;
+        // Even a successful REST fallback must back off while WS stays down;
+        // otherwise an exchange outage creates a permanent 4s VPS poll storm.
+        if (!wsConnected) fallbackFailures++;
+        else fallbackFailures = 0;
         liveTickHandlerRef.current(latest, 'rest');
       } catch {
         fallbackFailures++;
