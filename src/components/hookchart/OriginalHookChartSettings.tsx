@@ -555,9 +555,9 @@ function VisualProfileEditor({
       <Setting label="Вертикальний зум" desc="1× — природний діапазон. Розширений зум від 0,01× до 100×; значення можна вписати вручну.">
         <div className="flex items-center gap-2">
           <input aria-label="Вертикальний зум" type="range" className="visualProfileRange" min="-2" max="2" step="0.01"
-            value={Math.log10(selectedProfile.verticalZoom)} onChange={event => onProfileChange({ verticalZoom: Number((10 ** Number(event.target.value)).toFixed(3)) })}/>
+            value={Math.log10(selectedProfile.verticalZoom)} onChange={event => onProfileChange({ verticalZoom: Number((10 ** Number(event.target.value)).toFixed(3)), autoPriceScale: false })}/>
           <Num ariaLabel="Точний вертикальний зум" value={selectedProfile.verticalZoom} min={VISUAL_ZOOM_MIN} max={VISUAL_ZOOM_MAX} step={0.01}
-            set={value => onProfileChange({ verticalZoom: value })}/>
+            set={value => onProfileChange({ verticalZoom: value, autoPriceScale: false })}/>
           <b className="valueBadge">×</b>
         </div>
       </Setting>
