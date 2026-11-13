@@ -1,13 +1,17 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Bell, BellOff, Volume2, Play, Save, CircleHelp, ShieldAlert, SlidersHorizontal } from 'lucide-react';
+import React, { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react';
+import { Bell, BellOff, Volume2, Play, Save, CircleHelp, ShieldAlert, SlidersHorizontal, Upload, Trash2 } from 'lucide-react';
 import { useSiteNotifications } from '../../context/SiteNotificationsContext';
 import {
   NOTIFICATION_CATEGORIES, normalizeImpulseSymbol, normalizeSymbolList,
   type NotificationCategoryKey, type SiteNotificationSettings,
 } from '../../utils/siteNotifications';
-import { playSiteNotificationSound } from '../../utils/domSound';
-import { BUNDLED_NOTIFICATION_SOUNDS } from '../../utils/notificationSoundPresets';
+import { playSiteNotificationSound, stopCustomNotificationSound } from '../../utils/domSound';
 import { useAuth } from '../../context/AuthContext';
+import {
+  getCustomNotificationSound, saveCustomNotificationSounds, removeCustomNotificationSound,
+  listCustomNotificationSounds, selectCustomNotificationSound, customSoundDisplayName,
+  MAX_CUSTOM_SOUND_BYTES, MAX_CUSTOM_SOUND_SECONDS, MAX_CUSTOM_SOUND_TRACKS,
+} from '../../utils/customNotificationSound';
 
 type NumberSetting = 'impulseThresholdPct' | 'levelDistancePct' | 'roundDistancePct'
   | 'oiThresholdPct' | 'flowThresholdPct' | 'minBreakoutRvol' | 'liquidationMinUsd'
@@ -39,6 +43,11 @@ export const ProfileNotificationSettings: React.FC = () => {
   const { settings, updateSettings, soundEnabled, setSoundEnabled, error } = useSiteNotifications();
   const { user } = useAuth();
   const soundUid = user?.uid || 'guest';
+  const [personalSoundName, setPersonalSoundName] = useState<string | null>(null);
+  const [personalTracks, setPersonalTracks] = useState<Array<{ id: string; name: string; savedAt: number }>>([]);
+  const [selectedPersonalId, setSelectedPersonalId] = useState('');
+  const [soundLoading, setSoundLoading] = useState(false);
+  const [soundError, setSoundError] = useState<string | null>(null);
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
   const [help, setHelp] = useState<string | null>(null);
@@ -53,6 +62,87 @@ export const ProfileNotificationSettings: React.FC = () => {
     setThreshold(String(settings.impulseThresholdPct));
   }, [settings.impulseSymbol, settings.impulseThresholdPct]);
   useEffect(() => setSymbols(settings.scopeSymbols), [settings.scopeSymbols]);
+  useEffect(() => {
+    let active = true;
+    setPersonalSoundName(null);
+    setPersonalTracks([]);
+    setSelectedPersonalId('');
+    if (soundUid === 'guest') return;
+    void Promise.all([
+      getCustomNotificationSound(soundUid),
+      listCustomNotificationSounds(soundUid),
+    ]).then(([sound, library]) => {
+      if (!active) return;
+      setPersonalSoundName(sound?.name ?? null);
+      setPersonalTracks(library.tracks);
+      setSelectedPersonalId(library.selectedId);
+    }).catch(() => {
+      if (active) setSoundError('Не вдалося прочитати локально збережені мелодії.');
+    });
+    return () => { active = false; };
+  }, [soundUid]);
+
+  const refreshSoundLibrary = async () => {
+    const [sound, library] = await Promise.all([
+      getCustomNotificationSound(soundUid),
+      listCustomNotificationSounds(soundUid),
+    ]);
+    setPersonalSoundName(sound?.name ?? null);
+    setPersonalTracks(library.tracks);
+    setSelectedPersonalId(library.selectedId);
+    return library;
+  };
+
+  const uploadPersonalSound = async (event: ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.currentTarget.files ?? []);
+    event.currentTarget.value = '';
+    if (!files.length) return;
+    setSoundLoading(true);
+    setSoundError(null);
+    try {
+      await saveCustomNotificationSounds(soundUid, files);
+      await refreshSoundLibrary();
+      update({ sound: 'custom' });
+      setMessage(`Додано мелодій: ${files.length}. Вони збережені тільки в цьому браузері. Увімкнення звуку залишається окремим налаштуванням.`);
+    } catch (err) {
+      setSoundError(err instanceof Error ? err.message : 'Не вдалося завантажити мелодії.');
+    } finally {
+      setSoundLoading(false);
+    }
+  };
+
+  const choosePersonalSound = async (id: string) => {
+    setSoundLoading(true);
+    setSoundError(null);
+    try {
+      stopCustomNotificationSound();
+      await selectCustomNotificationSound(soundUid, id);
+      await refreshSoundLibrary();
+      update({ sound: 'custom' });
+    } catch (err) {
+      setSoundError(err instanceof Error ? err.message : 'Не вдалося вибрати мелодію.');
+    } finally {
+      setSoundLoading(false);
+    }
+  };
+
+  const deletePersonalSound = async () => {
+    if (!selectedPersonalId) return;
+    setSoundLoading(true);
+    setSoundError(null);
+    try {
+      stopCustomNotificationSound();
+      await removeCustomNotificationSound(soundUid, selectedPersonalId);
+      const library = await refreshSoundLibrary();
+      if (library.tracks.length === 0 && settingsRef.current.sound === 'custom') update({ sound: 'chime' });
+      setMessage('Вибрану мелодію видалено тільки з цього пристрою.');
+    } catch (err) {
+      setSoundError(err instanceof Error ? err.message : 'Не вдалося видалити мелодію.');
+    } finally {
+      setSoundLoading(false);
+    }
+  };
+
   const grouped = useMemo(() => {
     const groups = new Map<string, typeof NOTIFICATION_CATEGORIES[number][]>();
     for (const item of NOTIFICATION_CATEGORIES) groups.set(item.group, [...(groups.get(item.group) || []), item]);
@@ -269,10 +359,7 @@ export const ProfileNotificationSettings: React.FC = () => {
             <select value={settings.sound} onChange={e => update({ sound: e.target.value as SiteNotificationSettings['sound'] })}
               className="w-full rounded-lg border border-slate-700 bg-slate-900 p-2 text-sm text-white">
               <option value="chime">Дзвін</option><option value="soft">М’який</option><option value="pulse">Подвійний імпульс</option>
-              {BUNDLED_NOTIFICATION_SOUNDS.map(sound => (
-                <option key={sound.id} value={sound.id}>{sound.label}</option>
-              ))}
-              {settings.sound === 'custom' && <option value="custom">Раніше збережена мелодія</option>}
+              {(personalSoundName || settings.sound === 'custom') && <option value="custom">Моя мелодія</option>}
             </select>
           </label>
           <button type="button" onClick={() => playSiteNotificationSound(settings.sound, soundUid)}
@@ -280,11 +367,54 @@ export const ProfileNotificationSettings: React.FC = () => {
             <Play className="h-4 w-4" /> Прослухати
           </button>
         </div>
-        <p className="text-[11px] leading-relaxed text-slate-400">
-          Усі вісім додаткових мелодій уже вбудовані в h00k.top та доступні на всіх пристроях.
-          Виберіть звук зі списку й натисніть «Прослухати». Завантажувати файли не потрібно.
-          Звуки стосуються лише сповіщень сайту, а не Telegram чи системних повідомлень.
-        </p>
+        <div className="space-y-2 rounded-lg border border-slate-800 bg-slate-900/70 p-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <label className={'inline-flex cursor-pointer items-center gap-2 rounded-lg border border-cyan-700/70 px-3 py-2 text-xs text-cyan-200 ' +
+              (soundLoading || soundUid === 'guest' ? 'pointer-events-none opacity-40' : 'hover:bg-cyan-950/40')}>
+              <Upload className="h-4 w-4" /> {soundLoading ? 'Перевірка файлів…' : 'Додати свої мелодії'}
+              <input type="file" multiple className="sr-only" accept=".mp3,.wav,.ogg,.m4a,audio/mpeg,audio/wav,audio/ogg,audio/mp4"
+                onChange={e => void uploadPersonalSound(e)}
+                disabled={soundLoading || soundUid === 'guest'}
+                aria-label="Завантажити одразу кілька мелодій сповіщень"/>
+            </label>
+            {personalSoundName && (
+              <button type="button" disabled={soundLoading}
+                onClick={() => void deletePersonalSound()}
+                className="inline-flex items-center gap-1 rounded-lg border border-slate-700 px-2 py-2 text-xs text-slate-300 hover:text-rose-300 disabled:opacity-40">
+                <Trash2 className="h-3.5 w-3.5"/> Видалити вибрану
+              </button>
+            )}
+          </div>
+          {personalTracks.length > 0 && (
+            <label className="block space-y-1 text-xs text-slate-300">
+              <span>Мої мелодії ({personalTracks.length})</span>
+              <select
+                aria-label="Вибрати одну зі своїх мелодій"
+                disabled={soundLoading}
+                value={selectedPersonalId}
+                onChange={event => void choosePersonalSound(event.target.value)}
+                className="w-full min-w-0 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-base text-white sm:text-sm"
+              >
+                {personalTracks.map(track => (
+                  <option key={track.id} value={track.id}>{customSoundDisplayName(track.name)}</option>
+                ))}
+              </select>
+              <span className="block break-all text-[11px] text-slate-500">Вибрана: {personalSoundName}</span>
+            </label>
+          )}
+          <p className="text-[11px] leading-relaxed text-slate-400">
+            Можна додати одразу кілька MP3: розпакуйте ZIP-архів і виберіть усі звукові файли.
+            Після цього перемикайте їх у списку «Мої мелодії» і прослуховуйте кнопкою вище.
+          </p>
+          {settings.sound === 'custom' && !personalSoundName && (
+            <p role="status" className="text-xs text-amber-300">На цьому пристрої власної мелодії немає. Тимчасово відтворюється стандартний дзвін.</p>
+          )}
+          <p className="text-[11px] leading-relaxed text-slate-400">
+            MP3, WAV, OGG, M4A · до {Math.round(MAX_CUSTOM_SOUND_BYTES / 1024 / 1024)} МБ та {MAX_CUSTOM_SOUND_SECONDS} секунд на файл · максимум {MAX_CUSTOM_SOUND_TRACKS} мелодії.
+            Файли зберігаються тільки в браузері цього пристрою, не надсилаються на сервер і не змінюють звук системних чи Telegram-повідомлень.
+          </p>
+          {soundError && <p role="alert" className="text-xs text-rose-300">{soundError}</p>}
+        </div>
         <label className="flex items-center justify-between gap-3 text-xs">
           <span>Сповіщення браузера, якщо вкладка згорнута</span>
           <input type="checkbox" checked={settings.browserPush} disabled={!settings.enabled}

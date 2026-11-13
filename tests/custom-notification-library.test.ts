@@ -47,11 +47,18 @@ test('multi-track library preserves all tracks and selected audio across reads',
   assert.deepEqual(normalizeCustomSoundLibrary({ tracks: [], selectedId: 'bad' }).tracks, []);
 });
 
-test('all eight bundled tracks appear with the three original sound choices, without an upload form', () => {
+test('profile supports importing multiple sounds without altering mute or Telegram', () => {
   const profile = readFileSync(new URL('../src/components/profile/ProfileNotificationSettings.tsx', import.meta.url), 'utf8');
-  assert.match(profile, /BUNDLED_NOTIFICATION_SOUNDS\.map\(sound =>/);
-  for (const label of ['Дзвін','М’який','Подвійний імпульс']) assert.ok(profile.includes(label));
+  const service = readFileSync(new URL('../src/utils/customNotificationSound.ts', import.meta.url), 'utf8');
+  assert.match(profile, /type="file" multiple/);
+  assert.match(profile, /saveCustomNotificationSounds\(soundUid, files\)/);
+  assert.match(profile, /selectCustomNotificationSound\(soundUid, id\)/);
+  assert.match(profile, /removeCustomNotificationSound\(soundUid, selectedPersonalId\)/);
+  assert.match(profile, /aria-label="Вибрати одну зі своїх мелодій"/);
   assert.match(profile, /playSiteNotificationSound\(settings\.sound, soundUid\)/);
-  assert.doesNotMatch(profile, /type="file"|saveCustomNotificationSounds\(|uploadPersonalSound|Додати свої мелодії/);
+  assert.match(service, /const issue = validateCustomNotificationSound\(file\)/);
+  assert.match(service, /await checkAudioDuration\(file\)/);
+  assert.match(service, /await write\(uid, \{ version: 2, selectedId: added\[0\]\.id/);
+  assert.doesNotMatch(service, /fetch\(|uploadBytes|firebase/);
   assert.doesNotMatch(profile, /update\(\{\s*enabled:\s*true/);
 });

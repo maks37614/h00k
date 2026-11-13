@@ -1,19 +1,12 @@
 // Web Audio API sound for price alerts.
 import type { SiteNotificationSound } from './siteNotifications';
 import { getCustomNotificationSound } from './customNotificationSound';
-import { getBundledNotificationSound } from './notificationSoundPresets';
 
-let activeBundledSound: HTMLAudioElement | null = null;
 let activeUserSound: HTMLAudioElement | null = null;
 let activeUserSoundUrl: string | null = null;
 
 /** Stop an ongoing user melody immediately when notification consent is revoked. */
 export function stopCustomNotificationSound(): void {
-  if (activeBundledSound) {
-    activeBundledSound.pause();
-    activeBundledSound.removeAttribute('src');
-    activeBundledSound = null;
-  }
   if (activeUserSound) {
     activeUserSound.pause();
     activeUserSound.removeAttribute('src');
@@ -115,29 +108,8 @@ export function playSiteNotificationSound(
   uid = '',
   allowed?: () => boolean,
 ): void {
-  if (allowed && !allowed()) return;
   if (preset === 'custom') {
     void playPersonalSound(uid, allowed);
-    return;
-  }
-  const bundled = getBundledNotificationSound(preset);
-  if (bundled) {
-    stopCustomNotificationSound();
-    if (typeof Audio === 'undefined') return;
-    try {
-      const audio = new Audio(bundled.src);
-      activeBundledSound = audio;
-      audio.volume = 0.75;
-      const cleanup = () => {
-        if (activeBundledSound !== audio) return;
-        audio.pause();
-        audio.removeAttribute('src');
-        activeBundledSound = null;
-      };
-      audio.onended = cleanup;
-      audio.onerror = cleanup;
-      void audio.play().catch(cleanup);
-    } catch { /* Audio might be blocked by the browser. */ }
     return;
   }
   stopCustomNotificationSound();
