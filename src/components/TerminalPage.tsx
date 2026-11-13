@@ -721,15 +721,9 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
     </nav>
   ) : null;
 
-  return (
-    <div
-      className="fixed inset-0 z-40 w-screen h-[100dvh] max-h-[100dvh] min-h-[100dvh] bg-[#090d16] flex flex-col overflow-hidden select-none animate-in fade-in duration-200"
-      role="region"
-      aria-label="Термінал трейдера"
-    >
-      {/* Block count, centered clock and actions above the chart controls */}
-      <header className="z-20 flex shrink-0 flex-col gap-1.5 border-b border-slate-800 bg-slate-950/95 px-2 py-1.5 sm:px-3">
-        <div className="grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center sm:gap-2">
+  // One autoscale action, shown in its original position on phones/tablets
+  // and next to the timeframe row on desktop.
+  const renderAutoScaleButton = () => (
           <button
             type="button"
             onClick={() => setAutoScaleCharts(enabled => !enabled)}
@@ -747,6 +741,20 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
           >
             <ScanLine className="h-4 w-4" />
           </button>
+  );
+
+  return (
+    <div
+      className="fixed inset-0 z-40 w-screen h-[100dvh] max-h-[100dvh] min-h-[100dvh] bg-[#090d16] flex flex-col overflow-hidden select-none animate-in fade-in duration-200"
+      role="region"
+      aria-label="Термінал трейдера"
+    >
+      {/* Block count, centered clock and actions above the chart controls */}
+      <header className="z-20 flex shrink-0 flex-col gap-1.5 border-b border-slate-800 bg-slate-950/95 px-2 py-1.5 sm:px-3">
+        <div className="grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center sm:gap-2">
+          <div className="justify-self-start lg:hidden">
+            {renderAutoScaleButton()}
+          </div>
 
           <TerminalClock timeZone={profile?.timeZone} open={showTradingSessions} buttonRef={clockButtonRef}
             onOpenChange={setShowTradingSessions} onOpen={() => setShowCoinPresets(false)} />
@@ -828,6 +836,12 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
             >
               Монет: {terminalCoinCount}
             </span>
+
+          </div>
+
+          {/* On desktop, controls form one compact line around the timeframe.
+              Display:contents preserves the original mobile/tablet grid layout. */}
+          <div className="contents lg:col-start-2 lg:row-start-1 lg:flex lg:min-w-0 lg:items-center lg:justify-self-center lg:gap-1.5">
             <div className="hidden shrink-0 items-center bg-slate-900 p-0.5 lg:flex rounded-xl border border-slate-800 text-xs font-mono">
             <button
               onClick={() => {
@@ -894,7 +908,9 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
               4x
             </button>
             </div>
-          </div>
+            <div className="hidden shrink-0 items-center lg:flex">
+              {renderAutoScaleButton()}
+            </div>
 
           {/* Timeframe Selector */}
           <div className="col-start-2 row-start-1 flex shrink-0 items-center justify-self-center bg-slate-900 p-0.5 rounded-xl border border-slate-800 text-xs font-mono">
@@ -945,6 +961,7 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
             >
               <Plus className="w-4 h-4" />
             </button>
+          </div>
           </div>
         </div>
       </header>
