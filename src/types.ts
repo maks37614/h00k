@@ -412,6 +412,8 @@ export interface UserProfile {
   hookChartPreferences?: HookChartPreferences;
   timeZone?: string;
   soundAlertsEnabled?: boolean;
+  /** Per-user in-app notification categories, selected tone and price-impulse watch. */
+  siteNotificationSettings?: import('./utils/siteNotifications').SiteNotificationSettings;
   /** Shared across all coin detail pages; true only hides the custom Telegram alert form. */
   telegramPriceAlertCollapsed?: boolean;
   /** Shared across all coin pages; only affects the Smart Analysis UI. */
