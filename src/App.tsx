@@ -1082,6 +1082,9 @@ export default function App() {
               const supplemented = await hydrateMissingRegularOIFromBrowser(data.data as ScannedCoin[]);
               if (supplemented !== data.data && requestId === scanRequestRef.current) {
                 setCoins(supplemented);
+                // Verified browser OI can arrive after the server scan; re-evaluate
+                // only the existing snapshot, without creating exchange requests.
+                reportStrongFormations(supplemented);
               }
             }
           }
