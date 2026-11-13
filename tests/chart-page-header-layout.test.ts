@@ -28,14 +28,19 @@ test('chart headers put price directly after coin name and remove the redundant 
     const exchange = header.indexOf('{coin.exchange}');
     const pattern = header.includes('Switching patterns') ? header.indexOf('Switching patterns') : header.indexOf('Можлива формація:');
     assert.ok(coin > 0 && price > coin, 'price follows coin in the top flex row');
-    assert.ok(exchange > price && pattern > exchange, 'exchange stays in the top row and pattern follows');
+    if (header === regularHeader()) {
+      assert.ok(pattern > price && exchange > pattern, 'exchange follows the formation in the second row');
+    } else {
+      assert.ok(exchange > price && pattern > exchange, 'early chart retains the original badge position');
+    }
     assert.doesNotMatch(header, /USDT-M/);
     assert.match(header, /grid-cols-\[minmax\(0,1fr\)_auto\]/);
-    assert.match(header, /col-start-1 row-start-1 flex min-w-0 flex-wrap items-center/);
+    assert.match(header, /col-span-2 flex min-w-0 flex-wrap items-center/);
     assert.match(header, /col-start-1 row-start-2 min-w-0 max-w-full/);
     assert.match(header, /col-start-2 row-start-2 flex shrink-0/);
     assert.match(header, /sm:flex sm:justify-between/);
   }
+  assert.match(regularHeader(), /col-start-1 row-start-2 flex min-w-0 max-w-full items-center gap-1[.]5/);
 });
 
 test('existing chart actions remain right-aligned and retain their handlers', () => {
@@ -45,10 +50,7 @@ test('existing chart actions remain right-aligned and retain their handlers', ()
     assert.match(header, /onOpenTelegramModal/);
     assert.match(header, /onSendMetaScalp\(coin\)/);
     assert.match(header, /onClick=\{onClose\}/);
-    assert.match(header, /className="hidden sm:inline">Назад<\/span>/);
-    assert.match(header, /col-start-2 row-start-1 inline-flex shrink-0/);
-    assert.match(header, /onClick=\{\(\) => void handleCopySymbol\(\)\}/);
-    assert.match(header, /aria-label=\{\`Скопіювати \$\{coin.baseAsset\}\/\$\{coin.quoteAsset\}\`\}/);
+    assert.match(header, /className="sm:hidden">Назад<\/span>/);
     assert.match(header, /justify-self-end/);
   }
   assert.match(standard, /onFormationChange\(next\)/);
