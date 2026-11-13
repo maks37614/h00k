@@ -1,4 +1,5 @@
 'use strict';
+const { normalizeFloatingBoundsMap } = require('./workspace.cjs');
 
 // One independently persisted workspace for each external terminal.
 const PROVIDERS = Object.freeze(['metascalp', 'tiger', 'vataga']);
@@ -24,6 +25,8 @@ function defaults(provider) {
     height: 360,
     widgets: ['screener', 'formations'],
     targetHint: null,
+    // Saved manually arranged floating panes; sanitized per panel on load.
+    floatingBounds: {},
   };
 }
 function clampNumber(value, fallback, min, max) {
@@ -47,6 +50,7 @@ function normalizeProfile(provider, input) {
     width: clampNumber(raw.width, base.width, 240, 1100),
     height: clampNumber(raw.height, base.height, 200, 1000),
     widgets: widgets.length ? widgets : [...base.widgets],
+    floatingBounds: normalizeFloatingBoundsMap(raw.floatingBounds, PANELS.map(panel => panel.id)),
     targetHint: raw.targetHint && typeof raw.targetHint.exe === 'string'
       ? { exe: raw.targetHint.exe.slice(0, 100), title: String(raw.targetHint.title || '').slice(0, 160) }
       : null,

@@ -5,6 +5,7 @@ const path = require('node:path');
 const fs = require('node:fs');
 const readline = require('node:readline');
 const { dockRects, floatingRects } = require('./layout.cjs');
+const { normalizeFloatingBounds, restoreFloatingBounds, floatingLayoutKey } = require('./workspace.cjs');
 const { PROVIDERS, PANELS, normalizeSettings, normalizeProfile, matchesTerminal, availablePanels } = require('./profiles.cjs');
 
 const WEBSITE = 'https://h00k.top/';
@@ -22,6 +23,9 @@ let previousSnapshots = '';
 let lastDockStatus = {};
 let standalone = null;
 const toolbarOwners = new Map(); // local-only WebContentsView IDs, never exposed to h00k.top
+const lastLayoutKeys = new Map(); // detect explicit side/mode/size changes, even when follow is off
+const hiddenProviders = new Map(); // reclaim hidden webviews after prolonged terminal absence
+const HIDDEN_RECLAIM_MS = 30_000;
 
 function loadSettings() {
   statePath = path.join(app.getPath('userData'), 'smartdock.json');
@@ -111,15 +115,40 @@ function makeContentWindow(provider, id, mode = 'full') {
     },
   });
   win.__h00kMode = mode === 'floating' ? 'floating' : 'docked';
+  win.__h00kUrl = webURL(id);
+  win.__h00kLoaded = false; // Never load a scanner for a panel without display space.
+  win.__nextLoadAt = 0;
+  win.__autoPlacing = false;
   guardWebsite(win);
   attachDockToolbar(win, provider);
+  let persistTimer = null;
+  const persistManualBounds = () => {
+    if (win.isDestroyed() || win.__autoPlacing || !win.isVisible()) return;
+    const profile = settings.profiles[provider];
+    if (profile.mode !== 'floating' || profile.follow || win.__h00kMode !== 'floating') return;
+    clearTimeout(persistTimer);
+    persistTimer = setTimeout(() => {
+      if (win.isDestroyed() || win.__autoPlacing) return;
+      const active = settings.profiles[provider];
+      if (active.mode !== 'floating' || active.follow) return;
+      const bounds = normalizeFloatingBounds(win.getBounds());
+      if (!bounds || !PANELS.some(panel => panel.id === id)) return;
+      const previous = active.floatingBounds[id];
+      if (previous && Object.keys(bounds).every(key => previous[key] === bounds[key])) return;
+      active.floatingBounds[id] = bounds;
+      saveSettings();
+      pushSnapshot();
+    }, 450);
+  };
+  win.on('moved', persistManualBounds);
+  win.on('resized', persistManualBounds);
+  win.on('closed', () => clearTimeout(persistTimer));
   win.webContents.on('before-input-event', (event, input) => {
     if (input.type === 'keyDown' && (input.control || input.meta) && input.key === ',') {
       event.preventDefault();
       openSettingsWindow(provider);
     }
   });
-  win.loadURL(webURL(id)).catch(err => console.warn('h00k load error:', err.message));
   win.on('closed', () => {
     const collection = windows.get(provider);
     if (collection?.get(id) === win) collection.delete(id);
@@ -204,8 +233,11 @@ function findTarget(provider) {
   if (explicit) return explicit;
   const hint = settings.profiles[provider].targetHint;
   if (hint) {
-    const selected = all.find(item => item.exe === hint.exe && item.title === hint.title);
+    const sameExecutable = all.filter(item => item.exe === hint.exe);
+    const selected = sameExecutable.find(item => item.title === hint.title);
     if (selected) return selected;
+    // Dynamic price/PnL titles can change; recover only if exactly one window matches.
+    if (sameExecutable.length === 1) return sameExecutable[0];
   }
   return all.filter(item => matchesTerminal(provider, item))
     .sort((a,b) => (b.width*b.height)-(a.width*a.height))[0] || null;
@@ -233,6 +265,8 @@ function ensureContentWindows(provider, ids, mode = 'full') {
   return group;
 }
 function closeProvider(provider) {
+  hiddenProviders.delete(provider);
+  lastLayoutKeys.delete(provider);
   const group = windows.get(provider);
   if (!group) return;
   for (const win of group.values()) if (!win.isDestroyed()) win.destroy();
@@ -241,20 +275,53 @@ function closeProvider(provider) {
 function applyBounds(win, bounds, alwaysOnTop) {
   if (win.isDestroyed()) return;
   const old = win.getBounds();
-  if (old.x !== bounds.x || old.y !== bounds.y || old.width !== bounds.width || old.height !== bounds.height)
+  if (old.x !== bounds.x || old.y !== bounds.y || old.width !== bounds.width || old.height !== bounds.height) {
+    win.__autoPlacing = true;
     win.setBounds(bounds, false);
+    // Win32 moved/resized events may arrive after setBounds returns; do not persist them as user drag.
+    clearTimeout(win.__autoPlaceReset);
+    win.__autoPlaceReset = setTimeout(() => { win.__autoPlacing = false; }, 320);
+  }
   if (win.isAlwaysOnTop() !== alwaysOnTop) win.setAlwaysOnTop(alwaysOnTop);
+  if (!win.__h00kLoaded && Date.now() >= win.__nextLoadAt) {
+    win.__h00kLoaded = true;
+    win.loadURL(win.__h00kUrl).catch(err => {
+      if (win.isDestroyed()) return;
+      win.__h00kLoaded = false;
+      win.__nextLoadAt = Date.now() + 15_000; // bounded retry; never flood h00k.top on outage
+      console.warn('h00k load error (retry in 15s):', err.message);
+    });
+  }
   if (!win.isVisible()) win.showInactive();
+}
+function hideDockedWindows(provider, message) {
+  const group = windows.get(provider);
+  if (group) for (const win of group.values()) if (!win.isDestroyed()) win.hide();
+  const now = Date.now();
+  if (!hiddenProviders.has(provider)) hiddenProviders.set(provider, now);
+  else if (now - hiddenProviders.get(provider) >= HIDDEN_RECLAIM_MS) {
+    // A hidden h00k webview still runs timers and network requests; reclaim it after inactivity.
+    closeProvider(provider);
+  }
+  lastDockStatus[provider] = message;
+}
+function preferredFloatingBounds(provider, id, profile, fallback, restore) {
+  if (!restore) return fallback;
+  return restoreFloatingBounds(profile.floatingBounds[id], screen.getAllDisplays(), fallback);
 }
 function syncWindows() {
   for (const provider of PROVIDERS) {
     const profile = settings.profiles[provider];
     const ready = profile.enabled && (profile.autoAttach || manualAttached.has(provider));
-    const target = findTarget(provider);
     if (!ready) { closeProvider(provider); lastDockStatus[provider] = 'Вимкнено'; continue; }
+    const target = findTarget(provider);
+    const layoutKey = floatingLayoutKey(profile);
+    const layoutChanged = lastLayoutKeys.has(provider) && lastLayoutKeys.get(provider) !== layoutKey;
+    lastLayoutKeys.set(provider, layoutKey);
     if (!target) {
       if (profile.mode === 'floating') {
         // Truly independent floating panels can be launched without a terminal.
+        hiddenProviders.delete(provider);
         const ids = availablePanels(profile);
         const group = ensureContentWindows(provider, ids, profile.mode);
         const work = screen.getPrimaryDisplay().workArea;
@@ -262,26 +329,26 @@ function syncWindows() {
         ids.forEach((id, index) => {
           const win = group.get(id);
           if (!win || win.isDestroyed()) return;
-          if (win.isVisible() && !profile.follow) return; // preserve user drag
-          applyBounds(win, boxes[index], profile.alwaysOnTop);
+          const firstPlacement = !win.isVisible();
+          if (!profile.follow && !layoutChanged && !firstPlacement) {
+            if (win.isAlwaysOnTop() !== profile.alwaysOnTop) win.setAlwaysOnTop(profile.alwaysOnTop);
+            return;
+          }
+          const restore = firstPlacement && !profile.follow && !layoutChanged;
+          applyBounds(win, preferredFloatingBounds(provider, id, profile, boxes[index], restore), profile.alwaysOnTop);
         });
         lastDockStatus[provider] = 'Плаваючі панелі без термінала';
         continue;
       }
-      // Keep detached full windows open if the terminal closes; never pretend they are docked.
-      const group = windows.get(provider);
-      if (group) for (const win of group.values()) if (!win.isDestroyed()) win.hide();
-      lastDockStatus[provider] = 'Термінал не знайдено';
+      hideDockedWindows(provider, 'Термінал не знайдено');
       continue;
     }
     if (target.minimized && profile.mode !== 'floating') {
-      const group = windows.get(provider);
-      if (group) for (const win of group.values()) if (!win.isDestroyed()) win.hide();
-      lastDockStatus[provider] = 'Термінал згорнуто';
+      hideDockedWindows(provider, 'Термінал згорнуто');
       continue;
     }
+    hiddenProviders.delete(provider);
     const ids = availablePanels(profile);
-    const group = ensureContentWindows(provider, ids, profile.mode);
     const rect = externalRect(target);
     const work = screen.getDisplayMatching(rect).workArea;
     const boxes = profile.mode === 'floating'
@@ -289,18 +356,22 @@ function syncWindows() {
       : dockRects(rect, work, profile.side, profile.width, profile.height, ids.length);
     if (boxes.length !== ids.length) {
       // Never cover the terminal's order-entry controls just to make room.
-      for(const win of group.values()) if(!win.isDestroyed()) win.hide();
-      lastDockStatus[provider] = 'Замало місця з вибраного боку; змініть сторону або розмір';
+      hideDockedWindows(provider, 'Замало місця з вибраного боку; змініть сторону або розмір');
       continue;
     }
+    const group = ensureContentWindows(provider, ids, profile.mode);
     ids.forEach((id,index) => {
       const win = group.get(id);
       if (!win || win.isDestroyed()) return;
-      if (profile.mode === 'floating' && win.isVisible() && !profile.follow) {
-        if(win.isAlwaysOnTop() !== profile.alwaysOnTop)win.setAlwaysOnTop(profile.alwaysOnTop);
-        return; // manual drag is respected
+      const firstPlacement = !win.isVisible();
+      if (!profile.follow && !layoutChanged && !firstPlacement) {
+        if (win.isAlwaysOnTop() !== profile.alwaysOnTop) win.setAlwaysOnTop(profile.alwaysOnTop);
+        return; // Follow-off freezes the dock or preserves the manually moved floating window.
       }
-      applyBounds(win,boxes[index],profile.alwaysOnTop);
+      const restore = profile.mode === 'floating' && !profile.follow && firstPlacement && !layoutChanged;
+      applyBounds(win, profile.mode === 'floating'
+        ? preferredFloatingBounds(provider, id, profile, boxes[index], restore)
+        : boxes[index], profile.alwaysOnTop);
     });
     lastDockStatus[provider] = profile.mode === 'floating' ? 'Плаваючі панелі' : 'Прикріплено до ' + target.title;
   }
@@ -372,10 +443,16 @@ function registerIpc() {
   ipcMain.handle('desktop:pick',(event,provider,id) => {
     verifySettingsSender(event);
     if (!PROVIDERS.includes(provider)) throw new Error('Invalid terminal');
-    const target = candidateWindows().find(item => item.id === id);
-    if (!target) throw new Error('Window not found');
-    manualTargets.set(provider,id);
-    settings.profiles[provider].targetHint = {exe:target.exe,title:target.title};
+    if (id === '') {
+      // "Автоматично знайти" must actually remove the previous manual target.
+      manualTargets.delete(provider);
+      settings.profiles[provider].targetHint = null;
+    } else {
+      const target = candidateWindows().find(item => item.id === id);
+      if (!target) throw new Error('Window not found');
+      manualTargets.set(provider,id);
+      settings.profiles[provider].targetHint = {exe:target.exe,title:target.title};
+    }
     saveSettings(); syncWindows(); pushSnapshot(); return snapshot();
   });
   ipcMain.handle('desktop:attach',(event,provider) => {
@@ -391,6 +468,10 @@ function registerIpc() {
     settings.profiles[provider].enabled = false;
     manualAttached.delete(provider);
     closeProvider(provider); saveSettings(); pushSnapshot(); return snapshot();
+  });
+  ipcMain.handle('desktop:open-browser',event => {
+    verifySettingsSender(event);
+    return shell.openExternal(WEBSITE); // Never accept an arbitrary URL from the renderer.
   });
   ipcMain.handle('desktop:standalone',event => {
     verifySettingsSender(event);

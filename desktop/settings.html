@@ -25,11 +25,16 @@ button.danger{background:#38212b;border-color:#833b4c;color:#ffced8}
 #feedback{font-size:12px;color:#79e7c7;min-height:20px}
 @media(max-width:600px){.stack,.checks{grid-template-columns:1fr}.tabs button{font-size:11px}.grid label{font-size:11px;padding:7px 3px}}
 </style></head><body>
-<header><div><h1>h00k <span style="color:#fff">Desktop</span></h1><small>Smart Dock · Windows</small></div><button class="action" id="standalone">Увесь сайт ↗</button></header>
+<header><div><h1>h00k <span style="color:#fff">Desktop</span></h1><small>Smart Dock · Windows</small></div><div class="row" style="margin:0"><button class="action" id="standalone">Окреме вікно</button><button class="action" id="browser">У браузері ↗</button></div></header>
 <section><h2>1. Торговий термінал</h2><div class="tabs" id="tabs"></div><p>Для кожного термінала окремі налаштування. Можна прикріпити h00k до декількох терміналів одночасно.</p>
 <div id="status">Шукаю запущені термінали…</div>
 <label for="target"><small>Вибрати конкретне вікно вручну</small></label><select id="target"><option value="">Автоматичний пошук</option></select>
-<div class="warning" id="vataga" hidden>Прикріплення до вікон Vataga підтримується. Лінковка монет через її локальний API поки недоступна без специфікації. Застосунок не надсилатиме неперевірені команди.</div>
+<div class="warning" id="vataga" hidden>
+<strong>Vataga: прикріплення вікон доступне.</strong> Для підготовки до лінковки: у Vataga відкрийте
+«Налаштування → Загальні → Інше → Інтеграція застосунків», увімкніть її,
+потім у стакані виберіть «Прив'язка до вікна → Скринер».
+Передавання тикерів із h00k поки не активовано, оскільки локальний протокол команд не підтверджений.
+</div>
 </section>
 <section><h2>2. Що прикріпити?</h2><div class="grid" id="modes"></div>
 <div id="widgetArea" style="margin-top:16px"><h2>Вибрані блоки</h2><div class="checks" id="widgets"></div><p>Кожен блок відкриває відповідний розділ h00k у власному вікні.</p></div></section>
@@ -41,9 +46,10 @@ button.danger{background:#38212b;border-color:#833b4c;color:#ffced8}
 <label class="check"><input type="checkbox" id="autoAttach"> Прикріплювати автоматично</label>
 <label class="check"><input type="checkbox" id="follow"> Слідувати за вікном</label>
 <label class="check"><input type="checkbox" id="alwaysOnTop"> Завжди поверх вікон</label>
-</div><p>Плаваючі вікна можна перетягувати самостійно, якщо вимкнено слідування.</p></section>
+</div><p>Коли «Слідувати» вимкнено, можна вільно розміщувати плаваючі панелі. Їхнє розташування на моніторах автоматично зберігається й відновлюється під час наступного запуску.</p></section>
 <div class="row"><button class="action primary" id="save">Зберегти налаштування</button><button class="action" id="attach">Прикріпити зараз</button><button class="action danger" id="detach">Відкріпити</button></div>
 <div id="feedback" role="status"></div><small>Налаштування зберігаються лише на цьому комп’ютері. Smart Dock не запитує біржові API-ключі.</small>
+<p>Примітка: Google OAuth може не працювати у вбудованому вікні Windows через правила Google для embedded webviews. Для входу безпосередньо в h00k Desktop використовуйте email і пароль; вхід у зовнішньому браузері не переносить авторизацію автоматично.</p>
 <script>
 'use strict';
 const api=window.h00kDesktop, byId=id=>document.getElementById(id);
@@ -51,7 +57,7 @@ const providers=[['metascalp','MetaScalp'],['tiger','Tiger.Trade'],['vataga','Va
 const modes=[['full','Весь h00k.top'],['blocks','Вибрані блоки'],['floating','Плаваючі вікна']];
 const sides=[['right','Праворуч'],['bottom','Знизу'],['left','Ліворуч'],['top','Зверху']];
 const panels=[['screener','Скрінер'],['formations','Формації'],['early','Раннє виявлення'],['terminal','Термінал HookChart'],['surveillance','Спостереження'],['replay','Тестування']];
-let snap=null, active='metascalp', loadedMode='full';
+let snap=null, active='metascalp', loadedMode='full', lastWindowsList='';
 function error(e){byId('feedback').textContent=e?.message||String(e);}
 function radio(group, name, options, selected){
   group.replaceChildren(...options.map(([value,title])=>{
@@ -70,10 +76,19 @@ function drawStatus(){
   if(!snap)return;
   const t=snap.terminals.find(x=>x.id===active);
   byId('status').textContent=(t?.target?'● '+t.target.title+' • '+t.target.exe:'○ Термінал не знайдено')+' — '+(t?.status||'Очікування');
-  const current=byId('target').value;
-  byId('target').replaceChildren(new Option('Автоматично знайти',''),...snap.windows.map(w=>new Option(w.exe+' • '+w.title.slice(0,90),w.id)));
-  if(snap.windows.some(w=>w.id===current))byId('target').value=current;
-  else if(t?.target&&snap.windows.some(w=>w.id===t.target.id))byId('target').value=t.target.id;
+  // Avoid recreating <option> nodes every ~160ms: live terminal titles may update constantly.
+  const listKey=snap.windows.map(w=>w.id+':'+w.exe).join('|');
+  if(lastWindowsList!==listKey){
+    byId('target').replaceChildren(new Option('Автоматично знайти',''),
+      ...snap.windows.map(w=>new Option(w.exe+' • '+w.title.slice(0,90),w.id)));
+    lastWindowsList=listKey;
+  }
+  const hint=snap.settings.profiles[active].targetHint;
+  if(hint){
+    const sameExe=snap.windows.filter(w=>w.exe===hint.exe);
+    const chosen=sameExe.find(w=>w.title===hint.title)||(sameExe.length===1?sameExe[0]:null);
+    byId('target').value=chosen?.id||'';
+  }else byId('target').value='';
   byId('vataga').hidden=active!=='vataga';
 }
 function render(){
@@ -103,8 +118,9 @@ function form(){
 byId('save').onclick=async()=>{try{snap=await api.save(active,form());render();byId('feedback').textContent='Збережено';}catch(e){error(e);}};
 byId('attach').onclick=async()=>{try{snap=await api.save(active,form());snap=await api.attach(active);render();byId('feedback').textContent='Підключення увімкнено';}catch(e){error(e);}};
 byId('detach').onclick=async()=>{try{snap=await api.detach(active);render();byId('feedback').textContent='Відкріплено';}catch(e){error(e);}};
-byId('target').onchange=async e=>{if(!e.target.value)return;try{snap=await api.pick(active,e.target.value);drawStatus();}catch(err){error(err);}};
+byId('target').onchange=async e=>{try{snap=await api.pick(active,e.target.value);drawStatus();}catch(err){error(err);}};
 byId('standalone').onclick=async()=>{try{await api.openStandalone();}catch(e){error(e);}};
+byId('browser').onclick=async()=>{try{await api.openBrowser();}catch(e){error(e);}};
 api.onSelectProvider(provider=>{if(providers.some(([id])=>id===provider)){active=provider;render();}});
 api.onSnapshot(value=>{snap=value;drawStatus();});
 api.snapshot().then(value=>{snap=value;render();}).catch(error);

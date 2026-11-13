@@ -96,3 +96,38 @@ A screenshot alone cannot guarantee every OS decoration/theme is pixel-perfect.
 For an already-installed copy, use a new Windows installer from this branch's
 successful **h00k Desktop Windows** Actions artifact. Desktop files are not
 replaced by updating the Linux VPS.
+
+## v0.1.2 audit fixes
+
+- Saved per-panel floating bounds are validated, retained independently for
+  MetaScalp/Tiger/Vataga, and restored when their original monitor is connected.
+  An unplugged/off-screen display falls back to a visible work area.
+- Explicit changes to floating mode, side or dimensions reposition existing
+  windows even if Follow is disabled. New users can choose the initial side
+  without needing a running trading terminal.
+- Web pages are lazy-loaded **only after** the window has sufficient display
+  space and is first displayed. A docked panel hidden for over 30 seconds due
+  to a missing/minimized terminal or no free space is destroyed, releasing
+  timers/network activity until the terminal returns. The website server itself
+  continues handling its ordinary traffic.
+- "Автоматично знайти" now clears the manually stored target. A chosen
+  executable is found again if its window title changes and there is exactly
+  one matching running window.
+- The local window picker no longer re-creates its options on every tracker
+  tick (especially when PnL/price titles update).
+
+**Authentication limitation:** This version embeds h00k.top in Electron.
+Email/password sign-in remains the practical option in the embedded view.
+Google OAuth through embedded webviews is not guaranteed (Google restricts
+embedded user-agents); this version does not claim to solve external-browser
+OAuth callback/session transfer. Do not enter exchange API keys in Smart Dock.
+
+**Vataga limitation:** Public integration instructions exist (enable application
+integration in Settings > General > Other, and select orderbook > Bind to
+window > Screener), but the command protocol used by partners is not published.
+No unverified API traffic is sent. References:
+https://liner.scalpsecta.com/docs
+https://vataga.trading/ru/news/releases/obnovlenie-terminala-vataga-terminal-5-13-3
+
+These audit changes need real Windows validation (multi-monitor DPI, actual
+trading terminal executables, drag/resize behavior, Google auth experience).
