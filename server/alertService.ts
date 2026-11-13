@@ -4,7 +4,7 @@ import fs from 'fs';
 import path from 'path';
 import type { PriceAlert, AlertHistoryItem, ExchangeId, MarketType } from '../src/types';
 import { sendUserTelegramMessage, getTelegramDelivery } from './telegramDelivery';
-import { isUserTelegramCategoryAllowed } from './siteNotificationPrefs';
+import { isUserTelegramCategoryAllowed, isUserNotificationCategoryAllowed } from './siteNotificationPrefs';
 import { getUserTelegram, saveUserTelegram, loadUserTelegram } from './userTelegram';
 export { getUserTelegram, saveUserTelegram, loadUserTelegram } from './userTelegram';
 import type { SetupInstance } from './surveillance/types';
@@ -612,7 +612,13 @@ export async function checkAlertsOnce(userId?: string) {
 
 async function checkAlertsInternal(userId?: string) {
   const alerts = loadAlerts();
-  const allActive = alerts.filter(a => a.isActive && !a.triggered);
+  // Disabled users' alerts remain pending: no silent consumption and no
+  // exchange subscription until the user enables the price category.
+  const allActive = alerts.filter(a => a.isActive && !a.triggered
+    && isUserNotificationCategoryAllowed(a.userId || '', {
+      source: 'PRICE_ALERT', eventType: 'PRICE_ALERT',
+      symbol: a.symbol, exchange: a.exchange, marketType: a.marketType,
+    }));
   // A manual /api/cron/run for one user must NEVER replace the global
   // exchange subscription universe with that user's private subset.
   // Keep network subscriptions global but evaluate/notify only the caller.
