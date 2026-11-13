@@ -1,6 +1,7 @@
 import type { TpSlConstructorSettings, TpSlTouchState } from './utils/tpSlConstructor';
 import type { WickTouchBar } from './utils/wickTouchEvidence';
 import type { TerminalLinkSettings } from './utils/terminalLinkService';
+import type { VisualChartProfile } from './components/hookchart/visualProfiles';
 export type ExchangeId = 'binance' | 'bybit';
 export type MarketType = 'futures' | 'spot';
 export type ChartProvider = 'tradingview' | 'hookchart';
@@ -31,6 +32,8 @@ export interface TerminalWorkspaceConfig {
   coinPresetExchange?: 'all' | ExchangeId;
   coinPresetMarketType?: 'all' | MarketType;
   coinPresetLimit?: number;
+  /** Optional terminal-only startup viewport, never applied to Screener/Patterns. */
+  initialChartView?: VisualChartProfile;
 }
 
 export type PatternCategory = 'reversal' | 'continuation' | 'breakout' | 'compression' | 'candlestick';
