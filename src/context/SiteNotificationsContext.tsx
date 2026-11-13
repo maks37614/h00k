@@ -40,6 +40,16 @@ function loadStoredItems(uid: string): SiteNotificationItem[] {
   catch { return []; }
 }
 
+function soundStorageKey(uid: string): string { return 'h00k_site_notification_sound_v1:' + uid; }
+function readStoredSound(uid: string): boolean {
+  try { return localStorage.getItem(soundStorageKey(uid)) !== 'false'; } catch { return true; }
+}
+function changePendingCount(map: Map<string, number>, uid: string, delta: number): void {
+  const next = (map.get(uid) || 0) + delta;
+  if (next <= 0) map.delete(uid);
+  else map.set(uid, next);
+}
+
 export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, profile, updateProfileData } = useAuth();
   const { history } = useAlerts();
@@ -74,22 +84,26 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
   soundEnabledRef.current = preferences.soundAlertsEnabled;
   const [error, setError] = useState<string | null>(null);
   // Profile snapshots can arrive out of order while toggles are being saved.
-  const pendingSettingsWrites = useRef(0);
-  const pendingSoundWrites = useRef(0);
+  const pendingSettingsWrites = useRef(new Map<string, number>());
+  const pendingSoundWrites = useRef(new Map<string, number>());
 
   useEffect(() => {
     setSettingsState({ uid, settings: loadSettings(uid, profile?.uid === uid ? profile.siteNotificationSettings : undefined) });
     setItemState({ uid, items: loadStoredItems(uid) });
     setError(null);
-  }, [uid]);
+    const selectedSound = profile?.uid === uid && typeof profile.soundAlertsEnabled === 'boolean'
+      ? profile.soundAlertsEnabled : readStoredSound(uid);
+    updatePreferences({ soundAlertsEnabled: selectedSound });
+  }, [uid, updatePreferences]);
 
   useEffect(() => {
-    if (profile?.uid !== uid || pendingSoundWrites.current > 0 || typeof profile.soundAlertsEnabled !== 'boolean') return;
+    if (profile?.uid !== uid || pendingSoundWrites.current.has(uid) || typeof profile.soundAlertsEnabled !== 'boolean') return;
+    try { localStorage.setItem(soundStorageKey(uid), String(profile.soundAlertsEnabled)); } catch {}
     updatePreferences({ soundAlertsEnabled: profile.soundAlertsEnabled });
   }, [uid, profile?.soundAlertsEnabled, updatePreferences]);
 
   useEffect(() => {
-    if (profile?.uid !== uid || pendingSettingsWrites.current > 0 || !profile.siteNotificationSettings) return;
+    if (profile?.uid !== uid || pendingSettingsWrites.current.has(uid) || !profile.siteNotificationSettings) return;
     const remote = normalizeSiteNotificationSettings(profile.siteNotificationSettings);
     settingsRef.current = remote;
     setSettingsState({ uid, settings: remote });
@@ -112,10 +126,10 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
     try { localStorage.setItem(siteNotificationSettingsKey(currentUid), JSON.stringify(next)); } catch {}
     setError(null);
     if (user?.uid === currentUid) {
-      pendingSettingsWrites.current += 1;
+      changePendingCount(pendingSettingsWrites.current, currentUid, 1);
       try { await updateProfileData({ siteNotificationSettings: next }); }
       catch { if (uidRef.current === currentUid) setError('Не вдалося синхронізувати налаштування з профілем. Вони збережені на цьому пристрої.'); }
-      finally { pendingSettingsWrites.current -= 1; }
+      finally { changePendingCount(pendingSettingsWrites.current, currentUid, -1); }
     }
   }, [user?.uid, updateProfileData]);
 
@@ -123,11 +137,12 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
     updatePreferences({ soundAlertsEnabled: enabled });
     setError(null);
     const currentUid = uidRef.current;
+    try { localStorage.setItem(soundStorageKey(currentUid), String(enabled)); } catch {}
     if (user?.uid === currentUid) {
-      pendingSoundWrites.current += 1;
+      changePendingCount(pendingSoundWrites.current, currentUid, 1);
       try { await updateProfileData({ soundAlertsEnabled: enabled }); }
       catch { if (uidRef.current === currentUid) setError('Не вдалося зберегти налаштування звуку в профілі.'); }
-      finally { pendingSoundWrites.current -= 1; }
+      finally { changePendingCount(pendingSoundWrites.current, currentUid, -1); }
     }
   }, [user?.uid, updatePreferences, updateProfileData]);
 
