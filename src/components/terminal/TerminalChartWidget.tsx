@@ -29,6 +29,7 @@ import {
 import { formatCryptoPrice, formatVolume } from '../../utils/formatters';
 import { ExchangeCandlestickChart } from '../ExchangeCandlestickChart';
 import type { TerminalToolbarVisibility } from '../hookchart/HookChartCanvas';
+import type { VisualChartProfile } from '../hookchart/visualProfiles';
 import { getTradingViewSymbol, normalizeExchangeSymbol } from '../../utils/marketSymbols';
 import { fetchDirectKlines } from '../../utils/directExchangeClient';
 import { useChartProvider } from '../../utils/useChartProvider';
@@ -53,6 +54,7 @@ interface TerminalChartWidgetProps {
   heightStyle?: string;
   /** Terminal-wide candle auto-scale; does not start any extra feed. */
   terminalAutoScale?: boolean;
+  terminalInitialView?: VisualChartProfile;
 }
 
 
@@ -155,6 +157,7 @@ export const TerminalChartWidget: React.FC<TerminalChartWidgetProps> = ({
   onDrop,
   heightStyle,
   terminalAutoScale = false,
+  terminalInitialView,
 }) => {
   const chartProvider = useChartProvider();
   const useIntegratedHookChartToolbar = chartProvider === 'hookchart';
@@ -877,6 +880,7 @@ export const TerminalChartWidget: React.FC<TerminalChartWidgetProps> = ({
             ) : (
               <ExchangeCandlestickChart
                 terminalAutoScale={terminalAutoScale && useIntegratedHookChartToolbar}
+                terminalInitialView={useIntegratedHookChartToolbar ? terminalInitialView : undefined}
                 terminalMode={useIntegratedHookChartToolbar}
                 terminalToolbarVisibility={useIntegratedHookChartToolbar ? terminalToolbarVisibility : undefined}
                 onTimeframeChange={useIntegratedHookChartToolbar ? (nextTimeframe) => onUpdateBlock({ timeframe: nextTimeframe }) : undefined}
