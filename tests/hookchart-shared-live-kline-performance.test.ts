@@ -97,6 +97,30 @@ test('late subscribers get only latest candle, stale or malformed messages ignor
   stop1(); stop2();
 });
 
+test('shared exchange Kline rejects older same-candle messages and cumulative volume decreases', () => {
+  let socket: FakeSocket | undefined;
+  const manager = createSharedKlineSubscriptions(url => {
+    socket = new FakeSocket(url);
+    return socket as unknown as WebSocket;
+  });
+  const seen: { volume: number; close: number }[] = [];
+  const stop = manager.subscribe(
+    { exchange: 'binance', marketType: 'futures', symbol: 'ETHUSDT', timeframe: '1m' },
+    { onCandle: candle => seen.push({ volume: candle.volume, close: candle.close }) },
+  );
+  const send = (eventTime: number, volume: number, close: number) => socket!.emit({
+    e: 'kline', s: 'ETHUSDT', E: eventTime,
+    k: { t: 1710000000000, i: '1m', o: '100',
+      h: '110', l: '90', c: String(close), v: String(volume) },
+  });
+  send(1710000000200, 100, 105);
+  send(1710000000100, 105, 108); // older exchange event, despite greater volume
+  send(1710000000300, 90, 103); // newer event but lower cumulative volume
+  send(1710000000400, 110, 107); // genuine newer update
+  assert.deepEqual(seen, [{ volume: 100, close: 105 }, { volume: 110, close: 107 }]);
+  stop();
+});
+
 test('historical Replay does not subscribe to a live-market feed', () => {
   const replay = readFileSync(new URL('../src/components/replay/ReplayChart.tsx', import.meta.url), 'utf8');
   const hook = readFileSync(new URL('../src/components/hookchart/useOriginalHookChartLiveFeed.ts', import.meta.url), 'utf8');

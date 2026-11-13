@@ -26,3 +26,26 @@ export function fetchSharedLiveFallbackKline(
     return null;
   });
 }
+
+/**
+ * Guard against asynchronous REST fallback overwriting a newer live tick.
+ * A kline volume is cumulative within one candle and must not move backwards
+ * when HTTP returns an older exchange snapshot.
+ */
+export function shouldApplyLiveFallbackKline(
+  latest: Kline,
+  current: { time: number; volume?: number } | null,
+  requestStartedAt: number,
+  lastStreamTickReceivedAt: number,
+  wsConnected: boolean,
+): boolean {
+  if (!validCandle(latest)) return false;
+  if (!current) return true;
+  if (latest.time < current.time) return false;
+  if (latest.time > current.time) return true;
+  if (wsConnected && lastStreamTickReceivedAt >= requestStartedAt) return false;
+  // Equal cumulative volume carries no new execution and may contain an
+  // outdated price, so it should not replace a fresher trade-driven close.
+  if (Number.isFinite(current.volume) && latest.volume <= (current.volume ?? 0)) return false;
+  return true;
+}

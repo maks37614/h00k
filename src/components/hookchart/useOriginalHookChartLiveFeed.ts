@@ -37,10 +37,17 @@ export function useOriginalHookChartLiveFeed({
   const symbol = normalizeExchangeSymbol(rawSymbol);
   // Key deliberately excludes candle timeframe and display threshold.
   const liquidationScope = sessionLiquidationScope(exchange, marketType, symbol);
-  const sessionSubscription = useMemo(() => ({
-    subscribe: (notify: () => void) => subscribeSessionLiquidations(liquidationScope, notify),
-    snapshot: () => getSessionLiquidationTotals(liquidationScope),
-  }), [liquidationScope]);
+  const sessionSubscription = useMemo(() => replay
+    ? ({
+      // Replay is historical-only: no live liquidation session subscription,
+      // even when another live HookChart tracks the same exchange and symbol.
+      subscribe: (_notify: () => void) => () => {},
+      snapshot: () => EMPTY_SESSION_LIQUIDATIONS,
+    })
+    : ({
+      subscribe: (notify: () => void) => subscribeSessionLiquidations(liquidationScope, notify),
+      snapshot: () => getSessionLiquidationTotals(liquidationScope),
+    }), [liquidationScope, replay]);
   const sessionTotals = useSyncExternalStore(sessionSubscription.subscribe, sessionSubscription.snapshot, () => EMPTY_SESSION_LIQUIDATIONS);
   const [densities, setDensities] = useState<Density[]>([]);
   const [marketPrints, setMarketPrints] = useState<MarketPrint[]>([]);
