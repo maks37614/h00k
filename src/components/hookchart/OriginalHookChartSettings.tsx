@@ -534,16 +534,21 @@ function VisualProfileEditor({
         Редагування лише повзунками нижче: справжній HookChart застосує точні значення до
         свого розміру. Профілі Скрінера, Формацій, Термінала, телефона й комп’ютера окремі.
       </div>
+      <div className="visualProfileSelection">
       <Setting label="Тип графіка">
         <VisualContextPicker value={visualContext} onChange={onContextChange} includeTerminalContexts={includeTerminalContexts} />
       </Setting>
       <Choice label="Пристрій" values={['mobile', 'desktop']} labels={['Телефон', 'Комп’ютер']}
         value={visualDevice} set={value => onDeviceChange(value as VisualDevice)} />
+      </div>
+      <div className="visualProfilePreviewStage" aria-label="Попередній перегляд графіка">
       <HookChartVisualPreview
         longColor={previewLongColor}
         shortColor={previewShortColor}
         profile={selectedProfile}
       />
+      </div>
+      <div className="visualProfileControls" role="group" aria-label="Повзунки налаштування графіка">
       <Setting label="Кількість видимих свічок" desc="Кількість на ширину графіка; на вузькому екрані обмежується мінімальною шириною свічки.">
         <div className="flex items-center gap-2">
           <input aria-label="Кількість видимих свічок" type="range" className="visualProfileRange" min="15" max="500" step="5"
@@ -576,7 +581,8 @@ function VisualProfileEditor({
           <b className="valueBadge">барів</b>
         </div>
       </Setting>
-      <div className="flex flex-wrap gap-2">
+      </div>
+      <div className="visualProfileActions">
         {onCapture && <button type="button" className="hotkeyResetOne" onClick={onCapture}>
           Зберегти поточний вигляд графіка
         </button>}
