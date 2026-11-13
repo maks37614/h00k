@@ -5,8 +5,8 @@ import { getSharedMarketPrints, subscribeMarketTrades } from './marketTradeStrea
 import { calcCascadeRisk, type Candle, type Density, type Liquidation } from './engine';
 import { normalizeExchangeSymbol } from '../../utils/marketSymbols';
 import type { ChartDepthStatus } from '../../utils/hookChartDepthProtocol';
-import { connectHookChartDepth } from './depthStream';
-import { connectHookChartLiquidations } from './liquidationStream';
+import { connectSharedHookChartDepth } from './sharedDepthStream';
+import { connectSharedHookChartLiquidations } from './sharedLiquidationStream';
 import { HookChartDensityBook, type DensityAutoStats } from './densityBook';
 import { EMPTY_SESSION_LIQUIDATIONS, getSessionLiquidationTotals, recordSessionLiquidation, sessionLiquidationScope, subscribeSessionLiquidations } from './liquidationSession';
 import { canonicalLiquidationId, deduplicateLiquidations, filterVisibleLiquidations } from './liquidationDisplay';
@@ -86,7 +86,13 @@ export function useOriginalHookChartLiveFeed({
 
     let dead = false;
     const depthBook = new HookChartDensityBook();
+    let depthPublishTimer: ReturnType<typeof setTimeout> | null = null;
+    let lastDepthPublishAt = 0;
     const clearDepth = () => {
+      if (depthPublishTimer !== null) {
+        clearTimeout(depthPublishTimer);
+        depthPublishTimer = null;
+      }
       depthScopeRef.current = '';
       depthBook.clear();
       setDepthReady(false);
@@ -108,13 +114,33 @@ export function useOriginalHookChartLiveFeed({
       if (!next.depthReady) setDepthStatus(current => current === 'live' ? 'reconnecting' : current);
       return next.depthReady;
     };
+    // Apply every depth delta to each chart's exact local order book, but
+    // throttle only expensive derived-density rendering (at most 5 per second).
+    // Never throttle or drop a deletion/sequence update itself.
+    const queueDepthPublish = () => {
+      if (depthPublishTimer !== null || dead) return;
+      const remaining = 200 - (Date.now() - lastDepthPublishAt);
+      if (remaining <= 0) {
+        lastDepthPublishAt = Date.now();
+        applyBook();
+      } else {
+        depthPublishTimer = setTimeout(() => {
+          depthPublishTimer = null;
+          if (!dead) {
+            lastDepthPublishAt = Date.now();
+            applyBook();
+          }
+        }, remaining);
+      }
+    };
     applyBookRef.current = applyBook;
     clearDepth();
-    const stopDepth = connectHookChartDepth({
+    const stopDepth = connectSharedHookChartDepth({
       exchange, marketType, symbol,
       onBook: update => {
         if (dead || !depthBook.apply(update)) return false;
-        return applyBook();
+        queueDepthPublish();
+        return true;
       },
       onStatus: status => {
         if (dead) return;
@@ -149,6 +175,7 @@ export function useOriginalHookChartLiveFeed({
       stopTrades();
       stopDepth();
       clearInterval(depthPublish);
+      if (depthPublishTimer !== null) clearTimeout(depthPublishTimer);
       depthBook.clear();
     };
   }, [
@@ -179,8 +206,14 @@ export function useOriginalHookChartLiveFeed({
 
     let dead = false;
     let raw: Liquidation[] = [];
+    let latestEventAt = 0;
+    let pendingLiquidationPublish: ReturnType<typeof setTimeout> | null = null;
     const publish = () => {
       if (dead) return;
+      if (pendingLiquidationPublish !== null) {
+        clearTimeout(pendingLiquidationPublish);
+        pendingLiquidationPublish = null;
+      }
       const now = Date.now();
       raw.sort((a, b) => a.t - b.t);
       while (raw.length && now - raw[0].t > 30 * 60_000) raw.shift();
@@ -191,7 +224,15 @@ export function useOriginalHookChartLiveFeed({
         ? quantile(values, .75)
         : Math.max(quantile(values, .8), adaptiveCut(values, .8, .98, 2.5));
       setLiquidationCut(values.length ? Math.max(1000, adaptive) : 0);
+      setLiquidationLastEventAt(latestEventAt || null);
       setLiquidations([...raw]);
+    };
+    const scheduleLiquidationPublish = () => {
+      if (dead || pendingLiquidationPublish !== null) return;
+      pendingLiquidationPublish = setTimeout(() => {
+        pendingLiquidationPublish = null;
+        publish();
+      }, 200);
     };
     const push = (row: Liquidation) => {
       if (dead || !Number.isFinite(row.usd) || row.usd <= 0) return;
@@ -202,14 +243,16 @@ export function useOriginalHookChartLiveFeed({
         if (row.usd <= raw[index].usd) return; // replayed event or older fill
         raw[index] = { ...row, id };
       } else raw.push({ ...row, id });
-      setLiquidationLastEventAt(current => Math.max(current || 0, row.t));
-      publish();
+      latestEventAt = Math.max(latestEventAt, row.t);
+      // Preserve every event and the immediate session counter update; only
+      // group React renders while bursts arrive at high frequency.
+      scheduleLiquidationPublish();
     };
 
     setLiquidations([]);
     setLiquidationCut(0);
     setLiquidationLastEventAt(null);
-    const stop = connectHookChartLiquidations({
+    const stop = connectSharedHookChartLiquidations({
       exchange, symbol,
       onSnapshot: (events, connected) => {
         if (dead) return;
@@ -217,7 +260,7 @@ export function useOriginalHookChartLiveFeed({
         // Recover session-era events from a reconnect snapshot, without counting
         // pre-session historical events or repeating IDs already received.
         for (const row of events) recordSessionLiquidation(liquidationScope, row, 'snapshot');
-        setLiquidationLastEventAt(raw.length ? Math.max(...raw.map(row => row.t)) : null);
+        latestEventAt = raw.length ? Math.max(...raw.map(row => row.t)) : 0;
         setLiquidationStreamLive(connected);
         publish();
       },
@@ -227,6 +270,7 @@ export function useOriginalHookChartLiveFeed({
     const publishTimer = setInterval(publish, 2000);
     return () => {
       dead = true;
+      if (pendingLiquidationPublish !== null) clearTimeout(pendingLiquidationPublish);
       clearInterval(publishTimer);
       stop();
     };
