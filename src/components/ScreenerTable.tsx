@@ -4,6 +4,7 @@ import type { ScannedCoin, DetectedFormation } from '../types';
 import type { FormationGroup } from '../utils/formationList';
 import { formatCryptoPrice, formatVolume } from '../utils/formatters';
 import { useLanguage } from '../context/LanguageContext';
+import { FormationCoinCopyButton } from './FormationCoinCopyButton';
 
 interface ScreenerTableProps {
   items: FormationGroup[];
@@ -73,10 +74,10 @@ export const ScreenerTable: React.FC<ScreenerTableProps> = ({
 
                 {/* Coin Symbol */}
                 <td className="py-3 px-3 sm:px-4 font-mono">
-                  <div className="flex items-center gap-1.5">
+                  <FormationCoinCopyButton symbol={coin.symbol} className="flex items-center gap-1.5 text-left">
                     <span className="font-bold text-white text-xs sm:text-sm">{coin.baseAsset}</span>
                     <span className="text-[10px] text-slate-500">/{coin.quoteAsset}</span>
-                  </div>
+                  </FormationCoinCopyButton>
                   {/* Exchange badge on mobile when exchange col is hidden */}
                   <div className="flex items-center gap-1 mt-0.5 sm:hidden">
                     <span

@@ -7,6 +7,7 @@ import { fetchDirectKlines } from '../utils/directExchangeClient';
 import { formatCryptoPrice } from '../utils/formatters';
 import { useSurveillance } from '../context/SurveillanceContext';
 import { TradingViewChart } from './TradingViewChart';
+import { FormationCoinCopyButton } from './FormationCoinCopyButton';
 
 export interface EarlyFormationCardProps {
   coin: ScannedCoin;
@@ -99,9 +100,12 @@ export function EarlyFormationCard({
         <div className="flex-1 flex flex-col w-full h-full min-h-0 relative">
           <div className="formation-chart-header relative z-30 px-1 py-1 mb-1 border-b border-slate-800/80 shrink-0">
             <div className="formation-chart-identity">
-              <span className="formation-chart-symbol font-mono font-extrabold text-white text-xs sm:text-sm" title={coin.baseAsset + '/' + coin.quoteAsset}>
+              <FormationCoinCopyButton
+                symbol={coin.symbol}
+                className="formation-chart-symbol font-mono font-extrabold text-white text-xs sm:text-sm"
+              >
                 {coin.baseAsset}/{coin.quoteAsset}
-              </span>
+              </FormationCoinCopyButton>
               <span className="text-[10px] rounded bg-amber-500/15 px-1.5 py-0.5 text-amber-300 font-semibold" title="Формація ще не підтверджена">
                 МОЖЛИВА
               </span>
@@ -162,12 +166,12 @@ export function EarlyFormationCard({
                 {/* Match the regular FormationCard coin/price header. */}
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <div className="flex items-center gap-1.5">
+                    <FormationCoinCopyButton symbol={coin.symbol} className="flex min-w-0 items-center gap-1.5 text-left">
                       <span className="font-extrabold text-base text-white tracking-wide font-mono truncate">
                         {coin.baseAsset}
                       </span>
                       <span className="text-xs text-slate-500 font-mono truncate">/{coin.quoteAsset}</span>
-                    </div>
+                    </FormationCoinCopyButton>
                     <div className="flex items-center flex-wrap gap-1 mt-0.5">
                       <span className={'text-[10px] px-1.5 py-0.2 rounded font-semibold uppercase ' +
                         (coin.exchange === 'binance'

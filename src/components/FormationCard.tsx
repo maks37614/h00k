@@ -19,6 +19,7 @@ import { formatCryptoPrice } from '../utils/formatters';
 import { useArchive } from '../context/ArchiveContext';
 import { useSurveillance } from '../context/SurveillanceContext';
 import { TradingViewChart } from './TradingViewChart';
+import { FormationCoinCopyButton } from './FormationCoinCopyButton';
 
 const QUALITY_LABELS: Record<string, string> = {
   formation: 'Формація', extremeLocation: 'Екстремум', trigger: 'Пробій',
@@ -150,12 +151,12 @@ export const FormationCard: React.FC<FormationCardProps> = ({
           {/* Use the card's available width: desktop grid columns may be narrower than mobile. */}
           <div className="formation-chart-header relative z-30 px-1 py-1 mb-1 border-b border-slate-800/80 shrink-0">
             <div className="formation-chart-identity">
-              <span
+              <FormationCoinCopyButton
+                symbol={coin.symbol}
                 className="formation-chart-symbol font-mono font-extrabold text-white text-xs sm:text-sm"
-                title={`${coin.baseAsset}/${coin.quoteAsset}`}
               >
                 {coin.baseAsset}/{coin.quoteAsset}
-              </span>
+              </FormationCoinCopyButton>
               <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 font-mono uppercase">
                 {coin.exchange}
               </span>
@@ -234,12 +235,12 @@ export const FormationCard: React.FC<FormationCardProps> = ({
           <div className="flex items-start justify-between gap-2">
             <div className="flex items-center gap-2">
               <div>
-                <div className="flex items-center gap-1.5">
+                <FormationCoinCopyButton symbol={coin.symbol} className="flex items-center gap-1.5 text-left">
                   <span className="font-extrabold text-base text-white tracking-wide font-mono">
                     {coin.baseAsset}
                   </span>
                   <span className="text-xs text-slate-500 font-mono">/{coin.quoteAsset}</span>
-                </div>
+                </FormationCoinCopyButton>
                 <div className="flex items-center gap-1.5 mt-0.5">
                   <span
                     className={`text-[10px] px-1.5 py-0.2 rounded font-semibold uppercase ${
