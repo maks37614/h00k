@@ -136,8 +136,10 @@ export function normalizeSiteNotificationSettings(input: unknown): SiteNotificat
     enabledAt: typeof d.enabledAt === 'number' && Number.isFinite(d.enabledAt) && d.enabledAt > 0
       ? Math.floor(d.enabledAt) : 0,
     sound: d.sound === 'soft' || d.sound === 'pulse' ? d.sound : 'chime',
-    browserPush: consent && d.browserPush === true,
-    telegramEnabled: consent && d.telegramEnabled === true,
+    // The master switch also revokes delivery channels; merely keeping a browser
+    // permission granted is never consent to receive notifications.
+    browserPush: consent && d.enabled === true && d.browserPush === true,
+    telegramEnabled: consent && d.enabled === true && d.telegramEnabled === true,
     impulseSymbol: normalizeImpulseSymbol(d.impulseSymbol || ''),
     impulseThresholdPct: bounded(d.impulseThresholdPct, 2, .1, 50),
     impulseWindowMinutes: d.impulseWindowMinutes === 1 || d.impulseWindowMinutes === 15 ? d.impulseWindowMinutes : 5,
@@ -174,6 +176,16 @@ export function siteNotificationSettingsKey(uid: string): string {
 }
 export function siteNotificationClearedAtKey(uid: string): string {
   return 'h00k_site_notifications_cleared_at_v1:' + (uid || 'guest');
+}
+/** Shared across all tabs, so a stale profile snapshot cannot resurrect notifications. */
+export function siteNotificationMuteKey(uid: string): string {
+  return 'h00k_site_notifications_mute_v2:' + (uid || 'guest');
+}
+export function applyLocalNotificationMute(settings: SiteNotificationSettings, mutedAt: number): SiteNotificationSettings {
+  if (mutedAt > 0 && settings.enabledAt <= mutedAt) {
+    return normalizeSiteNotificationSettings({ ...settings, enabled: false });
+  }
+  return settings;
 }
 export function siteNotificationSeenKey(uid: string): string {
   return 'h00k_site_notifications_seen_v2:' + (uid || 'guest');
