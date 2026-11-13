@@ -26,6 +26,12 @@ jobs:
         run: powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File win-agent.ps1 -Once
       - name: Build Windows installer
         run: npm run dist
+      - name: Verify installer EXE embeds original h00k robot icon
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem dist -Filter '*.exe' | Select-Object -First 1
+          if (-not $installer) { throw 'Windows installer not found' }
+          & ./scripts/verify-installer-icon.ps1 -Installer $installer.FullName -RobotIcon ./build/h00k-installer.ico
       - name: Smoke-test NSIS installer and shortcut on real Windows
         shell: pwsh
         run: |
@@ -46,4 +52,6 @@ jobs:
           path: |
             desktop/dist/*.exe
             desktop/dist/SHA256SUMS.txt
+            desktop/build/h00k-robot-preview.png
+            desktop/build/h00k-installer.ico
           if-no-files-found: error
