@@ -12,6 +12,15 @@ test('Screener has no crypto news widget and Market Sentiment remains available'
   assert.equal(existsSync(new URL('../src/components/CryptoNewsWidget.tsx', import.meta.url)), false);
 });
 
+test('Market Sentiment fills the same available Screener width on desktop and mobile', () => {
+  const screener = source('../src/components/CoinScreenerPage.tsx');
+  const sentiment = source('../src/components/MarketSentimentWidget.tsx');
+  assert.match(screener, /<MarketSentimentWidget coins=\\{coins\\}/);
+  assert.match(sentiment, /className="w-full min-w-0 rounded-2xl bg-gradient-to-r/);
+  assert.match(sentiment, /className="w-full min-w-0 rounded-2xl border border-slate-800/);
+  assert.doesNotMatch(sentiment, /lg:max-w-5xl|lg:mx-auto|(?:sm|md|lg|xl|2xl):max-w-/);
+});
+
 test('News request, translation and server startup dependencies are removed', () => {
   const server = source('../server.ts');
   const env = source('../.env.example');
