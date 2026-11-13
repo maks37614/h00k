@@ -136,8 +136,37 @@ async function clipboardFallback(ticker: string): Promise<boolean> {
   return false;
 }
 
+/**
+ * Match Tiger's documented request echo, not a generic 'successfully' frame.
+ * A response for a different symbol/group must not be reported as our success.
+ */
+export function matchesTigerAcknowledgement(payload: string, response: unknown): boolean {
+  if (payload === 'ping') return false;
+  try {
+    const requested = JSON.parse(payload);
+    const envelope = response as {
+      response?: { type?: string };
+      request?: { e?: string; m?: string; symbol?: string; linkGroup?: string; type?: string };
+    } | null;
+    if (!envelope || envelope.response?.type?.toLowerCase() !== 'successfully' || !envelope.request) return false;
+    const echoed = envelope.request;
+    const same = (a: unknown, b: unknown) => typeof a === 'string' && typeof b === 'string'
+      && a.toUpperCase() === b.toUpperCase();
+    return same(echoed.type, 'setLinkSymbol') &&
+      same(echoed.e, requested.e) &&
+      same(echoed.m, requested.m) &&
+      same(echoed.symbol, requested.symbol) &&
+      same(echoed.linkGroup, requested.linkGroup);
+  } catch {
+    return false;
+  }
+}
+
 async function tigerSocketCommand(port: number, payload: string, timeoutMs = 2800): Promise<{ ok: boolean; message: string }> {
   if (typeof WebSocket === 'undefined') return { ok: false, message: 'Цей браузер не підтримує WebSocket.' };
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    return { ok: false, message: 'Некоректний локальний порт Tiger.' };
+  }
   return await new Promise(resolve => {
     let settled = false;
     let socket: WebSocket | null = null;
@@ -148,26 +177,35 @@ async function tigerSocketCommand(port: number, payload: string, timeoutMs = 280
       try { socket?.close(); } catch {}
       resolve({ ok, message });
     };
-    const timer = setTimeout(() => finish(false, 'Tiger не відповів. Перевірте локальний сервер сигналів і дозвіл браузера.'), timeoutMs);
+    const timer = setTimeout(() => finish(false, 'Tiger не відповів або не підтвердив потрібний інструмент. Перевірте локальний сервер сигналів.'), timeoutMs);
     try {
       socket = new WebSocket(`ws://127.0.0.1:${port}`);
-      socket.onopen = () => { try { socket?.send(payload); } catch { finish(false, 'Не вдалося надіслати команду в Tiger.'); } };
+      socket.onopen = () => {
+        try { socket?.send(payload); }
+        catch { finish(false, 'Не вдалося надіслати команду в Tiger.'); }
+      };
       socket.onmessage = event => {
-        const raw = String(event.data);
-        if (payload === 'ping' && (raw.toLowerCase() === 'pong' || raw.includes('"Pong"'))) {
+        const raw = typeof event.data === 'string' ? event.data : '';
+        if (payload === 'ping' && raw.trim().toLowerCase() === 'pong') {
           finish(true, 'Локальний сервер Tiger відповідає.');
           return;
         }
         try {
           const parsed = JSON.parse(raw);
-          if (payload === 'ping' && (parsed?.title === 'Pong' || parsed?.response?.type === 'successfully')) {
-            finish(true, 'Локальний сервер Tiger відповідає.');
-          } else if (parsed?.response?.type === 'successfully') {
-            finish(true, String(parsed?.message || 'Tiger підтвердив перемикання.'));
-          } else if (parsed?.response?.type === 'error' || parsed?.response?.error) {
-            finish(false, String(parsed?.response?.error?.message || parsed?.message || 'Tiger відхилив команду.'));
+          if (payload === 'ping') {
+            // An unrelated success response cannot identify the Tiger server.
+            if (parsed?.title === 'Pong' && parsed?.response?.type === 'successfully') {
+              finish(true, 'Локальний сервер Tiger відповідає.');
+            }
+            return;
           }
-        } catch { /* Ignore unrelated messages and wait for acknowledgement. */ }
+          if (parsed?.response?.type === 'error' || parsed?.response?.error) {
+            finish(false, String(parsed?.response?.error?.message || parsed?.message || 'Tiger відхилив команду.'));
+          } else if (matchesTigerAcknowledgement(payload, parsed)) {
+            finish(true, String(parsed?.message || 'Tiger підтвердив перемикання.'));
+          }
+          // Ignore unrelated/unsolicited frames; wait for the matching response or timeout.
+        } catch { /* Ignore non-JSON frames while waiting for the expected response. */ }
       };
       socket.onerror = () => finish(false, 'Не вдалося підключитися до Tiger на цьому комп’ютері.');
       socket.onclose = () => finish(false, 'Tiger закрив з’єднання без підтвердження.');
