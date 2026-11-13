@@ -1,0 +1,35 @@
+name: Capture real h00k guest screener screenshots
+
+on:
+  push:
+    branches:
+      - feature/guest-landing-onboarding-20261112
+    paths:
+      - .github/workflows/capture-guest-screener.yml
+
+permissions:
+  contents: write
+
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install screenshot browser
+        run: |
+          npm install --no-save playwright@1.57.0
+          npx playwright install chromium --with-deps
+      - name: Capture live public screener
+        run: node scripts/capture-public-screener.mjs
+      - name: Commit captured images to this PR branch
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add public/guest-shots/*.png
+          git diff --cached --quiet || (git commit -m 'Capture authentic production h00k screener screenshots' && git push)
