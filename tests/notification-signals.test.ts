@@ -207,6 +207,32 @@ test('new formations are not starved by the first three previously delivered coi
   assert.deepEqual(later.map(e => e.symbol), ['XRPUSDT']);
 });
 
+test('quota does not consume unreleased proximity and quality state on fourth coin', () => {
+  const now = 2_000_000;
+  const chosen = normalizeSiteNotificationSettings({
+    optedIn: true, enabled: true, levels: true, round: true, quality: true,
+    minQualityScore: 88, levelDistancePct: 1, roundDistancePct: 1,
+  });
+  const coins = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'XRPUSDT'].map(symbol => {
+    const snapshot = coin(now);
+    snapshot.symbol = symbol;
+    return snapshot;
+  });
+  const delivered = new Set<string>();
+  const quality = new QualityScoreTracker();
+  const proximity = new ProximityAlertTracker();
+  const call = (time: number) => scanNotificationSignals(coins, chosen, [], time,
+    quality, proximity, id => delivered.has(id));
+  const first = call(now);
+  for (const kind of ['levels', 'round', 'quality']) {
+    assert.equal(first.filter(e => e.kind === kind).length, 3, kind);
+  }
+  first.forEach(e => delivered.add(e.id));
+  const second = call(now + 1000);
+  for (const kind of ['levels', 'round', 'quality']) {
+    assert.ok(second.some(e => e.kind === kind && e.symbol === 'XRPUSDT'), kind);
+  }
+});
 test('surveillance event classification is grounded in server notificationType', () => {
   const row = { id: 'ev1', type: 'level', title: 'Пробій 4H', description: 'Закрита свічка',
     price: 100, timestamp: 500_000, severity: 'warning',
