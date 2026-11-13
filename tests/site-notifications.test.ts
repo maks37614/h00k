@@ -13,9 +13,10 @@ test('notification categories have independent opt-out and a master disable', ()
   assert.equal(notificationEnabled(defaults, 'price'), true);
   assert.equal(notificationEnabled(defaults, 'formation'), true);
   assert.equal(notificationEnabled(defaults, 'impulse'), false);
+  assert.equal(notificationEnabled(defaults, 'volatility'), false);
   assert.equal(notificationEnabled(defaults, 'surveillance'), true);
   const disabled = normalizeSiteNotificationSettings({ ...defaults, enabled: false, impulses: true });
-  for (const type of ['price', 'formation', 'impulse', 'surveillance'] as const)
+  for (const type of ['price', 'formation', 'impulse', 'volatility', 'surveillance'] as const)
     assert.equal(notificationEnabled(disabled, type), false);
   assert.equal(notificationEnabled({ ...defaults, price: false }, 'price'), false);
   assert.equal(notificationEnabled({ ...defaults, price: false }, 'formation'), true);
@@ -41,6 +42,7 @@ test('rolling impulse detector uses observed short-window prices, both direction
   assert.equal(tracker.push(100.3, 106_000, 2), null);
   const impulse = tracker.push(103, 111_000, 2);
   assert.ok(impulse);
+  assert.equal(impulse?.kind, 'impulse');
   assert.equal(impulse?.changePct, 3);
   assert.equal(impulse?.baselinePrice, 100);
   assert.equal(tracker.push(96, 122_000, 2), null, 'no flood before cooldown');
@@ -49,6 +51,19 @@ test('rolling impulse detector uses observed short-window prices, both direction
   assert.ok(decline);
   assert.ok((decline?.changePct || 0) < 0, 'downward impulse is recorded with a negative value');
   assert.equal(tracker.push(Number.NaN, 194_000, 2), null);
+});
+
+test('range-only volatility is detected despite a flat net price move', () => {
+  const tracker = new ImpulseTracker(1);
+  assert.equal(tracker.push(100, 100_000, 2), null);
+  assert.equal(tracker.push(103, 105_000, 2), null); // require 10 seconds of observed history
+  const spike = tracker.push(100, 111_000, 2);
+  assert.ok(spike);
+  assert.equal(spike?.kind, 'volatility');
+  assert.equal(spike?.changePct, 0);
+  assert.equal(spike?.rangePct, 3);
+  assert.equal(spike?.durationSeconds, 11);
+  assert.equal(tracker.push(104, 115_000, 2), null, 'cooldown covers both volatility and impulses');
 });
 
 test('notification history never reads another account and rejects invalid local entries', () => {
