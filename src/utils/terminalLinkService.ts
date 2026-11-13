@@ -234,7 +234,8 @@ export async function sendToSelectedTerminal(
   source: TerminalLinkSource,
   preferences: TerminalLinkSettings,
   metaScalp: MetaScalpSettings,
-  quality?: number
+  quality?: number,
+  allowClipboardFallback = true
 ): Promise<TerminalLinkResult> {
   const p = normalizeTerminalLinkSettings(preferences);
   const ticker = symbol.trim().toUpperCase();
@@ -250,7 +251,7 @@ export async function sendToSelectedTerminal(
     if (!metaScalp.enabled) return { ...base, message: 'MetaScalp вимкнено в налаштуваннях.' };
     const group = normalizeMetaScalpGroup(p.metaScalpGroups[source] || metaScalp.binding);
     if (!group) return { ...base, message: 'Група MetaScalp має бути від 001 до 500.' };
-    const result = await sendTickerToMetaScalp(ticker, exchange, marketType, { ...metaScalp, binding: group });
+    const result = await sendTickerToMetaScalp(ticker, exchange, marketType, { ...metaScalp, binding: group }, allowClipboardFallback);
     return { terminal, success: result.success, ticker: result.ticker, group, message: result.message, copiedToClipboard: result.copiedToClipboard };
   }
   if (terminal === 'tiger') {
@@ -258,10 +259,10 @@ export async function sendToSelectedTerminal(
     if (!group) return { ...base, message: 'Неправильна група Tiger. Доступні A–Z або 0–11.' };
     const payload = JSON.stringify({ type: 'setLinkSymbol', e: exchange.toUpperCase(), m: marketType.toUpperCase(), symbol: ticker, linkGroup: group });
     const result = await tigerSocketCommand(p.tigerPort, payload);
-    const copied = result.ok ? false : await clipboardFallback(ticker);
+    const copied = result.ok || !allowClipboardFallback ? false : await clipboardFallback(ticker);
     return { terminal, success: result.ok, ticker, group, message: result.message, copiedToClipboard: copied };
   }
-  const copied = await clipboardFallback(ticker);
+  const copied = allowClipboardFallback ? await clipboardFallback(ticker) : false;
   return {
     terminal, success: false, ticker, group: '',
     message: 'Vataga: відкриття через API ще не активовано — виробник не опублікував формат локальної команди. Налаштуйте «Інтеграція додатків» у Vataga; до підтвердження протоколу доступне копіювання тикера.',
