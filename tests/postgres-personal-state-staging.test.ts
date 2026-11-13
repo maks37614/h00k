@@ -1,0 +1,37 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { preparePersonalStateRows, STATE_MIGRATION_CHUNK } from '../server/pgPersonalState';
+
+test('staging skips guest, former-user, malformed state, and preserves valid per-user rows',()=>{
+ const snap={
+ surveillance:{
+  alice:[{id:'a1',userId:'alice',exchange:'binance',marketType:'futures',symbol:'BTCUSDT',isActive:true}],
+  former:[{id:'x',userId:'former',exchange:'bybit',marketType:'spot',symbol:'BTCUSDT',isActive:true}],
+  guest:[{id:'y',userId:'guest',exchange:'binance',marketType:'futures',symbol:'BTCUSDT',isActive:true}]
+ },
+ alerts:[{id:'id',userId:'alice',symbol:'ETHUSDT',exchange:'bybit',marketType:'spot',isActive:true},
+  {id:'old',userId:'former',symbol:'ETHUSDT',exchange:'bybit',marketType:'spot',isActive:true}],
+ history:[{id:'h',userId:'alice',triggeredAt:1},{id:'other',userId:'guest',triggeredAt:1}]
+ };
+ const rows=preparePersonalStateRows(snap as any,new Set(['alice']));
+ assert.deepEqual(rows.surveillance.map(x=>x.id),['a1']);
+ assert.deepEqual(rows.alerts.map(x=>x.id),['id']);
+ assert.deepEqual(rows.history.map(x=>x.id),['h']);
+ assert.equal(rows.skipped.orphaned,4);
+ assert.equal(STATE_MIGRATION_CHUNK,100);
+});
+test('staging is idempotent, atomic and does not replace JSON canonical state',()=>{
+ const code=readFileSync(new URL('../server/pgPersonalState.ts',import.meta.url),'utf8');
+ const sql=readFileSync(new URL('../server/migrations/002_personal_state.sql',import.meta.url),'utf8');
+ const cli=readFileSync(new URL('../server/pgStateMigrator.ts',import.meta.url),'utf8');
+ assert.match(code,/ON CONFLICT \(user_id,/);
+ assert.match(code,/await client.query\('BEGIN'\)/);
+ assert.match(code,/await client.query\('ROLLBACK'\)/);
+ assert.match(code,/pg_advisory_xact_lock/);
+ for(const name of ['h00k_surveillance_state','h00k_price_alert_state','h00k_alert_history_state']) {
+  assert.match(sql,new RegExp('CREATE TABLE IF NOT EXISTS '+name));
+ }
+ assert.match(cli,/liveCutover:false/);
+ assert.match(cli,/Specify exactly --dry-run or --apply/);
+});
