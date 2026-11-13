@@ -620,7 +620,7 @@ function VisualProfileEditor({
           </div>
         </Setting>
         <Setting label="Відступ праворуч"
-          help="Залишає порожнє місце праворуч від останньої свічки. Значення вимірюється в барах і відображається на схемі одразу. На реальному графіку відступ застосовується для вибраного профілю.">
+          help="Вільний простір праворуч від останньої свічки (у барах). Значення відображається на схемі одразу. На реальному графіку відступ застосовується для вибраного профілю.">
           <div className="flex items-center gap-2">
             <input aria-label="Відступ праворуч у барах" type="range" className="visualProfileRange" min="0" max={VISUAL_GAP_MAX} step="1"
               value={selectedProfile.rightGapBars} onChange={event => onProfileChange({ rightGapBars: Number(event.target.value) })}/>
