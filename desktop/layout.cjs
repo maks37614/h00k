@@ -54,11 +54,17 @@ function floatingRects(target, work, width, height, count, side = 'right') {
   const w = Math.min(width, work.width);
   const h = Math.min(height, work.height);
   const validTarget = finiteRect(target);
-  const baseX = !validTarget ? work.x + 32
+  const baseX = !validTarget
+    ? side === 'left' ? work.x + 24
+      : side === 'right' ? work.x + work.width - w - 24
+      : work.x + Math.round((work.width - w) / 2)
     : side === 'left' ? target.x - w - DOCK_GAP
     : side === 'top' || side === 'bottom' ? target.x + 32
     : target.x + target.width + DOCK_GAP;
-  const baseY = !validTarget ? work.y + 32
+  const baseY = !validTarget
+    ? side === 'top' ? work.y + 24
+      : side === 'bottom' ? work.y + work.height - h - 24
+      : work.y + Math.round((work.height - h) / 2)
     : side === 'top' ? target.y - h - DOCK_GAP
     : side === 'bottom' ? target.y + target.height + DOCK_GAP
     : target.y + 32;
@@ -69,4 +75,4 @@ function floatingRects(target, work, width, height, count, side = 'right') {
     height: Math.round(h),
   }));
 }
-module.exports = { dockRects, floatingRects };
+module.exports = { dockRects, floatingRects, finiteRect };
