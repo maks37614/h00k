@@ -131,3 +131,36 @@ https://vataga.trading/ru/news/releases/obnovlenie-terminala-vataga-terminal-5-1
 
 These audit changes need real Windows validation (multi-monitor DPI, actual
 trading terminal executables, drag/resize behavior, Google auth experience).
+
+## v0.1.3: branded Windows installer
+
+- The Windows executable, taskbar and its desktop shortcut use a **multi-resolution
+  h00k robot-eyes icon** (16 through 256 px) instead of the Electron placeholder.
+  The graphic is generated from the original existing `public/h00k-robot-logo.svg`
+  with no external image files.
+- The assisted NSIS install/uninstall wizard includes dark-navy h00k-themed
+  sidebar illustrations and a cyan-on-dark header (true 24-bit BMP graphics);
+  standard Windows wizard controls retain the native Windows theme.
+- The setup wizard now offers a **real "Створити ярлик h00k на робочому столі"
+  checkbox**. It defaults to checked; uncheck it to omit the shortcut. The
+  Start menu shortcut remains available. During re-installation the explicit
+  unchecked choice also clears an old desktop link.
+- `desktop/build/installer.nsh` extends the existing electron-builder NSIS
+  script rather than replacing the install/uninstall implementation.
+- Branding assets are generated locally during `npm test` and `npm run dist`
+  via `npm run brand-assets`. They are intentionally ignored by Git because
+  the robot source SVG remains the single source of truth.
+- New tests verify the robot ICO structure, its multi-resolution PNG frames,
+  24-bit bitmap dimensions, and the optional shortcut script.
+
+Run on Windows:
+```powershell
+cd desktop
+npm install
+npm test
+npm run dist
+```
+Download the installer from the **h00k Desktop Windows** GitHub Actions
+artifact. No Linux VPS deployment is needed. If you previously pinned the
+old Electron icon on the Windows taskbar, unpin it and pin the newly installed
+h00k Desktop again to refresh the taskbar cache.

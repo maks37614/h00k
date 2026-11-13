@@ -48,7 +48,7 @@ function simulateDesktop() {
     setBounds(){}
   }
   const electron={
-    app:{requestSingleInstanceLock(){return false;},quit(){}},
+    app:{requestSingleInstanceLock(){return false;},quit(){},setAppUserModelId(){}},
     BrowserWindow:FakeWindow,WebContentsView:FakeView,Menu:{buildFromTemplate(){return {popup(){}};}},
     ipcMain:{},shell:{openExternal(){return Promise.resolve();}},
     screen:{
