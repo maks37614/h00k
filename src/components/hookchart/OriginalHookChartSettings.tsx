@@ -735,7 +735,7 @@ export function OriginalHookChartSettings({
   return <div className={embedded ? "originalSettingsBackdrop embeddedSettingsBackdrop" : "originalSettingsBackdrop"} onMouseDown={event => { if (!embedded && event.target === event.currentTarget) onClose(); }}>
     <div ref={dialogRef} tabIndex={embedded ? undefined : -1} className="originalSettingsPanel" role={embedded ? "region" : "dialog"} aria-modal={embedded ? undefined : true} aria-label="Налаштування hookchart">
       <div className="settingsHeader">
-        <div><b>Налаштування графіка</b>{!embedded && <small>Параметри зберігаються автоматично</small>}</div>
+        <div><b>{embedded ? "Налаштування" : "Налаштування графіка"}</b>{!embedded && <small>Параметри зберігаються автоматично</small>}</div>
         {embedded && <span ref={headerHelpRef} className="profileSettingsHelp">
           <button type="button" className="profileSettingsHelpButton"
             aria-label="Про налаштування графіка"

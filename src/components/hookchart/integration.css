@@ -1305,8 +1305,17 @@
   height:100%!important;
   max-height:100%!important;
   margin:0!important;
-  border-radius:10px!important;
+  border:0!important;
+  border-radius:0!important;
+  background:transparent!important;
   box-shadow:none!important;
+}
+/* The profile owns the one and only window frame. Embedded HookChart
+   settings must look like a native profile section rather than a second modal. */
+.hookchart-root.profile-hookchart-settings .originalSettingsPanel .settingsHeader,
+.hookchart-root.profile-hookchart-settings .originalSettingsPanel .settingsTabs,
+.hookchart-root.profile-hookchart-settings .originalSettingsPanel .settingsBody {
+  background:transparent!important;
 }
 .hookchart-root.profile-hookchart-settings .originalSettingsBackdrop.embeddedSettingsBackdrop .settingsBody {
   min-height:0;
