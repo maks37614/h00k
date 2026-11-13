@@ -46,7 +46,7 @@ test('split a large execution burst across exact candle boundaries, including a 
 });
 
 test('tracker rejects duplicate REST/WS IDs, including when a burst is updated repeatedly', () => {
-  const now = Date.now();
+  const now = Math.floor(Date.now() / 1000) * 1000 + 100;
   const tracker = new LargeMarketTradeTracker();
   tracker.seedThreshold(Array.from({ length: 40 }, (_, i) => ({
     id: 'seed-' + i, t: now - 3000 + i, p: 10, q: 10, side: 'BUY' as const,
@@ -58,7 +58,29 @@ test('tracker rejects duplicate REST/WS IDs, including when a burst is updated r
   assert.equal(prints.length, 1, 'evolving burst updates the same ID');
   assert.equal(prints[0].usd, 500, 'the duplicate 200 USD trade was not counted again');
   assert.equal(prints[0].count, 2);
-  assert.equal(prints[0].segments!.reduce((sum, p) => sum + p.usd, 0), 500);
+  assert.equal(prints.reduce((sum, row) => sum + row.usd, 0), 500);
+});
+
+test('more than 40 qualifying bursts in one candle are fully summed rather than truncated', () => {
+  const now = Math.floor(Date.now() / 60_000) * 60_000;
+  const tracker = new LargeMarketTradeTracker();
+  tracker.seedThreshold(Array.from({ length: 30 }, (_, i) => ({
+    id: 'reference-' + i, t: now + 1000 + i, p: 10, q: 10, side: 'BUY' as const,
+  })));
+  for (let i = 0; i < 80; i++) {
+    const trade = tracker.accept({
+      id: 'many-' + i, t: now + 5000 + 5 * i,
+      p: 10, q: 20, side: i % 2 ? 'SELL' : 'BUY',
+    });
+    assert.ok(trade, 'different trade IDs are accepted');
+  }
+  const prints = tracker.snapshot(now + 10_000);
+  assert.equal(prints.length, 2, 'accumulated one second per direction');
+  const totals = aggregateMarketPrintsByCandle([{ t: now }], prints, 60_000);
+  assert.equal(totals.length, 1);
+  assert.equal(totals[0].buyUsd, 8000);
+  assert.equal(totals[0].sellUsd, 8000);
+  assert.equal(totals[0].totalUsd, 16000);
 });
 
 test('multiple HookCharts with same symbol share one exchange WebSocket and initial REST seed', async () => {
