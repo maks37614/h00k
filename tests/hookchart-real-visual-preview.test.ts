@@ -12,63 +12,50 @@ const previewSource = source('../src/components/hookchart/HookChartVisualPreview
 const settingsSource = source('../src/components/hookchart/OriginalHookChartSettings.tsx');
 const canvasSource = source('../src/components/hookchart/HookChartCanvas.tsx');
 
-const candles = Array.from({ length: 80 }, (_, index) => ({
-  t: 1700000000000 + index * 3600000,
-  o: 42500 + index * 12, h: 42580 + index * 12,
-  l: 42450 + index * 12, c: 42545 + index * 12,
-  v: 12 + index / 2, n: 0,
-}));
-
-test('real settings preview renders the HookChart canvas with actual OHLCV, price and time axis', () => {
+test('offline visual settings render the actual HookChart canvas using synthetic candles', () => {
   const html = renderToStaticMarkup(React.createElement(HookChartVisualPreview, {
-    candles,
-    symbol: 'BTCUSDT',
-    timeframe: '1h',
-    exchange: 'binance',
-    marketType: 'futures',
     visualContext: 'screenerQuick',
     visualDevice: 'desktop',
     profile: getVisualProfile(undefined, 'screenerQuick', 'desktop'),
     onChange: () => {},
   }));
+  assert.match(html, /data-synthetic-hookchart="true"/);
   assert.match(html, /class="hookchart-visual-preview-frame"/);
   assert.match(html, /class="chartWrap"/);
   assert.match(html, /<canvas/);
-  assert.match(html, /aria-label="Графік BTCUSDT"/);
+  assert.match(html, /aria-label="Графік DEMO"/);
   assert.match(html, /class="chartTimeAxis"/);
-  assert.match(html, /Binance/);
-  assert.match(html, /Дані відкритого HookChart/);
+  assert.match(html, /Штучні свічки/);
+  assert.match(html, /Без біржових запитів/);
   assert.match(html, /Зберегти масштаб/);
-  assert.doesNotMatch(html, /Приклад відносного масштабу|не реальні котирування/);
+  assert.doesNotMatch(html, /BTCUSDT|Binance|Bybit|Завантажуємо свічки/);
 });
 
-test('settings editor replaces synthetic SVG with real HookChart preview and wires existing candles', () => {
+test('Graph tab uses the shared chart engine but no live exchange candles', () => {
   assert.match(settingsSource, /<HookChartVisualPreview/);
   assert.match(settingsSource, /profile=\{selectedProfile\}/);
   assert.match(settingsSource, /onChange=\{onProfileChange\}/);
-  assert.match(settingsSource, /previewCandles=\{previewCandles\}/);
-  assert.doesNotMatch(settingsSource, /const bars = Math\.max\(14, Math\.min\(72/);
-  assert.doesNotMatch(settingsSource, /Приклад відносного масштабу/);
-  assert.match(canvasSource, /previewCandles=\{candles\}/);
-  assert.match(canvasSource, /previewSymbol=\{symbol\}/);
-  assert.match(canvasSource, /previewTimeframe=\{timeframe\}/);
+  const editor = settingsSource.slice(settingsSource.indexOf('function VisualProfileEditor'),
+    settingsSource.indexOf('export function OriginalHookChartSettings'));
+  assert.doesNotMatch(editor, /candles=\{previewCandles\}|exchange=\{previewExchange\}/);
+  assert.match(editor, /Штучний графік · точний масштаб і відступи/);
   assert.match(canvasSource, /!replay && panel === 'settings'/);
 });
 
-test('live preview never creates another exchange feed or changes drawing and alert persistence', () => {
+test('offline preview never fetches prices, opens WebSockets or duplicates the parent live feed', () => {
   assert.match(previewSource, /import \{\s*Chart, ChartTimeAxis,/);
-  assert.match(previewSource, /const useParentCandles = candles !== undefined/);
-  assert.match(previewSource, /if \(useParentCandles\) return/);
-  assert.match(previewSource, /fetchDirectKlines\(marketExchange, marketTypeSelected, marketSymbol, marketTimeframe, 900\)/);
+  assert.match(previewSource, /const OFFLINE_CANDLES = createSyntheticPreviewCandles\(900\)/);
+  assert.match(previewSource, /const activeCandles = OFFLINE_CANDLES/);
   assert.match(previewSource, /showLiqRiskBlock=\{false\}/);
   assert.match(previewSource, /controlsContainer=\{null\}/);
   assert.match(previewSource, /onViewportGesture=\{onGesture\}/);
   assert.match(previewSource, /onViewportChange=\{next =>/);
   assert.match(previewSource, /captureVisualProfile\(/);
-  assert.doesNotMatch(previewSource, /new WebSocket|setInterval|onCreatePriceAlert=|onNeedHistory=/);
+  assert.doesNotMatch(previewSource, /directExchangeClient|fetchDirectKlines|fetch\s*\(|new WebSocket|setInterval|onCreatePriceAlert=|onNeedHistory=/);
+  assert.doesNotMatch(previewSource, /candles\?: Candle\[\]|marketDefaults\?:|marketSymbolDraft/);
 });
 
-test('profile chart uses real measured width, matching engine viewports instead of a fixed-width illustration', () => {
+test('fake chart uses measured full-width geometry for all visual contexts', () => {
   assert.match(previewSource, /const \[chartWidth, setChartWidth\] = useState\(0\)/);
   assert.match(previewSource, /new ResizeObserver\(update\)/);
   assert.match(previewSource, /hookChartPlotWidth\(chartWidth\) \/ viewport\.barWidth/);
@@ -77,27 +64,21 @@ test('profile chart uses real measured width, matching engine viewports instead 
   assert.match(css, /hookchart-visual-preview-chart/);
   assert.match(css, /hookchart-visual-preview-frame \{\s*max-width:none;\s*width:100%;/);
   assert.match(css, /touch-action:none/);
-  assert.match(css, /@media \(max-width:600px\)/);
-  assert.match(previewSource, /Свічки вибраної біржі · реальний HookChart/);
+  assert.match(previewSource, /Штучні свічки/);
 });
 
-test('profile real HookChart picker uses Binance or Bybit spot/futures and the selected timeframe', () => {
-  assert.match(previewSource, /marketDefaults\?: \{ exchange\?: ExchangeId; marketType\?: MarketType; timeframe\?: Timeframe \}/);
-  assert.match(previewSource, /marketDefaults\?\.exchange \|\| 'binance'/);
-  assert.match(previewSource, /marketDefaults\?\.timeframe \|\| '15m'/);
-  assert.match(previewSource, /marketExchange, marketTypeSelected, marketSymbol, marketTimeframe, 900/);
-  assert.match(previewSource, /aria-label="Біржа HookChart у профілі"/);
-  assert.match(previewSource, /aria-label="Ринок HookChart у профілі"/);
-  assert.match(previewSource, /aria-label="Таймфрейм HookChart у профілі"/);
-  assert.match(previewSource, /aria-label="Монета HookChart у профілі"/);
-  assert.match(previewSource, /showVolumes=\{chartPreferences\?\.showVolumes !== false\}/);
-  assert.doesNotMatch(previewSource, /new WebSocket|setInterval/);
-  assert.match(settingsSource, /marketDefaults=\{marketDefaults\}/);
-  assert.match(settingsSource, /chartPreferences=\{prefs\}/);
-  const profile = source('../src/components/profile/ProfileHookChartSettings.tsx');
-  assert.match(profile, /exchange: profile\.defaultExchange === 'all'/);
-  assert.match(profile, /previewLongColor=\{draft\.candleLongColor\}/);
+test('synthetic sample candles are deterministic, chronological and have valid OHLCV', async () => {
+  const { createSyntheticPreviewCandles } = await import('../src/components/hookchart/syntheticPreviewCandles');
+  const a = createSyntheticPreviewCandles(900);
+  const b = createSyntheticPreviewCandles(900);
+  assert.deepEqual(a, b);
+  assert.equal(a.length, 900);
+  assert.ok(a.every(c => Number.isFinite(c.c) && Number.isFinite(c.v) && c.c > 0 && c.v >= 0
+    && c.h >= Math.max(c.o, c.c) && c.l <= Math.min(c.o, c.c)));
+  assert.ok(a.every((c, i) => i === 0 || c.t - a[i-1].t === 15 * 60 * 1000));
+  assert.ok(new Set(a.map(c => c.c)).size > 100);
 });
+
 test('Replay chart is unaffected by the new chart-only settings preview', () => {
   const replay = source('../src/components/replay/ReplayChart.tsx');
   assert.doesNotMatch(replay, /HookChartVisualPreview|previewCandles|visualProfileEditor/);
