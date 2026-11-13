@@ -131,9 +131,9 @@ export const ProfileTerminalLinkingSettings: React.FC = () => {
       </div>
       <section className="space-y-3 rounded-xl border border-slate-800 bg-slate-950/60 p-4">
         <h4 className="text-sm font-semibold text-slate-100">1. Вибір термінала</h4>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
           {([
-            ['metascalp', 'MetaScalp'], ['tiger', 'Tiger'], ['vataga', 'Vataga'], ['none', 'Без лінковки'],
+            ['metascalp', 'MetaScalp'], ['tiger', 'Tiger'], ['none', 'Без лінковки'],
           ] as Array<[TerminalProvider, string]>).map(([id, label]) => (
             <button key={id} type="button" onClick={() => chooseProvider(id)}
               aria-pressed={selected === id}
