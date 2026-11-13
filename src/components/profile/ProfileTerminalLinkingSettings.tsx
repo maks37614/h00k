@@ -18,6 +18,11 @@ export const ProfileTerminalLinkingSettings: React.FC = () => {
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [testing, setTesting] = useState(false);
+  const [guideOpen, setGuideOpen] = useState(true);
+
+  useEffect(() => {
+    setGuideOpen(true);
+  }, [draft.provider]);
 
   useEffect(() => {
     setDraft(getUserTerminalLinkSettings(user?.uid, profile));
@@ -207,7 +212,8 @@ export const ProfileTerminalLinkingSettings: React.FC = () => {
           </section>
 
           {ready && (
-            <details key={selected} defaultOpen className="group rounded-xl border border-cyan-800/40 bg-slate-950/60 p-4">
+            <details key={selected} open={guideOpen} onToggle={event => setGuideOpen(event.currentTarget.open)}
+              className="group rounded-xl border border-cyan-800/40 bg-slate-950/60 p-4">
               <summary className="flex cursor-pointer list-none items-center gap-2 text-sm font-semibold text-cyan-200 [&::-webkit-details-marker]:hidden">
                 <BookOpen size={17} className="shrink-0" />
                 <span className="flex-1">Як підключити {selected === 'tiger' ? 'Tiger' : 'MetaScalp'} до h00k.top</span>
