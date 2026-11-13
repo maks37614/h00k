@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import { ScannedCoin, DetectedFormation, Kline, FormationAIAnalysis, Timeframe, ArchivedFormation } from '../types';
 import { TradingViewChart } from './TradingViewChart';
+import type { ChartPageOrigin } from '../utils/chartPageRoute';
 import { FullscreenChartModal } from './FullscreenChartModal';
 import { formatCryptoPrice } from '../utils/formatters';
 import { fetchDirectKlines } from '../utils/directExchangeClient';
@@ -57,6 +58,8 @@ interface FormationDetailsModalProps {
   onClose: () => void;
   /** Standalone page instead of the historical overlay. */
   pageMode?: boolean;
+  /** Real navigation source, independent of whether the selected coin has a formation. */
+  visualOrigin?: ChartPageOrigin;
   /** Keep the standalone chart URL on the user's selected timeframe. */
   initialTimeframe?: Timeframe;
   onPageTimeframeChange?: (timeframe: Timeframe) => void;
@@ -77,6 +80,7 @@ export const FormationDetailsModal: React.FC<FormationDetailsModalProps> = ({
   onFormationChange,
   onClose,
   pageMode = false,
+  visualOrigin = 'formations',
   initialTimeframe,
   onPageTimeframeChange,
   onSendMetaScalp,
@@ -1099,7 +1103,7 @@ export const FormationDetailsModal: React.FC<FormationDetailsModalProps> = ({
                 </div>
               ) : (
                 <TradingViewChart
-                  visualContext="formationsQuick"
+                  visualContext={visualOrigin === 'screener' ? 'screenerQuick' : 'formationsQuick'}
                   klines={klines}
                   formation={formation}
                   symbol={`${coin.symbol}`}
@@ -1549,6 +1553,7 @@ export const FormationDetailsModal: React.FC<FormationDetailsModalProps> = ({
       {/* Interactive Fullscreen Chart Modal */}
       <FullscreenChartModal
         isOpen={isFullscreenChartOpen}
+        visualContext={visualOrigin === 'screener' ? 'screenerFull' : 'formationsFull'}
         onClose={() => setIsFullscreenChartOpen(false)}
         coin={coin}
         formation={formation}
