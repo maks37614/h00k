@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, useCallback, useMemo } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { apiFetch } from '../utils/apiFetch';
 import { useAuth } from './AuthContext';
 import {
@@ -39,6 +39,8 @@ const ArchiveContext = createContext<ArchiveContextType | undefined>(undefined);
 export const ArchiveProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user } = useAuth();
   const [archivedFormations, setArchivedFormations] = useState<ArchivedFormation[]>([]);
+  const activeUid = useRef(user?.uid);
+  activeUid.current = user?.uid;
   const [loading, setLoading] = useState<boolean>(true);
 
   // One account-scoped read at login. The server owns cross-device persistence;
@@ -240,6 +242,8 @@ export const ArchiveProvider: React.FC<{ children: React.ReactNode }> = ({ child
         throw new Error(failure.error || 'Не вдалося зберегти формацію на сервері.');
       }
 
+      // Ignore a response belonging to an account that logged out or switched.
+      if (activeUid.current !== currentUserId) throw new Error('Акаунт змінився під час збереження.');
       // Update state & user-scoped storage immediately
       setArchivedFormations((prev) => {
         const filtered = prev.filter((item) => item.id !== uniqueId);
@@ -261,7 +265,7 @@ export const ArchiveProvider: React.FC<{ children: React.ReactNode }> = ({ child
       if (!user) return false;
       const currentUserId = user.uid;
       const response = await apiFetch('/api/account/archive/' + encodeURIComponent(id), { method: 'DELETE' });
-      if (!response.ok) return false;
+      if (!response.ok || activeUid.current !== currentUserId) return false;
 
       setArchivedFormations((prev) => {
         const updated = prev.filter((item) => item.id !== id);
@@ -281,7 +285,7 @@ export const ArchiveProvider: React.FC<{ children: React.ReactNode }> = ({ child
     if (!user) return false;
     const currentUserId = user.uid;
     const response = await apiFetch('/api/account/archive', { method: 'DELETE' });
-    if (!response.ok) return false;
+    if (!response.ok || activeUid.current !== currentUserId) return false;
 
     setArchivedFormations([]);
     try {
