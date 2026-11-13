@@ -4,7 +4,7 @@ import type { ScannedCoin, SurveillanceEvent } from '../src/types';
 import { DEFAULT_SITE_NOTIFICATIONS, normalizeSiteNotificationSettings, notificationEnabled,
   NOTIFICATION_CATEGORIES, matchesNotificationScope } from '../src/utils/siteNotifications';
 import { scanNotificationSignals, marketSurveillanceSignal, liquidationNotificationSignal,
-  surveillanceNotificationKind } from '../src/utils/notificationSignals';
+  surveillanceNotificationKind, LiquidationCascadeTracker } from '../src/utils/notificationSignals';
 
 const settings = normalizeSiteNotificationSettings({
   optedIn: true, enabled: true, formations: true, levels: true, breakouts: true,
@@ -97,4 +97,19 @@ test('liquidation rules reject historical junk, tiny positions and unauthorized 
   assert.equal(liquidationNotificationSignal(row, DEFAULT_SITE_NOTIFICATIONS, source), null);
   assert.equal(liquidationNotificationSignal({ ...row, usd: 500 }, settings, source), null);
   assert.equal(liquidationNotificationSignal(row, settings, source)?.kind, 'liquidations');
+});
+
+test('5-minute liquidation cascade requires three unique live events and respects side cooldown', () => {
+  const tracker = new LiquidationCascadeTracker();
+  const now = 1_000_000;
+  const row = { id: 'A', side: 'LONG' as const, usd: 120_000, t: now };
+  assert.equal(tracker.push(row, 100_000, now), null);
+  assert.equal(tracker.push(row, 100_000, now), null, 'same order is not counted twice');
+  assert.equal(tracker.push({ ...row, id: 'B', usd: 110_000 }, 100_000, now), null);
+  const cascade = tracker.push({ ...row, id: 'C', usd: 140_000 }, 100_000, now);
+  assert.deepEqual(cascade, { side: 'LONG', usd: 370_000, count: 3 });
+  assert.equal(tracker.push({ ...row, id: 'D' }, 100_000, now + 1000), null, 'cascade cooldown');
+  assert.equal(tracker.push({ ...row, id: 'S', side: 'SHORT' }, 100_000, now + 2000), null, 'sides separated');
+  assert.equal(tracker.push({ ...row, id: 'future', t: now + 30_000 }, 100_000, now), null, 'future data rejected');
+  assert.equal(tracker.push({ ...row, id: 'stale', t: now - 6 * 60_000 }, 100_000, now), null);
 });
