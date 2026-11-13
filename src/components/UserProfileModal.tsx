@@ -14,12 +14,14 @@ import {
   Key,
   Target,
   ChartCandlestick,
+  PlugZap,
 } from 'lucide-react';
 import { FormationArchiveIcon } from './FormationArchiveIcon';
 import { useTelegram } from '../context/TelegramContext';
 import { InstallAppButton } from './InstallAppButton';
 import { TelegramConnectionCard } from './TelegramConnectionCard';
 import { ProfileNotificationSettings } from './profile/ProfileNotificationSettings';
+import { ProfileTerminalLinkingSettings } from './profile/ProfileTerminalLinkingSettings';
 import { useAuth } from '../context/AuthContext';
 import { useAlerts } from '../context/AlertsContext';
 import { useArchive } from '../context/ArchiveContext';
@@ -34,7 +36,7 @@ interface UserProfileModalProps {
   onClose: () => void;
   onOpenAlerts?: () => void;
   onOpenArchive?: () => void;
-  initialSection?: 'account' | 'chart' | 'notifications';
+  initialSection?: 'account' | 'chart' | 'notifications' | 'linking';
 }
 
 export const UserProfileModal: React.FC<UserProfileModalProps> = ({
@@ -54,7 +56,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
   const [defaultMarketType, setDefaultMarketType] = useState<'all' | MarketType>('all');
   const [defaultTimeframe, setDefaultTimeframe] = useState<Timeframe>('1h');
   const [isTpSlOpen, setIsTpSlOpen] = useState(false);
-  const [activeProfileSection, setActiveProfileSection] = useState<'account' | 'chart' | 'notifications'>(initialSection);
+  const [activeProfileSection, setActiveProfileSection] = useState<'account' | 'chart' | 'notifications' | 'linking'>(initialSection);
 
   useEffect(() => {
     if (isOpen) setActiveProfileSection(initialSection);
@@ -174,6 +176,13 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
             className={activeProfileSection === 'chart' ? 'rounded-lg border border-cyan-500/40 bg-cyan-950/50 px-4 py-2 text-xs font-bold text-cyan-200' : 'rounded-lg border border-slate-700 px-4 py-2 text-xs font-semibold text-slate-300 hover:text-white'}>
             <ChartCandlestick size={15} className="mr-1.5 inline-block" /> Графік
           </button>
+          <button type="button" role="tab" aria-selected={activeProfileSection === 'linking'}
+            onClick={() => setActiveProfileSection('linking')}
+            className={activeProfileSection === 'linking'
+              ? 'rounded-lg border border-cyan-500/40 bg-cyan-950/50 px-4 py-2 text-xs font-bold text-cyan-200'
+              : 'rounded-lg border border-slate-700 px-4 py-2 text-xs font-semibold text-slate-300 hover:text-white'}>
+            <PlugZap size={15} className="mr-1.5 inline-block" /> Лінковка
+          </button>
           <button type="button" role="tab" aria-selected={activeProfileSection === 'notifications'}
             onClick={() => setActiveProfileSection('notifications')}
             className={activeProfileSection === 'notifications'
@@ -191,6 +200,8 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
             <Suspense fallback={<div role="status" className="p-5 text-sm text-cyan-300">Завантаження налаштувань графіка…</div>}>
               <ProfileHookChartSettings />
             </Suspense>
+          ) : activeProfileSection === 'linking' ? (
+            <ProfileTerminalLinkingSettings />
           ) : activeProfileSection === 'notifications' ? (
             <ProfileNotificationSettings />
           ) : <div className="space-y-5">
@@ -296,7 +307,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                 Індивідуальна ізоляція профілю
               </span>
               <span>
-                Ваш архів збережених формацій, індивідуальні Telegram-сповіщення, зв'язка MetaScalp та список обраних монет надійно закріплені виключно за вашим обліковим записом.
+                Ваш архів збережених формацій, індивідуальні Telegram-сповіщення, лінковка торгових терміналів та список обраних монет надійно закріплені виключно за вашим обліковим записом.
               </span>
             </div>
           </div>
