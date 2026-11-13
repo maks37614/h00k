@@ -330,7 +330,10 @@ function syncWindows() {
           const win = group.get(id);
           if (!win || win.isDestroyed()) return;
           const firstPlacement = !win.isVisible();
-          if (!profile.follow && !layoutChanged && !firstPlacement) return;
+          if (!profile.follow && !layoutChanged && !firstPlacement) {
+            if (win.isAlwaysOnTop() !== profile.alwaysOnTop) win.setAlwaysOnTop(profile.alwaysOnTop);
+            return;
+          }
           const restore = firstPlacement && !profile.follow && !layoutChanged;
           applyBounds(win, preferredFloatingBounds(provider, id, profile, boxes[index], restore), profile.alwaysOnTop);
         });
