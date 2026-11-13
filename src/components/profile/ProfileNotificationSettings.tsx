@@ -83,7 +83,7 @@ export const ProfileNotificationSettings: React.FC = () => {
     else setFormError('Браузер не надав дозвіл. Перевірте налаштування браузера.');
   };
   const reset = () => {
-    const patch: Partial<SiteNotificationSettings> = { enabled: false, browserPush: false };
+    const patch: Partial<SiteNotificationSettings> = { enabled: false, browserPush: false, telegramEnabled: false };
     for (const item of NOTIFICATION_CATEGORIES) (patch as Record<string, unknown>)[keyFor(item.key)] = false;
     update(patch);
     void setSoundEnabled(false);
@@ -269,7 +269,22 @@ export const ProfileNotificationSettings: React.FC = () => {
           <input type="checkbox" checked={settings.browserPush} disabled={!settings.enabled}
             onChange={e => void enableBrowser(e.target.checked)} className="h-4 w-4 accent-cyan-400"/>
         </label>
-        <p className="text-[11px] leading-relaxed text-slate-400">Браузерні повідомлення залежать від дозволів пристрою й працюють лише з активною сторінкою. Telegram-алерти, які ви створили вручну, продовжують керуватися у власному розділі Telegram. Автоматична Telegram-доставка всіх цих нових категорій поки не підтримується.</p>
+        <label className="flex items-center justify-between gap-3 text-xs">
+          <span>Надсилати дозволені серверні події в Telegram</span>
+          <input type="checkbox" checked={settings.telegramEnabled} disabled={!settings.enabled}
+            onChange={e => update({ telegramEnabled: e.target.checked })}
+            className="h-4 w-4 accent-cyan-400" aria-label="Дозволити Telegram-доставку" />
+        </label>
+        <p className="text-[11px] leading-relaxed text-slate-400">
+          Telegram потрібно спочатку підключити до профілю. Цей перемикач дозволяє тільки обрані
+          категорії, які сервер уже моніторить: цінові рівні, системний нагляд, OI, щільності,
+          пробої та інші його підтверджені події. Нові сигнали, які обчислюються лише у браузері
+          (власні імпульси, комплекс Quant, ROUND, RVOL та ранні W/M), наразі приходять тільки на сайт.
+          Без увімкнених головного перемикача, категорії та Telegram доставку буде заблоковано.
+        </p>
+        <p className="text-[11px] text-slate-500">
+          Браузерні повідомлення вимагають окремого дозволу й активної сторінки; iPhone може обмежувати фонову роботу.
+        </p>
       </section>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
