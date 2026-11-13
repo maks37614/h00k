@@ -3,6 +3,7 @@ import type { Dispatch, SetStateAction } from 'react';
 import { useAuth } from '../context/AuthContext';
 import type { TerminalChartBlock, TerminalSavedPreset, TerminalWorkspaceConfig, TerminalWorkspaceSettings } from '../types';
 import { getStoredPreferences } from './userPreferences';
+import { normalizeVisualProfile } from '../components/hookchart/visualProfiles';
 import { normalizeTerminalBlocks, normalizeTerminalPresets, terminalStorageKey, TERMINAL_PRESETS_STORAGE_KEY } from './terminalPresets';
 
 const BLOCKS_KEY = 'crypto_screener_terminal_blocks';
@@ -27,6 +28,9 @@ export function loadTerminalWorkspace(uid?: string, settings?: TerminalWorkspace
   if (![1, 2, 3, 4, 5, 6].includes(config.columns)) config.columns = 2;
   if ((config.blockHeight as string) === 'tall') config.blockHeight = 'large';
   if (!['compact', 'medium', 'large'].includes(config.blockHeight)) config.blockHeight = 'medium';
+  if (config.initialChartView != null) {
+    config.initialChartView = normalizeVisualProfile(config.initialChartView, 'terminalMedium');
+  }
   return { blocks: Array.isArray(settings?.blocks) ? normalizeTerminalBlocks(settings.blocks)
     : Array.isArray(storedBlocks) ? normalizeTerminalBlocks(storedBlocks) : [defaultBlock], config,
     presets: normalizeTerminalPresets(settings?.customPresets ?? readCache(TERMINAL_PRESETS_STORAGE_KEY, uid)) };
