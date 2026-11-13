@@ -43,9 +43,15 @@ export const TerminalSettingsDrawer: React.FC<TerminalSettingsDrawerProps> = ({
   onResetWorkspace,
   totalBlocks,
 }) => {
-  const initial = config.initialChartView ?? getVisualProfile(undefined, 'terminalMedium', 'desktop');
+  // Keep slider edits local until Apply. Moving a slider must not reinitialize
+  // dozens of running terminal charts on every pointer-move event.
+  const [initial, setInitial] = React.useState(() =>
+    config.initialChartView ?? getVisualProfile(undefined, 'terminalMedium', 'desktop'));
+  React.useEffect(() => {
+    if (isOpen) setInitial(config.initialChartView ?? getVisualProfile(undefined, 'terminalMedium', 'desktop'));
+  }, [isOpen, config.initialChartView]);
   const updateInitial = (patch: Partial<typeof initial>) =>
-    onUpdateConfig({ initialChartView: { ...initial, ...patch } });
+    setInitial(previous => ({ ...previous, ...patch }));
 
   if (!isOpen) return null;
 
@@ -244,7 +250,10 @@ export const TerminalSettingsDrawer: React.FC<TerminalSettingsDrawerProps> = ({
                 </p>
               </div>
               <button type="button" aria-label="Відновити типовий показ графіків"
-                onClick={() => onUpdateConfig({ initialChartView: undefined })}
+                onClick={() => {
+                  setInitial(getVisualProfile(undefined, 'terminalMedium', 'desktop'));
+                  onUpdateConfig({ initialChartView: undefined });
+                }}
                 className="shrink-0 rounded-lg border border-slate-700 p-2 text-slate-400 hover:text-cyan-300">
                 <RotateCcw className="h-4 w-4"/>
               </button>
@@ -277,7 +286,10 @@ export const TerminalSettingsDrawer: React.FC<TerminalSettingsDrawerProps> = ({
               <input aria-label="Початковий вертикальний масштаб Термінала" type="range"
                 min={Math.log10(VISUAL_ZOOM_MIN)} max={Math.log10(VISUAL_ZOOM_MAX)}
                 step=".02" value={Math.log10(initial.verticalZoom)}
-                onChange={event => updateInitial({ verticalZoom: Number((10 ** Number(event.target.value)).toFixed(3)) })}
+                onChange={event => updateInitial({
+                  verticalZoom: Number((10 ** Number(event.target.value)).toFixed(3)),
+                  autoPriceScale: false,
+                })}
                 className="w-full accent-cyan-500" />
             </label>
             <label className="flex items-center justify-between gap-3 text-slate-300">
@@ -287,7 +299,13 @@ export const TerminalSettingsDrawer: React.FC<TerminalSettingsDrawerProps> = ({
                 onChange={event => updateInitial({ autoPriceScale: event.target.checked })}
                 className="h-4 w-4 accent-cyan-500" />
             </label>
+            <button type="button"
+              onClick={() => onUpdateConfig({ initialChartView: initial })}
+              className="w-full rounded-lg border border-cyan-600 bg-cyan-950/60 px-3 py-2 font-bold text-cyan-200 hover:bg-cyan-900/60">
+              Застосувати початковий вигляд
+            </button>
             <p className="text-[10px] leading-relaxed text-slate-500">
+              Повзунки не перераховують усі графіки під час руху. Натисніть «Застосувати» для збереження.
               Якщо зверху Термінала ввімкнено автоматичне масштабування свічок,
               воно має пріоритет над вертикальним масштабом.
               Без власних значень використовуються збережені профілі HookChart.
