@@ -4,11 +4,13 @@ import { fetchKlines } from '../marketService';
 import { acquireExchangeStream, type SharedExchangeStreamHandle } from './sharedExchangeStream';
 import { MultiTimeframeEngine } from './multiTimeframeEngine';
 import type { RawTradeEvent } from './exchangeStream';
+import { SharedMarketTradeWindow } from './sharedMarketTradeWindow';
 
 interface SharedCandleEntry {
   key: string;
   refs: number;
   engine: MultiTimeframeEngine;
+  tradeWindow: SharedMarketTradeWindow;
   source: SharedExchangeStreamHandle;
   ready: Promise<void>;
   initialized: boolean;
@@ -46,6 +48,7 @@ async function prime(entry: SharedCandleEntry, exchange: ExchangeId,
 
 export interface SharedCandleFeedHandle {
   readonly engine: MultiTimeframeEngine;
+  readonly tradeWindow: SharedMarketTradeWindow;
   readonly ready: Promise<void>;
   destroy(): void;
 }
@@ -61,11 +64,13 @@ export function acquireSharedCandleFeed(symbol: string,exchange: ExchangeId,
     const source=acquireExchangeStream(clean,exchange,market);
     const created:SharedCandleEntry={
       key,refs:0,source,engine:new MultiTimeframeEngine(),
+      tradeWindow:new SharedMarketTradeWindow(),
       ready:Promise.resolve(),initialized:false,destroyed:false,pending:[],
     };
     candleFeeds.set(key,created);
     source.on('trade',(trade:RawTradeEvent)=>{
       if(created.destroyed) return;
+      created.tradeWindow.addTrade(trade);
       if(created.initialized) created.engine.updateWithTrade(trade);
       else {
         if(created.pending.length>=5000) created.pending.shift();
@@ -79,7 +84,7 @@ export function acquireSharedCandleFeed(symbol: string,exchange: ExchangeId,
   const current=entry;
   let released=false;
   return {
-    engine:current.engine,ready:current.ready,
+    engine:current.engine,tradeWindow:current.tradeWindow,ready:current.ready,
     destroy() {
       if(released) return;
       released=true;
@@ -94,5 +99,6 @@ export function acquireSharedCandleFeed(symbol: string,exchange: ExchangeId,
 }
 export function sharedCandleFeedStats() {
   return { markets:candleFeeds.size, subscribers:[...candleFeeds.values()]
-    .reduce((sum,e)=>sum+e.refs,0) };
+    .reduce((sum,e)=>sum+e.refs,0),
+    recentMarketTrades:[...candleFeeds.values()].reduce((sum,e)=>sum+e.tradeWindow.size(),0) };
 }

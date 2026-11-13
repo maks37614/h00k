@@ -24,10 +24,11 @@ test('shared historical candles load once per market and replay only recent buff
   assert.doesNotMatch(worker,/private async loadInitialHistory/);
 });
 
-test('per-user trade flow, DOM threshold, notification decisions remain independent',()=>{
-  assert.match(worker,/this\.volumeOIEngine = new VolumeAndOIEngine\(\)/);
+test('market trade totals are shared, while per-user OI, Delta baseline, DOM and alert rules stay independent',()=>{
+  assert.match(worker,/this\.volumeOIEngine = new VolumeAndOIEngine\(this\.candleFeed\.tradeWindow\)/);
   assert.match(worker,/this\.orderBookEngine = new OrderBookEngine/);
-  assert.match(worker,/this\.volumeOIEngine\.addTrade\(trade\)/);
+  assert.match(shared,/created\.tradeWindow\.addTrade\(trade\)/);
+  assert.doesNotMatch(worker,/this\.volumeOIEngine\.addTrade\(trade\)/);
   assert.match(worker,/this\.orderBookEngine\.updateConfig/);
   assert.match(worker,/this\.coin\.config\.formationThreshold/);
   assert.match(worker,/userId: this\.coin\.userId/);

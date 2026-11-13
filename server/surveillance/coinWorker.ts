@@ -97,7 +97,7 @@ export class CoinWorker {
     this.candleFeed = acquireSharedCandleFeed(coin.symbol, coin.exchange, coin.marketType);
     this.mtfEngine = this.candleFeed.engine;
     this.levelsEngine = new LevelsAndFormationsEngine();
-    this.volumeOIEngine = new VolumeAndOIEngine();
+    this.volumeOIEngine = new VolumeAndOIEngine(this.candleFeed.tradeWindow);
     this.setupEngine = new SetupEngine();
 
     this.updateCoin(coin);
@@ -166,8 +166,8 @@ export class CoinWorker {
     // 2. Real-time Trade Flow
     this.streamClient.on('trade', (trade: RawTradeEvent) => {
       this.currentPrice = trade.price;
-      this.volumeOIEngine.addTrade(trade);
-      // SharedCandleFeed updates OHLCV once per exchange instrument.
+      // SharedCandleFeed accumulates public market trades once per instrument.
+      // Per-user OI and Delta baselines stay in VolumeAndOIEngine.
     });
 
     // 3. Depth Updates for Local Order Book & Densities (Fast Path)

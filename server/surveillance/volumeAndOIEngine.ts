@@ -1,11 +1,16 @@
 import { Kline } from '../../src/types';
 import { RawTradeEvent } from './exchangeStream';
 import { OISnapshot, TradeFlowSnapshot } from './types';
+import type { SharedMarketTradeWindow } from './sharedMarketTradeWindow';
 
 export class VolumeAndOIEngine {
   private recentTrades: RawTradeEvent[] = [];
   private oiHistory: { time: number; valueUsd: number; amountCoins: number; price: number }[] = [];
   private flowHistory: { time: number; deltaUsd: number }[] = [];
+
+  // Market trades are public, but OI observations and Delta baseline are
+  // intentionally private to each subscriber's worker.
+  constructor(private readonly sharedTrades?: SharedMarketTradeWindow) {}
 
   public addTrade(trade: RawTradeEvent) {
     this.recentTrades.push(trade);
@@ -19,20 +24,23 @@ export class VolumeAndOIEngine {
     let buyVolUsd = 0;
     let sellVolUsd = 0;
     let largeTrades = 0;
-
-    for (const t of this.recentTrades) {
-      const notional = t.price * t.quantity;
-      if (t.side === 'BUY') {
-        buyVolUsd += notional;
-      } else {
-        sellVolUsd += notional;
-      }
-      if (notional >= 50000) {
-        largeTrades++;
+    let totalTrades = this.recentTrades.length;
+    if (this.sharedTrades) {
+      // O(1) market totals, calculated only once for all subscribers.
+      const totals = this.sharedTrades.snapshot();
+      buyVolUsd = totals.aggressiveBuyUsd;
+      sellVolUsd = totals.aggressiveSellUsd;
+      largeTrades = totals.largeTradeCount;
+      totalTrades = totals.totalTradeCount;
+    } else {
+      // Preserve independent engine semantics for replay and older callers.
+      for (const t of this.recentTrades) {
+        const notional = t.price * t.quantity;
+        if (t.side === 'BUY') buyVolUsd += notional;
+        else sellVolUsd += notional;
+        if (notional >= 50000) largeTrades++;
       }
     }
-
-    const totalTrades = this.recentTrades.length;
     const totalVol = buyVolUsd + sellVolUsd;
     const avgTradeSize = totalTrades > 0 ? totalVol / totalTrades : 0;
     const imbalanceRatio = sellVolUsd > 0 ? buyVolUsd / sellVolUsd : buyVolUsd > 0 ? 99 : 1.0;
