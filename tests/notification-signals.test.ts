@@ -4,7 +4,7 @@ import type { ScannedCoin, SurveillanceEvent } from '../src/types';
 import { DEFAULT_SITE_NOTIFICATIONS, normalizeSiteNotificationSettings, notificationEnabled,
   NOTIFICATION_CATEGORIES, matchesNotificationScope } from '../src/utils/siteNotifications';
 import { scanNotificationSignals, marketSurveillanceSignal, liquidationNotificationSignal,
-  surveillanceNotificationKind, LiquidationCascadeTracker } from '../src/utils/notificationSignals';
+  surveillanceNotificationKind, LiquidationCascadeTracker, QualityScoreTracker } from '../src/utils/notificationSignals';
 
 const settings = normalizeSiteNotificationSettings({
   optedIn: true, enabled: true, formations: true, levels: true, breakouts: true,
@@ -21,7 +21,7 @@ const coin = (updatedAt = Date.now()): ScannedCoin => ({
   currentPrice: 100, priceChange24h: 1.3, highPrice24h: 108,
   lowPrice24h: 90, volume24hUsd: 2_000_000, lastUpdated: updatedAt,
   exchangeUrl: '',
-  regularIndicators: { atrPct: 1, rsi14: 60, oiChangePct: 4.1, deltaPct: 7, cvd20Pct: 5 },
+  regularIndicators: { atrPct: 1, rsi14: 60, oiChangePct: 4.1, oiAvailability: 'available', deltaPct: 7, cvd20Pct: 5 },
   formations: [{
     id: 'f1', patternKey: 'test', name: 'Пробій опору', confidence: 92, bias: 'bullish',
     levels: { entryPrice: 100.3, stopLossPrice: 96, targetPrice: 108, supportPrice: 99.5 },
@@ -95,6 +95,55 @@ test('known stale market snapshots never produce actionable trading notification
   const stale = coin(1_000);
   const signal = scanNotificationSignals([stale], settings, [], Date.now());
   assert.deepEqual(signal.map(v => v.kind), ['system']);
+});
+
+test('quality messages mean real measured improvements, never re-notify a flat or falling score', () => {
+  const tracker = new QualityScoreTracker();
+  const initial = coin(900_000);
+  const first = scanNotificationSignals([initial], settings, [], 905_000, tracker);
+  assert.equal(first.filter(e => e.kind === 'quality').length, 1);
+  assert.match(first.find(e => e.kind === 'quality')!.title, /Досягнуто/);
+  const again = scanNotificationSignals([initial], settings, [], 905_100, tracker);
+  assert.equal(again.filter(e => e.kind === 'quality').length, 0);
+  const decrease = coin(900_000);
+  decrease.formations[0].confidence = 89;
+  assert.equal(scanNotificationSignals([decrease], settings, [], 905_200, tracker).filter(e=>e.kind==='quality').length, 0);
+  const increase = coin(900_000);
+  increase.formations[0].confidence = 99;
+  const improved = scanNotificationSignals([increase], settings, [], 905_300, tracker).find(e => e.kind === 'quality');
+  assert.ok(improved);
+  assert.match(improved!.title, /Покращилася/);
+  assert.match(improved!.description, /92 → 99/);
+  const restored = new QualityScoreTracker(tracker.snapshot());
+  assert.equal(scanNotificationSignals([increase], settings, [], 905_400, restored).filter(e=>e.kind==='quality').length, 0);
+});
+
+test('ROUND requires current price near the actual number, not an old badge', () => {
+  const outdated = coin(900_000);
+  outdated.currentPrice = 107;
+  assert.ok(!scanNotificationSignals([outdated], settings, [], 905_000)
+    .some(e => e.kind === 'round'), 'price moved 7% away from tagged round level');
+  const close = coin(900_000);
+  assert.ok(scanNotificationSignals([close], settings, [], 905_000).some(e => e.kind === 'round'));
+});
+
+test('only verified OI and confirmed retests can trigger corresponding alerts', () => {
+  const unavailable = coin(900_000);
+  unavailable.regularIndicators!.oiAvailability = 'network-error';
+  const events = scanNotificationSignals([unavailable], settings, [], 905_000);
+  assert.ok(!events.some(e => e.kind === 'openInterest'));
+  assert.ok(!events.some(e => e.kind === 'composite' && e.description.includes('OI')));
+  const confirmed = coin(900_000);
+  confirmed.formations[0].status = 'retest';
+  confirmed.formations[0].validation!.entryMode = 'RETEST';
+  const retests = scanNotificationSignals([confirmed], settings, [], 905_000)
+    .filter(e => e.kind === 'breakouts');
+  assert.ok(retests.some(e => e.title.includes('ретест')));
+  const unconfirmed = coin(900_000);
+  unconfirmed.formations[0].status = 'retest';
+  unconfirmed.formations[0].validation!.closedCandleOnly = false;
+  assert.equal(scanNotificationSignals([unconfirmed], settings, [], 905_000)
+    .filter(e => e.title.includes('ретест')).length, 0);
 });
 
 test('surveillance event classification is grounded in server notificationType', () => {
