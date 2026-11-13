@@ -263,6 +263,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const revokeSession = async (id: string) => {
     const response = await apiFetch('/api/auth/sessions/' + encodeURIComponent(id), { method: 'DELETE' });
     if (!response.ok) throw new Error('Не вдалося завершити сесію.');
+    const result = await response.json();
+    if (result.revokedCurrent) clearIdentity();
   };
 
   return <AuthContext.Provider value={{
