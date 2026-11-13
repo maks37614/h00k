@@ -25,6 +25,14 @@ const MAX_SEEN = 30000;
 const PRINT_HISTORY_MS = 60 * 60_000;
 const MAX_PRINT_SECONDS = 7200;
 
+/** Exponential retry with per-browser jitter, to prevent mass reconnect bursts. */
+export function marketTradeReconnectDelay(attempt: number, randomValue = Math.random()): number {
+  const exponent = Number.isFinite(attempt) ? Math.max(0, Math.min(4, Math.floor(attempt))) : 0;
+  const base = Math.min(20_000, 1000 * 2 ** exponent);
+  const fraction = Number.isFinite(randomValue) ? Math.max(0, Math.min(1, randomValue)) : 0;
+  return base + Math.floor(fraction * Math.min(1000, base));
+}
+
 /** Pure accumulator: skips overlapping REST/WS trade IDs before volume or threshold calculations. */
 export class LargeMarketTradeTracker {
   private seen = new Map<string, number>();
@@ -288,9 +296,19 @@ class SharedMarketTradeStream {
         if (this.stopped || this.socket !== ws) return;
         this.retries = 0;
         if (exchange !== 'binance') {
-          ws.send(JSON.stringify({ op: 'subscribe', args: ['publicTrade.' + symbol] }));
+          try {
+            ws.send(JSON.stringify({ op: 'subscribe', args: ['publicTrade.' + symbol] }));
+          } catch {
+            // A failed subscription is not a healthy open market feed.
+            try { ws.close(); } catch {}
+            reconnect();
+            return;
+          }
           this.ping = setInterval(() => {
-            if (ws.readyState === WebSocket.OPEN) try { ws.send(JSON.stringify({ op: 'ping' })); } catch {}
+            if (ws.readyState === WebSocket.OPEN) {
+              try { ws.send(JSON.stringify({ op: 'ping' })); }
+              catch { try { ws.close(); } catch {} reconnect(); }
+            }
           }, 20_000);
         }
       };
@@ -317,7 +335,7 @@ class SharedMarketTradeStream {
       const reconnect = () => {
         if (this.ping) { clearInterval(this.ping); this.ping = null; }
         if (this.stopped || this.socket !== ws || this.reconnectTimer) return;
-        const delay = Math.min(20_000, 1000 * 2 ** Math.min(4, this.retries++));
+        const delay = marketTradeReconnectDelay(this.retries++);
         this.reconnectTimer = setTimeout(() => {
           this.reconnectTimer = null;
           this.connect();
@@ -327,7 +345,8 @@ class SharedMarketTradeStream {
       ws.onclose = reconnect;
     } catch {
       if (!this.stopped && !this.reconnectTimer) {
-        this.reconnectTimer = setTimeout(() => { this.reconnectTimer = null; this.connect(); }, 2000);
+        const delay = marketTradeReconnectDelay(this.retries++);
+        this.reconnectTimer = setTimeout(() => { this.reconnectTimer = null; this.connect(); }, delay);
       }
     }
   }
