@@ -12,9 +12,9 @@ features are available to **newly registered, verified PostgreSQL users**.
 The old authentication provider, browser SDK, obsolete access-code flow and
 cloud database rules have been removed from this branch.
 
-**This draft branch is NOT automatically live.** Test on staging first, including
-real SMTP message delivery, actual account registration and protected personal
-features. Do not replace production until all acceptance checks are green.
+**The PostgreSQL-only source is on `main`, but this does not prove the VPS has been updated.**
+Test on staging first, including real SMTP delivery, actual registration and
+protected personal features. Do not replace production until acceptance checks pass.
 
 ## Environment variables
 
@@ -24,12 +24,16 @@ For Docker Compose, configure a private .env file (never commit this file):
 POSTGRES_PASSWORD=GENERATE_WITH_openssl_rand_hex_32
 PUBLIC_BASE_URL=https://h00k.top
 AUTH_TRUST_PROXY=1
-SMTP_HOST=YOUR_SMTP_HOST
-SMTP_PORT=587
-SMTP_USER=YOUR_SMTP_USER
+SMTP_HOST=smtp.mail.ovh.net
+SMTP_PORT=465
+SMTP_USER=info@h00k.top
 SMTP_PASSWORD=YOUR_SMTP_PASSWORD
-SMTP_FROM=YOUR_VERIFIED_SENDER
+SMTP_FROM="h00k <info@h00k.top>"
 ```
+
+The SMTP example above applies to the owner's OVHcloud MX Plan mailbox; use its
+**mailbox password**, never the OVH admin-account password. Verify SPF/DKIM and
+real inbox delivery on the VPS. Do not commit `.env` to GitHub.
 
 SMTP TLS is mandatory. Verification links last 24 hours; password reset
 links last 30 minutes. Without working SMTP, registration fails closed.
