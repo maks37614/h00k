@@ -12,7 +12,7 @@ import {
 } from '../utils/siteNotifications';
 import { playSiteNotificationSound } from '../utils/domSound';
 import type { ScannedCoin } from '../types';
-import { scanNotificationSignals, marketSurveillanceSignal, liquidationNotificationSignal, LiquidationCascadeTracker } from '../utils/notificationSignals';
+import { scanNotificationSignals, marketSurveillanceSignal, liquidationNotificationSignal, LiquidationCascadeTracker, QualityScoreTracker } from '../utils/notificationSignals';
 import { matchesNotificationScope } from '../utils/siteNotifications';
 
 interface NewSiteNotification {
@@ -97,6 +97,9 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
   const deliveredSeen = useRef<{ uid: string; ids: Set<string> }>({ uid, ids: loadSeen(uid) });
   const uidRef = useRef(uid);
   const favoritesRef = useRef<readonly string[]>([]);
+  const qualityRef = useRef<{ uid: string; tracker: QualityScoreTracker }>({
+    uid, tracker: new QualityScoreTracker(),
+  });
   uidRef.current = uid;
   const soundEnabledRef = useRef(preferences.soundAlertsEnabled);
   soundEnabledRef.current = preferences.soundAlertsEnabled;
@@ -250,7 +253,17 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
   const processScan = useCallback((coins: readonly ScannedCoin[], favorites: readonly string[] = []) => {
     if (!settingsRef.current.optedIn || !settingsRef.current.enabled) return;
     favoritesRef.current = [...favorites];
-    for (const event of scanNotificationSignals(coins, settingsRef.current, favorites)) emit(event);
+    const currentUid = uidRef.current;
+    if (qualityRef.current.uid !== currentUid) {
+      let saved: unknown = {};
+      try { saved = JSON.parse(localStorage.getItem('h00k_quality_history_v1:' + currentUid) || '{}'); } catch {}
+      qualityRef.current = { uid: currentUid, tracker: new QualityScoreTracker(saved) };
+    }
+    const tracker = qualityRef.current.tracker;
+    for (const event of scanNotificationSignals(coins, settingsRef.current, favorites, Date.now(), tracker)) emit(event);
+    try {
+      localStorage.setItem('h00k_quality_history_v1:' + currentUid, JSON.stringify(tracker.snapshot()));
+    } catch { /* Read-only browser mode. */ }
   }, [emit]);
 
   // The server owns actual price-alert delivery. This is a local on-site view only.
