@@ -127,8 +127,8 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
   };
 
   const handleLogout = async () => {
-    await logout();
-    onClose();
+    try { await logout(); onClose(); }
+    catch (error: any) { setErrorMessage(error?.message || 'Не вдалося завершити сесію.'); }
   };
 
   const loadSessions = async () => {
