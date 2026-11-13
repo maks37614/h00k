@@ -131,17 +131,7 @@ export const AlertsProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         })
       );
 
-      if ('Notification' in window && Notification.permission === 'granted') {
-        try {
-          const conditionSign = serverAlert.condition === 'gte' ? '≥' : '≤';
-          new Notification(`🚨 SIGNALHOOK: ${serverAlert.symbol}`, {
-            body: `Ціна: $${serverAlert.triggeredPrice} ${conditionSign} Ціль: $${serverAlert.targetPrice}\n${serverAlert.note || serverAlert.formationName || 'Ціль досягнута!'}`,
-            icon: '/favicon.ico',
-          });
-        } catch {
-          // ignore
-        }
-      }
+
     }
   }, []);
 
