@@ -19,7 +19,7 @@ import { candlesBeforeHistoryEnd, clampHookChartHistory, extendHookChartHistory,
 import { createChartCrosshairStore } from './crosshairState';
 import { Chart, ChartTimeAxis, IndicatorDock, buildStructuralChannel, type Alert, type Candle, type Drawing, type HookChartHandle, type Viewport } from './engine';
 import { INDICATOR_META, type IndicatorId, type OIPoint } from './indicatorEngine';
-import { captureVisualProfile, getVisualProfile, makeVisualProfileKey, patchVisualProfile, visualContextForTerminalWidth, visualDeviceForWidth, type VisualContextId, type VisualProfileKey } from './visualProfiles';
+import { captureVisualProfile, getVisualProfile, makeVisualProfileKey, normalizeVisualProfile, patchVisualProfile, visualContextForTerminalWidth, visualDeviceForWidth, type VisualChartProfile, type VisualContextId, type VisualProfileKey } from './visualProfiles';
 import { hookChartPlotWidth } from './priceScale';
 import { FibIcon, IndicatorIcon, OverlayIcon } from './ToolbarIcons';
 import { HookChartTimeframePicker } from './HookChartTimeframePicker';
@@ -65,6 +65,8 @@ export interface HookChartCanvasProps {
   terminalMode?: boolean;
   /** Terminal-only global auto-scale; reuses live candles and the current canvas. */
   terminalAutoScale?: boolean;
+  /** Terminal workspace startup view, never used by other chart pages. */
+  terminalInitialView?: VisualChartProfile;
   /** Live placement; Replay ignores all user visual presets. */
   visualContext?: VisualContextId;
   terminalToolbarVisibility?: TerminalToolbarVisibility;
@@ -133,7 +135,7 @@ function enabledIndicators(preferences?: HookChartPreferences, replay = false, m
 }
 
 const HookChartCanvas = forwardRef<HookChartHandle, HookChartCanvasProps>(function HookChartCanvas({
-  externalData, klines, symbol, timeframe, exchange, marketType, markers = [], expandPriceScaleToMarkers = false, savedChartParams, replay = false, focusTrigger, terminalMode = false, terminalAutoScale = false, visualContext, terminalToolbarVisibility, focusFormation, onTimeframeChange, onCrosshairPriceChange, timeframeDisabled = false, replayPlaybackSpeed, onReplayPlaybackSpeedChange, chartActions, toolbarActions, toolbarOverlays, tradeLevelToggle, footerActions,
+  externalData, klines, symbol, timeframe, exchange, marketType, markers = [], expandPriceScaleToMarkers = false, savedChartParams, replay = false, focusTrigger, terminalMode = false, terminalAutoScale = false, terminalInitialView, visualContext, terminalToolbarVisibility, focusFormation, onTimeframeChange, onCrosshairPriceChange, timeframeDisabled = false, replayPlaybackSpeed, onReplayPlaybackSpeedChange, chartActions, toolbarActions, toolbarOverlays, tradeLevelToggle, footerActions,
 }, forwardedRef) {
   const { user, profile, updateProfileData } = useAuth();
   const { alerts: priceAlerts, addAlert, deleteAlert } = useAlerts();
@@ -208,8 +210,11 @@ const HookChartCanvas = forwardRef<HookChartHandle, HookChartCanvasProps>(functi
   const activeVisualContext = terminalMode ? terminalVisualContext : (visualContext || 'screenerQuick');
   const activeVisualKey = makeVisualProfileKey(activeVisualContext, visualDevice);
   // No saved profile means legacy HookChart defaults stay unchanged.
-  const activeVisualProfile = replay || !settings.visualProfiles?.[activeVisualKey]
-    ? undefined : getVisualProfile(settings, activeVisualContext, visualDevice);
+  const activeVisualProfile = replay ? undefined
+    : terminalMode && terminalInitialView
+      ? normalizeVisualProfile(terminalInitialView, activeVisualContext)
+      : !settings.visualProfiles?.[activeVisualKey]
+        ? undefined : getVisualProfile(settings, activeVisualContext, visualDevice);
   const toolbarRef = useRef<HTMLDivElement | null>(null);
   const extraToolsRef = useRef<HTMLDivElement | null>(null);
   const statsBarRef = useRef<HTMLDivElement | null>(null);
@@ -447,7 +452,8 @@ const HookChartCanvas = forwardRef<HookChartHandle, HookChartCanvasProps>(functi
   // Single source of truth: only the Graph tab's per-context rightGapBars
   // controls the space after the latest candle. Legacy global padding is ignored.
   // Replay deliberately keeps its historical fixed spacing (no visual profiles).
-  const rightPaddingBars = replay ? 10 : getVisualProfile(settings, activeVisualContext, visualDevice).rightGapBars;
+  const rightPaddingBars = replay ? 10 : activeVisualProfile?.rightGapBars
+    ?? getVisualProfile(settings, activeVisualContext, visualDevice).rightGapBars;
   const channel = useMemo(() => (replay ? replayOverlays.includes('channel') : settings.autoChannel)
     ? buildStructuralChannel(analysisSeries, candles.at(-1)?.c) : null,
     [analysisSeries, candles, settings.autoChannel, replay, replayOverlays]);
