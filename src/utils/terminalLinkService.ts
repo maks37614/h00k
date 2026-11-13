@@ -87,9 +87,18 @@ export function normalizeMetaScalpGroup(group?: string): string | null {
   return Number.isInteger(n) && n >= 1 && n <= 500 ? String(n).padStart(3, '0') : null;
 }
 
+/** Tiger Windows API uses BINANCE-FUT for USDⓈ-M Binance futures,
+ * while Bybit uses the same exchange code for spot and futures.
+ */
+export function tigerExchangeCode(exchange: ExchangeId, marketType: MarketType): string {
+  return exchange === 'binance' && marketType === 'futures'
+    ? 'BINANCE-FUT'
+    : exchange.toUpperCase();
+}
+
 export function normalizeTigerGroup(group?: string): string | null {
   const value = String(group ?? '').trim().toUpperCase();
-  return /^[A-Z]$/.test(value) || /^(?:[0-9]|10|11)$/.test(value) ? value : null;
+  return /^[A-Z]$/.test(value) || /^(?:[0-9]|1[0-8])$/.test(value) ? value : null;
 }
 
 export function getUserTerminalLinkSettings(
@@ -260,8 +269,8 @@ export async function sendToSelectedTerminal(
   }
   if (terminal === 'tiger') {
     const group = normalizeTigerGroup(p.tigerGroups[source] || p.tigerGroup);
-    if (!group) return { ...base, message: 'Неправильна група Tiger. Доступні A–Z або 0–11.' };
-    const payload = JSON.stringify({ type: 'setLinkSymbol', e: exchange.toUpperCase(), m: marketType.toUpperCase(), symbol: ticker, linkGroup: group });
+    if (!group) return { ...base, message: 'Неправильна група Tiger. Доступні A–Z або 0–18.' };
+    const payload = JSON.stringify({ type: 'setLinkSymbol', e: tigerExchangeCode(exchange, marketType), m: marketType.toUpperCase(), symbol: ticker, linkGroup: group });
     const result = await tigerSocketCommand(p.tigerPort, payload);
     const copied = result.ok || !allowClipboardFallback ? false : await clipboardFallback(ticker);
     return { terminal, success: result.ok, ticker, group, message: result.message, copiedToClipboard: copied };
