@@ -322,11 +322,15 @@ export const ChartTopAnalysisText: React.FC<ChartTopAnalysisTextProps> = ({
   }, [livePrice, coin, klines, timeframe, formation]);
 
   return (
-    <div className="w-full text-slate-300 text-xs font-sans select-text pb-1 space-y-2">
-      {/* Two columns on both mobile and desktop. */}
-      <div className="grid grid-cols-2 gap-x-3 sm:gap-x-6 gap-y-2 text-xs leading-relaxed">
+    <div className="w-full min-w-0 text-slate-300 text-xs font-sans select-text pb-1 space-y-2">
+      {/* Center both analysis columns as one compact group over the chart.
+          The pair fills smaller screens but stops expanding on wide desktops. */}
+      <div
+        data-testid="chart-top-analysis-columns"
+        className="mx-auto grid w-full max-w-[680px] min-w-0 grid-cols-2 items-start gap-x-3 gap-y-2 px-1 text-[11px] leading-relaxed sm:gap-x-6 sm:px-2 sm:text-xs lg:gap-x-10"
+      >
         {/* Section 1: Найближчі пули ліквідності */}
-        <div className="min-w-0 space-y-1">
+        <div className="min-w-0 space-y-1 break-words [overflow-wrap:anywhere]">
           <div>
             <span className="text-slate-400">Стопи шорт: </span>
             <span className="font-mono font-bold text-white">
@@ -359,7 +363,7 @@ export const ChartTopAnalysisText: React.FC<ChartTopAnalysisTextProps> = ({
         </div>
 
         {/* Section 2: Сильні опорні рівні (Support / Resistance) */}
-        <div className="min-w-0 space-y-1">
+        <div className="min-w-0 space-y-1 break-words [overflow-wrap:anywhere]">
           <div>
             <span className="text-slate-400">Супротив: </span>
             <span className="font-mono font-bold text-rose-400">
