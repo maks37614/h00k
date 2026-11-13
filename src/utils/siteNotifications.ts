@@ -161,7 +161,7 @@ export function normalizeSiteNotificationSettings(input: unknown): SiteNotificat
   return result;
 }
 export function siteNotificationStorageKey(uid: string): string {
-  return 'h00k_site_notifications_v1:' + (uid || 'guest');
+  return 'h00k_site_notifications_v2:' + (uid || 'guest');
 }
 export function siteNotificationSettingsKey(uid: string): string {
   return 'h00k_site_notification_settings_v2:' + (uid || 'guest');
