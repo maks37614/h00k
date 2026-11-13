@@ -46,6 +46,8 @@ import {
   resolveWatchlistEntries,
   toggleCoinWatchlist,
   removeCoinFromWatchlistFolders,
+  watchlistEntryToChartCoin,
+  type ResolvedWatchlistEntry,
   type CoinIdentifier,
 } from './utils/watchlistUtils';
 import {
@@ -743,6 +745,26 @@ export default function App() {
   );
 
   const [selectedEarly, setSelectedEarly] = useState<{ coin: ScannedCoin; candidate: EarlyFormationCandidate } | null>(null);
+  // A favorite's exchange/market identity is independent of the active scan.
+  const handleOpenWatchlistChart = useCallback((entry: ResolvedWatchlistEntry) => {
+    if (!user) {
+      handleOpenAuthModal('signin', 'chart');
+      return;
+    }
+    const selectedCoin = watchlistEntryToChartCoin(entry, preferences.defaultTimeframe);
+    setSelectedPair({ coin: selectedCoin });
+    setSelectedEarly(null);
+    setSelectedArchivedItem(null);
+    setIsWatchlistOpen(false);
+    openChartPage({
+      exchange: selectedCoin.exchange,
+      marketType: selectedCoin.marketType,
+      symbol: selectedCoin.symbol.toUpperCase(),
+      timeframe: selectedCoin.timeframe,
+      kind: 'coin',
+    }, { coin: selectedCoin });
+  }, [user, handleOpenAuthModal, preferences.defaultTimeframe, openChartPage]);
+
   // A's chart and projected trade levels must never remain open for user B
   // after switching accounts on the same browser.
   const detailAccountRef = useRef(user?.uid ?? null);
@@ -1718,6 +1740,7 @@ export default function App() {
         folders={watchlistFolders}
         onFoldersChange={handleWatchlistFoldersChange}
         onSendMetaScalp={handleSendToMetaScalp}
+        onOpenChart={handleOpenWatchlistChart}
         metaScalpBinding={metaScalpSettings.binding}
       />
 

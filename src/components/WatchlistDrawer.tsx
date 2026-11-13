@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Trash2, Star, Zap, FolderPlus, ArrowUpDown, ChevronDown, ChevronUp, Check } from 'lucide-react';
+import { X, Trash2, Star, Zap, FolderPlus, ArrowUpDown, ChevronDown, ChevronUp, Check, Copy, ExternalLink } from 'lucide-react';
+import { copyTextToClipboard } from '../utils/copyTextToClipboard';
 import type { ExchangeId, MarketType, ScannedCoin } from '../types';
 import {
   getCoinWatchlistKey, resolveWatchlistEntries, isWatchlistMarketQuote,
-  watchlistQuoteToScannedCoin,
+  watchlistQuoteToScannedCoin, watchlistDisplayName,
 } from '../utils/watchlistUtils';
 import type { ResolvedWatchlistEntry } from '../utils/watchlistUtils';
 import { formatCryptoPrice } from '../utils/formatters';
@@ -18,6 +19,8 @@ interface WatchlistDrawerProps {
   folders: Record<string, string[]>;
   onFoldersChange: (folders: Record<string, string[]>) => void;
   onSendMetaScalp?: (coin: ScannedCoin) => void;
+  /** Opens the selected exact exchange + market pair in the existing chart route. */
+  onOpenChart: (entry: ResolvedWatchlistEntry) => void;
   metaScalpBinding?: string;
 }
 
@@ -30,6 +33,7 @@ export const WatchlistDrawer: React.FC<WatchlistDrawerProps> = ({
   folders,
   onFoldersChange,
   onSendMetaScalp,
+  onOpenChart,
   metaScalpBinding = '001',
 }) => {
   const [newFolderName, setNewFolderName] = useState('');
@@ -41,6 +45,15 @@ export const WatchlistDrawer: React.FC<WatchlistDrawerProps> = ({
   const [folderMenu, setFolderMenu] = useState<{
     entryKey: string; left: number; top: number; width: number; maxHeight: number;
   } | null>(null);
+  // Separate, custom dark action menu on the symbol (not the folder selector).
+  const [coinMenu, setCoinMenu] = useState<{
+    entryKey: string; left: number; top: number; width: number;
+  } | null>(null);
+  const [coinMenuFeedback, setCoinMenuFeedback] = useState<{
+    entryKey: string; status: 'copied' | 'failed';
+  } | null>(null);
+  const coinMenuRef = useRef<HTMLDivElement>(null);
+  const coinMenuTriggerRef = useRef<HTMLButtonElement>(null);
   const folderMenuRef = useRef<HTMLDivElement>(null);
   const folderTriggerRef = useRef<HTMLButtonElement>(null);
   const drawerOverlayRef = useRef<HTMLDivElement>(null);
@@ -130,7 +143,9 @@ export const WatchlistDrawer: React.FC<WatchlistDrawerProps> = ({
     document.documentElement.style.overflow = 'hidden';
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
-        if (folderMenu) {
+        if (coinMenu) {
+          setCoinMenu(null);
+        } else if (folderMenu) {
           setFolderMenu(null);
         } else {
           onClose();
@@ -143,7 +158,7 @@ export const WatchlistDrawer: React.FC<WatchlistDrawerProps> = ({
       document.body.style.overflow = oldBodyOverflow;
       document.documentElement.style.overflow = oldHtmlOverflow;
     };
-  }, [isOpen, onClose, folderMenu]);
+  }, [isOpen, onClose, folderMenu, coinMenu]);
 
   // Mobile browser bars and the keyboard change the *visible* viewport
   // independently of 100vh/100dvh on some iOS Safari versions. Keep this
@@ -173,6 +188,28 @@ export const WatchlistDrawer: React.FC<WatchlistDrawerProps> = ({
       window.removeEventListener('resize', syncVisibleViewport);
     };
   }, [isOpen]);
+
+  // Close action popovers when the drawer is hidden.
+  useEffect(() => {
+    if (!isOpen) {
+      setCoinMenu(null);
+      setCoinMenuFeedback(null);
+    }
+  }, [isOpen]);
+
+  // Same viewport anchoring and keyboard behavior as the dark folder dropdown.
+  useEffect(() => {
+    if (!coinMenu) return;
+    const dismiss = () => setCoinMenu(null);
+    document.addEventListener('scroll', dismiss, true);
+    window.addEventListener('resize', dismiss);
+    coinMenuRef.current?.querySelector<HTMLButtonElement>('[role="menuitem"]')
+      ?.focus({ preventScroll: true });
+    return () => {
+      document.removeEventListener('scroll', dismiss, true);
+      window.removeEventListener('resize', dismiss);
+    };
+  }, [coinMenu]);
 
   // The floating list is measured relative to the viewport, not to a coin
   // card with overflow:hidden. Close it on viewport changes / list scroll.
@@ -237,6 +274,7 @@ export const WatchlistDrawer: React.FC<WatchlistDrawerProps> = ({
   };
 
   const openFolderMenu = (entry: ResolvedWatchlistEntry, button: HTMLButtonElement) => {
+    setCoinMenu(null);
     if (folderMenu?.entryKey === entry.key) {
       setFolderMenu(null);
       return;
@@ -257,6 +295,33 @@ export const WatchlistDrawer: React.FC<WatchlistDrawerProps> = ({
       : Math.max(8, Math.min(rect.bottom + 4, viewportHeight - maxHeight - 8));
     folderTriggerRef.current = button;
     setFolderMenu({ entryKey: entry.key, left, top, width, maxHeight });
+  };
+
+  const openCoinMenu = (entry: ResolvedWatchlistEntry, button: HTMLButtonElement) => {
+    if (coinMenu?.entryKey === entry.key) {
+      setCoinMenu(null);
+      return;
+    }
+    const rect = button.getBoundingClientRect();
+    const viewportWidth = document.documentElement.clientWidth;
+    const viewportHeight = window.innerHeight;
+    const width = Math.min(232, Math.max(160, viewportWidth - 16));
+    const left = Math.max(8, Math.min(rect.left, viewportWidth - width - 8));
+    const height = 112;
+    const openAbove = rect.bottom + height + 8 > viewportHeight && rect.top > height + 8;
+    const top = Math.max(8, Math.min(
+      openAbove ? rect.top - height - 4 : rect.bottom + 4,
+      Math.max(8, viewportHeight - height - 8),
+    ));
+    setFolderMenu(null);
+    setCoinMenuFeedback(null);
+    coinMenuTriggerRef.current = button;
+    setCoinMenu({ entryKey: entry.key, left, top, width });
+  };
+
+  const copyCoinName = async (entry: ResolvedWatchlistEntry) => {
+    const copied = await copyTextToClipboard(watchlistDisplayName(entry));
+    setCoinMenuFeedback({ entryKey: entry.key, status: copied ? 'copied' : 'failed' });
   };
 
   const onFolderMenuKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
@@ -414,9 +479,18 @@ export const WatchlistDrawer: React.FC<WatchlistDrawerProps> = ({
               >
                 <div className="flex min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-2">
                   <div className="flex min-w-0 flex-1 basis-[120px] flex-wrap items-center gap-2">
-                    <span className="min-w-0 break-all font-mono text-sm font-bold text-white">
-                      {entry.coin?.baseAsset || entry.symbol.replace(/(USDT|USDC|BUSD)$/, '') || entry.symbol}
-                    </span>
+                    <button
+                      type="button"
+                      onClick={(event) => openCoinMenu(entry, event.currentTarget)}
+                      aria-label={`Дії для монети ${watchlistDisplayName(entry)}`}
+                      aria-haspopup="menu"
+                      aria-expanded={coinMenu?.entryKey === entry.key}
+                      title="Відкрити графік або скопіювати назву"
+                      className="inline-flex min-h-[32px] min-w-0 max-w-full items-center gap-1 rounded-md px-1 py-1 text-left font-mono text-sm font-bold text-white transition-colors hover:bg-slate-800 hover:text-cyan-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400"
+                    >
+                      <span className="min-w-0 truncate">{watchlistDisplayName(entry)}</span>
+                      <ChevronDown aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+                    </button>
                     <span className="text-[10px] px-1.5 py-0.2 rounded font-semibold uppercase bg-slate-800 text-slate-400">
                       {entry.exchange}
                     </span>
@@ -471,6 +545,68 @@ export const WatchlistDrawer: React.FC<WatchlistDrawerProps> = ({
           )}
         </div>
       </div>
+      {coinMenu && (
+        <>
+          <div
+            className="fixed inset-0 z-[12]"
+            aria-hidden="true"
+            onMouseDown={() => setCoinMenu(null)}
+            onClick={() => setCoinMenu(null)}
+          />
+          <div
+            ref={coinMenuRef}
+            role="menu"
+            aria-label="Дії з обраною монетою"
+            data-watchlist-coin-actions
+            className="fixed z-[13] min-w-0 overflow-hidden rounded-xl border border-slate-700/80 bg-[#070c20] p-1.5 shadow-2xl shadow-black/60"
+            style={{ left: coinMenu.left, top: coinMenu.top, width: coinMenu.width }}
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') {
+                event.stopPropagation();
+                event.preventDefault();
+                setCoinMenu(null);
+                coinMenuTriggerRef.current?.focus({ preventScroll: true });
+              }
+            }}
+          >
+            {(() => {
+              const entry = entries.find(item => item.key === coinMenu.entryKey);
+              if (!entry) return null;
+              const name = watchlistDisplayName(entry);
+              const copied = coinMenuFeedback?.entryKey === entry.key && coinMenuFeedback.status === 'copied';
+              const failed = coinMenuFeedback?.entryKey === entry.key && coinMenuFeedback.status === 'failed';
+              return (
+                <>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setCoinMenu(null);
+                      onOpenChart(entry);
+                    }}
+                    className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm text-slate-200 transition-colors hover:bg-slate-800 hover:text-cyan-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400"
+                  >
+                    <ExternalLink aria-hidden="true" className="h-4 w-4 shrink-0 text-cyan-400" />
+                    <span>Відкрити графік</span>
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => void copyCoinName(entry)}
+                    className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm text-slate-200 transition-colors hover:bg-slate-800 hover:text-cyan-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400"
+                  >
+                    {copied ? <Check aria-hidden="true" className="h-4 w-4 shrink-0 text-emerald-400" />
+                      : <Copy aria-hidden="true" className="h-4 w-4 shrink-0 text-cyan-400" />}
+                    <span role="status" aria-live="polite">
+                      {copied ? `Скопійовано: ${name}` : failed ? 'Не вдалося скопіювати' : `Копіювати ${name}`}
+                    </span>
+                  </button>
+                </>
+              );
+            })()}
+          </div>
+        </>
+      )}
       {folderMenu && (
         <>
           <div

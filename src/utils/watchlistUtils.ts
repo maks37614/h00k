@@ -1,4 +1,4 @@
-import { ExchangeId, MarketType, ScannedCoin } from '../types';
+import { ExchangeId, MarketType, ScannedCoin, type Timeframe } from '../types';
 
 export interface CoinIdentifier {
   symbol: string;
@@ -191,6 +191,34 @@ export function resolveWatchlistEntries(
   return [...resolved.values()];
 }
 
+
+/** Display the same short name in the drawer and in its copy action. */
+export function watchlistDisplayName(entry: ResolvedWatchlistEntry): string {
+  return entry.coin?.baseAsset || entry.symbol.replace(/(USDT|USDC|BUSD)$/, '') || entry.symbol;
+}
+
+/** Build a chart coin from the exact favorite identity, even when its ticker
+ * hasn't arrived. Do not attach stale formation entry/SL/TP levels.
+ */
+export function watchlistEntryToChartCoin(entry: ResolvedWatchlistEntry, timeframe: Timeframe): ScannedCoin & { timeframe: Timeframe } {
+  const { exchange, marketType, symbol } = parseWatchlistKey(entry.key);
+  if (entry.coin) {
+    return {
+      ...entry.coin, exchange, marketType, symbol, timeframe,
+      formations: [], hasFormations: false,
+    };
+  }
+  const quoteAsset = ['USDT', 'USDC', 'BUSD', 'BTC', 'ETH'].find(quote =>
+    symbol.endsWith(quote) && symbol.length > quote.length) ?? 'USDT';
+  const baseAsset = symbol.endsWith(quoteAsset) && symbol.length > quoteAsset.length
+    ? symbol.slice(0, -quoteAsset.length) : symbol;
+  return {
+    exchange, marketType, symbol, baseAsset, quoteAsset, timeframe,
+    currentPrice: 0, priceChange24h: 0, volume24hUsd: 0,
+    highPrice24h: 0, lowPrice24h: 0, lastUpdated: Date.now(),
+    formations: [], hasFormations: false, exchangeUrl: '',
+  };
+}
 
 /** Minimal quote data delivered by the shared-market favorite-quotes endpoint.
  * It is not a formation scan: synthetic technical indicators are never added.
