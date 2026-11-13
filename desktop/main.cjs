@@ -9,6 +9,8 @@ const { normalizeFloatingBounds, restoreFloatingBounds, floatingLayoutKey } = re
 const { PROVIDERS, PANELS, normalizeSettings, normalizeProfile, matchesTerminal, availablePanels } = require('./profiles.cjs');
 
 const WEBSITE = 'https://h00k.top/';
+// Align Windows taskbar notifications and pinned shortcuts with the branded EXE.
+if (process.platform === 'win32') app.setAppUserModelId('top.h00k.desktop');
 const LABELS = { metascalp: 'MetaScalp', tiger: 'Tiger.Trade', vataga: 'Vataga' };
 let settingsWindow = null;
 let settings = normalizeSettings();
