@@ -100,6 +100,7 @@ test('known stale market snapshots never produce actionable trading notification
 test('quality messages mean real measured improvements, never re-notify a flat or falling score', () => {
   const tracker = new QualityScoreTracker();
   const initial = coin(900_000);
+  initial.formations[0].confidence = 90;
   const first = scanNotificationSignals([initial], settings, [], 905_000, tracker);
   assert.equal(first.filter(e => e.kind === 'quality').length, 1);
   assert.match(first.find(e => e.kind === 'quality')!.title, /Досягнуто/);
@@ -109,11 +110,11 @@ test('quality messages mean real measured improvements, never re-notify a flat o
   decrease.formations[0].confidence = 89;
   assert.equal(scanNotificationSignals([decrease], settings, [], 905_200, tracker).filter(e=>e.kind==='quality').length, 0);
   const increase = coin(900_000);
-  increase.formations[0].confidence = 99;
+  increase.formations[0].confidence = 100;
   const improved = scanNotificationSignals([increase], settings, [], 905_300, tracker).find(e => e.kind === 'quality');
   assert.ok(improved);
   assert.match(improved!.title, /Покращилася/);
-  assert.match(improved!.description, /92 → 99/);
+  assert.match(improved!.description, /90 → 100/);
   const restored = new QualityScoreTracker(tracker.snapshot());
   assert.equal(scanNotificationSignals([increase], settings, [], 905_400, restored).filter(e=>e.kind==='quality').length, 0);
 });
