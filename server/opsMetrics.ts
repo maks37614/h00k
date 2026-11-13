@@ -18,6 +18,7 @@ import { telegramDispatchQueue } from './telegramQueue';
 import { sharedMarketAnalysis } from './surveillance/sharedMarketAnalysis';
 import { sharedCandleFeedStats } from './surveillance/sharedCandleFeed';
 import { surveillanceCheckCandleCache } from './surveillance/checkCandleCache';
+import { priceAlertFallbackStats } from './alertService';
 
 function authorized(req: Request): boolean {
   const secret = process.env.H00K_OPS_TOKEN;
@@ -68,6 +69,7 @@ export function installOpsMetrics(app: Express,
       liquidationFeed: liquidationFeed.stats(),
       publicQuoteDelivery: publicQuoteResponseCache.stats(),
       publicPriceWebSockets: publicPriceFeed.status(),
+      priceAlertFallback: priceAlertFallbackStats(),
       binanceMarketTickers: binanceTickerStream.status(),
       sharedExchange: { marketStreams: shared.length,
         totalSubscribers: shared.reduce((sum, x) => sum + x.subscribers, 0),

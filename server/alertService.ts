@@ -1,5 +1,6 @@
 import { publicPriceFeed } from './publicPriceFeed';
 import { exchangeFetch } from './exchangeHttp';
+import { forEachBounded, selectRoundRobinBatch } from './priceAlertFallback';
 import fs from 'fs';
 import path from 'path';
 import type { PriceAlert, AlertHistoryItem, ExchangeId, MarketType } from '../src/types';
@@ -606,6 +607,14 @@ async function fetchCurrentPrice(exchange: ExchangeId, market: MarketType, symbo
   return null;
 }
 
+const PRICE_REST_FALLBACK_MAX_PER_CYCLE = 16;
+const PRICE_REST_FALLBACK_PARALLEL = 8;
+let fallbackCursor = 0;
+let fallbackLast = { missingStreamPrices: 0, restPriceChecks: 0, streamPrices: 0 };
+export function priceAlertFallbackStats() { return { ...fallbackLast,
+  maxRestPerCycle: PRICE_REST_FALLBACK_MAX_PER_CYCLE,
+  maxConcurrentRest: PRICE_REST_FALLBACK_PARALLEL }; }
+
 // Check active alerts against live prices
 let checkInFlight = false;
 export async function checkAlertsOnce(userId?: string) {
@@ -645,17 +654,24 @@ async function checkAlertsInternal(userId?: string) {
       uniqueKeys.set(key, { exchange: a.exchange, market: a.marketType, symbol: a.symbol });
   }
 
-  // Fetch only prices not yet available from a fresh exchange WS message.
+  // Prefer one shared live quote per instrument. During an exchange WebSocket
+  // outage, checking *all* missing prices in parallel would overload the VPS
+  // and possibly exhaust Binance/Bybit REST rate limits.
   const priceMap = new Map<string, number>();
-  await Promise.all(
-    Array.from(uniqueKeys.entries()).map(async ([key, item]) => {
-      const p = publicPriceFeed.current({ exchange: item.exchange, market: item.market, symbol: item.symbol })
-        ?? await fetchCurrentPrice(item.exchange, item.market, item.symbol);
-      if (p !== null && !isNaN(p)) {
-        priceMap.set(key, p);
-      }
-    })
-  );
+  const missing: Array<[string, { exchange: ExchangeId; market: MarketType; symbol: string }]> = [];
+  for (const [key, item] of uniqueKeys) {
+    const live = publicPriceFeed.current({ exchange: item.exchange, market: item.market, symbol: item.symbol });
+    if (live !== null && Number.isFinite(live) && live > 0) priceMap.set(key, live);
+    else missing.push([key, item]);
+  }
+  const batch = selectRoundRobinBatch(missing, fallbackCursor, PRICE_REST_FALLBACK_MAX_PER_CYCLE);
+  fallbackCursor = batch.nextCursor;
+  fallbackLast = { missingStreamPrices: missing.length, restPriceChecks: batch.selected.length,
+    streamPrices: priceMap.size };
+  await forEachBounded(batch.selected, PRICE_REST_FALLBACK_PARALLEL, async ([key, item]) => {
+    const price = await fetchCurrentPrice(item.exchange, item.market, item.symbol);
+    if (price !== null && Number.isFinite(price) && price > 0) priceMap.set(key, price);
+  });
 
   let updated = false;
 
