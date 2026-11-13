@@ -624,6 +624,7 @@ export default function App() {
 
   const handleAlertToast = useCallback(
     (toast: { symbol: string; targetPrice: number; condition: 'gte' | 'lte'; message?: string }) => {
+      if (!notificationEnabled(notificationSettings, 'price')) return;
       setAlertToast({
         id: Date.now(),
         symbol: toast.symbol,
@@ -632,8 +633,15 @@ export default function App() {
         message: toast.message,
       });
     },
-    []
+    [notificationSettings]
   );
+
+  // Hide an already-visible price toast as soon as notifications are disabled.
+  useEffect(() => {
+    if (!notificationEnabled(notificationSettings, 'price')) {
+      setAlertToast(null);
+    }
+  }, [notificationSettings.optedIn, notificationSettings.enabled, notificationSettings.price]);
 
   // Auto-dismiss MetaScalp toast
   useEffect(() => {
@@ -1797,6 +1805,7 @@ export default function App() {
         prefill={telegramPrefill}
         onOpenAuth={() => handleOpenAuthModal('signin', 'alerts')}
         onAlertCreated={(alert) => {
+          if (!notificationEnabled(notificationSettings, 'price')) return;
           setAlertToast({
             id: Date.now(),
             symbol: alert.symbol,
