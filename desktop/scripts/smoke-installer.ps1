@@ -26,21 +26,21 @@ function Install-H00k([string[]]$Arguments) {
 
 # GitHub Windows runner is fresh; intentionally exercise both an opted-out and
 # an opted-in install on the same Windows user. No trading terminal is launched.
-if ((DesktopLinks).Count -ne 0) { throw 'Runner already has a h00k desktop shortcut' }
+if (@(DesktopLinks).Count -ne 0) { throw 'Runner already has a h00k desktop shortcut' }
 Install-H00k @('/S','/NO_DESKTOP_SHORTCUT')
-if ((DesktopLinks).Count -ne 0) { throw 'Opt-out installation incorrectly created a desktop shortcut' }
-$startLinks = StartMenuLinks
+if (@(DesktopLinks).Count -ne 0) { throw 'Opt-out installation incorrectly created a desktop shortcut' }
+$startLinks = @(StartMenuLinks)
 if ($startLinks.Count -lt 1) { throw 'Installer did not create a Start Menu shortcut' }
 Write-Host 'Opt-out: desktop shortcut absent, Start Menu shortcut present'
 
 # Verify that silent upgrading without explicitly opting in respects prior choice.
 Install-H00k @('/S')
-if ((DesktopLinks).Count -ne 0) { throw 'Silent upgrade ignored saved opt-out preference' }
+if (@(DesktopLinks).Count -ne 0) { throw 'Silent upgrade ignored saved opt-out preference' }
 Write-Host 'Opt-out choice preserved through a silent upgrade'
 
 # Explicitly turn the shortcut back on; ensure Windows sees the icon-bearing exe.
 Install-H00k @('/S','/DESKTOP_SHORTCUT')
-$links = DesktopLinks
+$links = @(DesktopLinks)
 if ($links.Count -ne 1) { throw "Expected exactly one desktop shortcut, got $($links.Count)" }
 $shortcut = (New-Object -ComObject WScript.Shell).CreateShortcut($links[0].FullName)
 if (-not (Test-Path -LiteralPath $shortcut.TargetPath -PathType Leaf)) {
