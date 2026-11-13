@@ -15,6 +15,10 @@ const EMPTY_AUTO_STATS: DensityAutoStats = { baseline: 0, bidCut: 0, askCut: 0, 
 export class HookChartDensityBook {
   private bids = new Map<number, number>();
   private asks = new Map<number, number>();
+  // Updated in O(changed levels) for ordinary deltas. A full scan is needed
+  // only when the current best price is removed (or on initial snapshot).
+  private bestBid = -Infinity;
+  private bestAsk = Infinity;
   private tracked = new Map<string, Density>();
   private ready = false;
   private receivedAt = 0;
@@ -77,6 +81,8 @@ export class HookChartDensityBook {
   clear() {
     this.bids.clear();
     this.asks.clear();
+    this.bestBid = -Infinity;
+    this.bestAsk = Infinity;
     this.tracked.clear();
     this.ready = false;
     this.receivedAt = this.sourceTime = this.sequence = this.thresholdAt = this.autoThreshold = 0;
@@ -98,16 +104,31 @@ export class HookChartDensityBook {
     else if (!this.ready) return false;
     else if (update.sequence <= this.sequence) return true;
 
-    const apply = (rows: [number, number][], target: Map<number, number>) => {
+    const apply = (rows: [number, number][], target: Map<number, number>, bid: boolean) => {
+      let removedBest = false;
       for (const [price, quantity] of rows) {
-        if (quantity > 0) target.set(price, quantity);
-        else target.delete(price);
+        if (quantity > 0) {
+          target.set(price, quantity);
+          if (bid && price > this.bestBid) this.bestBid = price;
+          if (!bid && price < this.bestAsk) this.bestAsk = price;
+        } else if (target.delete(price)) {
+          if (price === (bid ? this.bestBid : this.bestAsk)) removedBest = true;
+        }
+      }
+      // Only a deletion of the current best price requires scanning the
+      // remaining levels. Regular quantity deltas are now constant time.
+      if (removedBest) {
+        let best = bid ? -Infinity : Infinity;
+        for (const price of target.keys()) {
+          if (bid ? price > best : price < best) best = price;
+        }
+        if (bid) this.bestBid = best;
+        else this.bestAsk = best;
       }
     };
-    apply(bids, this.bids);
-    apply(asks, this.asks);
-    const bestBid = Math.max(...this.bids.keys()), bestAsk = Math.min(...this.asks.keys());
-    if (!this.bids.size || !this.asks.size || bestBid >= bestAsk) {
+    apply(bids, this.bids, true);
+    apply(asks, this.asks, false);
+    if (!this.bids.size || !this.asks.size || this.bestBid >= this.bestAsk) {
       this.clear();
       return false;
     }
@@ -123,7 +144,7 @@ export class HookChartDensityBook {
       this.clear();
       return { densities: [] as Density[], book: { b: [], a: [] }, densityCut: 0, depthReady: false, price: 0, autoStats: EMPTY_AUTO_STATS };
     }
-    const price = (Math.max(...this.bids.keys()) + Math.min(...this.asks.keys())) / 2;
+    const price = (this.bestBid + this.bestAsk) / 2;
     const distance = normalizeDensityDistance(settings.densityDiffPct);
     const levels = getOrderBookDensityLevels([...this.bids], [...this.asks], price, distance);
     const book = {
