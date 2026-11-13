@@ -3,7 +3,7 @@ import { translateHookChartPhrase } from '../../locales/hookchartLanguage';
 import type { SupportedLanguage } from '../../locales';
 import type { VisualChartProfile } from './visualProfiles';
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState, useImperativeHandle, useId } from 'react';
-import { useSharedChartClock } from './useSharedChartClock';
+import { ChartBarCountdown } from './ChartBarCountdown';
 import { createPortal } from 'react-dom';
 import { CalendarDays } from 'lucide-react';
 import { drawTouchMagnifier, magnifierZoomFromPriceDrag, TOUCH_MAGNIFIER_DEFAULT_ZOOM } from './touchMagnifier';
@@ -460,16 +460,14 @@ export function Chart({candles,symbol,tf,tool,drawings,setDrawings,alerts,setAle
    window.addEventListener('keydown',keydown,true);window.addEventListener('keyup',keyup,true);window.addEventListener('blur',stop);window.addEventListener('pointerup',stop);
    return()=>{stop();window.removeEventListener('keydown',keydown,true);window.removeEventListener('keyup',keyup,true);window.removeEventListener('blur',stop);window.removeEventListener('pointerup',stop)};
  },[transientRuler]);
- const clockNow=useSharedChartClock(!hideBarCountdown);
  useEffect(()=>{if(!jumpOpen)setJumpDate(zoneDateKey(Date.now(),timezone))},[timezone]);useEffect(()=>{if(hideTimeJump&&jumpOpen)setJumpOpen(false)},[hideTimeJump,jumpOpen]);
- const intervalMs=TF_MS[tf]||300000,lastBarStart=candles.at(-1)?.t||Math.floor(clockNow/intervalMs)*intervalMs,barStart=(lastBarStart<=clockNow&&clockNow-lastBarStart<intervalMs*2)?lastBarStart:Math.floor(clockNow/intervalMs)*intervalMs,barLeftMs=Math.max(0,barStart+intervalMs-clockNow);
+ const intervalMs=TF_MS[tf]||300000;
  // Bucket labels only when prints/candle data changes, not on every cursor
  // frame or mouse movement while the chart is being drawn.
  const marketPrintBuckets=useMemo(
    ()=>showMarketPrintSums?aggregateMarketPrintsByCandle(candles,marketPrints,intervalMs):[],
    [showMarketPrintSums,candles,marketPrints,intervalMs],
  );
- const formatBarLeft=(ms:number)=>{const total=Math.max(0,Math.ceil(ms/1000)),h=Math.floor(total/3600),m=Math.floor((total%3600)/60),sec=total%60;return h>0?`${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`:`${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`};
  const axisTimeFmt=useMemo(()=>new Intl.DateTimeFormat(language,{timeZone:timezone,hour:'2-digit',minute:'2-digit',...(intervalMs<60000?{second:'2-digit' as const}:{}),hour12:false}),[timezone,language,intervalMs]);
  const axisDateFmt=useMemo(()=>new Intl.DateTimeFormat(language,{timeZone:timezone,day:'2-digit',month:'2-digit'}),[timezone,language]);
  const axisFullFmt=useMemo(()=>new Intl.DateTimeFormat(language,{timeZone:timezone,day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit',...(intervalMs<60000?{second:'2-digit' as const}:{}),hour12:false}),[timezone,language,intervalMs]);
@@ -1249,7 +1247,7 @@ export function Chart({candles,symbol,tf,tool,drawings,setDrawings,alerts,setAle
  const handleDoubleClick=(e:React.MouseEvent<HTMLElement>)=>{const g=geometry();if(!g)return;const x=e.clientX-g.r.left,y=e.clientY-g.r.top;if(x<0||x>g.r.width||y<0||y>g.r.height)return;if(zone(x,y,g)==='price')setVp(v=>({...v,autoY:true,manualCenter:null,manualRange:null}));else reset()};
  const handleTouchEnd=(e:React.PointerEvent<HTMLElement>)=>{if(e.pointerType==='mouse'||drag.current?.kind==='pinch'||drag.current?.panning||drag.current?.inspecting){handlePointerUp(e);return}const now=Date.now();if(now-lastTap.current<320){const g=geometry();if(g){const x=e.clientX-g.r.left,y=e.clientY-g.r.top;if(zone(x,y,g)==='price')setVp(v=>({...v,autoY:true,manualCenter:null,manualRange:null}))}}lastTap.current=now;handlePointerUp(e)};
  useImperativeHandle(controlRef,()=>({takeScreenshot:()=>{try{return ref.current?.toDataURL('image/png')||null}catch{return null}},fitContent:fitAllHistory,zoomToLatest:reset,focusLatest:()=>setVp(v=>({...v,rightOffset:0,autoY:true,manualCenter:null,manualRange:null,fitAll:false})),zoom:zoomButton}),[candles,vp]);
- const barCountdown=!hideBarCountdown?<div className="barCountdown" role="timer" aria-label="Час до закриття бару" title={`До закриття свічки ${tf}`}><b>{formatBarLeft(barLeftMs)}</b></div>:null;
+ const barCountdown=!hideBarCountdown?<ChartBarCountdown tf={tf} intervalMs={intervalMs} lastBarStart={candles.at(-1)?.t}/>:null;
  const scaleControls=(<div role="toolbar" aria-label="Керування масштабом графіка" className={'chartScaleDock '+(zoomPanelOpen?'expanded':'collapsed')}>
    {countdownContainer===undefined&&barCountdown}
    {zoomPanelOpen&&<div className="scaleTools"><button type="button" aria-label="Збільшити масштаб" title="Збільшити масштаб" onClick={()=>zoomButton(1.2)}>+</button><button type="button" aria-label="Зменшити масштаб" title="Зменшити масштаб" onClick={()=>zoomButton(1/1.2)}>−</button><button type="button" className="scaleReset" onClick={reset}>Reset</button><button type="button" className={vp.fitAll?'scaleHistory active':'scaleHistory'} title={vp.fitAll?'Вся історія: увімкнено':'Вся завантажена історія поточного таймфрейму'} aria-label="Показати всю історію" onClick={fitAllHistory}><svg width="15" height="15" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.45" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M2.5 3v12M15.5 3v12M5 9h8"/><path d="M7 7 5 9l2 2M11 7l2 2-2 2"/></svg></button></div>}
