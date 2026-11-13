@@ -46,12 +46,19 @@ function dockRects(target, work, side, width, height, count) {
     height: Math.round(horizontal ? segment : thickness),
   }));
 }
-function floatingRects(target, work, width, height, count) {
+function floatingRects(target, work, width, height, count, side = 'right') {
   if (!finiteRect(work) || !Number.isInteger(count) || count < 1 || count > 12) return [];
   const w = Math.min(width, work.width);
   const h = Math.min(height, work.height);
-  const baseX = finiteRect(target) ? target.x + 32 : work.x + 32;
-  const baseY = finiteRect(target) ? target.y + 32 : work.y + 32;
+  const validTarget = finiteRect(target);
+  const baseX = !validTarget ? work.x + 32
+    : side === 'left' ? target.x - w - GAP
+    : side === 'top' || side === 'bottom' ? target.x + 32
+    : target.x + target.width + GAP;
+  const baseY = !validTarget ? work.y + 32
+    : side === 'top' ? target.y - h - GAP
+    : side === 'bottom' ? target.y + target.height + GAP
+    : target.y + 32;
   return Array.from({length: count}, (_, index) => ({
     x: Math.round(clamp(baseX + index * 36, work.x, work.x + work.width - w)),
     y: Math.round(clamp(baseY + index * 36, work.y, work.y + work.height - h)),
