@@ -64,7 +64,7 @@ export function HookChartVisualPreview({
         <span>DEMO · 15m</span>
         <span>Штучні свічки · без підключень до бірж</span>
       </div>
-      <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} width="100%" height="auto"
+      <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} width="100%"
         role="img" aria-label="Маленький штучний графік для попереднього перегляду масштабу та відступів"
         focusable="false" preserveAspectRatio="xMidYMid meet"
         style={{ display: 'block', maxWidth: '420px', width: '100%', height: 'auto' }}>
