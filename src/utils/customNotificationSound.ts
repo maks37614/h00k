@@ -42,32 +42,85 @@ function openDb(): Promise<IDBDatabase> {
   });
 }
 
-async function read(uid: string): Promise<CustomNotificationSound | null> {
-  if (!uid || uid === 'guest') return null;
+export const MAX_CUSTOM_SOUND_TRACKS = 24;
+
+export interface SavedSoundTrack extends CustomNotificationSound {
+  id: string;
+}
+export interface CustomSoundLibrary {
+  version: 2;
+  selectedId: string;
+  tracks: SavedSoundTrack[];
+}
+
+const CUSTOM_SOUND_LABELS: Record<string, string> = {
+  'jg-032316-sfx-robot-talk-1': 'Голос робота',
+  '23ab89dc95700ba': 'Цифровий сигнал 1',
+  '1c0ccd2e60335f6': 'Цифровий сигнал 2',
+  'magical_sound_freetone.org': 'Магічне сповіщення',
+  '59f4c8e1df6982a': 'Цифровий сигнал 3',
+  'e28ae0d18cb8813': 'Цифровий сигнал 4',
+  'whistle_of_a_bird_freetone.org': 'Пташиний свист',
+  '4f16c5e4d065268': 'Цифровий сигнал 5',
+};
+
+/** Friendly labels for the eight supplied sounds; other files keep their names. */
+export function customSoundDisplayName(filename: string): string {
+  const name = filename.replace(/^(?:0[1-8]_)/, '').replace(/\.(?:mp3|wav|ogg|m4a)$/i, '');
+  const cleanName = name.replace(/\(\d+\)$/, '').toLowerCase();
+  return CUSTOM_SOUND_LABELS[cleanName] || name;
+}
+
+/** Reads v1 single-melody records without data loss and converts to a v2 library. */
+export function normalizeCustomSoundLibrary(raw: unknown): CustomSoundLibrary {
+  const empty: CustomSoundLibrary = { version: 2, selectedId: '', tracks: [] };
+  if (!raw || typeof raw !== 'object') return empty;
+  const data = raw as Record<string, unknown>;
+  if (Array.isArray(data.tracks)) {
+    const valid = data.tracks.filter((track: unknown): track is SavedSoundTrack => {
+      if (!track || typeof track !== 'object') return false;
+      const t = track as Record<string, unknown>;
+      return typeof t.id === 'string' && Boolean(t.id)
+        && typeof t.name === 'string' && t.blob instanceof Blob;
+    }).slice(0, MAX_CUSTOM_SOUND_TRACKS);
+    const selectedId = typeof data.selectedId === 'string' && valid.some(x => x.id === data.selectedId)
+      ? data.selectedId : (valid[0]?.id || '');
+    return { version: 2, selectedId, tracks: valid };
+  }
+  if (typeof data.name === 'string' && data.blob instanceof Blob) {
+    const legacy: SavedSoundTrack = {
+      id: 'legacy', name: data.name.slice(0,100),
+      blob: data.blob, savedAt: typeof data.savedAt === 'number' ? data.savedAt : Date.now(),
+    };
+    return { version: 2, selectedId: legacy.id, tracks: [legacy] };
+  }
+  return empty;
+}
+
+async function read(uid: string): Promise<CustomSoundLibrary> {
+  if (!uid || uid === 'guest') return normalizeCustomSoundLibrary(null);
   const db = await openDb();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE, 'readonly');
     const request = tx.objectStore(STORE).get(uid);
-    let value: CustomNotificationSound | null = null;
-    request.onsuccess = () => {
-      const data = request.result as CustomNotificationSound | undefined;
-      if (data && typeof data.name === 'string' && data.blob instanceof Blob) value = data;
-    };
+    let value: CustomSoundLibrary = normalizeCustomSoundLibrary(null);
+    request.onsuccess = () => { value = normalizeCustomSoundLibrary(request.result); };
     tx.oncomplete = () => { db.close(); resolve(value); };
-    tx.onerror = () => { db.close(); reject(new Error('Не вдалося прочитати мелодію.')); };
-    tx.onabort = () => { db.close(); reject(new Error('Читання мелодії перервано.')); };
+    tx.onerror = () => { db.close(); reject(new Error('Не вдалося прочитати мелодії.')); };
+    tx.onabort = () => { db.close(); reject(new Error('Читання мелодій перервано.')); };
   });
 }
-async function write(uid: string, value?: CustomNotificationSound): Promise<void> {
+
+async function write(uid: string, value?: CustomSoundLibrary): Promise<void> {
   if (!uid || uid === 'guest') throw new Error('Спочатку увійдіть у профіль.');
   const db = await openDb();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(STORE, 'readwrite');
-    if (value) tx.objectStore(STORE).put(value, uid);
+    if (value && value.tracks.length) tx.objectStore(STORE).put(value, uid);
     else tx.objectStore(STORE).delete(uid);
     tx.oncomplete = () => { db.close(); resolve(); };
-    tx.onerror = () => { db.close(); reject(new Error('Не вдалося зберегти мелодію на пристрої.')); };
-    tx.onabort = () => { db.close(); reject(new Error('Збереження мелодії перервано.')); };
+    tx.onerror = () => { db.close(); reject(new Error('Не вдалося зберегти мелодії на пристрої.')); };
+    tx.onabort = () => { db.close(); reject(new Error('Збереження мелодій перервано.')); };
   });
 }
 
@@ -104,16 +157,64 @@ function checkAudioDuration(file: File): Promise<void> {
 }
 
 export async function getCustomNotificationSound(uid: string): Promise<CustomNotificationSound | null> {
-  return read(uid);
+  const library = await read(uid);
+  return library.tracks.find(track => track.id === library.selectedId) || null;
 }
+
+export async function listCustomNotificationSounds(uid: string): Promise<{
+  selectedId: string; tracks: Array<{ id: string; name: string; savedAt: number }>;
+}> {
+  const library = await read(uid);
+  return {
+    selectedId: library.selectedId,
+    tracks: library.tracks.map(({ id, name, savedAt }) => ({ id, name, savedAt })),
+  };
+}
+
+function trackId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+  return Date.now().toString(36) + '-' + Math.random().toString(36).slice(2);
+}
+
+/** Validates all files before any write: a failed import does not wipe old sounds. */
+export async function saveCustomNotificationSounds(uid: string, files: readonly File[]): Promise<SavedSoundTrack[]> {
+  if (!uid || uid === 'guest') throw new Error('Спочатку увійдіть у профіль.');
+  if (files.length === 0) return [];
+  const library = await read(uid);
+  if (files.length + library.tracks.length > MAX_CUSTOM_SOUND_TRACKS)
+    throw new Error(`Можна зберегти не більше ${MAX_CUSTOM_SOUND_TRACKS} мелодій на пристрої.`);
+  for (const file of files) {
+    const issue = validateCustomNotificationSound(file);
+    if (issue) throw new Error(`${file.name}: ${issue}`);
+    await checkAudioDuration(file);
+  }
+  const now = Date.now();
+  const added = files.map((file, index): SavedSoundTrack => ({
+    id: trackId(), name: file.name.slice(0,100), blob: file, savedAt: now + index,
+  }));
+  await write(uid, { version: 2, selectedId: added[0].id, tracks: [...library.tracks, ...added] });
+  return added;
+}
+
 export async function saveCustomNotificationSound(uid: string, file: File): Promise<CustomNotificationSound> {
-  const issue = validateCustomNotificationSound(file);
-  if (issue) throw new Error(issue);
-  await checkAudioDuration(file);
-  const value = { name: file.name.slice(0, 100), blob: file, savedAt: Date.now() };
-  await write(uid, value);
-  return value;
+  const [saved] = await saveCustomNotificationSounds(uid, [file]);
+  return saved;
 }
-export async function removeCustomNotificationSound(uid: string): Promise<void> {
-  await write(uid);
+
+export async function selectCustomNotificationSound(uid: string, id: string): Promise<void> {
+  const library = await read(uid);
+  if (!library.tracks.some(track => track.id === id)) throw new Error('Мелодію не знайдено на цьому пристрої.');
+  await write(uid, { ...library, selectedId: id });
+}
+
+/** Without id, retains legacy behavior: removes every local custom sound. */
+export async function removeCustomNotificationSound(uid: string, id?: string): Promise<void> {
+  if (!id) { await write(uid); return; }
+  const library = await read(uid);
+  const tracks = library.tracks.filter(track => track.id !== id);
+  await write(uid, {
+    version: 2,
+    selectedId: library.selectedId === id ? (tracks[0]?.id || '') : library.selectedId,
+    tracks,
+  });
 }

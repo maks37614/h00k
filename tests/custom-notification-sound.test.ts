@@ -55,8 +55,8 @@ test('personal melody is device-local, per account, with master mute and preview
   assert.match(sound, /preset === 'custom'/);
   assert.match(sound, /getCustomNotificationSound\(uid\)/);
   assert.match(sound, /if \(allowed && !allowed\(\)\) return/);
-  assert.match(profile, /saveCustomNotificationSound\(soundUid, file\)/);
-  assert.match(profile, /removeCustomNotificationSound\(soundUid\)/);
+  assert.match(profile, /saveCustomNotificationSounds\(soundUid, files\)/);
+  assert.match(profile, /removeCustomNotificationSound\(soundUid, selectedPersonalId\)/);
   assert.match(profile, /playSiteNotificationSound\(settings\.sound, soundUid\)/);
   assert.match(provider, /playSiteNotificationSound\(settingsRef\.current\.sound, soundOwner/);
   assert.match(provider, /stopCustomNotificationSound\(\)/);
