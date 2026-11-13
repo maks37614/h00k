@@ -28,17 +28,43 @@ export function validateCustomNotificationSound(file: Pick<File, 'name' | 'size'
   return null;
 }
 
+const STORAGE_TIMEOUT_MS = 8_000;
+
+/** IndexedDB can be blocked indefinitely by another tab or Safari privacy mode. */
 function openDb(): Promise<IDBDatabase> {
   if (typeof indexedDB === 'undefined')
     return Promise.reject(new Error('Збереження мелодії недоступне в цьому браузері.'));
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, 1);
+    let request: IDBOpenDBRequest;
+    try {
+      request = indexedDB.open(DB_NAME, 1);
+    } catch {
+      reject(new Error('Не вдалося відкрити локальне сховище мелодій.'));
+      return;
+    }
+    let finished = false;
+    const timeout = setTimeout(() => {
+      if (finished) return;
+      finished = true;
+      reject(new Error('Сховище мелодій не відповідає. Закрийте інші вкладки h00k.top і спробуйте ще раз.'));
+    }, STORAGE_TIMEOUT_MS);
+    const fail = (message: string) => {
+      if (finished) return;
+      finished = true;
+      clearTimeout(timeout);
+      reject(new Error(message));
+    };
     request.onupgradeneeded = () => {
       if (!request.result.objectStoreNames.contains(STORE)) request.result.createObjectStore(STORE);
     };
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(new Error('Не вдалося відкрити локальне сховище мелодій.'));
-    request.onblocked = () => reject(new Error('Закрийте інші вкладки h00k.top і повторіть.'));
+    request.onsuccess = () => {
+      if (finished) { request.result.close(); return; }
+      finished = true;
+      clearTimeout(timeout);
+      resolve(request.result);
+    };
+    request.onerror = () => fail('Не вдалося відкрити локальне сховище мелодій.');
+    request.onblocked = () => fail('Закрийте інші вкладки h00k.top і повторіть.');
   });
 }
 
@@ -101,13 +127,33 @@ async function read(uid: string): Promise<CustomSoundLibrary> {
   if (!uid || uid === 'guest') return normalizeCustomSoundLibrary(null);
   const db = await openDb();
   return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE, 'readonly');
-    const request = tx.objectStore(STORE).get(uid);
+    let tx: IDBTransaction;
     let value: CustomSoundLibrary = normalizeCustomSoundLibrary(null);
-    request.onsuccess = () => { value = normalizeCustomSoundLibrary(request.result); };
-    tx.oncomplete = () => { db.close(); resolve(value); };
-    tx.onerror = () => { db.close(); reject(new Error('Не вдалося прочитати мелодії.')); };
-    tx.onabort = () => { db.close(); reject(new Error('Читання мелодій перервано.')); };
+    try {
+      tx = db.transaction(STORE, 'readonly');
+      const request = tx.objectStore(STORE).get(uid);
+      request.onsuccess = () => { value = normalizeCustomSoundLibrary(request.result); };
+    } catch {
+      db.close();
+      reject(new Error('Не вдалося прочитати мелодії.'));
+      return;
+    }
+    let finished = false;
+    const finish = (error?: Error) => {
+      if (finished) return;
+      finished = true;
+      clearTimeout(timeout);
+      db.close();
+      if (error) reject(error);
+      else resolve(value);
+    };
+    const timeout = setTimeout(() => {
+      finish(new Error('Читання мелодій триває надто довго. Спробуйте перезавантажити вкладку.'));
+      try { tx.abort(); } catch { /* Transaction may already be inactive. */ }
+    }, STORAGE_TIMEOUT_MS);
+    tx.oncomplete = () => finish();
+    tx.onerror = () => finish(new Error('Не вдалося прочитати мелодії.'));
+    tx.onabort = () => finish(new Error('Читання мелодій перервано.'));
   });
 }
 
@@ -115,12 +161,32 @@ async function write(uid: string, value?: CustomSoundLibrary): Promise<void> {
   if (!uid || uid === 'guest') throw new Error('Спочатку увійдіть у профіль.');
   const db = await openDb();
   return new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE, 'readwrite');
-    if (value && value.tracks.length) tx.objectStore(STORE).put(value, uid);
-    else tx.objectStore(STORE).delete(uid);
-    tx.oncomplete = () => { db.close(); resolve(); };
-    tx.onerror = () => { db.close(); reject(new Error('Не вдалося зберегти мелодії на пристрої.')); };
-    tx.onabort = () => { db.close(); reject(new Error('Збереження мелодій перервано.')); };
+    let tx: IDBTransaction;
+    try {
+      tx = db.transaction(STORE, 'readwrite');
+      if (value && value.tracks.length) tx.objectStore(STORE).put(value, uid);
+      else tx.objectStore(STORE).delete(uid);
+    } catch {
+      db.close();
+      reject(new Error('Не вдалося зберегти мелодії на пристрої.'));
+      return;
+    }
+    let finished = false;
+    const finish = (error?: Error) => {
+      if (finished) return;
+      finished = true;
+      clearTimeout(timeout);
+      db.close();
+      if (error) reject(error);
+      else resolve();
+    };
+    const timeout = setTimeout(() => {
+      finish(new Error('Сховище не підтвердило збереження мелодій. Можливо, на пристрої бракує місця.'));
+      try { tx.abort(); } catch { /* Already committed or inactive. */ }
+    }, STORAGE_TIMEOUT_MS);
+    tx.oncomplete = () => finish();
+    tx.onerror = () => finish(new Error('Не вдалося зберегти мелодії на пристрої. Перевірте вільне місце.'));
+    tx.onabort = () => finish(new Error('Збереження мелодій перервано.'));
   });
 }
 
@@ -135,8 +201,10 @@ function checkAudioDuration(file: File): Promise<void> {
       if (settled) return;
       settled = true;
       clearTimeout(timeout);
+      // Do not call audio.load() again during cleanup: some browsers re-enter
+      // the decoder and stall the tab while replacing the media resource.
+      audio.pause();
       audio.removeAttribute('src');
-      audio.load();
       URL.revokeObjectURL(url);
       if (error) reject(error);
       else resolve();
@@ -151,8 +219,12 @@ function checkAudioDuration(file: File): Promise<void> {
       else cleanup();
     };
     audio.onerror = () => cleanup(new Error('Файл пошкоджений або цей аудіоформат не підтримується браузером.'));
-    audio.src = url;
-    audio.load();
+    try {
+      audio.src = url;
+      audio.load();
+    } catch {
+      cleanup(new Error('Не вдалося відкрити MP3 у браузері.'));
+    }
   });
 }
 
@@ -177,16 +249,28 @@ function trackId(): string {
 }
 
 /** Validates all files before any write: a failed import does not wipe old sounds. */
-export async function saveCustomNotificationSounds(uid: string, files: readonly File[]): Promise<SavedSoundTrack[]> {
+export async function saveCustomNotificationSounds(
+  uid: string, files: readonly File[], onProgress?: (done: number, total: number) => void,
+): Promise<SavedSoundTrack[]> {
   if (!uid || uid === 'guest') throw new Error('Спочатку увійдіть у профіль.');
   if (files.length === 0) return [];
-  const library = await read(uid);
-  if (files.length + library.tracks.length > MAX_CUSTOM_SOUND_TRACKS)
-    throw new Error(`Можна зберегти не більше ${MAX_CUSTOM_SOUND_TRACKS} мелодій на пристрої.`);
+  // Reject invalid/oversized files BEFORE opening IndexedDB or decoding any MP3.
   for (const file of files) {
     const issue = validateCustomNotificationSound(file);
     if (issue) throw new Error(`${file.name}: ${issue}`);
-    await checkAudioDuration(file);
+  }
+  if (files.length > MAX_CUSTOM_SOUND_TRACKS)
+    throw new Error(`Можна зберегти не більше ${MAX_CUSTOM_SOUND_TRACKS} мелодій на пристрої.`);
+  const library = await read(uid);
+  if (files.length + library.tracks.length > MAX_CUSTOM_SOUND_TRACKS)
+    throw new Error(`Можна зберегти не більше ${MAX_CUSTOM_SOUND_TRACKS} мелодій на пристрої.`);
+  for (let i = 0; i < files.length; i++) {
+    try {
+      await checkAudioDuration(files[i]);
+    } catch (error) {
+      throw new Error(`${files[i].name}: ${error instanceof Error ? error.message : 'Файл не підтримується.'}`);
+    }
+    onProgress?.(i + 1, files.length);
   }
   const now = Date.now();
   const added = files.map((file, index): SavedSoundTrack => ({

@@ -47,6 +47,7 @@ export const ProfileNotificationSettings: React.FC = () => {
   const [personalTracks, setPersonalTracks] = useState<Array<{ id: string; name: string; savedAt: number }>>([]);
   const [selectedPersonalId, setSelectedPersonalId] = useState('');
   const [soundLoading, setSoundLoading] = useState(false);
+  const [soundProgress, setSoundProgress] = useState<string | null>(null);
   const [soundError, setSoundError] = useState<string | null>(null);
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
@@ -97,10 +98,15 @@ export const ProfileNotificationSettings: React.FC = () => {
     const files = Array.from(event.currentTarget.files ?? []);
     event.currentTarget.value = '';
     if (!files.length) return;
+    if (soundLoading) return;
     setSoundLoading(true);
     setSoundError(null);
+    setSoundProgress(`Перевіряємо MP3: 0 із ${files.length}`);
     try {
-      await saveCustomNotificationSounds(soundUid, files);
+      await saveCustomNotificationSounds(soundUid, files, (done, total) => {
+        setSoundProgress(`Перевіряємо MP3: ${done} із ${total}`);
+      });
+      setSoundProgress('Зберігаємо мелодії…');
       await refreshSoundLibrary();
       update({ sound: 'custom' });
       setMessage(`Додано мелодій: ${files.length}. Вони збережені тільки в цьому браузері. Увімкнення звуку залишається окремим налаштуванням.`);
@@ -108,6 +114,7 @@ export const ProfileNotificationSettings: React.FC = () => {
       setSoundError(err instanceof Error ? err.message : 'Не вдалося завантажити мелодії.');
     } finally {
       setSoundLoading(false);
+      setSoundProgress(null);
     }
   };
 
@@ -371,7 +378,7 @@ export const ProfileNotificationSettings: React.FC = () => {
           <div className="flex flex-wrap items-center gap-2">
             <label className={'inline-flex cursor-pointer items-center gap-2 rounded-lg border border-cyan-700/70 px-3 py-2 text-xs text-cyan-200 ' +
               (soundLoading || soundUid === 'guest' ? 'pointer-events-none opacity-40' : 'hover:bg-cyan-950/40')}>
-              <Upload className="h-4 w-4" /> {soundLoading ? 'Перевірка файлів…' : 'Додати свої мелодії'}
+              <Upload className="h-4 w-4" /> {soundLoading ? (soundProgress || 'Перевірка файлів…') : 'Додати свої мелодії'}
               <input type="file" multiple className="sr-only" accept=".mp3,.wav,.ogg,.m4a,audio/mpeg,audio/wav,audio/ogg,audio/mp4"
                 onChange={e => void uploadPersonalSound(e)}
                 disabled={soundLoading || soundUid === 'guest'}
@@ -413,6 +420,7 @@ export const ProfileNotificationSettings: React.FC = () => {
             MP3, WAV, OGG, M4A · до {Math.round(MAX_CUSTOM_SOUND_BYTES / 1024 / 1024)} МБ та {MAX_CUSTOM_SOUND_SECONDS} секунд на файл · максимум {MAX_CUSTOM_SOUND_TRACKS} мелодії.
             Файли зберігаються тільки в браузері цього пристрою, не надсилаються на сервер і не змінюють звук системних чи Telegram-повідомлень.
           </p>
+          {soundLoading && soundProgress && <p role="status" aria-live="polite" className="text-xs text-cyan-300">{soundProgress}</p>}
           {soundError && <p role="alert" className="text-xs text-rose-300">{soundError}</p>}
         </div>
         <label className="flex items-center justify-between gap-3 text-xs">

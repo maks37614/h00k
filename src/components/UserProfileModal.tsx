@@ -21,6 +21,7 @@ import { useTelegram } from '../context/TelegramContext';
 import { InstallAppButton } from './InstallAppButton';
 import { TelegramConnectionCard } from './TelegramConnectionCard';
 import { ProfileNotificationSettings } from './profile/ProfileNotificationSettings';
+import { ProfileNotificationsErrorBoundary } from './profile/ProfileNotificationsErrorBoundary';
 import { ProfileTerminalLinkingSettings } from './profile/ProfileTerminalLinkingSettings';
 import { useAuth } from '../context/AuthContext';
 import { useAlerts } from '../context/AlertsContext';
@@ -203,7 +204,9 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
           ) : activeProfileSection === 'linking' ? (
             <ProfileTerminalLinkingSettings />
           ) : activeProfileSection === 'notifications' ? (
-            <ProfileNotificationSettings />
+            <ProfileNotificationsErrorBoundary onClose={onClose}>
+              <ProfileNotificationSettings />
+            </ProfileNotificationsErrorBoundary>
           ) : <div className="space-y-5">
           {/* Install guide lives in the user's profile, not in the main header. */}
           <section className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-cyan-500/30 bg-slate-950/70 p-3">
