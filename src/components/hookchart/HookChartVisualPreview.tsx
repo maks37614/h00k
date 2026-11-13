@@ -230,26 +230,53 @@ export function HookChartVisualPreview({
   }, [activeCandles, viewport, profile, visualContext, onChange]);
 
   return (
-    <div className="hookchart-visual-preview">
+    <div className="hookchart-visual-preview" data-real-hookchart="true">
+      {!useParentCandles && (
+        <div className="hookchart-live-market-selector" role="group" aria-label="Вибір реального ринку для HookChart">
+          <label>Монета
+            <input aria-label="Монета HookChart у профілі" value={marketSymbolDraft}
+              onChange={event => setMarketSymbolDraft(event.target.value.toUpperCase())}
+              onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); applySymbol(); } }}
+              onBlur={applySymbol} maxLength={28} spellCheck={false} autoCapitalize="characters" />
+          </label>
+          <label>Біржа
+            <select aria-label="Біржа HookChart у профілі" value={marketExchange}
+              onChange={event => setMarketExchange(event.target.value as ExchangeId)}>
+              <option value="binance">Binance</option><option value="bybit">Bybit</option>
+            </select>
+          </label>
+          <label>Ринок
+            <select aria-label="Ринок HookChart у профілі" value={marketTypeSelected}
+              onChange={event => setMarketTypeSelected(event.target.value as MarketType)}>
+              <option value="futures">Futures</option><option value="spot">Spot</option>
+            </select>
+          </label>
+          <label>Таймфрейм
+            <select aria-label="Таймфрейм HookChart у профілі" value={marketTimeframe}
+              onChange={event => setMarketTimeframe(event.target.value as Timeframe)}>
+              {(['1m','5m','15m','1h','4h','1d'] as const).map(tf => <option key={tf} value={tf}>{tf}</option>)}
+            </select>
+          </label>
+          <button type="button" className="hookchart-live-refresh"
+            onClick={() => setRequestVersion(x => x + 1)}>Оновити свічки</button>
+        </div>
+      )}
       <div className="hookchart-visual-preview-caption">
         <strong>{activeSymbol}</strong>
         <span>{activeTimeframe}</span>
         <span>{marketDescription}</span>
         <span className="hookchart-visual-preview-live">
-          {useParentCandles ? 'Свічки відкритого графіка' : 'Реальні свічки для прикладу'}
+          {useParentCandles ? 'Дані відкритого HookChart' : 'Свічки вибраної біржі · реальний HookChart'}
         </span>
       </div>
       {activeCandles.length ? (
         <>
-          <div
-            className="hookchart-visual-preview-frame"
-            style={{ maxWidth: profilePreviewWidth(visualContext, visualDevice) }}
-          >
+          <div className="hookchart-visual-preview-frame">
             <div ref={previewRef} className="hookchart-visual-preview-chart"
               onPointerDownCapture={rememberDragStart}
               onWheelCapture={rememberDragStart}>
               <Chart
-                key={`${activeSymbol}:${activeTimeframe}`}
+                key={`${selectedExchange}:${selectedMarket}:${activeSymbol}:${activeTimeframe}`}
                 controlRef={chartControl}
                 candles={activeCandles}
                 symbol={activeSymbol}
@@ -273,6 +300,7 @@ export function HookChartVisualPreview({
                 timezone={timezone}
                 candleLongColor={longColor}
                 candleShortColor={shortColor}
+                showVolumes={chartPreferences?.showVolumes !== false}
                 visualProfile={profile}
                 rightPaddingBars={profile.rightGapBars}
                 visualProfileKey={previewKey}
@@ -290,8 +318,14 @@ export function HookChartVisualPreview({
               rightPaddingBars={profile.rightGapBars}
             />
           </div>
+          <div className="hookchart-live-metrics" role="status">
+            <span>Ширина: <b>{chartWidth || '—'} px</b></span>
+            <span>Видимі свічки: <b>{measuredSlots ?? '—'}</b></span>
+            <span>Відступ: <b>{profile.rightGapBars} барів</b></span>
+            <span>Вертикальний масштаб: <b>{profile.verticalZoom}×</b></span>
+          </div>
           <div className="hookchart-visual-preview-actions">
-            <span>Переміщуй та масштабуй графік — параметри під ним змінюються одразу.</span>
+            <span>Рухай і масштабуй реальний графік пальцем або мишею. Масштаб і відступ зберігаються у відповідному профілі.</span>
             <button type="button" onClick={focusLatest}>Автофокус</button>
             <button type="button" onClick={saveChartScale}>Зберегти масштаб</button>
           </div>
@@ -305,17 +339,25 @@ export function HookChartVisualPreview({
       ) : (
         <div className="hookchart-visual-preview-empty" role="status">
           {sampleLoading
-            ? 'Завантажуємо реальні свічки BTCUSDT…'
+            ? `Завантажуємо свічки ${activeSymbol} · ${marketDescription} · ${activeTimeframe}…`
             : sampleError
-              ? 'Немає доступу до котирувань BTCUSDT. Відкрий графік монети на Скрінері, Формаціях або в Терміналі.'
+              ? `Не вдалося отримати свічки ${activeSymbol} з ${marketDescription}. Перевір монету/ринок або натисни «Оновити свічки».`
               : useParentCandles
                 ? 'Очікуємо реальні свічки поточної монети…'
-                : 'Очікування біржових свічок для графіка…'}
+                : 'Очікування справжніх біржових свічок…'}
         </div>
       )}
+      {typeof window !== 'undefined' && visualDevice !== (window.innerWidth < 768 ? 'mobile' : 'desktop') && (
+        <p className="hookchart-device-notice">
+          Обрано профіль «{visualDevice === 'desktop' ? 'Комп’ютер' : 'Телефон'}», але редактор відкрито
+          на іншому пристрої. Для піксельної відповідності відкрий його на відповідному екрані.
+        </p>
+      )}
       <p className="hookchart-visual-preview-info">
-        Це справжній HookChart із реальними біржовими свічками. Редактор не створює окремих WebSocket-з’єднань.
-        Повзунки змінюють графік одразу; рухи та масштабування на графіку оновлюють повзунки і зберігаються в профілі.
+        Це той самий рушій HookChart, що використовується на сайті; без демонстраційних свічок.
+        Масштаб і відступ розраховуються за фактичною шириною. Редактор завантажує справжні свічки
+        тільки при виборі ринку й не створює нових WebSocket-з'єднань.
+        На іншому пристрої кількість видимих свічок залежить від розміру його графіка.
       </p>
     </div>
   );
