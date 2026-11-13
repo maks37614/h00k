@@ -12,6 +12,7 @@ import { HookChartDensityBook, type DensityAutoStats } from './densityBook';
 import { EMPTY_SESSION_LIQUIDATIONS, getSessionLiquidationTotals, recordSessionLiquidation, sessionLiquidationScope, subscribeSessionLiquidations } from './liquidationSession';
 import { canonicalLiquidationId, deduplicateLiquidations, filterVisibleLiquidations } from './liquidationDisplay';
 import { shouldPublishDepthView, shouldPublishLiquidationView } from './feedPublishPolicy';
+import { LiquidationEventBuffer } from './liquidationEventBuffer';
 
 type BookLevel = { p: number; q: number };
 
@@ -227,7 +228,7 @@ export function useOriginalHookChartLiveFeed({
     }
 
     let dead = false;
-    let raw: Liquidation[] = [];
+    const buffered = new LiquidationEventBuffer<Liquidation>();
     let latestEventAt = 0;
     let previouslyHadRows = false;
     let pendingLiquidationPublish: ReturnType<typeof setTimeout> | null = null;
@@ -238,21 +239,19 @@ export function useOriginalHookChartLiveFeed({
         pendingLiquidationPublish = null;
       }
       const now = Date.now();
-      raw.sort((a, b) => a.t - b.t);
-      while (raw.length && now - raw[0].t > 30 * 60_000) raw.shift();
-      if (raw.length > 1500) raw.splice(0, raw.length - 1500);
+      const rows = buffered.snapshot(now);
       // No event means nothing changes with wall-clock time. Avoid sending
       // a brand-new [] into React every two seconds for every idle chart.
-      if (!shouldPublishLiquidationView(raw.length, previouslyHadRows)) return;
-      previouslyHadRows = raw.length > 0;
-      const values = raw.filter(row => now - row.t <= 15 * 60_000)
+      if (!shouldPublishLiquidationView(rows.length, previouslyHadRows)) return;
+      previouslyHadRows = rows.length > 0;
+      const values = rows.filter(row => now - row.t <= 15 * 60_000)
         .map(row => row.usd).filter(value => Number.isFinite(value) && value > 0);
       const adaptive = !values.length ? 0 : values.length < 6
         ? quantile(values, .75)
         : Math.max(quantile(values, .8), adaptiveCut(values, .8, .98, 2.5));
       setLiquidationCut(values.length ? Math.max(1000, adaptive) : 0);
       setLiquidationLastEventAt(latestEventAt || null);
-      setLiquidations([...raw]);
+      setLiquidations(rows);
     };
     const scheduleLiquidationPublish = () => {
       if (dead || pendingLiquidationPublish !== null) return;
@@ -265,11 +264,7 @@ export function useOriginalHookChartLiveFeed({
       if (dead || !Number.isFinite(row.usd) || row.usd <= 0) return;
       recordSessionLiquidation(liquidationScope, row);
       const id = canonicalLiquidationId(row.id);
-      const index = raw.findIndex(item => item.id === id);
-      if (index >= 0) {
-        if (row.usd <= raw[index].usd) return; // replayed event or older fill
-        raw[index] = { ...row, id };
-      } else raw.push({ ...row, id });
+      if (!buffered.upsert({ ...row, id })) return; // duplicate or older cumulative fill
       latestEventAt = Math.max(latestEventAt, row.t);
       // Preserve every event and the immediate session counter update; only
       // group React renders while bursts arrive at high frequency.
@@ -283,11 +278,11 @@ export function useOriginalHookChartLiveFeed({
       exchange, symbol,
       onSnapshot: (events, connected) => {
         if (dead) return;
-        raw = deduplicateLiquidations(events);
+        buffered.replace(deduplicateLiquidations(events));
         // Recover session-era events from a reconnect snapshot, without counting
         // pre-session historical events or repeating IDs already received.
         for (const row of events) recordSessionLiquidation(liquidationScope, row, 'snapshot');
-        latestEventAt = raw.length ? Math.max(...raw.map(row => row.t)) : 0;
+        latestEventAt = buffered.newestEventTime();
         setLiquidationStreamLive(connected);
         publish();
       },
