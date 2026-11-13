@@ -194,9 +194,9 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
         </div>
 
         {/* Chart editor mounts only when selected; it does not mount a chart or open market sockets. */}
-        <div className={`min-h-0 overflow-y-auto p-3 sm:p-6 ${
-          activeProfileSection === 'chart' ? 'flex-1' : ''
-        }`}>
+        <div className={activeProfileSection === 'chart'
+          ? 'min-h-0 flex-1 overflow-hidden p-0'
+          : 'min-h-0 overflow-y-auto p-3 sm:p-6'}>
           {activeProfileSection === 'chart' ? (
             <Suspense fallback={<div role="status" className="p-5 text-sm text-cyan-300">Завантаження налаштувань графіка…</div>}>
               <ProfileHookChartSettings />
