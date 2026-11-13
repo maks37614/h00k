@@ -13,11 +13,9 @@ test('Save scale preview writes through editor and profile persistence path', ()
   const editor = read('../src/components/hookchart/OriginalHookChartSettings.tsx');
   const profile = read('../src/components/profile/ProfileHookChartSettings.tsx');
   const chart = read('../src/components/hookchart/HookChartCanvas.tsx');
-  assert.match(preview, /const captured = captureVisualProfile\(profile, plotWidth, viewport, naturalRange\)/);
-  assert.match(preview, /onChange\(captured\)/);
-  assert.match(preview, /onClick=\{saveChartScale\}/);
-  assert.match(preview, /onViewportGesture=\{onGesture\}/);
-  assert.match(editor, /onChange=\{onProfileChange\}/);
+  assert.match(preview, /data-synthetic-hookchart/);
+  assert.doesNotMatch(preview, /captureVisualProfile|onClick=|onViewportGesture=|onPointerDown=/);
+  assert.match(editor, /onProfileChange\(\{ visibleBars:/);
   assert.match(editor, /set\('visualProfiles', patchVisualProfile\(/);
   assert.match(profile, /writerRef\.current\(\{ hookChartPreferences: delta \}\)/);
   assert.match(profile, /Збережено у профілі/);
@@ -55,6 +53,6 @@ test('captured manual scale and extended gap survive account save plus rehydrati
 test('visual capture looks only at visible candles, excluding blank right-side slots', () => {
   const preview = read('../src/components/hookchart/HookChartVisualPreview.tsx');
   const live = read('../src/components/hookchart/HookChartCanvas.tsx');
-  assert.match(preview, /viewport\.barWidth\) - profile\.rightGapBars/);
+  assert.match(preview, /PLOT \/ \(visible \+ rightGap\)/);
   assert.match(live, /viewport\.barWidth\) - rightPaddingBars/);
 });
