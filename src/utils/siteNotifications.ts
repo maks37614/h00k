@@ -1,20 +1,80 @@
-export type SiteNotificationKind = 'price' | 'formation' | 'impulse' | 'volatility' | 'surveillance';
+/** Explicit opt-in v2. Existing implicit/legacy toggles are never interpreted as consent. */
+export type SiteNotificationKind =
+  | 'price' | 'formation' | 'impulse' | 'volatility' | 'surveillance'
+  | 'levels' | 'breakouts' | 'density' | 'round' | 'openInterest'
+  | 'flow' | 'liquidations' | 'volume' | 'early' | 'quality'
+  | 'favorites' | 'system' | 'composite';
 export type SiteNotificationSound = 'chime' | 'soft' | 'pulse';
 export type ImpulseExchange = 'binance' | 'bybit';
 export type ImpulseMarket = 'futures' | 'spot';
+export type NotificationCategoryKey = Exclude<SiteNotificationKind, 'volatility'>;
+
+export const NOTIFICATION_CATEGORIES: ReadonlyArray<{
+  key: NotificationCategoryKey; group: string; label: string; explanation: string; source: string;
+}> = [
+  { key: 'price', group: 'Ціна та рівні', label: 'Цінові алерти', explanation: 'Досягнення рівня, який ви окремо створили на графіку. Серверна доставка Telegram для створених вручну алертів налаштовується окремо.', source: 'Існуючі цінові алерти' },
+  { key: 'levels', group: 'Ціна та рівні', label: 'Наближення до Entry / SL / TP / S/R', explanation: 'Відстань від поточної ціни до ключових рівнів в уже знайдених формаціях. Це наближення, а не гарантована точка входу.', source: 'Сканер формацій' },
+  { key: 'breakouts', group: 'Ціна та рівні', label: 'Пробої, ретести та структура', explanation: 'Підтверджений пробій на закритій свічці формації, а також події рівнів, каналів, Fibonacci та структури із системного нагляду. Хибний пробій можливий лише якщо окрема подія так позначена.', source: 'Сканер і системний нагляд' },
+  { key: 'round', group: 'Ціна та рівні', label: 'Круглі числа · ROUND', explanation: 'Формації з позначкою ROUND біля круглого цінового рівня. Для підтвердження щільності є окремий фільтр.', source: 'ROUND у картці формації' },
+  { key: 'density', group: 'Стакан та потік', label: 'Щільності BID / ASK', explanation: 'Тільки підтверджена реальним стаканом щільність біля формації або спеціальні події моніторингу. Близькість до ROUND не означає щільність.', source: 'Перевірений стакан / нагляд' },
+  { key: 'openInterest', group: 'Стакан та потік', label: 'Аномалії Open Interest', explanation: 'OI змінюється понад заданий поріг; тільки реальні доступні біржові дані ф’ючерсів. Н/д не є сигналом.', source: 'Перевірений OI' },
+  { key: 'flow', group: 'Стакан та потік', label: 'Delta / CVD20', explanation: 'Великий дисбаланс агресивних покупців чи продавців за закритими свічками. Показники недоступні на частині ринків.', source: 'Binance Delta / CVD20' },
+  { key: 'volume', group: 'Стакан та потік', label: 'Аномальний обсяг · RVOL', explanation: 'Обсяг свічки підтвердженого пробою щодо середнього обсягу. Не плутати з денним оборотом.', source: 'Валідація формації' },
+  { key: 'liquidations', group: 'Стакан та потік', label: 'Ліквідації Long / Short', explanation: 'Велика ліквідація вибраної монети за повідомленнями потоку HookChart. Вимагає конкретної монети та відкритої вкладки.', source: 'Потік ліквідацій HookChart' },
+  { key: 'impulse', group: 'Стакан та потік', label: 'Імпульс і волатильність', explanation: 'Зміна ціни або діапазон коливань за 1, 5 чи 15 хвилин. Працює через WebSocket лише з відкритим сайтом.', source: 'Угоди WebSocket' },
+  { key: 'formation', group: 'Формації та Quant', label: 'Нові сильні формації', explanation: 'Свіжа формація з оцінкою вище вибраного порога. Повторні сканування того самого патерну не надсилають дубль.', source: 'Сканер формацій' },
+  { key: 'early', group: 'Формації та Quant', label: 'Ранні W / M', explanation: 'Можлива W/M-структура на закритих свічках. Це передбачення, а не підтверджена формація.', source: 'Ранній пошук W/M' },
+  { key: 'quality', group: 'Формації та Quant', label: 'Зміна оцінки сигналу', explanation: 'Формація вперше перейшла заданий бал або її рейтинг істотно покращився. Наявність сигналу не гарантує результату.', source: 'Оцінка 0–100' },
+  { key: 'composite', group: 'Формації та Quant', label: 'Комплексне підтвердження', explanation: 'Одночасно достатньо НЕЗАЛЕЖНИХ доступних підтверджень: структура, обсяг, OI, Delta/CVD, ROUND, стакан. Це прозорі Quant-правила, а не рекомендація ШІ до торгівлі.', source: 'Quant-перевірка' },
+  { key: 'favorites', group: 'Особисте та система', label: 'Події обраних монет', explanation: 'Сильні формації лише на монетах із ваших обраних папок (з урахуванням біржі та типу ринку).', source: 'Обрані монети' },
+  { key: 'surveillance', group: 'Особисте та система', label: 'Стеження за монетою', explanation: 'Інші нові події персонального системного нагляду, які не потрапили до спеціальних категорій.', source: 'Наявний системний нагляд' },
+  { key: 'system', group: 'Особисте та система', label: 'Технічні попередження', explanation: 'Втрачений інтернет, збій сканування або застарілі дані. Технічні повідомлення не є торговими сигналами.', source: 'Стан підключення сайту' },
+] as const;
 
 export interface SiteNotificationSettings {
+  /** Explicit user opt-in marker. v1 values cannot enable notifications. */
+  optedIn: boolean;
   enabled: boolean;
   price: boolean;
   formations: boolean;
   impulses: boolean;
   surveillance: boolean;
+  levels: boolean;
+  breakouts: boolean;
+  density: boolean;
+  round: boolean;
+  openInterest: boolean;
+  flow: boolean;
+  liquidations: boolean;
+  volume: boolean;
+  early: boolean;
+  quality: boolean;
+  favorites: boolean;
+  system: boolean;
+  composite: boolean;
   sound: SiteNotificationSound;
+  browserPush: boolean;
   impulseSymbol: string;
   impulseThresholdPct: number;
   impulseWindowMinutes: 1 | 5 | 15;
   impulseExchange: ImpulseExchange;
   impulseMarket: ImpulseMarket;
+  /** Global filters for scanner and surveillance events. */
+  scopeExchange: 'all' | ImpulseExchange;
+  scopeMarket: 'all' | ImpulseMarket;
+  scopeTimeframe: 'all' | '1m' | '5m' | '15m' | '1h' | '4h' | '1d';
+  scopeSymbols: string;
+  onlyFavorites: boolean;
+  levelDistancePct: number;
+  roundDistancePct: number;
+  oiThresholdPct: number;
+  flowThresholdPct: number;
+  minBreakoutRvol: number;
+  liquidationMinUsd: number;
+  minQualityScore: number;
+  qualityImprovement: number;
+  minConfirmations: number;
+  cooldownMinutes: number;
 }
 
 export interface SiteNotificationItem {
@@ -24,69 +84,95 @@ export interface SiteNotificationItem {
   description: string;
   timestamp: number;
   symbol?: string;
+  exchange?: string;
+  marketType?: string;
+  timeframe?: string;
   changePct?: number;
   rangePct?: number;
   read: boolean;
 }
 
 export const DEFAULT_SITE_NOTIFICATIONS: SiteNotificationSettings = {
-  enabled: true,
-  price: true,
-  formations: true,
-  impulses: false,
-  surveillance: true,
-  sound: 'chime',
-  impulseSymbol: '',
-  impulseThresholdPct: 2,
-  impulseWindowMinutes: 5,
-  impulseExchange: 'binance',
-  impulseMarket: 'futures',
+  optedIn: false, enabled: false,
+  price: false, formations: false, impulses: false, surveillance: false,
+  levels: false, breakouts: false, density: false, round: false, openInterest: false,
+  flow: false, liquidations: false, volume: false, early: false, quality: false,
+  favorites: false, system: false, composite: false,
+  sound: 'chime', browserPush: false,
+  impulseSymbol: '', impulseThresholdPct: 2, impulseWindowMinutes: 5,
+  impulseExchange: 'binance', impulseMarket: 'futures',
+  scopeExchange: 'all', scopeMarket: 'all', scopeTimeframe: 'all',
+  scopeSymbols: '', onlyFavorites: false,
+  levelDistancePct: .3, roundDistancePct: .5,
+  oiThresholdPct: 3, flowThresholdPct: 5, minBreakoutRvol: 2,
+  liquidationMinUsd: 100_000, minQualityScore: 88,
+  qualityImprovement: 10, minConfirmations: 3, cooldownMinutes: 15,
 };
 
+const CATEGORY_KEYS: ReadonlyArray<NotificationCategoryKey> = NOTIFICATION_CATEGORIES.map(c => c.key);
 export function normalizeImpulseSymbol(input: string): string {
   const symbol = String(input ?? '').trim().toUpperCase().replace(/[/\s-]/g, '');
   if (!/^[A-Z0-9]{2,30}$/.test(symbol)) return '';
   return symbol.endsWith('USDT') ? symbol : symbol + 'USDT';
 }
-
-export function normalizeSiteNotificationSettings(input: unknown): SiteNotificationSettings {
-  const data = input && typeof input === 'object' ? input as Partial<SiteNotificationSettings> : {};
-  const threshold = Number(data.impulseThresholdPct);
-  return {
-    enabled: data.enabled !== false,
-    price: data.price !== false,
-    formations: data.formations !== false,
-    impulses: data.impulses === true,
-    surveillance: data.surveillance !== false,
-    sound: data.sound === 'soft' || data.sound === 'pulse' ? data.sound : 'chime',
-    impulseSymbol: normalizeImpulseSymbol(data.impulseSymbol || ''),
-    impulseThresholdPct: Number.isFinite(threshold) ? Math.max(0.1, Math.min(50, Math.round(threshold * 100) / 100)) : 2,
-    impulseWindowMinutes: data.impulseWindowMinutes === 1 || data.impulseWindowMinutes === 15 ? data.impulseWindowMinutes : 5,
-    impulseExchange: data.impulseExchange === 'bybit' ? 'bybit' : 'binance',
-    impulseMarket: data.impulseMarket === 'spot' ? 'spot' : 'futures',
-  };
+export function normalizeSymbolList(input: unknown): string {
+  return String(input ?? '').split(/[,\s;]+/).map(normalizeImpulseSymbol)
+    .filter(Boolean).filter((v, i, a) => a.indexOf(v) === i).slice(0, 40).join(', ');
 }
-
+function bounded(value: unknown, fallback: number, min: number, max: number): number {
+  if (value === null || value === undefined || value === '') return fallback;
+  const n = Number(value);
+  return Number.isFinite(n) ? Math.max(min, Math.min(max, Math.round(n * 100) / 100)) : fallback;
+}
+export function normalizeSiteNotificationSettings(input: unknown): SiteNotificationSettings {
+  const d = input && typeof input === 'object' ? input as Partial<SiteNotificationSettings> : {};
+  const consent = d.optedIn === true;
+  const result: SiteNotificationSettings = {
+    ...DEFAULT_SITE_NOTIFICATIONS, optedIn: consent,
+    enabled: consent && d.enabled === true,
+    sound: d.sound === 'soft' || d.sound === 'pulse' ? d.sound : 'chime',
+    browserPush: consent && d.browserPush === true,
+    impulseSymbol: normalizeImpulseSymbol(d.impulseSymbol || ''),
+    impulseThresholdPct: bounded(d.impulseThresholdPct, 2, .1, 50),
+    impulseWindowMinutes: d.impulseWindowMinutes === 1 || d.impulseWindowMinutes === 15 ? d.impulseWindowMinutes : 5,
+    impulseExchange: d.impulseExchange === 'bybit' ? 'bybit' : 'binance',
+    impulseMarket: d.impulseMarket === 'spot' ? 'spot' : 'futures',
+    scopeExchange: d.scopeExchange === 'binance' || d.scopeExchange === 'bybit' ? d.scopeExchange : 'all',
+    scopeMarket: d.scopeMarket === 'spot' || d.scopeMarket === 'futures' ? d.scopeMarket : 'all',
+    scopeTimeframe: ['1m','5m','15m','1h','4h','1d'].includes(String(d.scopeTimeframe)) ? d.scopeTimeframe as SiteNotificationSettings['scopeTimeframe'] : 'all',
+    scopeSymbols: normalizeSymbolList(d.scopeSymbols),
+    onlyFavorites: d.onlyFavorites === true,
+    levelDistancePct: bounded(d.levelDistancePct, .3, .01, 5),
+    roundDistancePct: bounded(d.roundDistancePct, .5, .01, 5),
+    oiThresholdPct: bounded(d.oiThresholdPct, 3, .1, 50),
+    flowThresholdPct: bounded(d.flowThresholdPct, 5, .1, 100),
+    minBreakoutRvol: bounded(d.minBreakoutRvol, 2, 1, 20),
+    liquidationMinUsd: bounded(d.liquidationMinUsd, 100_000, 1000, 10_000_000),
+    minQualityScore: Math.round(bounded(d.minQualityScore, 88, 1, 100)),
+    qualityImprovement: Math.round(bounded(d.qualityImprovement, 10, 1, 100)),
+    minConfirmations: Math.round(bounded(d.minConfirmations, 3, 2, 6)),
+    cooldownMinutes: Math.round(bounded(d.cooldownMinutes, 15, 1, 240)),
+  };
+  for (const key of CATEGORY_KEYS) {
+    (result as unknown as Record<string, unknown>)[key] = consent && d[key] === true;
+  }
+  return result;
+}
 export function siteNotificationStorageKey(uid: string): string {
   return 'h00k_site_notifications_v1:' + (uid || 'guest');
 }
-
 export function siteNotificationSettingsKey(uid: string): string {
-  return 'h00k_site_notification_settings_v1:' + (uid || 'guest');
+  return 'h00k_site_notification_settings_v2:' + (uid || 'guest');
 }
-
 export function siteNotificationClearedAtKey(uid: string): string {
   return 'h00k_site_notifications_cleared_at_v1:' + (uid || 'guest');
 }
-
 export function notificationEnabled(settings: SiteNotificationSettings, kind: SiteNotificationKind): boolean {
-  if (!settings.enabled) return false;
-  return kind === 'price' ? settings.price
-    : kind === 'formation' ? settings.formations
-    : kind === 'impulse' || kind === 'volatility' ? settings.impulses
-    : settings.surveillance;
+  if (!settings.optedIn || !settings.enabled) return false;
+  const key = kind === 'volatility' ? 'impulses' : kind === 'formation' ? 'formations'
+    : kind === 'impulse' ? 'impulses' : kind;
+  return (settings as unknown as Record<string, unknown>)[key] === true;
 }
-
 export function readNotificationItems(raw: string | null): SiteNotificationItem[] {
   if (!raw) return [];
   try {
@@ -95,9 +181,31 @@ export function readNotificationItems(raw: string | null): SiteNotificationItem[
     return parsed.filter((item): item is SiteNotificationItem =>
       item && typeof item.id === 'string' && typeof item.title === 'string'
       && typeof item.description === 'string' && Number.isFinite(item.timestamp)
-      && ['price', 'formation', 'impulse', 'volatility', 'surveillance'].includes(item.kind)
+      && ['price','formation','impulse','volatility','surveillance','levels','breakouts',
+        'density','round','openInterest','flow','liquidations','volume','early','quality',
+        'favorites','system','composite'].includes(item.kind)
     ).slice(0, 100).map(item => ({ ...item, read: item.read === true }));
   } catch { return []; }
+}
+export function matchesNotificationScope(
+  settings: SiteNotificationSettings,
+  source: { symbol?: string; exchange?: string; marketType?: string; timeframe?: string },
+  favoriteIds: readonly string[] = [],
+): boolean {
+  if (settings.scopeExchange !== 'all' && source.exchange && source.exchange !== settings.scopeExchange) return false;
+  if (settings.scopeMarket !== 'all' && source.marketType && source.marketType !== settings.scopeMarket) return false;
+  if (settings.scopeTimeframe !== 'all' && source.timeframe && source.timeframe !== settings.scopeTimeframe) return false;
+  const symbol = (source.symbol || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (settings.scopeSymbols) {
+    if (!symbol || !settings.scopeSymbols.split(/,\s*/).includes(symbol)) return false;
+  }
+  if (settings.onlyFavorites) {
+    if (!symbol || !favoriteIds.some(id => {
+      const clean = id.toUpperCase();
+      return clean.includes(symbol) && (!source.exchange || clean.includes(source.exchange.toUpperCase()));
+    })) return false;
+  }
+  return true;
 }
 
 export interface ImpulseDetection {
