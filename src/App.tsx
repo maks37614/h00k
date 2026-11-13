@@ -643,7 +643,7 @@ export default function App() {
 
   // Routes all existing external-terminal buttons through the user-selected adapter.
   const handleSendToMetaScalp = useCallback(
-    async (coin: ScannedCoin, source: TerminalLinkSource = 'screener') => {
+    async (coin: ScannedCoin, source: TerminalLinkSource = 'screener', isBackground = false) => {
       if (!user) { handleOpenAuthModal('signin', 'linking'); return; }
       if (terminalLinkSettings.provider === 'none' || !terminalLinkSettings.enabled) {
         setProfileInitialSection('linking');
@@ -661,7 +661,7 @@ export default function App() {
       try {
         res = await sendToSelectedTerminal(
           coin.symbol, coin.exchange, coin.marketType, source,
-          terminalLinkSettings, metaScalpSettings, quality
+          terminalLinkSettings, metaScalpSettings, quality, !isBackground
         );
       } catch {
         // Allow immediate retry and report a failure instead of leaving an unhandled rejection.
@@ -696,7 +696,7 @@ export default function App() {
       && (item.marketType === 'futures' || item.marketType === 'spot'));
   }, [user, terminalLinkSettings]);
 
-  const handleLinkNotification = useCallback((item: SiteNotificationItem) => {
+  const handleLinkNotification = useCallback((item: SiteNotificationItem, isBackground = false) => {
     if (!canLinkNotification(item)) return;
     const source = notificationTerminalSource(item.kind);
     if (!source || !item.symbol || (item.exchange !== 'binance' && item.exchange !== 'bybit')
@@ -711,7 +711,7 @@ export default function App() {
       currentPrice: 0, priceChange24h: 0, highPrice24h: 0, lowPrice24h: 0,
       volume24hUsd: 0, formations: [], lastUpdated: Date.now(), exchangeUrl: '',
     };
-    void handleSendToMetaScalp(minimalCoin, source);
+    void handleSendToMetaScalp(minimalCoin, source, isBackground);
   }, [canLinkNotification, coins, handleSendToMetaScalp]);
 
   // Only newly emitted notifications qualify for optional auto-linking.
@@ -738,7 +738,7 @@ export default function App() {
       !notificationCenter?.settings.enabled || !notificationCenter.settings.optedIn ||
       item.read || !isFreshTerminalNotification(item.timestamp, cursor.since, Date.now())
       || !canLinkNotification(item)) return;
-    handleLinkNotification(item);
+    handleLinkNotification(item, true);
   }, [user?.uid, notificationCenter?.items, notificationCenter?.settings.enabled,
     notificationCenter?.settings.optedIn, terminalLinkSettings.autoSignals,
     canLinkNotification, handleLinkNotification]);
