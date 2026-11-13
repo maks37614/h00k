@@ -71,7 +71,7 @@ test('desktop defers loading invisible webviews and frees hidden ones after a gr
   const path=require('node:path');
   const main=fs.readFileSync(path.join(__dirname,'..','main.cjs'),'utf8');
   assert.match(main,/win\.__h00kLoaded = false/);
-  assert.match(main,/if \(!win\.__h00kLoaded\)/);
+  assert.match(main,/if \(!win\.__h00kLoaded && Date\.now\(\) >= win\.__nextLoadAt\)/);
   assert.match(main,/HIDDEN_RECLAIM_MS = 30_000/);
   assert.match(main,/hiddenProviders\.delete\(provider\)/);
   assert.match(main,/const layoutChanged = lastLayoutKeys\.has\(provider\)/);
