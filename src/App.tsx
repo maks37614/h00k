@@ -26,6 +26,7 @@ import { ArchiveModal } from './components/ArchiveModal';
 import { AlertToast, AlertToastState } from './components/AlertToast';
 import { useAlerts } from './context/AlertsContext';
 import { useSiteNotifications } from './context/SiteNotificationsContext';
+import { notificationEnabled } from './utils/siteNotifications';
 import { useAuth } from './context/AuthContext';
 import { useArchive } from './context/ArchiveContext';
 import { useSurveillance } from './context/SurveillanceContext';
@@ -561,7 +562,7 @@ export default function App() {
 
   // Telegram price alerts state
   const { activeAlertsCount } = useAlerts();
-  const { emit: emitSiteNotification, processScan, setFavoriteIds } = useSiteNotifications();
+  const { emit: emitSiteNotification, processScan, setFavoriteIds, settings: notificationSettings } = useSiteNotifications();
   useEffect(() => { setFavoriteIds(watchlist); }, [watchlist, setFavoriteIds]);
   const [isTelegramModalOpen, setIsTelegramModalOpen] = useState<boolean>(false);
   const [telegramPrefill, setTelegramPrefill] = useState<any>(null);
@@ -590,7 +591,7 @@ export default function App() {
   useEffect(() => {
     const handleTriggered = (event: Event) => {
       const customEvent = event as CustomEvent;
-      if (customEvent?.detail) {
+      if (customEvent?.detail && notificationEnabled(notificationSettings, 'price')) {
         setAlertToast({
           id: Date.now(),
           symbol: customEvent.detail.symbol,
@@ -603,7 +604,7 @@ export default function App() {
 
     window.addEventListener('signalhook:alert-triggered', handleTriggered);
     return () => window.removeEventListener('signalhook:alert-triggered', handleTriggered);
-  }, []);
+  }, [notificationSettings]);
 
   const handleOpenTelegramAlerts = useCallback((prefill?: any) => {
     if (!user) {
