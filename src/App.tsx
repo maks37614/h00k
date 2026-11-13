@@ -35,7 +35,7 @@ import {
   playMetaScalpClickSound,
   getUserMetaScalpSettings,
 } from './utils/metaScalpService';
-import { getUserTerminalLinkSettings, sendToSelectedTerminal, terminalLabel, notificationTerminalSource, type TerminalLinkSource } from './utils/terminalLinkService';
+import { getUserTerminalLinkSettings, sendToSelectedTerminal, terminalLabel, notificationTerminalSource, isFreshTerminalNotification, type TerminalLinkSource } from './utils/terminalLinkService';
 import type { SiteNotificationItem } from './utils/siteNotifications';
 import { ScannedCoin, DetectedFormation, ScreenerFilterState, PriceAlert, ArchivedFormation, ActivePageType, type FullEarlyScanSnapshot } from './types';
 import { runDirectClientScan, getFallbackScannedCoins, hydrateMissingRegularOIFromBrowser } from './utils/directExchangeClient';
@@ -716,15 +716,19 @@ export default function App() {
 
   // Only newly emitted notifications qualify for optional auto-linking.
   // Existing history, cross-account events, and stale notifications are never replayed.
-  const autoLinkCursor = useRef<{ uid: string | null; id: string | null }>({
+  const autoLinkCursor = useRef<{ uid: string | null; id: string | null; enabled: boolean; since: number }>({
     uid: user?.uid ?? null, id: notificationCenter?.items?.[0]?.id ?? null,
+    enabled: terminalLinkSettings.autoSignals, since: Date.now(),
   });
   useEffect(() => {
     const uid = user?.uid ?? null;
     const item = notificationCenter?.items?.[0];
     const cursor = autoLinkCursor.current;
-    if (cursor.uid !== uid) {
-      autoLinkCursor.current = { uid, id: item?.id ?? null };
+    if (cursor.uid !== uid || cursor.enabled !== terminalLinkSettings.autoSignals) {
+      // New user or newly granted consent: the currently visible history is the baseline.
+      autoLinkCursor.current = {
+        uid, id: item?.id ?? null, enabled: terminalLinkSettings.autoSignals, since: Date.now(),
+      };
       return;
     }
     const isNew = !!item?.id && cursor.id !== item.id;
@@ -732,7 +736,8 @@ export default function App() {
     if (!isNew || !item || !terminalLinkSettings.autoSignals ||
       terminalLinkSettings.provider === 'vataga' ||
       !notificationCenter?.settings.enabled || !notificationCenter.settings.optedIn ||
-      item.read || Date.now() - item.timestamp > 12000 || !canLinkNotification(item)) return;
+      item.read || !isFreshTerminalNotification(item.timestamp, cursor.since, Date.now())
+      || !canLinkNotification(item)) return;
     handleLinkNotification(item);
   }, [user?.uid, notificationCenter?.items, notificationCenter?.settings.enabled,
     notificationCenter?.settings.optedIn, terminalLinkSettings.autoSignals,
