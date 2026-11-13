@@ -44,6 +44,8 @@ export function shouldApplyLiveFallbackKline(
   if (latest.time < current.time) return false;
   if (latest.time > current.time) return true;
   if (wsConnected && lastStreamTickReceivedAt >= requestStartedAt) return false;
-  if (Number.isFinite(current.volume) && latest.volume + 1e-9 < (current.volume ?? 0)) return false;
+  // Equal cumulative volume carries no new execution and may contain an
+  // outdated price, so it should not replace a fresher trade-driven close.
+  if (Number.isFinite(current.volume) && latest.volume <= (current.volume ?? 0)) return false;
   return true;
 }
