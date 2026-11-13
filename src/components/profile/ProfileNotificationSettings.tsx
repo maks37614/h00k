@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { Bell, BellOff, Volume2, Play, Activity, Target, ShieldAlert, TrendingUp, Save, AlertTriangle } from 'lucide-react';
-import { useSiteNotifications } from '../context/SiteNotificationsContext';
-import { normalizeImpulseSymbol, type SiteNotificationSettings } from '../utils/siteNotifications';
-import { playSiteNotificationSound } from '../utils/domSound';
+import { useSiteNotifications } from '../../context/SiteNotificationsContext';
+import { normalizeImpulseSymbol, type SiteNotificationSettings } from '../../utils/siteNotifications';
+import { playSiteNotificationSound } from '../../utils/domSound';
 
 const Row: React.FC<{
   icon: React.ReactNode;
