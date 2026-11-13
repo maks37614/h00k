@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import type { ExchangeId, HookChartPreferences, MarketType } from '../../types';
 import { adaptiveCut, atr, quantile, type MarketPrint } from './marketAnalytics';
+import { getSharedMarketPrints, subscribeMarketTrades } from './marketTradeStream';
 import { calcCascadeRisk, type Candle, type Density, type Liquidation } from './engine';
 import { normalizeExchangeSymbol } from '../../utils/marketSymbols';
 import type { ChartDepthStatus } from '../../utils/hookChartDepthProtocol';
@@ -22,30 +23,7 @@ type LiveFeedArgs = {
 };
 
 const BINANCE_FUTURES_API = 'https://fapi.binance.com';
-const BINANCE_SPOT_APIS = ['https://data-api.binance.vision', 'https://api.binance.com'];
-const BINANCE_FUTURES_WS = 'wss://fstream.binance.com/market/ws';
-const BINANCE_SPOT_WS = 'wss://stream.binance.com:9443/ws';
 const BYBIT_API = 'https://api.bybit.com';
-const BYBIT_WS = {
-  futures: 'wss://stream.bybit.com/v5/public/linear',
-  spot: 'wss://stream.bybit.com/v5/public/spot',
-} as const;
-
-async function fetchBinanceJson(path: string, marketType: MarketType, signal?: AbortSignal) {
-  const hosts = marketType === 'futures' ? [BINANCE_FUTURES_API] : BINANCE_SPOT_APIS;
-  let lastError: unknown;
-  for (const host of hosts) {
-    try {
-      const response = await fetch(`${host}${path}`, { signal, cache: 'no-store' });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      return await response.json();
-    } catch (error) {
-      lastError = error;
-      if (signal?.aborted) throw error;
-    }
-  }
-  throw lastError instanceof Error ? lastError : new Error('Binance unavailable');
-}
 
 export function useOriginalHookChartLiveFeed({
   exchange,
@@ -107,14 +85,7 @@ export function useOriginalHookChartLiveFeed({
     }
 
     let dead = false;
-    let tradeSocket: WebSocket | null = null;
-    let tradePing: ReturnType<typeof setInterval> | null = null;
     const depthBook = new HookChartDensityBook();
-    const tradeWindow: Array<{ t: number; usd: number }> = [];
-    let lastTradeThresholdCalc = 0;
-    let tradeCut = 0;
-    let burst: { side: 'BUY' | 'SELL'; start: number; last: number; usd: number; pv: number; count: number; id: string } | null = null;
-
     const clearDepth = () => {
       depthScopeRef.current = '';
       depthBook.clear();
@@ -154,133 +125,41 @@ export function useOriginalHookChartLiveFeed({
     // Advance holding time even if the next exchange event contains no price change.
     const depthPublish = setInterval(applyBook, 1000);
 
-    type Trade = { t: number; p: number; q: number; side: 'BUY' | 'SELL'; id: string };
-
-    const commitBurst = () => {
-      if (dead || !burst || !tradeCut || burst.usd < tradeCut) return;
-      const p = burst.pv / Math.max(1, burst.usd);
-      const score = Math.min(100, Math.round(100 * burst.usd / Math.max(tradeCut * 2, 1)));
-      const item: MarketPrint = {
-        id: burst.id, side: burst.side, t: burst.start, p, usd: burst.usd,
-        count: burst.count, touches: 1, lastTouch: burst.start, score,
-      };
-      setMarketPrints(previous => {
-        const next = [...previous];
-        const index = next.findIndex(row => row.id === item.id);
-        if (index >= 0) next[index] = item;
-        else next.push(item);
-        return next.filter(row => Date.now() - row.t < 6 * 60 * 60_000).slice(-60);
-      });
-    };
-
-    const handleTrade = (trade: Trade) => {
-      if (dead || !Number.isFinite(trade.p) || !Number.isFinite(trade.q) || trade.p <= 0 || trade.q <= 0) return;
-      const usd = trade.p * trade.q;
-      depthBook.recordAggressiveTrade({ t: trade.t, p: trade.p, usd, side: trade.side, id: trade.id });
-      tradeWindow.push({ t: trade.t, usd });
-      while (tradeWindow.length && trade.t - tradeWindow[0].t > 120_000) tradeWindow.shift();
-      if (!tradeCut || trade.t - lastTradeThresholdCalc > 3000) {
-        tradeCut = adaptiveCut(tradeWindow.map(row => row.usd), .95, .995, 2.8);
-        lastTradeThresholdCalc = trade.t;
-      }
-      if (!burst || burst.side !== trade.side || trade.t - burst.last > 450 || trade.t - burst.start > 1400) {
-        commitBurst();
-        burst = { side: trade.side, start: trade.t, last: trade.t, usd, pv: trade.p * usd, count: 1, id: `${trade.side}:${trade.t}:${trade.id}` };
-      } else {
-        burst.last = trade.t;
-        burst.usd += usd;
-        burst.pv += trade.p * usd;
-        burst.count += 1;
-      }
-      if (tradeCut && burst.usd >= tradeCut) commitBurst();
-    };
-
-    const seedTrades = async () => {
-      try {
-        let rows: Trade[] = [];
-        if (exchange === 'binance') {
-          const path = marketType === 'futures'
-            ? `/fapi/v1/aggTrades?symbol=${encodeURIComponent(symbol)}&limit=1000`
-            : `/api/v3/aggTrades?symbol=${encodeURIComponent(symbol)}&limit=1000`;
-          const data = await fetchBinanceJson(path, marketType);
-          rows = (Array.isArray(data) ? data : []).map((row: any) => ({
-            t: Number(row.T) || Date.now(),
-            p: Number(row.p),
-            q: Number(row.q),
-            side: row.m ? 'SELL' : 'BUY',
-            id: String(row.a ?? row.T),
-          }));
-        } else {
-          const category = marketType === 'futures' ? 'linear' : 'spot';
-          const response = await fetch(`${BYBIT_API}/v5/market/recent-trade?category=${category}&symbol=${encodeURIComponent(symbol)}&limit=1000`, { cache: 'no-store' });
-          if (!response.ok) return;
-          const data = await response.json();
-          rows = (data?.result?.list || []).map((row: any) => ({
-            t: Number(row.time) || Date.now(),
-            p: Number(row.price),
-            q: Number(row.size),
-            side: String(row.side).toLowerCase() === 'sell' ? 'SELL' : 'BUY',
-            id: String(row.execId || row.time),
-          })).sort((a: Trade, b: Trade) => a.t - b.t);
-        }
-        if (dead || !rows.length) return;
-        tradeCut = adaptiveCut(rows.map(row => row.p * row.q), .95, .995, 2.8);
-        lastTradeThresholdCalc = Date.now();
-        for (const row of rows) handleTrade(row);
-        commitBurst();
-      } catch {}
-    };
-    void seedTrades();
-
-    try {
-      if (exchange === 'binance') {
-        const host = marketType === 'futures' ? BINANCE_FUTURES_WS : BINANCE_SPOT_WS;
-        tradeSocket = new WebSocket(`${host}/${encodeURIComponent(symbol.toLowerCase())}@aggTrade`);
-        tradeSocket.onmessage = event => {
-          if (dead) return;
-          try {
-            const row = JSON.parse(event.data);
-            handleTrade({
-              t: Number(row.T) || Date.now(), p: Number(row.p), q: Number(row.q),
-              side: row.m ? 'SELL' : 'BUY', id: String(row.a ?? row.T),
-            });
-          } catch {}
-        };
-      } else {
-        tradeSocket = new WebSocket(BYBIT_WS[marketType]);
-        tradeSocket.onopen = () => tradeSocket?.send(JSON.stringify({ op: 'subscribe', args: [`publicTrade.${symbol}`] }));
-        tradeSocket.onmessage = event => {
-          if (dead) return;
-          try {
-            const message = JSON.parse(event.data);
-            if (message.topic !== `publicTrade.${symbol}` || !Array.isArray(message.data)) return;
-            for (const row of message.data) {
-              handleTrade({
-                t: Number(row.T) || Date.now(), p: Number(row.p), q: Number(row.v),
-                side: String(row.S).toLowerCase() === 'sell' ? 'SELL' : 'BUY',
-                id: String(row.i || row.T),
-              });
-            }
-          } catch {}
-        };
-        tradePing = setInterval(() => {
-          if (tradeSocket?.readyState === WebSocket.OPEN) try { tradeSocket.send(JSON.stringify({ op: 'ping' })); } catch {}
-        }, 20_000);
-      }
-    } catch {}
+    // All charts of the same exchange/market/symbol share one REST seed,
+    // WebSocket and adaptive threshold. Each chart still gets trade evidence
+    // for its own depth/absorption analysis.
+    setMarketPrints([]);
+    const stopTrades = subscribeMarketTrades(
+      { exchange, marketType, symbol },
+      {
+        onTrade: trade => {
+          if (!dead) depthBook.recordAggressiveTrade(trade);
+        },
+        onPrints: prints => {
+          if (!dead && settingsRef.current.showMarketPrintSums === true)
+            setMarketPrints(prints);
+        },
+      },
+    );
 
     return () => {
       dead = true;
       if (applyBookRef.current === applyBook) applyBookRef.current = null;
+      stopTrades();
       stopDepth();
       clearInterval(depthPublish);
       depthBook.clear();
-      if (tradePing) clearInterval(tradePing);
-      try { tradeSocket?.close(); } catch {}
     };
   }, [
     exchange, marketType, symbol, replay,
   ]);
+
+  // The drawing toggle does not reopen the exchange connection. Hide print
+  // updates entirely while disabled, but restore the shared snapshot on enable.
+  useEffect(() => {
+    setMarketPrints(settings.showMarketPrintSums === true && !replay
+      ? getSharedMarketPrints({ exchange, marketType, symbol }) : []);
+  }, [settings.showMarketPrintSums, exchange, marketType, symbol, replay]);
 
   useEffect(() => {
     applyBookRef.current?.();
