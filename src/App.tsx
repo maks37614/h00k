@@ -35,7 +35,8 @@ import {
   playMetaScalpClickSound,
   getUserMetaScalpSettings,
 } from './utils/metaScalpService';
-import { getUserTerminalLinkSettings, sendToSelectedTerminal, terminalLabel, type TerminalLinkSource } from './utils/terminalLinkService';
+import { getUserTerminalLinkSettings, sendToSelectedTerminal, terminalLabel, notificationTerminalSource, type TerminalLinkSource } from './utils/terminalLinkService';
+import type { SiteNotificationItem } from './utils/siteNotifications';
 import { ScannedCoin, DetectedFormation, ScreenerFilterState, PriceAlert, ArchivedFormation, ActivePageType, type FullEarlyScanSnapshot } from './types';
 import { runDirectClientScan, getFallbackScannedCoins, hydrateMissingRegularOIFromBrowser } from './utils/directExchangeClient';
 import { getVisibleFormations, groupVisibleFormations } from './utils/formationList';
@@ -672,6 +673,56 @@ export default function App() {
     [user, metaScalpSettings, terminalLinkSettings, handleOpenAuthModal]
   );
 
+  const canLinkNotification = useCallback((item: SiteNotificationItem): boolean => {
+    const source = notificationTerminalSource(item.kind);
+    return Boolean(user && terminalLinkSettings.enabled && terminalLinkSettings.provider !== 'none'
+      && source && terminalLinkSettings.sources[source]
+      && typeof item.symbol === 'string' && /^[A-Z0-9:_-]{2,40}$/i.test(item.symbol)
+      && (item.exchange === 'binance' || item.exchange === 'bybit')
+      && (item.marketType === 'futures' || item.marketType === 'spot'));
+  }, [user, terminalLinkSettings]);
+
+  const handleLinkNotification = useCallback((item: SiteNotificationItem) => {
+    if (!canLinkNotification(item)) return;
+    const source = notificationTerminalSource(item.kind);
+    if (!source || !item.symbol || (item.exchange !== 'binance' && item.exchange !== 'bybit')
+      || (item.marketType !== 'spot' && item.marketType !== 'futures')) return;
+    const exchange = item.exchange;
+    const marketType = item.marketType;
+    const symbol = item.symbol.toUpperCase();
+    const found = coins.find(coin => coin.symbol === symbol && coin.exchange === exchange && coin.marketType === marketType);
+    const minimalCoin: ScannedCoin = found || {
+      symbol, baseAsset: symbol.replace(/USDT$/, ''), quoteAsset: 'USDT',
+      exchange, marketType, timeframe: '5m',
+      currentPrice: 0, priceChange24h: 0, highPrice24h: 0, lowPrice24h: 0,
+      volume24hUsd: 0, formations: [], lastUpdated: Date.now(), exchangeUrl: '',
+    };
+    void handleSendToMetaScalp(minimalCoin, source);
+  }, [canLinkNotification, coins, handleSendToMetaScalp]);
+
+  // Only newly emitted notifications qualify for optional auto-linking.
+  // Existing history, cross-account events, and stale notifications are never replayed.
+  const autoLinkCursor = useRef<{ uid: string | null; id: string | null }>({
+    uid: user?.uid ?? null, id: notificationCenter?.items?.[0]?.id ?? null,
+  });
+  useEffect(() => {
+    const uid = user?.uid ?? null;
+    const item = notificationCenter?.items?.[0];
+    const cursor = autoLinkCursor.current;
+    if (cursor.uid !== uid) {
+      autoLinkCursor.current = { uid, id: item?.id ?? null };
+      return;
+    }
+    const isNew = !!item?.id && cursor.id !== item.id;
+    cursor.id = item?.id ?? null;
+    if (!isNew || !item || !terminalLinkSettings.autoSignals ||
+      !notificationCenter?.settings.enabled || !notificationCenter.settings.optedIn ||
+      item.read || Date.now() - item.timestamp > 12000 || !canLinkNotification(item)) return;
+    handleLinkNotification(item);
+  }, [user?.uid, notificationCenter?.items, notificationCenter?.settings.enabled,
+    notificationCenter?.settings.optedIn, terminalLinkSettings.autoSignals,
+    canLinkNotification, handleLinkNotification]);
+
   // Enter a dedicated chart URL without losing the originating Screener tab.
   // A small per-user session snapshot restores the exact formation/archive
   // when reloading the chart, without launching a second full-market scan.
@@ -1298,6 +1349,8 @@ export default function App() {
         lastUpdated={lastUpdated}
         onOpenAuth={() => handleOpenAuthModal('signin', null)}
         onOpenProfile={() => { setProfileInitialSection('account'); setIsProfileModalOpen(true); }}
+        onLinkNotification={handleLinkNotification}
+        canLinkNotification={canLinkNotification}
         onOpenNotificationSettings={() => {
           if (!user) { handleOpenAuthModal('signin', 'general'); return; }
           setProfileInitialSection('notifications');
