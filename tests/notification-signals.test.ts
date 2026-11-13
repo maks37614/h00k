@@ -4,7 +4,7 @@ import type { ScannedCoin, SurveillanceEvent } from '../src/types';
 import { DEFAULT_SITE_NOTIFICATIONS, normalizeSiteNotificationSettings, notificationEnabled,
   NOTIFICATION_CATEGORIES, matchesNotificationScope } from '../src/utils/siteNotifications';
 import { scanNotificationSignals, marketSurveillanceSignal, liquidationNotificationSignal,
-  surveillanceNotificationKind, LiquidationCascadeTracker, QualityScoreTracker } from '../src/utils/notificationSignals';
+  surveillanceNotificationKind, LiquidationCascadeTracker, QualityScoreTracker, ProximityAlertTracker } from '../src/utils/notificationSignals';
 
 const settings = normalizeSiteNotificationSettings({
   optedIn: true, enabled: true, formations: true, levels: true, breakouts: true,
@@ -145,6 +145,41 @@ test('only verified OI and confirmed retests can trigger corresponding alerts', 
   unconfirmed.formations[0].validation!.closedCandleOnly = false;
   assert.equal(scanNotificationSignals([unconfirmed], settings, [], 905_000)
     .filter(e => e.title.includes('ретест')).length, 0);
+});
+
+test('level and ROUND signals fire on entry, remain silent nearby, then rearm after an exit', () => {
+  const tracker = new ProximityAlertTracker();
+  const quality = new QualityScoreTracker();
+  const start = 1_000_000;
+  const near = coin(start);
+  const first = scanNotificationSignals([near], settings, [], start, quality, tracker);
+  assert.ok(first.some(e => e.kind === 'levels'));
+  assert.ok(first.some(e => e.kind === 'round'));
+  const unchanged = scanNotificationSignals([near], settings, [], start + 200, quality, tracker);
+  assert.ok(!unchanged.some(e => e.kind === 'levels' || e.kind === 'round'));
+  const far = coin(start + 300);
+  far.currentPrice = 111;
+  const outside = scanNotificationSignals([far], settings, [], start + 300, quality, tracker);
+  assert.ok(!outside.some(e => e.kind === 'levels' || e.kind === 'round'));
+  const back = coin(start + 901_000);
+  const rearmed = scanNotificationSignals([back], settings, [], start + 901_000, quality, tracker);
+  assert.ok(rearmed.some(e => e.kind === 'levels'));
+  assert.ok(rearmed.some(e => e.kind === 'round'));
+  const saved = new ProximityAlertTracker(tracker.snapshot());
+  assert.equal(scanNotificationSignals([back], settings, [], start + 901_100, quality, saved)
+    .filter(e => e.kind === 'levels' || e.kind === 'round').length, 0);
+});
+
+test('price and live liquidation events have no chart-timeframe and must not be filtered out', () => {
+  const filtered = normalizeSiteNotificationSettings({ ...settings, scopeTimeframe: '4h' });
+  const source = { symbol: 'BTCUSDT', exchange: 'binance', marketType: 'futures' };
+  assert.equal(matchesNotificationScope(filtered, source), false);
+  assert.equal(matchesNotificationScope(filtered, source, [], { timeframeIndependent: true }), true);
+  assert.equal(matchesNotificationScope(filtered, { ...source, exchange: 'bybit' }, [],
+    { timeframeIndependent: true }), true, 'TF exemption does not override exchange preferences');
+  const exchangeOnly = normalizeSiteNotificationSettings({ ...filtered, scopeExchange: 'binance' });
+  assert.equal(matchesNotificationScope(exchangeOnly, { ...source, exchange: 'bybit' }, [],
+    { timeframeIndependent: true }), false);
 });
 
 test('surveillance event classification is grounded in server notificationType', () => {
