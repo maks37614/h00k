@@ -116,12 +116,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     mounted.current = true;
-    try {
-      localStorage.removeItem('signalhook_local_accounts');
-      localStorage.removeItem('signalhook_local_session');
-      localStorage.removeItem('signalhook_tg_token');
-      localStorage.removeItem('signalhook_tg_chat_id');
-    } catch {}
+    // Preserve legacy browser-local accounts and sessions for an explicit,
+    // backed-up migration. Never destructively clean user data on page load.
     const params = new URLSearchParams(window.location.search);
     const verifyToken = params.get('verifyEmail');
     if (verifyToken || params.has('resetPassword')) {
