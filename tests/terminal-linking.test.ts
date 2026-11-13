@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {
   DEFAULT_TERMINAL_LINK_SETTINGS,
   getUserTerminalLinkSettings, normalizeMetaScalpGroup, normalizeTigerGroup,
-  normalizeTerminalLinkSettings, sendToSelectedTerminal, testTigerConnection, matchesTigerAcknowledgement,
+  normalizeTerminalLinkSettings, sendToSelectedTerminal, testTigerConnection, matchesTigerAcknowledgement, isFreshTerminalNotification,
 } from '../src/utils/terminalLinkService';
 import { DEFAULT_METASCALP_SETTINGS } from '../src/utils/metaScalpService';
 
@@ -149,4 +149,13 @@ test('Tiger ping must be a real pong, not an unrelated success response', async 
     ? Object.defineProperty(globalThis, 'WebSocket', previous)
     : Reflect.deleteProperty(globalThis, 'WebSocket'));
   assert.equal((await testTigerConnection(7819)).ok, true);
+});
+
+test('automatic linking accepts only new, recent, nonfuture notifications', () => {
+  const now = 100_000;
+  assert.equal(isFreshTerminalNotification(now - 2000, now - 3000, now), true);
+  assert.equal(isFreshTerminalNotification(now - 2000, now - 1000, now), false, 'loaded history predates opt-in');
+  assert.equal(isFreshTerminalNotification(now - 20000, now - 30000, now), false, 'stale');
+  assert.equal(isFreshTerminalNotification(now + 2000, now - 3000, now), false, 'future');
+  assert.equal(isFreshTerminalNotification(NaN, now - 3000, now), false);
 });
