@@ -22,7 +22,7 @@ test('Screener, Formations and fullscreen routes pass their profile context into
   assert.match(early, /visualContext="formationsQuick"/);
   assert.match(fullscreen, /'formationsFull' : 'screenerFull'/);
   assert.match(exchange, /visualContext=\{visualContext\}/);
-  assert.match(trading, /terminalMode=\{terminalMode\} terminalAutoScale=\{terminalAutoScale\} visualContext=\{visualContext\}/);
+  assert.match(trading, /terminalMode=\{terminalMode\} terminalAutoScale=\{terminalAutoScale\} terminalInitialView=\{terminalInitialView\} visualContext=\{visualContext\}/);
   assert.match(trading, /visualContext = 'screenerQuick'/);
 });
 
@@ -58,7 +58,8 @@ test('saved chart settings rehydrate from user account and drive native chart, t
 test('Replay remains independent and global Terminal auto mode has explicit priority', () => {
   const engine = source('../src/components/hookchart/engine.tsx');
   const canvas = source('../src/components/hookchart/HookChartCanvas.tsx');
-  assert.match(canvas, /const activeVisualProfile = replay \|\| !settings\.visualProfiles\?\.\[activeVisualKey\]/);
+  assert.match(canvas, /const activeVisualProfile = replay \? undefined/);
+  assert.match(canvas, /terminalMode && terminalInitialView/);
   assert.match(engine, /const priceAuto=terminalAutoScale\|\|visualProfile\.autoPriceScale/);
   assert.match(engine, /yZoom:terminalAutoScale\?1:visualProfile\.verticalZoom/);
   assert.match(engine, /terminalCandlePriceRange\(lo,hi,plotH,showVolumes\)/);
