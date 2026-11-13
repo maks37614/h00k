@@ -28,7 +28,7 @@ jobs:
       - name: HookChart visual profile and real-preview regression tests
         run: node --import tsx --test tests/hookchart-visual-profiles.test.ts tests/hookchart-real-visual-preview.test.ts tests/hookchart-visual-save-runtime.test.ts tests/hookchart-visual-persistence.test.ts tests/hookchart-chart-connection.test.ts
       - name: Site Notifications regression tests
-        run: node --import tsx --test tests/site-notifications.test.ts
+        run: node --import tsx --test tests/site-notifications.test.ts tests/notification-signals.test.ts
       - name: Build
         run: npm run build
       - name: Tests
