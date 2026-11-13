@@ -66,3 +66,17 @@ test('shortcut checkbox controls desktop link without changing start menu shortc
   assert.equal(pkg.build.nsis.createDesktopShortcut,true);
   assert.equal(pkg.build.nsis.createStartMenuShortcut,true);
 });
+
+test('desktop shortcut preference survives upgrades and can be explicitly overridden',()=>{
+  const nsis=fs.readFileSync(path.join(root,'build','installer.nsh'),'utf8');
+  assert.match(nsis,/ReadRegStr \$R8 SHELL_CONTEXT "\$\{INSTALL_REGISTRY_KEY\}" "H00kDesktopShortcutChoice"/);
+  assert.match(nsis,/WriteRegStr SHELL_CONTEXT "\$\{INSTALL_REGISTRY_KEY\}" "H00kDesktopShortcutChoice"/);
+  assert.ok(nsis.includes('"/NO_DESKTOP_SHORTCUT"'));
+  assert.ok(nsis.includes('"/DESKTOP_SHORTCUT"'));
+  assert.match(nsis,/CreateShortCut "\$newDesktopLink"/);
+  assert.match(nsis,/WinShell::SetLnkAUMI/);
+  assert.match(nsis,/!ifndef BUILD_UNINSTALLER/);
+  const workflow=fs.readFileSync(path.join(root,'..','.github','workflows','h00k-desktop-windows.yml'),'utf8');
+  assert.ok(workflow.includes('smoke-installer.ps1'));
+  assert.ok(workflow.includes('SHA256SUMS.txt'));
+});
