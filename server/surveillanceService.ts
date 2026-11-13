@@ -17,6 +17,7 @@ import { normalizeKlineTimeMs } from '../src/utils/formationValidation';
 import { getTimeframeMs } from './surveillance/multiTimeframeEngine';
 import { fetchKlines } from './marketService';
 import { surveillanceCheckCandleCache } from './surveillance/checkCandleCache';
+import { candleCloseCheckPlanner } from './surveillance/candleCloseCheckPlanner';
 import { getUserTelegram } from './alertService';
 import { surveillanceManager } from './surveillance/surveillanceManager';
 import { notificationRouter } from './notificationRouter';
@@ -822,13 +823,27 @@ export function startSurveillanceMonitor(intervalMs = 25000) {
     let lastPersistAt = Date.now();
     try {
       const activeItems = getAllActiveSurveillanceCoins();
+      const activeKeys = new Set(activeItems.map(({ userId, coin }) =>
+        JSON.stringify([userId, coin.id])));
+      candleCloseCheckPlanner.prune(activeKeys);
       if (activeItems.length === 0) return;
 
       for (const { userId, coin } of activeItems) {
+        const key = JSON.stringify([userId, coin.id]);
+        if (!candleCloseCheckPlanner.due(key, coin.config, Date.now())) continue;
         try {
           const { coin: updated } = await checkCoinSurveillance(coin);
-          commitSurveillanceCheck(updated, { deferPersist: true });
+          const result = commitSurveillanceCheck(updated, { deferPersist: true });
+          if (!result || !result.lastCheckedAt ||
+              result.lastCheckedAt === coin.lastCheckedAt) {
+            // Missing exchange candles, changed account config, or a partial
+            // server response: retry, don't sleep until the next bar close.
+            candleCloseCheckPlanner.failed(key, coin.config, Date.now());
+          } else {
+            candleCloseCheckPlanner.succeeded(key, coin.config, Date.now());
+          }
         } catch (e) {
+          candleCloseCheckPlanner.failed(key, coin.config, Date.now());
           console.error(`[Surveillance] Failed to check coin ${coin.symbol} for user ${userId}:`, e);
         }
         // Keep at most a short window of routine measurements unflushed,

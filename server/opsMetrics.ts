@@ -21,6 +21,7 @@ import { sharedCandleFeedStats } from './surveillance/sharedCandleFeed';
 import { sharedOiPoller } from './surveillance/sharedOiPoller';
 import { surveillanceCheckCandleCache } from './surveillance/checkCandleCache';
 import { priceAlertFallbackStats } from './alertService';
+import { candleCloseCheckPlanner } from './surveillance/candleCloseCheckPlanner';
 
 function authorized(req: Request): boolean {
   const secret = process.env.H00K_OPS_TOKEN;
@@ -66,6 +67,7 @@ export function installOpsMetrics(app: Express,
       sharedCandles: sharedCandleFeedStats(),
       sharedOiPolling: sharedOiPoller.stats(),
       surveillanceCheckCandles: surveillanceCheckCandleCache.stats(),
+      candleCloseCheckPlanner: candleCloseCheckPlanner.stats(),
       telegramQueue: telegramDispatchQueue.stats(),
       historicalOiCache: exchangeHistoryCache.stats(),
       liveOiCache: getLiveOiCacheStats(),
