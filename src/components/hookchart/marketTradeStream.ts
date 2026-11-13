@@ -4,7 +4,7 @@ import { adaptiveCut, type MarketPrint } from './marketAnalytics';
 /** One public-trade transport and one adaptive threshold per exchange/market/symbol per browser tab. */
 export type MarketTrade = { id: string; t: number; p: number; q: number; side: 'BUY' | 'SELL' };
 export type AggressiveMarketTrade = { id: string; t: number; p: number; usd: number; side: 'BUY' | 'SELL' };
-type Listener = { onTrade: (trade: AggressiveMarketTrade) => void; onPrints: (prints: MarketPrint[]) => void; wantsPrints?: () => boolean };
+type Listener = { onTrade: (trade: AggressiveMarketTrade) => void; onPrints: (prints: MarketPrint[]) => void; wantsPrints?: () => boolean; liveOnly?: boolean };
 type Burst = {
   id: string; side: 'BUY' | 'SELL'; start: number; last: number;
   usd: number; weightedPrice: number; count: number;
@@ -167,9 +167,11 @@ class SharedMarketTradeStream {
 
   subscribe(listener: Listener): () => void {
     this.listeners.add(listener);
-    for (let i = this.recentHead; i < this.recent.length; i++) {
-      const trade = this.recent[i];
-      if (trade.t >= Date.now() - 300_000) listener.onTrade(trade);
+    if (!listener.liveOnly) {
+      for (let i = this.recentHead; i < this.recent.length; i++) {
+        const trade = this.recent[i];
+        if (trade.t >= Date.now() - 300_000) listener.onTrade(trade);
+      }
     }
     if (listener.wantsPrints?.() !== false) listener.onPrints(this.tracker.snapshot());
     return () => this.listeners.delete(listener);
@@ -189,7 +191,7 @@ class SharedMarketTradeStream {
     }, 500);
   }
 
-  private accept(trade: MarketTrade) {
+  private accept(trade: MarketTrade, fromHistory = false) {
     const revision = this.tracker.revision;
     const accepted = this.tracker.accept(trade);
     if (!accepted) return;
@@ -199,7 +201,7 @@ class SharedMarketTradeStream {
       this.recent = this.recent.slice(this.recentHead);
       this.recentHead = 0;
     }
-    for (const listener of this.listeners) listener.onTrade(accepted);
+    for (const listener of this.listeners) if (!fromHistory || !listener.liveOnly) listener.onTrade(accepted);
     if (revision !== this.tracker.revision) this.publish();
   }
 
@@ -264,9 +266,12 @@ class SharedMarketTradeStream {
     history.sort((a, b) => a.t - b.t);
     this.tracker.seedThreshold(history);
     // REST and WebSocket overlap by design; merge in time order and deduplicate by trade ID.
-    const combined = history.concat(this.pending).sort((a, b) => a.t - b.t);
+    const combined = [
+      ...history.map(trade => ({ trade, fromHistory: true })),
+      ...this.pending.map(trade => ({ trade, fromHistory: false })),
+    ].sort((a, b) => a.trade.t - b.trade.t);
     this.pending = [];
-    for (const trade of combined) this.accept(trade);
+    for (const { trade, fromHistory } of combined) this.accept(trade, fromHistory);
     this.buffering = false;
   }
 
