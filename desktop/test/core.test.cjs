@@ -27,7 +27,7 @@ test('automatic matching requires terminal executable, never title alone', () =>
 test('docking in all four directions keeps terminal rectangle untouched', () => {
   const target = {x:400,y:250,width:700,height:500};
   const work = {x:0,y:0,width:1920,height:1080};
-  const cases = {right:{x:1106},left:{x:64},top:{y:44},bottom:{y:756}};
+  const cases = {right:{x:1100},left:{x:70},top:{y:50},bottom:{y:750}};
   for (const side of Object.keys(cases)) {
     const boxes = dockRects(target,work,side,330,200,1);
     assert.equal(boxes.length,1,side);
@@ -50,5 +50,24 @@ test('negative coordinates and floating bounds are valid for secondary monitors'
   assert.notDeepEqual(floatingRects(target,work,300,300,1,'left'), floatingRects(target,work,300,300,1,'right'));
   for(const bounds of floatingRects(target,work,500,300,4)) {
     assert.ok(bounds.x >= work.x && bounds.x+bounds.width <= work.x+work.width);
+  }
+});
+
+test('all four docking directions touch the visible target boundary without overlap', () => {
+  const target = { x: -1240, y: 115, width: 700, height: 650 };
+  const work = { x: -1920, y: 0, width: 1920, height: 1080 };
+  const right = dockRects(target, work, 'right', 260, 220, 1)[0];
+  const left = dockRects(target, work, 'left', 260, 220, 1)[0];
+  const top = dockRects(target, work, 'top', 260, 180, 1)[0];
+  const bottom = dockRects(target, work, 'bottom', 260, 180, 1)[0];
+  assert.equal(right.x, target.x + target.width);
+  assert.equal(left.x + left.width, target.x);
+  assert.equal(top.y + top.height, target.y);
+  assert.equal(bottom.y, target.y + target.height);
+  for (const pane of [right, left, top, bottom]) {
+    assert.ok(pane.width > 0 && pane.height > 0);
+    assert.ok(pane.x >= work.x && pane.y >= work.y);
+    assert.ok(pane.x + pane.width <= work.x + work.width);
+    assert.ok(pane.y + pane.height <= work.y + work.height);
   }
 });
