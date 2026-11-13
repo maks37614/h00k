@@ -56,3 +56,33 @@ export function playAlertChime(): void {
   }
 }
 
+
+/** Original, selectable sounds for on-site notifications. Call only after category and mute gates. */
+export function playSiteNotificationSound(preset: 'chime' | 'soft' | 'pulse' = 'chime'): void {
+  if (preset === 'chime') {
+    playAlertChime();
+    return;
+  }
+  try {
+    const ctx = getAudioContext();
+    if (!ctx) return;
+    const t = ctx.currentTime;
+    const notes = preset === 'soft'
+      ? [{ freq: 660, offset: 0, duration: 0.24, volume: 0.07 }]
+      : [{ freq: 540, offset: 0, duration: 0.12, volume: 0.10 },
+         { freq: 810, offset: 0.18, duration: 0.12, volume: 0.10 }];
+    for (const note of notes) {
+      const oscillator = ctx.createOscillator();
+      const gain = ctx.createGain();
+      oscillator.type = preset === 'soft' ? 'sine' : 'triangle';
+      oscillator.frequency.setValueAtTime(note.freq, t + note.offset);
+      gain.gain.setValueAtTime(0.0001, t + note.offset);
+      gain.gain.linearRampToValueAtTime(note.volume, t + note.offset + 0.025);
+      gain.gain.exponentialRampToValueAtTime(0.0001, t + note.offset + note.duration);
+      oscillator.connect(gain);
+      gain.connect(ctx.destination);
+      oscillator.start(t + note.offset);
+      oscillator.stop(t + note.offset + note.duration + 0.01);
+    }
+  } catch { /* Browser or autoplay policy may prohibit sound. */ }
+}
