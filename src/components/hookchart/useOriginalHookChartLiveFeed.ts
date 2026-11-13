@@ -103,8 +103,14 @@ export function useOriginalHookChartLiveFeed({
     let dead = false;
     const depthBook = new HookChartDensityBook();
     let depthPublishTimer: ReturnType<typeof setTimeout> | null = null;
+    let depthHoldClock: ReturnType<typeof setInterval> | null = null;
     let lastDepthPublishAt = 0;
+    const stopDepthHoldClock = () => {
+      if (depthHoldClock !== null) clearInterval(depthHoldClock);
+      depthHoldClock = null;
+    };
     const clearDepth = () => {
+      stopDepthHoldClock();
       if (depthPublishTimer !== null) {
         clearTimeout(depthPublishTimer);
         depthPublishTimer = null;
@@ -120,6 +126,12 @@ export function useOriginalHookChartLiveFeed({
     const applyBook = () => {
       if (dead) return false;
       const next = depthBook.read(settingsRef.current, atrRef.current);
+      // Holding-time and reaction scores need a periodic refresh only while
+      // a complete, fresh book exists. Otherwise an empty Terminal chart
+      // would run an unnecessary per-second JS timer indefinitely.
+      if (next.depthReady) {
+        if (depthHoldClock === null) depthHoldClock = setInterval(applyBook, 1000);
+      } else stopDepthHoldClock();
       const wasReady = depthScopeRef.current === depthScope;
       if (!shouldPublishDepthView(next.depthReady, wasReady)) {
         // We must still withdraw LIVE transport status if a snapshot was
@@ -171,8 +183,8 @@ export function useOriginalHookChartLiveFeed({
         if (status !== 'live') clearDepth();
       },
     });
-    // Advance holding time even if the next exchange event contains no price change.
-    const depthPublish = setInterval(applyBook, 1000);
+    // The holding-time clock starts upon the first valid book snapshot;
+    // it stops immediately on disconnect, invalid data or final unmount.
 
     // All charts of the same exchange/market/symbol share one REST seed,
     // WebSocket and adaptive threshold. Each chart still gets trade evidence
@@ -197,7 +209,7 @@ export function useOriginalHookChartLiveFeed({
       if (applyBookRef.current === applyBook) applyBookRef.current = null;
       stopTrades();
       stopDepth();
-      clearInterval(depthPublish);
+      stopDepthHoldClock();
       if (depthPublishTimer !== null) clearTimeout(depthPublishTimer);
       depthBook.clear();
     };
