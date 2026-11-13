@@ -22,6 +22,8 @@ jobs:
         run: npm install --no-audit --no-fund
       - name: Validate desktop layout and state
         run: npm test
+      - name: Compile and execute read-only Win32 window agent
+        run: powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File win-agent.ps1 -Once
       - name: Build Windows installer
         run: npm run dist
       - uses: actions/upload-artifact@v4
