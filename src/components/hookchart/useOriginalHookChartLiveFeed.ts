@@ -139,6 +139,7 @@ export function useOriginalHookChartLiveFeed({
           if (!dead && settingsRef.current.showMarketPrintSums === true)
             setMarketPrints(prints);
         },
+        wantsPrints: () => settingsRef.current.showMarketPrintSums === true,
       },
     );
 
@@ -330,7 +331,7 @@ export function useOriginalHookChartLiveFeed({
   const currentDepth = depthScopeRef.current === depthScope && depthReady;
   return {
     densities: currentDepth ? densities : [],
-    marketPrints: marketPrints.slice(-40),
+    marketPrints,
     liquidations: visibleLiquidations,
     allLiquidations: liquidations,
     sessionLiquidationsUsd: sessionTotals.totalUsd,
