@@ -8,6 +8,11 @@ contextBridge.exposeInMainWorld('h00kDesktop', {
   attach: (provider) => ipcRenderer.invoke('desktop:attach', provider),
   detach: (provider) => ipcRenderer.invoke('desktop:detach', provider),
   openStandalone: () => ipcRenderer.invoke('desktop:standalone'),
+  onSelectProvider: (callback) => {
+    const handler = (_event, provider) => callback(provider);
+    ipcRenderer.on('desktop:select-provider', handler);
+    return () => ipcRenderer.removeListener('desktop:select-provider', handler);
+  },
   onSnapshot: (callback) => {
     const handler = (_event, snapshot) => callback(snapshot);
     ipcRenderer.on('desktop:snapshot-pushed', handler);
