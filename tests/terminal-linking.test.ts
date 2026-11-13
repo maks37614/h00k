@@ -159,3 +159,26 @@ test('automatic linking accepts only new, recent, nonfuture notifications', () =
   assert.equal(isFreshTerminalNotification(now + 2000, now - 3000, now), false, 'future');
   assert.equal(isFreshTerminalNotification(NaN, now - 3000, now), false);
 });
+
+test('background terminal signals never overwrite the clipboard if providers are unavailable', async (t) => {
+  const copied: string[] = [];
+  const previousNavigator = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
+  Object.defineProperty(globalThis, 'navigator', {
+    configurable: true, value: { clipboard: { writeText: async (value: string) => { copied.push(value); } } },
+  });
+  t.after(() => {
+    if (previousNavigator) Object.defineProperty(globalThis, 'navigator', previousNavigator);
+    else Reflect.deleteProperty(globalThis, 'navigator');
+  });
+  t.mock.method(globalThis, 'fetch', async () => new Response('{}', { status: 404 }));
+  const allSources = { ...DEFAULT_TERMINAL_LINK_SETTINGS.sources, alerts: true };
+  const meta = await sendToSelectedTerminal('BTCUSDT', 'binance', 'futures', 'alerts',
+    normalizeTerminalLinkSettings({ sources: allSources }), DEFAULT_METASCALP_SETTINGS, undefined, false);
+  assert.equal(meta.success, false);
+  assert.equal(meta.copiedToClipboard, false);
+  const vataga = await sendToSelectedTerminal('SOLUSDT', 'bybit', 'spot', 'alerts',
+    normalizeTerminalLinkSettings({ provider: 'vataga', sources: allSources }), DEFAULT_METASCALP_SETTINGS, undefined, false);
+  assert.equal(vataga.success, false);
+  assert.equal(vataga.copiedToClipboard, false);
+  assert.deepEqual(copied, []);
+});
