@@ -50,7 +50,7 @@ test('profile can only be edited with sliders below the fixed mini preview', () 
   assert.match(rest, /aria-label="Відступ праворуч у барах"/);
   assert.match(rest, /Автоматичний масштаб ціни/);
   assert.ok(rest.indexOf('Кількість видимих свічок') > rest.indexOf('<HookChartVisualPreview'));
-  assert.doesNotMatch(rest.slice(0, rest.indexOf('<\/HookChartVisualPreview>')), /onChange=/);
+  assert.doesNotMatch(rest.slice(0, rest.indexOf('/>', rest.indexOf('<HookChartVisualPreview'))), /onChange=/);
 });
 
 test('synthetic candles are deterministic, valid and do not depend on real prices', () => {
