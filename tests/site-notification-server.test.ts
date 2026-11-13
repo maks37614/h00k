@@ -37,5 +37,7 @@ test('preferences endpoint is authenticated, and all automatic Telegram send pat
   assert.match(server, /app\.put\('\/api\/notification-preferences'/);
   assert.match(router, /isUserTelegramCategoryAllowed\(params\.userId/);
   assert.match(price, /if \(!userAllowedTelegram\)/);
+  assert.match(price, /isUserNotificationCategoryAllowed\(a\.userId/);
+  assert.match(server, /isUserTelegramCategoryAllowed\(res\.locals\.userId/);
   assert.match(context, /apiFetch\('\/api\/notification-preferences'/);
 });
