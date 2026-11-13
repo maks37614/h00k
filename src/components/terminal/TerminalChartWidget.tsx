@@ -275,10 +275,25 @@ export const TerminalChartWidget: React.FC<TerminalChartWidgetProps> = ({
     }
   }, [coin?.currentPrice]);
 
+  const pendingHeaderPriceRef = useRef<number | null>(null);
+  const headerPriceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const handleChartPrice = useCallback((price: number) => {
     if (!Number.isFinite(price) || price <= 0) return;
-    setCurrentPrice(previous => previous === price ? previous : price);
-    setLivePrice(previous => previous === price ? previous : price);
+    pendingHeaderPriceRef.current = price;
+    if (headerPriceTimerRef.current !== null) return;
+    // Keep the chart's high-frequency candle updates independent from its
+    // header: rerendering every Terminal card at 12fps is unnecessarily costly.
+    headerPriceTimerRef.current = setTimeout(() => {
+      headerPriceTimerRef.current = null;
+      const latest = pendingHeaderPriceRef.current;
+      if (latest == null) return;
+      setCurrentPrice(previous => previous === latest ? previous : latest);
+      setLivePrice(previous => previous === latest ? previous : latest);
+    }, 250);
+  }, []);
+  useEffect(() => () => {
+    if (headerPriceTimerRef.current !== null) clearTimeout(headerPriceTimerRef.current);
+    headerPriceTimerRef.current = null;
   }, []);
 
   // Only legacy chart layouts need their own ticker; the HookChart already
