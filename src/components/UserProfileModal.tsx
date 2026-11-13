@@ -19,6 +19,7 @@ import { FormationArchiveIcon } from './FormationArchiveIcon';
 import { useTelegram } from '../context/TelegramContext';
 import { InstallAppButton } from './InstallAppButton';
 import { TelegramConnectionCard } from './TelegramConnectionCard';
+import { ProfileNotificationSettings } from './profile/ProfileNotificationSettings';
 import { useAuth } from '../context/AuthContext';
 import { useAlerts } from '../context/AlertsContext';
 import { useArchive } from '../context/ArchiveContext';
@@ -33,6 +34,7 @@ interface UserProfileModalProps {
   onClose: () => void;
   onOpenAlerts?: () => void;
   onOpenArchive?: () => void;
+  initialSection?: 'account' | 'chart' | 'notifications';
 }
 
 export const UserProfileModal: React.FC<UserProfileModalProps> = ({
@@ -40,6 +42,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
   onClose,
   onOpenAlerts,
   onOpenArchive,
+  initialSection = 'account',
 }) => {
   const { user, profile, updateProfileData, logout } = useAuth();
   const { status: telegramStatus } = useTelegram();
@@ -51,14 +54,13 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
   const [defaultMarketType, setDefaultMarketType] = useState<'all' | MarketType>('all');
   const [defaultTimeframe, setDefaultTimeframe] = useState<Timeframe>('1h');
   const [isTpSlOpen, setIsTpSlOpen] = useState(false);
-  const [activeProfileSection, setActiveProfileSection] = useState<'account' | 'chart'>('account');
+  const [activeProfileSection, setActiveProfileSection] = useState<'account' | 'chart' | 'notifications'>(initialSection);
 
   useEffect(() => {
-    if (isOpen) setActiveProfileSection('account');
-  }, [isOpen, user?.uid]);
+    if (isOpen) setActiveProfileSection(initialSection);
+  }, [isOpen, user?.uid, initialSection]);
   const [timeZone, setTimeZone] = useState('auto');
   const timeZoneChoices = useMemo(() => getTimeZoneChoices(timeZone), [timeZone]);
-  const [soundAlertsEnabled, setSoundAlertsEnabled] = useState(true);
 
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
@@ -79,7 +81,6 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
       setDefaultMarketType(profile.defaultMarketType || 'all');
       setDefaultTimeframe(profile.defaultTimeframe || '1h');
       setTimeZone(profile.timeZone || 'auto');
-      setSoundAlertsEnabled(profile.soundAlertsEnabled !== undefined ? profile.soundAlertsEnabled : true);
 
     }
   }, [profile, user, isOpen]);
@@ -100,14 +101,12 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
         defaultMarketType,
         defaultTimeframe,
         timeZone,
-        soundAlertsEnabled,
       });
 
       saveStoredPreferences({
         defaultExchange,
         defaultMarketType,
         defaultTimeframe,
-        soundAlertsEnabled,
       });
 
       setSaveSuccess(true);
@@ -175,6 +174,13 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
             className={activeProfileSection === 'chart' ? 'rounded-lg border border-cyan-500/40 bg-cyan-950/50 px-4 py-2 text-xs font-bold text-cyan-200' : 'rounded-lg border border-slate-700 px-4 py-2 text-xs font-semibold text-slate-300 hover:text-white'}>
             <ChartCandlestick size={15} className="mr-1.5 inline-block" /> Графік
           </button>
+          <button type="button" role="tab" aria-selected={activeProfileSection === 'notifications'}
+            onClick={() => setActiveProfileSection('notifications')}
+            className={activeProfileSection === 'notifications'
+              ? 'rounded-lg border border-cyan-500/40 bg-cyan-950/50 px-4 py-2 text-xs font-bold text-cyan-200'
+              : 'rounded-lg border border-slate-700 px-4 py-2 text-xs font-semibold text-slate-300 hover:text-white'}>
+            <Bell size={15} className="mr-1.5 inline-block" /> Сповіщення
+          </button>
         </div>
 
         {/* Chart editor mounts only when selected; it does not mount a chart or open market sockets. */}
@@ -185,6 +191,8 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
             <Suspense fallback={<div role="status" className="p-5 text-sm text-cyan-300">Завантаження налаштувань графіка…</div>}>
               <ProfileHookChartSettings />
             </Suspense>
+          ) : activeProfileSection === 'notifications' ? (
+            <ProfileNotificationSettings />
           ) : <div className="space-y-5">
           {/* Install guide lives in the user's profile, not in the main header. */}
           <section className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-cyan-500/30 bg-slate-950/70 p-3">
@@ -419,26 +427,6 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                 <p className="mt-1 text-[11px] text-slate-500">Годинник і розклад торгових сесій у Терміналі. Літній час враховується автоматично.</p>
               </div>
 
-              {/* Sound toggle */}
-              <div className="flex items-center justify-between p-3 rounded-xl bg-slate-950 border border-slate-800/80">
-                <div className="flex items-center gap-2.5">
-                  <Bell className="w-4 h-4 text-cyan-400" />
-                  <div>
-                    <span className="text-xs font-semibold text-white block">
-                      Звукові сповіщення в браузері
-                    </span>
-                    <span className="text-[11px] text-slate-400 block">
-                      Відтворювати звуковий сигнал при спрацюванні алерту
-                    </span>
-                  </div>
-                </div>
-                <input
-                  type="checkbox"
-                  checked={soundAlertsEnabled}
-                  onChange={(e) => setSoundAlertsEnabled(e.target.checked)}
-                  className="w-4 h-4 rounded text-cyan-500 focus:ring-0 bg-slate-900 border-slate-700 cursor-pointer"
-                />
-              </div>
             </div>
 
             {/* Save Buttons */}
