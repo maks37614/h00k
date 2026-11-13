@@ -2377,12 +2377,12 @@
   min-width:26px;
   font-size:11px;
 }
-.hookchart-root .visualProfileCompact .visualProfileControls .settingRow:has(.settingsSwitch) {
+.hookchart-root .visualProfileCompact .visualProfileControls .settingRow.visualProfileAutoScaleRow {
   flex-direction:row;
   justify-content:space-between;
   align-items:center;
 }
-.hookchart-root .visualProfileCompact .visualProfileControls .settingRow:has(.settingsSwitch) .settingControl {
+.hookchart-root .visualProfileCompact .visualProfileControls .settingRow.visualProfileAutoScaleRow .settingControl {
   width:auto;
   flex:0 0 auto;
   justify-content:flex-end;
@@ -2536,5 +2536,14 @@
   }
   .hookchart-root .visualProfileCompact .visualProfileControls .settingControl .visualProfileRange {
     height:26px;
+  }
+}
+
+@media (max-height:650px) and (min-width:490px) and (max-width:680px) {
+  .hookchart-root .visualProfileCompact .visualProfileControls {
+    grid-template-columns:repeat(2,minmax(0,1fr));
+  }
+  .hookchart-root .visualProfileCompact .visualProfileControls .settingRow {
+    min-height:51px!important;
   }
 }
