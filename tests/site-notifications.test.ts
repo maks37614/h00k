@@ -149,6 +149,10 @@ test('browser notifications, sounds, old price toasts and cross-tab state are al
   assert.match(provider, /updatePreferences\(\{ soundAlertsEnabled: false \}\)/);
   assert.match(provider, /localStorage\.setItem\(siteNotificationMuteKey\(currentUid\)/);
   assert.match(provider, /browserPush && typeof document/);
+  assert.match(provider, /visibleBrowserNotificationsRef\.current\.add\(visible\)/);
+  assert.match(provider, /notification\.close\(\)/);
+  assert.match(provider, /if \(disabling\) \{\s*closeVisibleBrowserNotifications\(\)/);
+  assert.match(provider, /if \(!fromStorage\.enabled\) \{\s*closeVisibleBrowserNotifications\(\)/);
   assert.ok(provider.indexOf("apiFetch('/api/notification-preferences'", provider.indexOf('const updateSettings')) <
     provider.indexOf('await updateProfileData({', provider.indexOf('const updateSettings')),
     'mute the server first before the profile update');
