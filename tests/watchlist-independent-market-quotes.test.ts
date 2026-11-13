@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { request as httpRequest } from 'node:http';
+import { once } from 'node:events';
 import express from 'express';
 import { readFileSync } from 'node:fs';
 import {
@@ -79,8 +80,18 @@ test('Public API returns only requested symbols and rejects malformed batches', 
   const { feed, calls } = fakeFeed();
   installFavoriteQuoteRoutes(app, feed);
   const server = app.listen(0, '127.0.0.1');
-  const address = server.address();
-  assert.ok(address && typeof address !== 'string');
+  // Binding on 127.0.0.1 is async in Node 22; querying address() immediately
+  // can return null. Await listening before assertions and always close the server.
+  let address: ReturnType<typeof server.address>;
+  try {
+    await once(server, 'listening');
+    address = server.address();
+    assert.ok(address && typeof address !== 'string');
+  } catch (error) {
+    server.closeAllConnections();
+    server.close();
+    throw error;
+  }
   const submit = (keys: unknown) => new Promise<{ code: number; json: any; headers: any }>((resolve, reject) => {
     const data = JSON.stringify({ keys });
     const request = httpRequest({
@@ -108,6 +119,7 @@ test('Public API returns only requested symbols and rejects malformed batches', 
     assert.equal(bad.json.success, false);
     assert.equal(calls.length, 1);
   } finally {
+    server.closeAllConnections();
     await new Promise<void>((resolve, reject) => server.close(err => err ? reject(err) : resolve()));
   }
 });
