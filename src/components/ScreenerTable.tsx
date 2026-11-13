@@ -257,7 +257,7 @@ export const ScreenerTable: React.FC<ScreenerTableProps> = ({
                       <button
                         onClick={() => onSendMetaScalp(coin)}
                         className="p-1 sm:p-1.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 transition-all active:scale-95"
-                        title={`Відкрити в MetaScalp (Група ${metaScalpBinding})`}
+                        title={`Відкрити в обраному терміналі (Група ${metaScalpBinding})`}
                       >
                         <Zap className="w-3.5 h-3.5 text-amber-400 fill-amber-400/20" />
                       </button>
