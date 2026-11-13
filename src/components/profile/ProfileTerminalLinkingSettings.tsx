@@ -9,7 +9,7 @@ import {
 } from '../../utils/terminalLinkService';
 
 const inputClass = 'rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-100 focus:border-cyan-500 focus:outline-none';
-const GROUP_SOURCES: TerminalLinkSource[] = ['screener', 'formations', 'early', 'favorites', 'chart', 'terminal'];
+const GROUP_SOURCES: TerminalLinkSource[] = LINK_SOURCES.map(source => source.id);
 
 export const ProfileTerminalLinkingSettings: React.FC = () => {
   const { user, profile, updateProfileData } = useAuth();
@@ -171,14 +171,12 @@ export const ProfileTerminalLinkingSettings: React.FC = () => {
             <p className="text-[11px] text-slate-400">Натискання кнопок у вибраних розділах надсилатиме тільки монету, біржу й тип ринку (якщо підтримує термінал). Вимкнені джерела блокуються.</p>
             <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
               {LINK_SOURCES.map(({ id, label, description }) => {
-                const available = GROUP_SOURCES.includes(id);
                 return (
-                  <label key={id} className={`flex gap-2 rounded-lg border border-slate-800 bg-slate-900/60 p-2.5 ${available ? 'cursor-pointer' : 'opacity-60'}`}>
+                  <label key={id} className="flex cursor-pointer gap-2 rounded-lg border border-slate-800 bg-slate-900/60 p-2.5">
                     <input type="checkbox" className="mt-0.5 accent-cyan-500" checked={draft.sources[id]}
-                      disabled={!available} onChange={e => setSource(id, e.target.checked)}/>
+                      onChange={e => setSource(id, e.target.checked)}/>
                     <span className="min-w-0"><span className="block text-xs font-medium text-slate-100">{label}</span>
                       <span className="block text-[11px] text-slate-400">{description}</span>
-                      {!available && <span className="text-[10px] text-amber-300">Очікує інтеграції джерела сигналу</span>}
                     </span>
                   </label>
                 );
@@ -214,10 +212,14 @@ export const ProfileTerminalLinkingSettings: React.FC = () => {
                 <span className="mt-0.5 block text-[11px] text-slate-400">Якщо вимкнути, працюватимуть тільки кнопки ручної лінковки.</span>
               </span>
             </label>
-            <label className="flex items-start gap-2 text-xs text-slate-500">
-              <input type="checkbox" disabled checked={false} className="mt-0.5"/>
-              <span>Автоматично перемикати за новими сигналами
-                <span className="mt-0.5 block text-[11px]">Поки недоступно: необхідне підключення конкретних джерел сигналів та захист від небажаних перемикань.</span>
+            <label className="flex cursor-pointer items-start gap-2 text-xs text-slate-200">
+              <input type="checkbox" checked={draft.autoSignals} className="mt-0.5 accent-cyan-500"
+                onChange={e => change({ autoSignals: e.target.checked })}/>
+              <span>Автоматично перемикати за новими сповіщеннями
+                <span className="mt-0.5 block text-[11px] text-slate-400">
+                  Вимкнено за замовчуванням. Лише нові події з увімкненого Центру сповіщень, які мають тикер, біржу та ринок.
+                  Може перемкнути стакан під час вашої роботи — використовуйте обережно.
+                </span>
               </span>
             </label>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
