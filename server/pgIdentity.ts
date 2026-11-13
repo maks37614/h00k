@@ -4,14 +4,30 @@ import { Pool, type PoolClient } from 'pg';
 import nodemailer from 'nodemailer';
 import type { Request } from 'express';
 
-function deriveScrypt(password: string, salt: Buffer, length: number): Promise<Buffer> {
-  return new Promise((resolve, reject) => {
-    scryptCallback(password, salt, length, SCRYPT_OPTIONS, (error, derived) => {
-      if (error) reject(error);
-      else resolve(derived);
+// Hashing is intentionally capped on a 2-vCPU VPS; no unbounded scrypt work queue.
+let hashingActive = 0;
+const waitingHashes: Array<() => void> = [];
+async function deriveScrypt(password: string, salt: Buffer, length: number): Promise<Buffer> {
+  if (hashingActive >= 2) {
+    if (waitingHashes.length >= 16) throw new AuthFailure(429, 'Сервер авторизації зайнятий. Повторіть спробу.', 'AUTH_BUSY');
+    await new Promise<void>(resolve => { waitingHashes.push(resolve); });
+  } else {
+    hashingActive++;
+  }
+  try {
+    return await new Promise((resolve, reject) => {
+      scryptCallback(password, salt, length, SCRYPT_OPTIONS, (error, derived) => {
+        if (error) reject(error);
+        else resolve(derived);
+      });
     });
-  });
+  } finally {
+    // Transfer the same worker slot to the next waiting request.
+    const next = waitingHashes.shift();
+    if (next) next(); else hashingActive--;
+  }
 }
+
 const SESSION_DAYS = 30;
 const HASH_LENGTH = 64;
 const SCRYPT_COST = 32768;
@@ -95,7 +111,7 @@ export async function checkPassword(password: string, encoded: string): Promise<
     if (salt.length !== 16 || digest.length !== HASH_LENGTH) return false;
     const candidate = await deriveScrypt(password, salt, digest.length);
     return timingSafeEqual(candidate, digest);
-  } catch { return false; }
+  } catch (error) { if (error instanceof AuthFailure) throw error; return false; }
 }
 
 const baseUrl = () => {
