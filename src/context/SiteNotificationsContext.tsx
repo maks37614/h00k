@@ -36,7 +36,7 @@ const Context = createContext<SiteNotificationsValue | null>(null);
 export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, profile, updateProfileData } = useAuth();
   const { history } = useAlerts();
-  const { allEvents } = useSurveillance();
+  const { allEvents, coins: surveillanceCoins } = useSurveillance();
   const { preferences, updatePreferences } = useAppPreferences();
   const uid = user?.uid || 'guest';
 
@@ -71,6 +71,11 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
     setItemState({ uid, items: readNotificationItems(localStorage.getItem(siteNotificationStorageKey(uid))) });
     setError(null);
   }, [uid]);
+
+  useEffect(() => {
+    if (profile?.uid !== uid || typeof profile.soundAlertsEnabled !== 'boolean') return;
+    updatePreferences({ soundAlertsEnabled: profile.soundAlertsEnabled });
+  }, [uid, profile?.soundAlertsEnabled, updatePreferences]);
 
   useEffect(() => {
     if (profile?.uid !== uid || !profile.siteNotificationSettings) return;
@@ -157,7 +162,9 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
         timestamp: h.triggeredAt, read: true,
       });
     }
+    const ownedSurveillanceIds = new Set(surveillanceCoins.filter(coin => coin.userId === uid).map(coin => coin.id));
     if (settings.surveillance) for (const event of allEvents.slice(0, 80)) {
+      if (!ownedSurveillanceIds.has(event.coinId)) continue;
       if (!Number.isFinite(event.timestamp)) continue;
       const id = 'surveillance:' + event.coinId + ':' + event.id;
       if (existing.has(id)) continue;
@@ -172,7 +179,7 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
     if (collected.length) {
       replaceItems([...itemsRef.current, ...collected].sort((a, b) => b.timestamp - a.timestamp));
     }
-  }, [uid, settings.enabled, settings.price, settings.surveillance, history, allEvents, replaceItems]);
+  }, [uid, settings.enabled, settings.price, settings.surveillance, history, allEvents, surveillanceCoins, replaceItems]);
 
   // One direct WS per selected coin, never a global ticker REST loop.
   useEffect(() => {
