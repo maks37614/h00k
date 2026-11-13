@@ -104,12 +104,22 @@ test('Tiger acknowledges a correctly formatted setLinkSymbol command', async (t)
   assert.equal((await testTigerConnection(7819)).ok, true);
 });
 
-test('Vataga does not claim an unsupported API integration succeeded', async () => {
+test('paused Vataga selection fails closed without activating a fallback provider', async () => {
+  const saved = normalizeTerminalLinkSettings({ provider: 'vataga', enabled: true, autoSignals: true });
+  assert.equal(saved.provider, 'none');
+  assert.equal(saved.enabled, false);
+  assert.equal(saved.autoSignals, false);
   const result = await sendToSelectedTerminal('SOLUSDT', 'bybit', 'spot', 'screener',
-    normalizeTerminalLinkSettings({ provider: 'vataga' }), DEFAULT_METASCALP_SETTINGS);
+    saved, DEFAULT_METASCALP_SETTINGS);
   assert.equal(result.success, false);
-  assert.equal(result.terminal, 'vataga');
-  assert.match(result.message, /протокол/);
+  assert.equal(result.terminal, 'none');
+  assert.equal(result.copiedToClipboard, undefined);
+  assert.match(result.message, /вимкнена/);
+  const restored = getUserTerminalLinkSettings('owner-a', {
+    uid: 'owner-a', terminalLinkSettings: { ...DEFAULT_TERMINAL_LINK_SETTINGS, provider: 'vataga' },
+  });
+  assert.equal(restored.provider, 'none');
+  assert.equal(restored.enabled, false);
 });
 
 test('Tiger accepts only acknowledgement of the exact requested symbol and group', () => {
