@@ -31,6 +31,7 @@ import { useArchive } from './context/ArchiveContext';
 import { useSurveillance } from './context/SurveillanceContext';
 import { useLanguage } from './context/LanguageContext';
 import {
+  type MetaScalpSettings,
   playMetaScalpClickSound,
   getUserMetaScalpSettings,
 } from './utils/metaScalpService';
