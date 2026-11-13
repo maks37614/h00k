@@ -169,6 +169,9 @@ export function siteNotificationSettingsKey(uid: string): string {
 export function siteNotificationClearedAtKey(uid: string): string {
   return 'h00k_site_notifications_cleared_at_v1:' + (uid || 'guest');
 }
+export function siteNotificationSeenKey(uid: string): string {
+  return 'h00k_site_notifications_seen_v2:' + (uid || 'guest');
+}
 export function notificationEnabled(settings: SiteNotificationSettings, kind: SiteNotificationKind): boolean {
   if (!settings.optedIn || !settings.enabled) return false;
   const key = kind === 'volatility' ? 'impulses' : kind === 'formation' ? 'formations'
