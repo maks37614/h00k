@@ -1,6 +1,9 @@
 'use strict';
 
-const GAP = 6;
+// No gap at the terminal edge: the trading terminal and dock meet pixel-for-pixel.
+const DOCK_GAP = 0;
+// Separate spacing between multiple h00k panels (not between h00k and the terminal).
+const PANEL_GAP = 4;
 const MIN_WIDTH = 210;
 const MIN_HEIGHT = 140;
 function finiteRect(rect) {
@@ -22,26 +25,26 @@ function dockRects(target, work, side, width, height, count) {
   const workRight = work.x + work.width;
   const workBottom = work.y + work.height;
   const horizontal = side === 'right' || side === 'left';
-  const free = side === 'right' ? workRight - right - GAP
-    : side === 'left' ? target.x - work.x - GAP
-    : side === 'bottom' ? workBottom - bottom - GAP
-    : target.y - work.y - GAP;
+  const free = side === 'right' ? workRight - right - DOCK_GAP
+    : side === 'left' ? target.x - work.x - DOCK_GAP
+    : side === 'bottom' ? workBottom - bottom - DOCK_GAP
+    : target.y - work.y - DOCK_GAP;
   const thickness = Math.min(horizontal ? width : height, free);
   if (thickness < (horizontal ? MIN_WIDTH : MIN_HEIGHT)) return [];
 
   const startX = horizontal
-    ? side === 'right' ? right + GAP : target.x - thickness - GAP
+    ? side === 'right' ? right + DOCK_GAP : target.x - thickness - DOCK_GAP
     : clamp(target.x, work.x, workRight - Math.min(work.width, target.width));
   const startY = horizontal
     ? clamp(target.y, work.y, workBottom - Math.min(work.height, target.height))
-    : side === 'bottom' ? bottom + GAP : target.y - thickness - GAP;
+    : side === 'bottom' ? bottom + DOCK_GAP : target.y - thickness - DOCK_GAP;
   const longSize = horizontal ? Math.min(target.height, workBottom - startY)
     : Math.min(target.width, workRight - startX);
-  const segment = (longSize - GAP * (count - 1)) / count;
+  const segment = (longSize - PANEL_GAP * (count - 1)) / count;
   if (segment < (horizontal ? MIN_HEIGHT : MIN_WIDTH)) return [];
   return Array.from({length:count}, (_, index) => ({
-    x: Math.round(startX + (horizontal ? 0 : index * (segment + GAP))),
-    y: Math.round(startY + (horizontal ? index * (segment + GAP) : 0)),
+    x: Math.round(startX + (horizontal ? 0 : index * (segment + PANEL_GAP))),
+    y: Math.round(startY + (horizontal ? index * (segment + PANEL_GAP) : 0)),
     width: Math.round(horizontal ? thickness : segment),
     height: Math.round(horizontal ? segment : thickness),
   }));
@@ -52,12 +55,12 @@ function floatingRects(target, work, width, height, count, side = 'right') {
   const h = Math.min(height, work.height);
   const validTarget = finiteRect(target);
   const baseX = !validTarget ? work.x + 32
-    : side === 'left' ? target.x - w - GAP
+    : side === 'left' ? target.x - w - DOCK_GAP
     : side === 'top' || side === 'bottom' ? target.x + 32
-    : target.x + target.width + GAP;
+    : target.x + target.width + DOCK_GAP;
   const baseY = !validTarget ? work.y + 32
-    : side === 'top' ? target.y - h - GAP
-    : side === 'bottom' ? target.y + target.height + GAP
+    : side === 'top' ? target.y - h - DOCK_GAP
+    : side === 'bottom' ? target.y + target.height + DOCK_GAP
     : target.y + 32;
   return Array.from({length: count}, (_, index) => ({
     x: Math.round(clamp(baseX + index * 36, work.x, work.x + work.width - w)),

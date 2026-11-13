@@ -32,6 +32,7 @@ public static class H00kWindowAgent {
   [DllImport("user32.dll")] private static extern int GetWindowTextLengthW(IntPtr hwnd);
   [DllImport("user32.dll", CharSet=CharSet.Unicode)] private static extern int GetWindowTextW(IntPtr hwnd, StringBuilder text, int max);
   [DllImport("user32.dll")] private static extern bool GetWindowRect(IntPtr hwnd, out RECT rect);
+  [DllImport("dwmapi.dll")] private static extern int DwmGetWindowAttribute(IntPtr hwnd, int attribute, out RECT bounds, int size);
   [DllImport("user32.dll")] private static extern uint GetWindowThreadProcessId(IntPtr hwnd, out uint pid);
   [DllImport("user32.dll")] private static extern IntPtr GetWindow(IntPtr hwnd, uint command);
   [DllImport("user32.dll")] private static extern bool SetProcessDpiAwarenessContext(IntPtr value);
@@ -50,6 +51,14 @@ public static class H00kWindowAgent {
         GetWindowTextW(hwnd, title, title.Capacity);
         RECT bounds;
         if (!GetWindowRect(hwnd, out bounds)) return true;
+        // GetWindowRect may include invisible Windows resize borders (visible as a black seam).
+        // DWM's extended-frame bounds represent the actual visible target boundary.
+        RECT visible;
+        try {
+          if (DwmGetWindowAttribute(hwnd, 9, out visible, Marshal.SizeOf(typeof(RECT))) == 0
+            && visible.Right > visible.Left && visible.Bottom > visible.Top)
+            bounds = visible;
+        } catch { /* older Windows or DWM unavailable: use GetWindowRect */ }
         if (bounds.Right - bounds.Left < 140 || bounds.Bottom - bounds.Top < 80) return true;
         uint pid;
         GetWindowThreadProcessId(hwnd, out pid);
@@ -81,5 +90,5 @@ while ($true) {
     [Console]::Out.Flush()
   }
   if ($Once) { break }
-  Start-Sleep -Milliseconds 650
+  Start-Sleep -Milliseconds 160
 }
