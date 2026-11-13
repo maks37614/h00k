@@ -1,0 +1,33 @@
+name: h00k Desktop Windows
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'desktop/**'
+      - '.github/workflows/h00k-desktop-windows.yml'
+jobs:
+  windows-build:
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install desktop dependencies
+        run: npm install --no-audit --no-fund
+      - name: Validate desktop layout and state
+        run: npm test
+      - name: Compile and execute read-only Win32 window agent
+        run: powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File win-agent.ps1 -Once
+      - name: Build Windows installer
+        run: npm run dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: h00k-desktop-windows
+          path: desktop/dist/*.exe
+          if-no-files-found: error
