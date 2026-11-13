@@ -73,7 +73,7 @@ import { marketQuoteToChartCoin } from './utils/chartPageCoin';
 import {
   chartPageHash, readChartPageHash, sameChartPageRoute,
   saveChartPageSnapshot, readChartPageSnapshot, saveChartReturnHash, readChartReturnHash,
-  safeReturnHash, type ChartPageRoute, type ChartPageSnapshot,
+  safeReturnHash, chartPageVisualOrigin, chartPageVisualContext, type ChartPageRoute, type ChartPageSnapshot,
 } from './utils/chartPageRoute';
 
 const DEFAULT_FILTERS: ScreenerFilterState = {
@@ -827,6 +827,7 @@ export default function App() {
         exchange: selected.coin.exchange, marketType: selected.coin.marketType,
         symbol: selected.coin.symbol.toUpperCase(), timeframe: selected.coin.timeframe || preferences.defaultTimeframe,
         kind: 'coin', formationId: rawFormation?.id,
+        origin: activePage === 'patterns' ? 'formations' : 'screener',
       }, selected);
       if (terminalLinkSettings.enabled && terminalLinkSettings.switchOnChartOpen
         && (activePage !== 'patterns' || !earlyMode || terminalLinkSettings.sources.early)) {
@@ -943,13 +944,14 @@ export default function App() {
         exchange: matchingCoin.exchange, marketType: matchingCoin.marketType,
         symbol: matchingCoin.symbol.toUpperCase(), timeframe: archived.timeframe,
         kind: 'archive', formationId: archived.formation.id,
+        origin: activePage === 'screener' ? 'screener' : 'formations',
       }, { coin: matchingCoin, formation: archived.formation, archived });
       setIsArchiveModalOpen(false);
       if (terminalLinkSettings.enabled && terminalLinkSettings.switchOnChartOpen) {
         handleSendToMetaScalp(matchingCoin, 'formations');
       }
     },
-    [coins, terminalLinkSettings, handleSendToMetaScalp, openChartPage]
+    [coins, activePage, terminalLinkSettings, handleSendToMetaScalp, openChartPage]
   );
 
   // Browser Back/Forward switches between real Screener and chart pages.
@@ -1097,6 +1099,7 @@ export default function App() {
     openChartPage({
       exchange: chosen.exchange, marketType: chosen.marketType,
       symbol: chosen.symbol.toUpperCase(), timeframe: chosen.timeframe, kind: 'coin',
+      origin: chartRoute.origin,
     }, { coin: chosen }, true);
   }, [chartRoute, openChartPage]);
 
@@ -1107,6 +1110,7 @@ export default function App() {
     openChartPage({
       exchange: coin.exchange, marketType: coin.marketType,
       symbol: coin.symbol.toUpperCase(), timeframe, kind: 'coin',
+      origin: chartRoute.origin,
     }, { coin }, true);
   }, [chartRoute, selectedPair, openChartPage]);
 
@@ -1485,6 +1489,7 @@ export default function App() {
           ) : activeSelectedPair?.formation && chartRoute?.kind !== 'early' ? (
             <FormationDetailsModal
               pageMode
+              visualOrigin={chartPageVisualOrigin(chartRoute)}
               coin={activeSelectedPair.coin}
               formation={activeSelectedPair.formation}
               onFormationChange={(nextFormation) => {
@@ -1531,6 +1536,7 @@ export default function App() {
               )}
               <FullscreenChartModal
                 pageMode isOpen
+                visualContext={chartPageVisualContext(chartRoute, true)}
                 coin={selectedPair.coin}
                 formation={null}
                 currentTimeframe={chartRoute?.timeframe || selectedPair.coin.timeframe || preferences.defaultTimeframe}
