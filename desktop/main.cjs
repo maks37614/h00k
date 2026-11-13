@@ -307,7 +307,7 @@ function syncWindows() {
     if (!ready) { closeProvider(provider); lastDockStatus[provider] = 'Вимкнено'; continue; }
     const target = findTarget(provider);
     const layoutKey = floatingLayoutKey(profile);
-    const layoutChanged = lastLayoutKeys.get(provider) !== layoutKey;
+    const layoutChanged = lastLayoutKeys.has(provider) && lastLayoutKeys.get(provider) !== layoutKey;
     lastLayoutKeys.set(provider, layoutKey);
     if (!target) {
       if (profile.mode === 'floating') {
@@ -337,7 +337,6 @@ function syncWindows() {
     }
     hiddenProviders.delete(provider);
     const ids = availablePanels(profile);
-    const group = ensureContentWindows(provider, ids, profile.mode);
     const rect = externalRect(target);
     const work = screen.getDisplayMatching(rect).workArea;
     const boxes = profile.mode === 'floating'
@@ -348,6 +347,7 @@ function syncWindows() {
       hideDockedWindows(provider, 'Замало місця з вибраного боку; змініть сторону або розмір');
       continue;
     }
+    const group = ensureContentWindows(provider, ids, profile.mode);
     ids.forEach((id,index) => {
       const win = group.get(id);
       if (!win || win.isDestroyed()) return;
