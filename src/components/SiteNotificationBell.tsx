@@ -101,20 +101,20 @@ export const SiteNotificationBell: React.FC<{
                                 onClick={() => { setOpen(false); onOpenChart(item); }}
                                 aria-label={'Відкрити повний графік ' + symbol}
                                 title={'Відкрити графік ' + symbol}
-                                className="min-h-7 rounded px-1 font-mono font-bold text-cyan-200 underline decoration-cyan-600/50 underline-offset-2 hover:bg-cyan-950/60 hover:text-cyan-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400">
+                                className="min-h-7 rounded px-1 font-mono text-sm font-extrabold tracking-wide text-cyan-200 underline decoration-cyan-600/50 underline-offset-2 hover:bg-cyan-950/60 hover:text-cyan-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400 sm:text-base">
                                 {symbol}
                               </button>
                             ) : (
-                              <span className="font-mono text-cyan-200">{symbol}</span>
+                              <span className="font-mono text-sm font-extrabold tracking-wide text-cyan-200 sm:text-base">{symbol}</span>
                             )}
                             <button type="button"
                               onClick={event => { event.stopPropagation(); void copySymbol(item, symbol); }}
                               aria-label={'Скопіювати ' + symbol}
                               title={'Скопіювати лише ' + symbol}
-                              className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-slate-700/70 text-slate-400 hover:border-cyan-600/70 hover:text-cyan-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400">
+                              className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-slate-700/70 text-slate-400 hover:border-cyan-600/70 hover:text-cyan-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400">
                               {copyStatus?.id === item.id && copyStatus.success
-                                ? <Check aria-hidden="true" className="h-3.5 w-3.5 text-emerald-400" />
-                                : <Copy aria-hidden="true" className="h-3.5 w-3.5" />}
+                                ? <Check aria-hidden="true" className="h-3 w-3 text-emerald-400" />
+                                : <Copy aria-hidden="true" className="h-3 w-3" />}
                             </button>
                             {copyStatus?.id === item.id && (
                               <span role="status" className="sr-only">
