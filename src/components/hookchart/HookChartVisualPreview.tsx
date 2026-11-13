@@ -1,7 +1,6 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import type { ExchangeId, MarketType, Timeframe, HookChartPreferences } from '../../types';
-import { fetchDirectKlines } from '../../utils/directExchangeClient';
-import { toHookCandles } from '../../utils/hookchartData';
+import { createSyntheticPreviewCandles } from './syntheticPreviewCandles';
 import {
   Chart, ChartTimeAxis,
   type Alert, type Candle, type CascadeRisk, type Drawing, type Viewport, type ViewportGesture, type HookChartHandle,
@@ -12,14 +11,14 @@ import { captureVisualProfile, makeVisualProfileKey, VISUAL_GAP_MAX, type Visual
 const EMPTY_RISK: CascadeRisk = {
   score: 0, level: 'LOW', total5: 0, count5: 0, longUsd: 0, shortUsd: 0,
 };
-const EMPTY_CANDLES: Candle[] = [];
+const OFFLINE_CANDLES = createSyntheticPreviewCandles(900);
 const EMPTY_DENSITIES: [] = [];
 const EMPTY_MARKET_PRINTS: [] = [];
 const EMPTY_LIQUIDATIONS: [] = [];
 const EMPTY_AUTO_LEVELS: [] = [];
 
 interface HookChartVisualPreviewProps {
-  /** Reuse the parent HookChart OHLCV; absolutely no second market feed or socket. */
+  /** Legacy live-chart props are accepted for compatibility but never used here. */
   candles?: Candle[];
   symbol?: string;
   timeframe?: string;
@@ -38,20 +37,14 @@ interface HookChartVisualPreviewProps {
 }
 
 /**
- * Actual HookChart canvas engine used by live graphs, not an illustrative mock.
- * Standalone profile editor fetches OHLCV only for the explicitly selected
- * symbol/exchange/market/timeframe. No extra WebSockets or polling loops.
+ * Offline illustration rendered by the SAME HookChart viewport/price-scale engine.
+ * No parent candles, REST polling, exchange requests or WebSocket subscriptions.
+ * Only this small canvas is mounted while the Graph-settings tab is visible.
  */
 export function HookChartVisualPreview({
-  candles,
-  symbol,
-  timeframe,
-  exchange,
-  marketType,
   timezone = 'Europe/Warsaw',
   longColor = '#0ECB81',
   shortColor = '#F6465D',
-  marketDefaults,
   chartPreferences,
   visualContext,
   visualDevice,
@@ -59,16 +52,7 @@ export function HookChartVisualPreview({
   onChange,
   saveStatus = 'idle',
 }: HookChartVisualPreviewProps) {
-  const [marketSymbolDraft, setMarketSymbolDraft] = useState('BTCUSDT');
-  const [marketSymbol, setMarketSymbol] = useState('BTCUSDT');
-  const [marketExchange, setMarketExchange] = useState<ExchangeId>(marketDefaults?.exchange || 'binance');
-  const [marketTypeSelected, setMarketTypeSelected] = useState<MarketType>(marketDefaults?.marketType || 'futures');
-  const [marketTimeframe, setMarketTimeframe] = useState<Timeframe>(marketDefaults?.timeframe || '15m');
-  const [requestVersion, setRequestVersion] = useState(0);
-  const [sample, setSample] = useState<{ scope: string; rows: Candle[] }>({ scope: '', rows: EMPTY_CANDLES });
   const [chartWidth, setChartWidth] = useState(0);
-  const [sampleLoading, setSampleLoading] = useState(false);
-  const [sampleError, setSampleError] = useState(false);
   const [visualProfileCaptureVersion, setVisualProfileCaptureVersion] = useState(0);
   const [saveRequested, setSaveRequested] = useState(false);
   const [gestureEdited, setGestureEdited] = useState(false);
@@ -84,40 +68,12 @@ export function HookChartVisualPreview({
   const [drawings, setDrawings] = useState<Drawing[]>([]);
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const previewRef = useRef<HTMLDivElement>(null);
-  // An attached live chart may still be waiting for its first candle. In that
-  // case don't make a redundant REST call just to fill the preview.
-  const useParentCandles = candles !== undefined;
-  const sampleScope = [marketExchange, marketTypeSelected, marketSymbol, marketTimeframe].join(':');
-  const applySymbol = () => {
-    const cleaned = marketSymbolDraft.trim().toUpperCase().replace(/[\s/-]/g, '');
-    if (!/^[A-Z0-9]{2,25}(USDT|USDC|BTC|ETH)$/.test(cleaned)) {
-      setSampleError(true);
-      return;
-    }
-    setSampleError(false);
-    setMarketSymbol(cleaned);
-    setMarketSymbolDraft(cleaned);
-  };
 
-  useEffect(() => {
-    if (useParentCandles) return;
-    let active = true;
-    setSampleLoading(true);
-    setSampleError(false);
-    // Fetch only on explicit market selection, never on slider or zoom updates.
-    void fetchDirectKlines(marketExchange, marketTypeSelected, marketSymbol, marketTimeframe, 900)
-      .then(rows => {
-        if (!active) return;
-        const converted = toHookCandles(rows);
-        setSample({ scope: sampleScope, rows: converted });
-        setSampleError(converted.length === 0);
-      })
-      .catch(() => { if (active) setSampleError(true); })
-      .finally(() => { if (active) setSampleLoading(false); });
-    return () => { active = false; };
-  }, [useParentCandles, sampleScope, requestVersion, marketExchange, marketTypeSelected, marketSymbol, marketTimeframe]);
-  
-  // Measure the rendered canvas instead of simulating a fixed 354/550/760px chart.
+  // Module-level deterministic data. No network call, per-candle subscription,
+  // interval or computation of live market indicators can be initiated here.
+  const activeCandles = OFFLINE_CANDLES;
+  const activeSymbol = 'DEMO';
+  const activeTimeframe = '15m';
   useEffect(() => {
     const root = previewRef.current;
     if (!root || typeof ResizeObserver === 'undefined') return;
@@ -126,17 +82,8 @@ export function HookChartVisualPreview({
     const observer = new ResizeObserver(update);
     observer.observe(root);
     return () => observer.disconnect();
-  }, [useParentCandles, sampleScope, sample.scope, candles?.length]);
+  }, []);
 
-  const activeCandles = useMemo(
-    () => (useParentCandles ? candles! : sample.scope === sampleScope ? sample.rows : EMPTY_CANDLES).slice(-900),
-    [useParentCandles, candles, sample, sampleScope],
-  );
-  const activeSymbol = useParentCandles ? (symbol || '—') : marketSymbol;
-  const activeTimeframe = useParentCandles ? (timeframe || '15m') : marketTimeframe;
-  const selectedExchange = useParentCandles ? (exchange || 'binance') : marketExchange;
-  const selectedMarket = useParentCandles ? (marketType || 'futures') : marketTypeSelected;
-  const marketDescription = `${selectedExchange === 'bybit' ? 'Bybit' : 'Binance'} · ${selectedMarket === 'spot' ? 'Spot' : 'Futures'}`;
   const measuredSlots = chartWidth > 0 && viewport.barWidth > 0
     ? Math.max(0, Math.round(hookChartPlotWidth(chartWidth) / viewport.barWidth - profile.rightGapBars))
     : null;
@@ -230,53 +177,20 @@ export function HookChartVisualPreview({
   }, [activeCandles, viewport, profile, visualContext, onChange]);
 
   return (
-    <div className="hookchart-visual-preview" data-real-hookchart="true">
-      {!useParentCandles && (
-        <div className="hookchart-live-market-selector" role="group" aria-label="Вибір реального ринку для HookChart">
-          <label>Монета
-            <input aria-label="Монета HookChart у профілі" value={marketSymbolDraft}
-              onChange={event => setMarketSymbolDraft(event.target.value.toUpperCase())}
-              onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); applySymbol(); } }}
-              onBlur={applySymbol} maxLength={28} spellCheck={false} autoCapitalize="characters" />
-          </label>
-          <label>Біржа
-            <select aria-label="Біржа HookChart у профілі" value={marketExchange}
-              onChange={event => setMarketExchange(event.target.value as ExchangeId)}>
-              <option value="binance">Binance</option><option value="bybit">Bybit</option>
-            </select>
-          </label>
-          <label>Ринок
-            <select aria-label="Ринок HookChart у профілі" value={marketTypeSelected}
-              onChange={event => setMarketTypeSelected(event.target.value as MarketType)}>
-              <option value="futures">Futures</option><option value="spot">Spot</option>
-            </select>
-          </label>
-          <label>Таймфрейм
-            <select aria-label="Таймфрейм HookChart у профілі" value={marketTimeframe}
-              onChange={event => setMarketTimeframe(event.target.value as Timeframe)}>
-              {(['1m','5m','15m','1h','4h','1d'] as const).map(tf => <option key={tf} value={tf}>{tf}</option>)}
-            </select>
-          </label>
-          <button type="button" className="hookchart-live-refresh"
-            onClick={() => setRequestVersion(x => x + 1)}>Оновити свічки</button>
-        </div>
-      )}
+    <div className="hookchart-visual-preview" data-synthetic-hookchart="true">
       <div className="hookchart-visual-preview-caption">
-        <strong>{activeSymbol}</strong>
-        <span>{activeTimeframe}</span>
-        <span>{marketDescription}</span>
-        <span className="hookchart-visual-preview-live">
-          {useParentCandles ? 'Дані відкритого HookChart' : 'Свічки вибраної біржі · реальний HookChart'}
-        </span>
+        <strong>DEMO</strong>
+        <span>15m</span>
+        <span>Штучні свічки</span>
+        <span className="hookchart-visual-preview-live">Без біржових запитів</span>
       </div>
-      {activeCandles.length ? (
-        <>
+      <>
           <div className="hookchart-visual-preview-frame">
             <div ref={previewRef} className="hookchart-visual-preview-chart"
               onPointerDownCapture={rememberDragStart}
               onWheelCapture={rememberDragStart}>
               <Chart
-                key={`${selectedExchange}:${selectedMarket}:${activeSymbol}:${activeTimeframe}`}
+                key="offline-demo-15m"
                 controlRef={chartControl}
                 candles={activeCandles}
                 symbol={activeSymbol}
@@ -325,7 +239,7 @@ export function HookChartVisualPreview({
             <span>Вертикальний масштаб: <b>{profile.verticalZoom}×</b></span>
           </div>
           <div className="hookchart-visual-preview-actions">
-            <span>Рухай і масштабуй реальний графік пальцем або мишею. Масштаб і відступ зберігаються у відповідному профілі.</span>
+            <span>Рухай і масштабуй штучний графік пальцем або мишею. Масштаб і відступ зберігаються у відповідному профілі.</span>
             <button type="button" onClick={focusLatest}>Автофокус</button>
             <button type="button" onClick={saveChartScale}>Зберегти масштаб</button>
           </div>
@@ -335,18 +249,7 @@ export function HookChartVisualPreview({
               : saveStatus === 'saving' ? 'Зберігаємо масштаб у профілі…'
               : 'Зміни з графіка передані до налаштувань під ним; збереження профілю виконується автоматично.'}
           </div>}
-        </>
-      ) : (
-        <div className="hookchart-visual-preview-empty" role="status">
-          {sampleLoading
-            ? `Завантажуємо свічки ${activeSymbol} · ${marketDescription} · ${activeTimeframe}…`
-            : sampleError
-              ? `Не вдалося отримати свічки ${activeSymbol} з ${marketDescription}. Перевір монету/ринок або натисни «Оновити свічки».`
-              : useParentCandles
-                ? 'Очікуємо реальні свічки поточної монети…'
-                : 'Очікування справжніх біржових свічок…'}
-        </div>
-      )}
+      </>
       {typeof window !== 'undefined' && visualDevice !== (window.innerWidth < 768 ? 'mobile' : 'desktop') && (
         <p className="hookchart-device-notice">
           Обрано профіль «{visualDevice === 'desktop' ? 'Комп’ютер' : 'Телефон'}», але редактор відкрито
@@ -354,10 +257,10 @@ export function HookChartVisualPreview({
         </p>
       )}
       <p className="hookchart-visual-preview-info">
-        Це той самий рушій HookChart, що використовується на сайті; без демонстраційних свічок.
-        Масштаб і відступ розраховуються за фактичною шириною. Редактор завантажує справжні свічки
-        тільки при виборі ринку й не створює нових WebSocket-з'єднань.
-        На іншому пристрої кількість видимих свічок залежить від розміру його графіка.
+        Штучні свічки (не ринкові дані) відображає той самий рушій HookChart, який розраховує
+        масштаб, правий відступ і шкалу цін на сайті. Жодних запитів до бірж чи окремих WebSocket.
+        Результат зберігається для вибраного типу графіка та пристрою. На інших розмірах
+        екрана геометрія масштабу перераховується за реальною шириною області графіка.
       </p>
     </div>
   );
