@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { HookChartDensityBook } from '../src/components/hookchart/densityBook';
 import { ORDER_BOOK_MAX_AGE_MS } from '../src/utils/orderBookValidation';
+import type { BookUpdate } from '../src/utils/binanceOrderBook';
 
 const feed = readFileSync(new URL('../src/components/hookchart/useOriginalHookChartLiveFeed.ts', import.meta.url), 'utf8');
 
@@ -27,7 +28,7 @@ test('exchange depth readiness is withdrawn when the order book expires', () => 
   const now = Date.now();
   const base = book.read({} as any, 0, now);
   assert.equal(base.depthReady, false);
-  const snapshot = {
+  const snapshot: BookUpdate = {
     isSnapshot: true, sequence: 100, eventTime: now,
     bids: [[99, 100]], asks: [[101, 100]],
   };
