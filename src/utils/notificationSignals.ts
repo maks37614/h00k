@@ -217,3 +217,29 @@ export function liquidationNotificationSignal(
     description: 'Обсяг ' + formatPrice(row.usd) + ' · ' + source.exchange.toUpperCase(),
   };
 }
+
+/** Side-specific, de-duplicated 5-minute liquidation cascade; live trades only. */
+export class LiquidationCascadeTracker {
+  private rows = new Map<string, LiquidationNotificationRow>();
+  private lastBySide = new Map<string, number>();
+  push(row: LiquidationNotificationRow, minUsd: number, now = Date.now()):
+    { side: 'LONG' | 'SHORT'; usd: number; count: number } | null {
+    if (!row || !row.id || !['LONG','SHORT'].includes(row.side)
+      || !finite(row.usd) || row.usd <= 0 || !finite(row.t)) return null;
+    const cutoff = now - 5 * 60_000;
+    for (const [id, previous] of this.rows) if (previous.t < cutoff) this.rows.delete(id);
+    if (row.t < cutoff || row.t > now + 10_000) return null;
+    const previous = this.rows.get(row.id);
+    if (previous && (previous.side !== row.side || row.usd <= previous.usd)) return null;
+    this.rows.set(row.id, row);
+    if (this.rows.size > 1000) this.rows.delete(this.rows.keys().next().value!);
+    const selected = [...this.rows.values()].filter(item => item.side === row.side);
+    const total = selected.reduce((sum, item) => sum + item.usd, 0);
+    const threshold = Math.max(1000, minUsd);
+    if (selected.length < 3 || total < threshold * 3) return null;
+    const last = this.lastBySide.get(row.side) || 0;
+    if (last && now - last < 5 * 60_000) return null;
+    this.lastBySide.set(row.side, now);
+    return { side: row.side, usd: Math.round(total), count: selected.length };
+  }
+}
