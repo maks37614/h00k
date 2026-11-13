@@ -160,6 +160,18 @@ export function scanNotificationSignals(
       }
     }
     const i = coin.regularIndicators;
+    // Diagnostic events are optional and use actual exchange data statuses.
+    const oiFault = i?.oiAvailability;
+    if (coin.marketType === 'futures'
+      && (oiFault === 'stale-history' || oiFault === 'rate-limited'
+        || oiFault === 'network-error' || oiFault === 'http-error')) {
+      emit(coin, 'system', 'oi:' + oiFault, 'Дані OI недоступні · ' + coin.symbol,
+        'Причина: ' + oiFault + ' · перевірка потоку даних потрібна');
+    }
+    if (Number.isFinite(coin.lastUpdated) && now - coin.lastUpdated > 5 * 60_000) {
+      emit(coin, 'system', 'stale-market', 'Застарілі котирування · ' + coin.symbol,
+        'Дані останнього сканування старші за 5 хвилин');
+    }
     // These are exchange-data anomalies, not inferred position directions.
     if (coin.marketType === 'futures' && finite(i?.oiChangePct)
         && Math.abs(i.oiChangePct) >= settings.oiThresholdPct) {
