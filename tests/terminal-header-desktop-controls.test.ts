@@ -8,7 +8,10 @@ const secondRow = header.slice(header.lastIndexOf('grid w-full min-w-0 grid-cols
 
 test('desktop clock is centered above the timeframe, not above the whole control group', () => {
   assert.equal((header.match(/grid-cols-\[minmax\(0,1fr\)_auto_minmax\(0,1fr\)\]/g) ?? []).length, 2);
-  assert.match(header, /<TerminalClock timeZone=\{profile\?\.timeZone\}/);
+  // The first column's auto-scale control is lg:hidden; without an explicit
+  // grid-column assignment, CSS Grid would place the clock in column one.
+  assert.match(header, /<div className="col-start-2 row-start-1 justify-self-center">\s*<TerminalClock timeZone=\{profile\?\.timeZone\}/);
+  assert.match(header, /col-start-3 row-start-1 flex shrink-0 items-center justify-self-end/);
   assert.match(secondRow, /col-start-2 row-start-1 flex shrink-0 items-center justify-self-center/);
   assert.doesNotMatch(secondRow, /contents lg:col-start-2 lg:row-start-1 lg:flex/);
 });

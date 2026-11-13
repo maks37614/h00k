@@ -756,8 +756,12 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
             {renderAutoScaleButton()}
           </div>
 
-          <TerminalClock timeZone={profile?.timeZone} open={showTradingSessions} buttonRef={clockButtonRef}
-            onOpenChange={setShowTradingSessions} onOpen={() => setShowCoinPresets(false)} />
+          {/* Explicit center-column placement keeps the clock at the page midpoint
+              even when the autoscale button is hidden on desktop. */}
+          <div className="col-start-2 row-start-1 justify-self-center">
+            <TerminalClock timeZone={profile?.timeZone} open={showTradingSessions} buttonRef={clockButtonRef}
+              onOpenChange={setShowTradingSessions} onOpen={() => setShowCoinPresets(false)} />
+          </div>
 
           {/* Telegram, MetaScalp, Settings, Fullscreen */}
           <div className="col-start-3 row-start-1 flex shrink-0 items-center justify-self-end gap-0 min-[375px]:gap-0.5 sm:gap-2">
