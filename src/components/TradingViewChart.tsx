@@ -33,6 +33,9 @@ import { CHART_TRADE_LEVELS_EVENT, chartTradeLevelStorageKey, normalizeChartTrad
 import { HookChart } from './HookChart';
 import type { TerminalToolbarVisibility } from './hookchart/HookChartCanvas';
 import type { HookChartHandle } from './hookchart/engine';
+import { subscribeSharedKlines } from './hookchart/sharedKlineStream';
+import { subscribeMarketTrades } from './hookchart/marketTradeStream';
+import { fetchSharedLiveFallbackKline } from './hookchart/sharedLiveFallback';
 import type { VisualChartProfile, VisualContextId } from './hookchart/visualProfiles';
 
 interface TradingViewChartProps {
@@ -73,32 +76,6 @@ interface TradingViewChartProps {
   hookchartToolbarActions?: React.ReactNode;
   hookchartToolbarOverlays?: React.ReactNode;
   onLiveStatusChange?: (status: { isConnected: boolean; mode: 'ws' | 'rest' }) => void;
-}
-
-// Convert timeframe string to Binance WS interval
-function toBinanceWsInterval(tf: string): string {
-  switch (tf) {
-    case '1m': return '1m';
-    case '5m': return '5m';
-    case '15m': return '15m';
-    case '1h': return '1h';
-    case '4h': return '4h';
-    case '1d': return '1d';
-    default: return '1h';
-  }
-}
-
-// Convert timeframe string to Bybit WS interval
-function toBybitWsInterval(tf: string): string {
-  switch (tf) {
-    case '1m': return '1';
-    case '5m': return '5';
-    case '15m': return '15';
-    case '1h': return '60';
-    case '4h': return '240';
-    case '1d': return 'D';
-    default: return '60';
-  }
 }
 
 // Calculate remaining time until the active candle closes based on the timeframe
@@ -855,267 +832,113 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
     }
   }, [effectiveKlines, formation, customMarkers, showEntryLevel, showTargetLevel, showStopLevel, savedChartParams, chartProvider, previewMarkers]);
 
-  // Real-Time Live Stream Connection (Combined Trade + Kline WebSocket with fast failover)
+  const liveTickHandlerRef = useRef(handleLiveTick);
+  liveTickHandlerRef.current = handleLiveTick;
+
+  // Live mode only: ReplayChart is a separate historical renderer and NEVER
+  // subscribes to these public-market streams. A browser tab shares one
+  // exchange kline feed per instrument/TF and one trade feed per instrument.
   useEffect(() => {
-    let isDisposed = false;
-    let ws: WebSocket | null = null;
-    let pollInterval: any = null;
-    let reconnectTimer: any = null;
-    let pingInterval: any = null;
-
+    let disposed = false;
+    let wsConnected = false;
+    let lastExchangePriceAt = 0;
+    let polling = false;
+    let fallbackFailures = 0;
+    let nextFallbackAt = Date.now() + 2000 + Math.floor(Math.random() * 1000);
     const cleanSymbol = normalizeExchangeSymbol(symbol);
+    const intervalMs = ({
+      '1m': 60_000, '5m': 300_000, '15m': 900_000,
+      '1h': 3600_000, '4h': 14400_000, '1d': 86400_000,
+    } as Record<string, number>)[timeframe] || 3600_000;
 
-    const connectWs = () => {
-      if (isDisposed) return;
+    const stopKlines = subscribeSharedKlines(
+      { exchange, marketType, symbol: cleanSymbol, timeframe },
+      {
+        onStatus: connected => {
+          if (disposed) return;
+          wsConnected = connected;
+          setIsLiveConnected(connected);
+          if (connected) { setLiveMode('ws'); fallbackFailures = 0; }
+        },
+        onCandle: candle => {
+          if (disposed) return;
+          const eventAt = Number(candle.eventTime) || Date.now();
+          const current = currentCandleRef.current;
+          // Separate trade and kline sockets are not guaranteed to deliver in
+          // global order. A slightly older kline still supplies authoritative
+          // CUMULATIVE OHLCV, but must not undo a more recent trade price.
+          const corrected = current && current.time === candle.time &&
+            eventAt < lastExchangePriceAt
+            ? { ...candle, close: current.close,
+                high: Math.max(candle.high, current.high, current.close),
+                low: Math.min(candle.low, current.low, current.close) }
+            : candle;
+          if (!current || candle.time > current.time) lastExchangePriceAt = eventAt;
+          else lastExchangePriceAt = Math.max(lastExchangePriceAt, eventAt);
+          liveTickHandlerRef.current(corrected, 'ws');
+        },
+      },
+    );
 
-      try {
-        if (exchange === 'binance') {
-          const interval = toBinanceWsInterval(timeframe);
-          const baseWs =
-            marketType === 'futures'
-              ? 'wss://fstream.binance.com/market/stream?streams='
-              : 'wss://stream.binance.com:9443/stream?streams=';
-          const symLower = encodeURIComponent(cleanSymbol.toLowerCase());
-          // Combined stream: real-time klines + millisecond aggregated trades for 0 latency price ticks
-          const wsUrl = `${baseWs}${symLower}@kline_${interval}/${symLower}@aggTrade`;
+    const stopTrades = subscribeMarketTrades(
+      { exchange, marketType, symbol: cleanSymbol },
+      {
+        // REST seed is for analytics/density history, never a live candle tick.
+        liveOnly: true,
+        wantsPrints: () => false,
+        onPrints: () => {},
+        onTrade: trade => {
+          if (disposed || !Number.isFinite(trade.p) || trade.p <= 0) return;
+          const current = currentCandleRef.current;
+          if (!current || trade.t <= lastExchangePriceAt ||
+              trade.t < current.time * 1000 ||
+              trade.t >= current.time * 1000 + intervalMs) return;
+          lastExchangePriceAt = trade.t;
+          liveTickHandlerRef.current({
+            ...current, close: trade.p,
+            high: Math.max(current.high, trade.p),
+            low: Math.min(current.low, trade.p),
+            // The kline stream is the authoritative source of candle volume.
+            // Adding aggregate trades here double-counted overlapping ticks.
+            volume: current.volume,
+          }, 'ws');
+        },
+      },
+    );
 
-          ws = new WebSocket(wsUrl);
-
-          ws.onmessage = (event) => {
-            if (isDisposed) return;
-            try {
-              const raw = JSON.parse(event.data);
-              const stream = raw.stream || '';
-              const payload = raw.data || raw;
-
-              if (stream.includes('@kline') || payload.e === 'kline') {
-                const k = payload.k || payload;
-                const candleTime = Math.floor(k.t / 1000);
-                const open = parseFloat(k.o);
-                const high = parseFloat(k.h);
-                const low = parseFloat(k.l);
-                const close = parseFloat(k.c);
-                const volume = parseFloat(k.v);
-
-                handleLiveTick(
-                  {
-                    time: candleTime,
-                    open,
-                    high,
-                    low,
-                    close,
-                    volume,
-                  },
-                  'ws'
-                );
-              } else if (stream.includes('@aggTrade') || payload.e === 'aggTrade') {
-                // Immediate millisecond trade execution tick
-                const price = parseFloat(payload.p);
-                const qty = parseFloat(payload.q || 0);
-                if (price > 0 && currentCandleRef.current) {
-                  const cur = currentCandleRef.current;
-                  const updated = {
-                    ...cur,
-                    close: price,
-                    high: Math.max(cur.high, price),
-                    low: Math.min(cur.low, price),
-                    volume: (cur.volume || 0) + qty,
-                  };
-                  handleLiveTick(updated, 'ws');
-                }
-              }
-            } catch {
-              // Ignored
-            }
-          };
-
-          ws.onopen = () => {
-            if (!isDisposed) {
-              setIsLiveConnected(true);
-              setLiveMode('ws');
-            }
-          };
-
-          ws.onclose = () => {
-            if (!isDisposed && !reconnectTimer) {
-              setIsLiveConnected(false);
-              reconnectTimer = setTimeout(() => {
-                reconnectTimer = null;
-                connectWs();
-              }, 800);
-            }
-          };
-
-          ws.onerror = () => {
-            try {
-              ws?.close();
-            } catch {}
-          };
-        } else {
-          // Bybit
-          const wsUrl =
-            marketType === 'futures'
-              ? 'wss://stream.bybit.com/v5/public/linear'
-              : 'wss://stream.bybit.com/v5/public/spot';
-
-          ws = new WebSocket(wsUrl);
-
-          ws.onopen = () => {
-            if (isDisposed) return;
-            setIsLiveConnected(true);
-            setLiveMode('ws');
-            try {
-              const interval = toBybitWsInterval(timeframe);
-              ws?.send(
-                JSON.stringify({
-                  op: 'subscribe',
-                  args: [
-                    `kline.${interval}.${cleanSymbol}`,
-                    `publicTrade.${cleanSymbol}`,
-                  ],
-                })
-              );
-              // Send ping every 20 seconds to keep Bybit connection alive
-              if (pingInterval) clearInterval(pingInterval);
-              pingInterval = setInterval(() => {
-                if (ws && ws.readyState === WebSocket.OPEN) {
-                  ws.send(JSON.stringify({ op: 'ping' }));
-                }
-              }, 20000);
-            } catch {
-              // Ignored
-            }
-          };
-
-          ws.onmessage = (event) => {
-            if (isDisposed) return;
-            try {
-              const data = JSON.parse(event.data);
-              if (data.topic && data.topic.startsWith('kline')) {
-                const rawData = data.data;
-                const items = Array.isArray(rawData) ? rawData : [rawData];
-                if (items.length > 0 && items[0]) {
-                  const item = items[0];
-                  const ts = parseInt(item.start || item.timestamp || item.t || Date.now(), 10);
-                  const open = parseFloat(item.open || item.o || 0);
-                  const high = parseFloat(item.high || item.h || 0);
-                  const low = parseFloat(item.low || item.l || 0);
-                  const close = parseFloat(item.close || item.c || 0);
-                  const volume = parseFloat(item.volume || item.v || 0);
-
-                  if (close > 0) {
-                    handleLiveTick(
-                      {
-                        time: Math.floor(ts / 1000),
-                        open,
-                        high,
-                        low,
-                        close,
-                        volume,
-                      },
-                      'ws'
-                    );
-                  }
-                }
-              } else if (data.topic && data.topic.startsWith('publicTrade')) {
-                // Immediate millisecond trade execution tick from Bybit
-                const trades = Array.isArray(data.data) ? data.data : [data.data];
-                if (trades.length > 0 && currentCandleRef.current) {
-                  let lastPrice = 0;
-                  let addedVol = 0;
-                  for (const t of trades) {
-                    const p = parseFloat(t.p || t.price || 0);
-                    const v = parseFloat(t.v || t.size || 0);
-                    if (p > 0) {
-                      lastPrice = p;
-                      addedVol += v;
-                    }
-                  }
-                  if (lastPrice > 0) {
-                    const cur = currentCandleRef.current;
-                    const updated = {
-                      ...cur,
-                      close: lastPrice,
-                      high: Math.max(cur.high, lastPrice),
-                      low: Math.min(cur.low, lastPrice),
-                      volume: (cur.volume || 0) + addedVol,
-                    };
-                    handleLiveTick(updated, 'ws');
-                  }
-                }
-              }
-            } catch {
-              // Ignored
-            }
-          };
-
-          ws.onclose = () => {
-            if (pingInterval) clearInterval(pingInterval);
-            if (!isDisposed && !reconnectTimer) {
-              setIsLiveConnected(false);
-              reconnectTimer = setTimeout(() => {
-                reconnectTimer = null;
-                connectWs();
-              }, 800);
-            }
-          };
-
-          ws.onerror = () => {
-            try {
-              ws?.close();
-            } catch {}
-          };
-        }
-      } catch {
-        // WS setup failed, fallback poller will operate
-      }
-    };
-
-    connectWs();
-
-    // Maintain the original 2s failover when WS is actually disconnected.
-    // An open WS can have no trades for minutes on illiquid coins: do not
-    // interpret silence as disconnection and hammer REST every two seconds.
-    let lastConnectedFallback = 0;
     const runFastPoll = async () => {
-      if (isDisposed) return;
+      if (disposed || polling || document.visibilityState === 'hidden') return;
       const now = Date.now();
-      if (ws && ws.readyState === WebSocket.OPEN) {
-        if (now - lastTickTimeRef.current < 5_000) return;
-        if (now - lastConnectedFallback < 15_000) return;
-        lastConnectedFallback = now;
-      }
-
+      if (wsConnected && now - lastTickTimeRef.current < 5000) return;
+      if (now < nextFallbackAt) return;
+      // Exponential backoff + jitter prevents reconnect storms hitting VPS.
+      const wait = wsConnected ? 30_000 :
+        Math.min(20_000, 4000 * 2 ** Math.min(4, fallbackFailures));
+      nextFallbackAt = now + wait + Math.floor(Math.random() * 1500);
+      polling = true;
       try {
-        const res = await fetch(
-          `/api/klines?exchange=${exchange}&market=${marketType}&symbol=${encodeURIComponent(cleanSymbol)}&timeframe=${timeframe}&limit=3`
-        );
-        const json = await res.json();
-        if (!isDisposed && json.success && Array.isArray(json.data) && json.data.length > 0) {
-          const latest = json.data[json.data.length - 1];
-          handleLiveTick(latest, 'rest');
-        }
+        const latest = await fetchSharedLiveFallbackKline(exchange, marketType, cleanSymbol, timeframe);
+        if (disposed) return;
+        if (!latest) { fallbackFailures++; return; }
+        // Even a successful REST fallback must back off while WS stays down;
+        // otherwise an exchange outage creates a permanent 4s VPS poll storm.
+        if (!wsConnected) fallbackFailures++;
+        else fallbackFailures = 0;
+        liveTickHandlerRef.current(latest, 'rest');
       } catch {
-        // Ignored
+        fallbackFailures++;
+      } finally {
+        polling = false;
       }
     };
-
-    pollInterval = setInterval(runFastPoll, 2000);
-
+    const pollInterval = setInterval(() => void runFastPoll(), 2000);
     return () => {
-      isDisposed = true;
-      if (reconnectTimer) clearTimeout(reconnectTimer);
-      if (pollInterval) clearInterval(pollInterval);
-      if (pingInterval) clearInterval(pingInterval);
-      if (ws) {
-        try {
-          ws.close();
-        } catch {
-          // Ignored
-        }
-      }
+      disposed = true;
+      clearInterval(pollInterval);
+      stopTrades();
+      stopKlines();
     };
-  }, [symbol, timeframe, exchange, marketType, handleLiveTick]);
+  }, [symbol, timeframe, exchange, marketType]);
 
   // One control always changes all three plotted levels together, regardless
   // of chart provider, page or fullscreen state.

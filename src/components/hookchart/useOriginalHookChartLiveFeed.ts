@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'reac
 import type { ExchangeId, HookChartPreferences, MarketType } from '../../types';
 import { adaptiveCut, atr, quantile, type MarketPrint } from './marketAnalytics';
 import { getSharedMarketPrints, subscribeMarketTrades } from './marketTradeStream';
+import { fetchSharedChartJson } from '../../utils/sharedChartRequests';
 import { calcCascadeRisk, type Candle, type Density, type Liquidation } from './engine';
 import { normalizeExchangeSymbol } from '../../utils/marketSymbols';
 import type { ChartDepthStatus } from '../../utils/hookChartDepthProtocol';
@@ -277,85 +278,71 @@ export function useOriginalHookChartLiveFeed({
   }, [exchange, marketType, symbol, replay]);
 
   useEffect(() => {
-    const exchangeSymbol = /^[\p{L}\p{M}\p{N}]+$/u.test(symbol);
+    const exchangeSymbol = /^[\\p{L}\\p{M}\\p{N}]+$/u.test(symbol);
     if (replay || !exchangeSymbol || marketType !== 'futures') {
       setFundingRate(Number.NaN);
       setFundingHistory([]);
       return;
     }
     let dead = false;
-    let controller = new AbortController();
+    let pulling = false;
     let lastHistoryFetchAt = 0;
     let nextFundingAt = 0;
-    setFundingRate(Number.NaN); setFundingHistory([]);
+    setFundingRate(Number.NaN);
+    setFundingHistory([]);
 
     const pull = async () => {
+      if (dead || pulling) return;
+      pulling = true;
       try {
+        const refreshHistory = Date.now() - lastHistoryFetchAt >= 15 * 60_000 ||
+          (nextFundingAt > 0 && Date.now() >= nextFundingAt);
         if (exchange === 'binance') {
-          // Current rate still refreshes every minute. Historical funding only
-          // changes at settlement, so don't download 100 rows every minute.
-          const refreshHistory = Date.now() - lastHistoryFetchAt >= 15 * 60_000 ||
-            (nextFundingAt > 0 && Date.now() >= nextFundingAt);
-          const [premiumResponse, historyResponse] = await Promise.all([
-            fetch(`${BINANCE_FUTURES_API}/fapi/v1/premiumIndex?symbol=${encodeURIComponent(symbol)}`, { signal: controller.signal, cache: 'no-store' }),
+          const [premium, history] = await Promise.all([
+            fetchSharedChartJson(`${BINANCE_FUTURES_API}/fapi/v1/premiumIndex?symbol=${encodeURIComponent(symbol)}`),
             refreshHistory
-              ? fetch(`${BINANCE_FUTURES_API}/fapi/v1/fundingRate?symbol=${encodeURIComponent(symbol)}&limit=100`, { signal: controller.signal, cache: 'no-store' })
+              ? fetchSharedChartJson(`${BINANCE_FUTURES_API}/fapi/v1/fundingRate?symbol=${encodeURIComponent(symbol)}&limit=100`, 'funding-history')
               : Promise.resolve(null),
           ]);
-          if (!premiumResponse.ok || (historyResponse && !historyResponse.ok)) {
-            if (!dead) setFundingRate(Number.NaN);
-            return;
-          }
-          const premium = await premiumResponse.json();
-          const history = historyResponse ? await historyResponse.json() : null;
           if (dead) return;
           const futureFundingAt = Number(premium?.nextFundingTime);
           if (Number.isFinite(futureFundingAt) && futureFundingAt > Date.now())
             nextFundingAt = futureFundingAt;
           setFundingRate(premium?.lastFundingRate == null ? Number.NaN : Number(premium.lastFundingRate));
-          if (historyResponse) {
-            setFundingHistory((Array.isArray(history) ? history : []).map((row: any) => Number(row.fundingRate)).filter(Number.isFinite));
+          if (refreshHistory) {
+            setFundingHistory((Array.isArray(history) ? history : [])
+              .map((row: any) => Number(row.fundingRate)).filter(Number.isFinite));
             lastHistoryFetchAt = Date.now();
           }
         } else {
-          const refreshHistory = Date.now() - lastHistoryFetchAt >= 15 * 60_000 ||
-            (nextFundingAt > 0 && Date.now() >= nextFundingAt);
-          const [tickerResponse, historyResponse] = await Promise.all([
-            fetch(`${BYBIT_API}/v5/market/tickers?category=linear&symbol=${encodeURIComponent(symbol)}`, { signal: controller.signal, cache: 'no-store' }),
+          const [ticker, history] = await Promise.all([
+            fetchSharedChartJson(`${BYBIT_API}/v5/market/tickers?category=linear&symbol=${encodeURIComponent(symbol)}`),
             refreshHistory
-              ? fetch(`${BYBIT_API}/v5/market/funding/history?category=linear&symbol=${encodeURIComponent(symbol)}&limit=100`, { signal: controller.signal, cache: 'no-store' })
+              ? fetchSharedChartJson(`${BYBIT_API}/v5/market/funding/history?category=linear&symbol=${encodeURIComponent(symbol)}&limit=100`, 'funding-history')
               : Promise.resolve(null),
           ]);
-          if (!tickerResponse.ok || (historyResponse && !historyResponse.ok)) {
-            if (!dead) setFundingRate(Number.NaN);
-            return;
-          }
-          const ticker = await tickerResponse.json();
-          const history = historyResponse ? await historyResponse.json() : null;
           if (dead) return;
           const value = ticker?.result?.list?.[0]?.fundingRate;
           const futureFundingAt = Number(ticker?.result?.list?.[0]?.nextFundingTime);
           if (Number.isFinite(futureFundingAt) && futureFundingAt > Date.now())
             nextFundingAt = futureFundingAt;
           setFundingRate(ticker?.retCode === 0 && value != null ? Number(value) : Number.NaN);
-          if (historyResponse) {
-            setFundingHistory((history?.result?.list || []).map((row: any) => Number(row.fundingRate)).filter(Number.isFinite));
+          if (refreshHistory) {
+            setFundingHistory((history?.result?.list || [])
+              .map((row: any) => Number(row.fundingRate)).filter(Number.isFinite));
             lastHistoryFetchAt = Date.now();
           }
         }
-      } catch { if (!dead) { setFundingRate(Number.NaN); setFundingHistory([]); } }
+      } catch {
+        if (!dead) { setFundingRate(Number.NaN); setFundingHistory([]); }
+      } finally {
+        pulling = false;
+      }
     };
-
     void pull();
-    const timer = setInterval(() => {
-      controller.abort();
-      controller = new AbortController();
-      void pull();
-    }, 60_000);
-
+    const timer = setInterval(() => void pull(), 60_000);
     return () => {
       dead = true;
-      controller.abort();
       clearInterval(timer);
     };
   }, [exchange, marketType, symbol, replay]);

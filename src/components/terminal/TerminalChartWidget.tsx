@@ -275,9 +275,31 @@ export const TerminalChartWidget: React.FC<TerminalChartWidgetProps> = ({
     }
   }, [coin?.currentPrice]);
 
-  // Connect to lightweight real-time ticker stream
+  const pendingHeaderPriceRef = useRef<number | null>(null);
+  const headerPriceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handleChartPrice = useCallback((price: number) => {
+    if (!Number.isFinite(price) || price <= 0) return;
+    pendingHeaderPriceRef.current = price;
+    if (headerPriceTimerRef.current !== null) return;
+    // Keep the chart's high-frequency candle updates independent from its
+    // header: rerendering every Terminal card at 12fps is unnecessarily costly.
+    headerPriceTimerRef.current = setTimeout(() => {
+      headerPriceTimerRef.current = null;
+      const latest = pendingHeaderPriceRef.current;
+      if (latest == null) return;
+      setCurrentPrice(previous => previous === latest ? previous : latest);
+      setLivePrice(previous => previous === latest ? previous : latest);
+    }, 250);
+  }, []);
+  useEffect(() => () => {
+    if (headerPriceTimerRef.current !== null) clearTimeout(headerPriceTimerRef.current);
+    headerPriceTimerRef.current = null;
+  }, []);
+
+  // Only legacy chart layouts need their own ticker; the HookChart already
+  // receives its latest price via the shared kline/trade stream.
   useEffect(() => {
-    if (!shouldLoadWidgets) return;
+    if (!shouldLoadWidgets || useIntegratedHookChartToolbar) return;
     let ws: WebSocket | null = null;
     let isDisposed = false;
 
@@ -285,9 +307,7 @@ export const TerminalChartWidget: React.FC<TerminalChartWidgetProps> = ({
     if (!cleanSymbol) return;
 
     const handlePriceUpdate = (price: number) => {
-      if (isDisposed || !price || isNaN(price)) return;
-      setCurrentPrice(price);
-      setLivePrice(price);
+      if (!isDisposed) handleChartPrice(price);
     };
 
     if (block.exchange === 'binance') {
@@ -350,7 +370,7 @@ export const TerminalChartWidget: React.FC<TerminalChartWidgetProps> = ({
         } catch {}
       }
     };
-  }, [block.symbol, block.exchange, block.marketType, shouldLoadWidgets]);
+  }, [block.symbol, block.exchange, block.marketType, shouldLoadWidgets, useIntegratedHookChartToolbar, handleChartPrice]);
 
   // Correlation/ATR are only needed in TradingView's extra status strip.
   useEffect(() => {
@@ -879,6 +899,7 @@ export const TerminalChartWidget: React.FC<TerminalChartWidgetProps> = ({
               </>
             ) : (
               <ExchangeCandlestickChart
+                onLivePriceUpdate={useIntegratedHookChartToolbar ? handleChartPrice : undefined}
                 terminalAutoScale={terminalAutoScale && useIntegratedHookChartToolbar}
                 terminalInitialView={useIntegratedHookChartToolbar ? terminalInitialView : undefined}
                 terminalMode={useIntegratedHookChartToolbar}

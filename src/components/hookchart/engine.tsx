@@ -3,6 +3,7 @@ import { translateHookChartPhrase } from '../../locales/hookchartLanguage';
 import type { SupportedLanguage } from '../../locales';
 import type { VisualChartProfile } from './visualProfiles';
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState, useImperativeHandle, useId } from 'react';
+import { useSharedChartClock } from './useSharedChartClock';
 import { createPortal } from 'react-dom';
 import { CalendarDays } from 'lucide-react';
 import { drawTouchMagnifier, magnifierZoomFromPriceDrag, TOUCH_MAGNIFIER_DEFAULT_ZOOM } from './touchMagnifier';
@@ -425,7 +426,7 @@ export function Chart({candles,symbol,tf,tool,drawings,setDrawings,alerts,setAle
  },[symbol,tf,visualProfileKey,visualProfileCaptureVersion,visualProfile?.visibleBars,visualProfile?.verticalZoom,visualProfile?.autoPriceScale,visualProfile?.rightGapBars,!!candles.length,initialLogicalRange,terminalMode,terminalAutoScale,visualCanvasWidth]);
  useLayoutEffect(()=>{if(visualProfile||rangeRestored.current||!candles.length||!initialLogicalRange)return;const width=ref.current?.getBoundingClientRect().width||800,restored=restoredHookViewport(candles.length,hookChartPlotWidth(width),initialLogicalRange);if(restored){rangeRestored.current=true;setVp({...restored,rightOffset:restored.rightOffset+Math.max(0,rightPaddingBars)+Math.max(0,rightPadding)/Math.max(3,restored.barWidth)})}},[candles.length,initialLogicalRange,rightPaddingBars,rightPadding,!!visualProfile]);
  const [draft,setDraft]=useState<{t:number,p:number}|null>(null),[selectedDrawingId,setSelectedDrawingId]=useState<string|null>(null),[editingDrawingId,setEditingDrawingId]=useState<string|null>(null);
- const [zoomPanelOpen,setZoomPanelOpen]=useState<boolean>(()=>false),[clockNow,setClockNow]=useState(()=>Date.now()),[jumpOpen,setJumpOpen]=useState(false),[jumpMode,setJumpMode]=useState<'day'|'time'>('day'),[jumpDate,setJumpDate]=useState(()=>zoneDateKey(Date.now(),timezone)),[jumpTime,setJumpTime]=useState('12:00'),[jumpBusy,setJumpBusy]=useState(false),[jumpMessage,setJumpMessage]=useState(''),[pendingJump,setPendingJump]=useState<{t:number,fitDay:boolean}|null>(null),[liqHudOpen,setLiqHudOpen]=useState<boolean>(()=>true);
+ const [zoomPanelOpen,setZoomPanelOpen]=useState<boolean>(()=>false),[jumpOpen,setJumpOpen]=useState(false),[jumpMode,setJumpMode]=useState<'day'|'time'>('day'),[jumpDate,setJumpDate]=useState(()=>zoneDateKey(Date.now(),timezone)),[jumpTime,setJumpTime]=useState('12:00'),[jumpBusy,setJumpBusy]=useState(false),[jumpMessage,setJumpMessage]=useState(''),[pendingJump,setPendingJump]=useState<{t:number,fitDay:boolean}|null>(null),[liqHudOpen,setLiqHudOpen]=useState<boolean>(()=>true);
  const touchHold=useRef<ReturnType<typeof createChartTouchHold>|null>(null),touchCursorVisible=useRef(false),suppressTouchClick=useRef(false);
  if(!touchHold.current)touchHold.current=createChartTouchHold();
  const magnifierPointer=useRef<number|null>(null),magnifierSample=useRef<HTMLCanvasElement|null>(null);
@@ -459,7 +460,7 @@ export function Chart({candles,symbol,tf,tool,drawings,setDrawings,alerts,setAle
    window.addEventListener('keydown',keydown,true);window.addEventListener('keyup',keyup,true);window.addEventListener('blur',stop);window.addEventListener('pointerup',stop);
    return()=>{stop();window.removeEventListener('keydown',keydown,true);window.removeEventListener('keyup',keyup,true);window.removeEventListener('blur',stop);window.removeEventListener('pointerup',stop)};
  },[transientRuler]);
- useEffect(()=>{const id=setInterval(()=>setClockNow(Date.now()),1000);return()=>clearInterval(id)},[]);
+ const clockNow=useSharedChartClock(!hideBarCountdown);
  useEffect(()=>{if(!jumpOpen)setJumpDate(zoneDateKey(Date.now(),timezone))},[timezone]);useEffect(()=>{if(hideTimeJump&&jumpOpen)setJumpOpen(false)},[hideTimeJump,jumpOpen]);
  const intervalMs=TF_MS[tf]||300000,lastBarStart=candles.at(-1)?.t||Math.floor(clockNow/intervalMs)*intervalMs,barStart=(lastBarStart<=clockNow&&clockNow-lastBarStart<intervalMs*2)?lastBarStart:Math.floor(clockNow/intervalMs)*intervalMs,barLeftMs=Math.max(0,barStart+intervalMs-clockNow);
  // Bucket labels only when prints/candle data changes, not on every cursor
@@ -645,7 +646,7 @@ export function Chart({candles,symbol,tf,tool,drawings,setDrawings,alerts,setAle
     interactionDrawRef.current();
     return;
   }
- const mouse=mouseRef.current,rawDpr=Math.max(1,window.devicePixelRatio||1),dpr=Math.min(4,rawDpr),w=Math.max(1,g.r.width),h=Math.max(1,g.r.height),pw=Math.max(1,Math.round(w*dpr)),ph=Math.max(1,Math.round(h*dpr));if(c.width!==pw||c.height!==ph){c.width=pw;c.height=ph}const q=c.getContext('2d',{alpha:false})!;const scaleX=pw/w,scaleY=ph/h;q.setTransform(scaleX,0,0,scaleY,0,0);q.imageSmoothingEnabled=false;q.globalCompositeOperation='source-over';q.lineCap='butt';q.lineJoin='miter';const strokeX=(v:number)=>(Math.round(v*scaleX)+.5)/scaleX,strokeY=(v:number)=>(Math.round(v*scaleY)+.5)/scaleY,hairX=1/scaleX,hairY=1/scaleY,hair=Math.max(hairX,hairY);q.clearRect(0,0,w,h);q.fillStyle=backgroundColor;q.fillRect(0,0,w,h);
+ const mouse=mouseRef.current,rawDpr=Math.max(1,window.devicePixelRatio||1),dpr=Math.min(terminalMode?2:4,rawDpr),w=Math.max(1,g.r.width),h=Math.max(1,g.r.height),pw=Math.max(1,Math.round(w*dpr)),ph=Math.max(1,Math.round(h*dpr));if(c.width!==pw||c.height!==ph){c.width=pw;c.height=ph}const q=c.getContext('2d',{alpha:false})!;const scaleX=pw/w,scaleY=ph/h;q.setTransform(scaleX,0,0,scaleY,0,0);q.imageSmoothingEnabled=false;q.globalCompositeOperation='source-over';q.lineCap='butt';q.lineJoin='miter';const strokeX=(v:number)=>(Math.round(v*scaleX)+.5)/scaleX,strokeY=(v:number)=>(Math.round(v*scaleY)+.5)/scaleY,hairX=1/scaleX,hairY=1/scaleY,hair=Math.max(hairX,hairY);q.clearRect(0,0,w,h);q.fillStyle=backgroundColor;q.fillRect(0,0,w,h);
   // Clip all candles, drawings, volume and overlays to the region left of the price scale.
   q.save();q.beginPath();q.rect(0,0,g.plotW,g.plotH);q.clip();
   // TradingView-style adaptive price scale: tick spacing follows the current Y range.

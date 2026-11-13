@@ -15,6 +15,7 @@ import { fetchHistoricalReplayCandles } from '../../utils/replayService';
 import { normalizeExchangeSymbol } from '../../utils/marketSymbols';
 import { fetchDirectKlines } from '../../utils/directExchangeClient';
 import { fetchSharedAnalysisKlines } from '../../utils/sharedAnalysisKlines';
+import { fetchSharedChartJson } from '../../utils/sharedChartRequests';
 import { candlesBeforeHistoryEnd, clampHookChartHistory, extendHookChartHistory, scopedHookChartHistoryRows, type ScopedHookChartHistory } from '../../utils/hookChartHistory';
 import { createChartCrosshairStore } from './crosshairState';
 import { Chart, ChartTimeAxis, IndicatorDock, buildStructuralChannel, type Alert, type Candle, type Drawing, type HookChartHandle, type Viewport } from './engine';
@@ -483,9 +484,7 @@ const HookChartCanvas = forwardRef<HookChartHandle, HookChartCanvasProps>(functi
                 exchange, market: marketType, symbol: benchmark, timeframe, limit: '250',
               });
               try {
-                const response = await fetch('/api/klines?' + params, { signal: controller.signal });
-                if (!response.ok) throw new Error('BTC candles unavailable');
-                const data = await response.json();
+                const data = await fetchSharedChartJson('/api/klines?' + params);
                 if (!controller.signal.aborted) setBtcReference({
                   scope: statsScope, rows: data.success && Array.isArray(data.data) ? data.data : [],
                 });
@@ -498,9 +497,7 @@ const HookChartCanvas = forwardRef<HookChartHandle, HookChartCanvasProps>(functi
           try {
             if (exchange !== 'binance') return;
             const params = new URLSearchParams({ exchange, market: marketType, symbol: cleanedSymbol });
-            const response = await fetch('/api/chart/trades24h?' + params, { signal: controller.signal });
-            if (!response.ok) throw new Error('Trade count unavailable');
-            const data = await response.json();
+            const data = await fetchSharedChartJson('/api/chart/trades24h?' + params);
             const count = data.success && Number.isSafeInteger(data.trades24h) && data.trades24h >= 0
               ? data.trades24h as number : null;
             if (!controller.signal.aborted) setTradeCount24h({ scope: statsScope, count });
@@ -915,9 +912,7 @@ const HookChartCanvas = forwardRef<HookChartHandle, HookChartCanvasProps>(functi
     const poll = async () => {
       try {
         const query = new URLSearchParams({ symbol: normalizeExchangeSymbol(symbol), timeframe });
-        const response = await fetch(`/api/derivatives/oi/history?${query}`, { signal: controller.signal });
-        if (!response.ok) throw new Error('OI unavailable');
-        const data = await response.json();
+        const data = await fetchSharedChartJson(`/api/derivatives/oi/history?${query}`);
         if (!data.success || (!data.binance?.length && !data.bybit?.length)) throw new Error('OI unavailable');
         if (!controller.signal.aborted) { setOi({ binance: data.binance || [], bybit: data.bybit || [] }); setOiError(false); }
       } catch { if (!controller.signal.aborted) setOiError(true); }
