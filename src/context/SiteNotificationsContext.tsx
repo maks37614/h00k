@@ -416,7 +416,9 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
               id: 'liq-cascade:' + exchange + ':' + symbol + ':' + cascade.side + ':' + Math.floor(Date.now() / 300000),
               kind: 'liquidations', symbol, exchange, marketType: 'futures',
               title: 'Каскад ліквідацій ' + cascade.side + ' · ' + symbol,
-              description: cascade.count + ' ліквідацій за 5 хв · 
+              description: cascade.count + ' ліквідацій за 5 хв · $' + cascade.usd.toLocaleString('en-US'),
+            });
+          } catch { /* Ignore malformed live frames. */ }
         };
         socket.onclose = () => {
           if (!stopped) {
@@ -427,60 +429,6 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
             });
             retry = setTimeout(connect, Math.min(30_000, 2000 * 2 ** Math.min(attempt++, 4)));
           }
-        };
-        socket.onerror = () => socket?.close();
-      } catch {
-        if (!stopped) retry = setTimeout(connect, 10_000);
-      }
-    };
-    connect();
-    return () => {
-      stopped = true;
-      if (retry) clearTimeout(retry);
-      if (socket) { socket.onmessage = null; socket.onclose = null; socket.close(); }
-    };
-  }, [uid, settings.optedIn, settings.enabled, settings.liquidations,
-    settings.impulseSymbol, settings.impulseExchange, settings.liquidationMinUsd, emit]);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const onDisconnect = () => emit({
-      id: 'system:offline:' + Math.floor(Date.now() / 60000),
-      kind: 'system', title: 'З’єднання втрачено',
-      description: 'Пристрій перейшов в офлайн. Ринкові дані можуть бути застарілими.',
-    });
-    window.addEventListener('offline', onDisconnect);
-    return () => window.removeEventListener('offline', onDisconnect);
-  }, [emit]);
-
-  const markAllRead = useCallback(() => replaceItems(itemsRef.current.map(item => ({ ...item, read: true }))), [replaceItems]);
-  const clear = useCallback(() => {
-    try { localStorage.setItem(siteNotificationClearedAtKey(uidRef.current), String(Date.now())); } catch {}
-    replaceItems([]);
-  }, [replaceItems]);
-  const unreadCount = items.filter(item => !item.read).length;
-
-  return <Context.Provider value={{
-    settings, updateSettings, soundEnabled: preferences.soundAlertsEnabled, setSoundEnabled,
-    items, unreadCount, emit, processScan, setFavoriteIds, markAllRead, clear, error,
-  }}>{children}</Context.Provider>;
-};
-
-export function useOptionalSiteNotifications(): SiteNotificationsValue | null {
-  return useContext(Context);
-}
-
-export function useSiteNotifications(): SiteNotificationsValue {
-  const value = useContext(Context);
-  if (!value) throw new Error('useSiteNotifications requires SiteNotificationsProvider');
-  return value;
-}
- + cascade.usd.toLocaleString('en-US'),
-            });
-          } catch { /* Ignore malformed live frames. */ }
-        };
-        socket.onclose = () => {
-          if (!stopped) retry = setTimeout(connect, Math.min(30_000, 2000 * 2 ** Math.min(attempt++, 4)));
         };
         socket.onerror = () => socket?.close();
       } catch {
