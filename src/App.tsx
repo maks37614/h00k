@@ -1286,7 +1286,11 @@ export default function App() {
         lastUpdated={lastUpdated}
         onOpenAuth={() => handleOpenAuthModal('signin', null)}
         onOpenProfile={() => { setProfileInitialSection('account'); setIsProfileModalOpen(true); }}
-        onOpenNotificationSettings={() => { setProfileInitialSection('notifications'); setIsProfileModalOpen(true); }}
+        onOpenNotificationSettings={() => {
+          if (!user) { handleOpenAuthModal('signin', 'general'); return; }
+          setProfileInitialSection('notifications');
+          setIsProfileModalOpen(true);
+        }}
         activePage={activePage}
         onPageChange={handlePageChange}
       />}
