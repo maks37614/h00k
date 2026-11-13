@@ -232,8 +232,11 @@ function findTarget(provider) {
   if (explicit) return explicit;
   const hint = settings.profiles[provider].targetHint;
   if (hint) {
-    const selected = all.find(item => item.exe === hint.exe && item.title === hint.title);
+    const sameExecutable = all.filter(item => item.exe === hint.exe);
+    const selected = sameExecutable.find(item => item.title === hint.title);
     if (selected) return selected;
+    // Dynamic price/PnL titles can change; recover only if exactly one window matches.
+    if (sameExecutable.length === 1) return sameExecutable[0];
   }
   return all.filter(item => matchesTerminal(provider, item))
     .sort((a,b) => (b.width*b.height)-(a.width*a.height))[0] || null;
@@ -431,10 +434,16 @@ function registerIpc() {
   ipcMain.handle('desktop:pick',(event,provider,id) => {
     verifySettingsSender(event);
     if (!PROVIDERS.includes(provider)) throw new Error('Invalid terminal');
-    const target = candidateWindows().find(item => item.id === id);
-    if (!target) throw new Error('Window not found');
-    manualTargets.set(provider,id);
-    settings.profiles[provider].targetHint = {exe:target.exe,title:target.title};
+    if (id === '') {
+      // "Автоматично знайти" must actually remove the previous manual target.
+      manualTargets.delete(provider);
+      settings.profiles[provider].targetHint = null;
+    } else {
+      const target = candidateWindows().find(item => item.id === id);
+      if (!target) throw new Error('Window not found');
+      manualTargets.set(provider,id);
+      settings.profiles[provider].targetHint = {exe:target.exe,title:target.title};
+    }
     saveSettings(); syncWindows(); pushSnapshot(); return snapshot();
   });
   ipcMain.handle('desktop:attach',(event,provider) => {
