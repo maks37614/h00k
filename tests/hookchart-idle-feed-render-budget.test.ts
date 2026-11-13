@@ -29,7 +29,7 @@ test('real-time HookChart applies the guards without disabling live depth or Rep
   const feed = readFileSync(new URL('../src/components/hookchart/useOriginalHookChartLiveFeed.ts', import.meta.url), 'utf8');
   const replay = readFileSync(new URL('../src/components/replay/ReplayChart.tsx', import.meta.url), 'utf8');
   assert.match(feed, /shouldPublishDepthView\(next\.depthReady, wasReady\)/);
-  assert.match(feed, /shouldPublishLiquidationView\(raw\.length, previouslyHadRows\)/);
+  assert.match(feed, /shouldPublishLiquidationView\(rows\.length, previouslyHadRows\)/);
   assert.match(feed, /const depthPublish = setInterval\(applyBook, 1000\)/);
   assert.match(feed, /const publishTimer = setInterval\(publish, 2000\)/);
   assert.match(feed, /const stopDepth = connectSharedHookChartDepth/);
