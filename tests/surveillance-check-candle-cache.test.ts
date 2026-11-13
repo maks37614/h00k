@@ -54,3 +54,35 @@ test('surveillance monitor coalesces REST checks and skips overlapping passes', 
   assert.match(source,/monitorPassInFlight = true;/);
   assert.match(source,/finally \{[\s\S]*?monitorPassInFlight = false;/);
 });
+
+test('a request that crosses candle close is never cached as the new closed candle', async () => {
+  let now=899_900, calls=0;
+  const pending: Array<(rows:Kline[])=>void> = [];
+  const cache=new SurveillanceCheckCandleCache(async () => {
+    calls++;
+    return new Promise<Kline[]>(resolve => pending.push(resolve));
+  },()=>now,18_000,8);
+  const old=cache.get('binance','futures','BTCUSDT','15m',60);
+  now=900_100; // first request is still in flight at the next 15m candle
+  const current=cache.get('binance','futures','BTCUSDT','15m',60);
+  assert.equal(calls,2,'a new bar must not join the older in-flight request');
+  pending[1]([candle(900_000,202)]);
+  assert.equal((await current)[0].close,202);
+  pending[0]([candle(899_000,101)]);
+  assert.equal((await old)[0].close,101);
+  assert.equal((await cache.get('binance','futures','BTCUSDT','15m',60))[0].close,202);
+  assert.equal(calls,2,'an older request must not overwrite the next candle');
+});
+
+test('each surveillance user receives a private copy of cached OHLCV', async () => {
+  let now=120_000, calls=0;
+  const cache=new SurveillanceCheckCandleCache(async()=>{calls++;return [candle(0,300)]},
+    ()=>now,18_000,8);
+  const first=await cache.get('bybit','spot','ETHUSDT','1h',60);
+  first[0].close=999;
+  const second=await cache.get('bybit','spot','ETHUSDT','1h',60);
+  assert.equal(second[0].close,300);
+  assert.notStrictEqual(first,second);
+  assert.notStrictEqual(first[0],second[0]);
+  assert.equal(calls,1);
+});
