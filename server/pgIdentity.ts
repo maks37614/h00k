@@ -127,7 +127,7 @@ async function actionFor(userId: string, email: string, purpose: 'verify-email' 
   const token = randomToken();
   const hash = hashToken(token);
   await database().query('DELETE FROM auth_action_tokens WHERE user_id = $1 AND purpose = $2', [userId, purpose]);
-  await database().query('INSERT INTO auth_action_tokens (token_hash, user_id, purpose, expires_at) VALUES ($1, $2, $3, now() + ($4 * interval '' + '1 second'))',
+  await database().query('INSERT INTO auth_action_tokens (token_hash, user_id, purpose, expires_at) VALUES ($1, $2, $3, now() + make_interval(secs => $4::int))',
     [hash, userId, purpose, purpose === 'verify-email' ? 86400 : 1800]);
   await sendActionMail(email, purpose, token);
 }
@@ -253,7 +253,7 @@ export async function createSession(userId: string, req: Request, remember = tru
   const id = randomUUID();
   const days = remember ? SESSION_DAYS : 1;
   await database().query(
-    'INSERT INTO auth_sessions (id, user_id, token_hash, user_agent, ip_address, expires_at) VALUES ($1, $2, $3, $4, $5, now() + ($6 * interval '' + '1 day'))',
+    'INSERT INTO auth_sessions (id, user_id, token_hash, user_agent, ip_address, expires_at) VALUES ($1, $2, $3, $4, $5, now() + make_interval(days => $6::int))',
     [id, userId, hashToken(token), String(req.get('User-Agent') || '').slice(0, 255), String(req.ip || '').slice(0, 80), days],
   );
   return { token, days };
