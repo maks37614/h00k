@@ -2,6 +2,7 @@ param([switch]$Once)
 # Read-only Win32 discovery. No DLL injection, keyboard emulation, or orders.
 # One persistent PowerShell process avoids repeatedly starting Windows PowerShell.
 $ErrorActionPreference = 'Stop'
+[Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false)
 Add-Type -TypeDefinition @'
 using System;
 using System.Collections.Generic;
