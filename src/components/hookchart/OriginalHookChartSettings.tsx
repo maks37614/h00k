@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import type { ExchangeId, HookChartPreferences, MarketType } from '../../types';
 import { clampHookChartHistory } from '../../utils/hookChartHistory';
 import { normalizeDensityDistance } from './marketAnalytics';
-import { applyVisualDefaultsForDevice, VISUAL_CONTEXTS, VISUAL_ZOOM_MIN, VISUAL_ZOOM_MAX, VISUAL_GAP_MAX, getVisualProfile, makeVisualProfileKey, normalizedVisualProfiles, patchVisualProfile, visualDeviceForWidth, type VisualContextId, type VisualDevice, type VisualProfileKey } from './visualProfiles';
+import { applyVisualDefaultsForDevice, VISUAL_ZOOM_MIN, VISUAL_ZOOM_MAX, VISUAL_GAP_MAX, getVisualProfile, makeVisualProfileKey, normalizedVisualProfiles, patchVisualProfile, selectableVisualContexts, visualDeviceForWidth, type VisualContextId, type VisualDevice, type VisualProfileKey } from './visualProfiles';
 import type { Candle, Viewport } from './engine';
 import { HookChartVisualPreview } from './HookChartVisualPreview';
 import { DEFAULT_CROSSHAIR_LINE_WIDTH, normalizeCrosshairLineWidth } from './chartCursor';
@@ -373,9 +373,10 @@ function StrategySettings({ activeId, onSelect }: { activeId: string; onSelect: 
 
 /** Custom chart-context picker avoids Safari's bright native <select> popup.
  * A body portal keeps the menu visible outside the clipped settings sections. */
-export function VisualContextPicker({ value, onChange }: {
+export function VisualContextPicker({ value, onChange, includeTerminalContexts = true }: {
   value: VisualContextId;
   onChange: (id: VisualContextId) => void;
+  includeTerminalContexts?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [placement, setPlacement] = useState<{
@@ -385,7 +386,8 @@ export function VisualContextPicker({ value, onChange }: {
   const menuRef = useRef<HTMLDivElement>(null);
   const focusedOnOpen = useRef(false);
   const menuId = React.useId();
-  const chosen = VISUAL_CONTEXTS.find(context => context.id === value) ?? VISUAL_CONTEXTS[0];
+  const contexts = selectableVisualContexts(includeTerminalContexts);
+  const chosen = contexts.find(context => context.id === value) ?? contexts[0];
 
   useEffect(() => {
     if (!open) {
@@ -479,7 +481,7 @@ export function VisualContextPicker({ value, onChange }: {
         className="hookchart-visual-context-menu"
         style={{ left: placement.left, top: placement.top, width: placement.width, maxHeight: placement.maxHeight }}
         onKeyDown={moveFocus}>
-        {VISUAL_CONTEXTS.map((context, index) => {
+        {contexts.map((context, index) => {
           const group = index === 0 ? 'Скрінер' : index === 2 ? 'Формації' : index === 4 ? 'Термінал' : null;
           const active = context.id === value;
           return <React.Fragment key={context.id}>
@@ -504,11 +506,13 @@ export function VisualContextPicker({ value, onChange }: {
 /** Real HookChart preview uses the current chart's candles, with optional one-time sample in profile settings. */
 function VisualProfileEditor({
   visualContext, visualDevice, selectedProfile, onContextChange, onDeviceChange,
-  onProfileChange, onReset, onApplyToAll, onCapture, live, previewTimezone,
+  onProfileChange, onReset, onApplyToAll, onCapture, includeTerminalContexts,
+  live, previewTimezone,
   previewLongColor, previewShortColor, chartPreferences, saveStatus,
 }: {
   visualContext: VisualContextId;
   visualDevice: VisualDevice;
+  includeTerminalContexts: boolean;
   selectedProfile: import('./visualProfiles').VisualChartProfile;
   onContextChange: (id: VisualContextId) => void;
   onDeviceChange: (device: VisualDevice) => void;
@@ -531,7 +535,7 @@ function VisualProfileEditor({
         свого розміру. Профілі Скрінера, Формацій, Термінала, телефона й комп’ютера окремі.
       </div>
       <Setting label="Тип графіка">
-        <VisualContextPicker value={visualContext} onChange={onContextChange} />
+        <VisualContextPicker value={visualContext} onChange={onContextChange} includeTerminalContexts={includeTerminalContexts} />
       </Setting>
       <Choice label="Пристрій" values={['mobile', 'desktop']} labels={['Телефон', 'Комп’ютер']}
         value={visualDevice} set={value => onDeviceChange(value as VisualDevice)} />
@@ -952,6 +956,7 @@ export function OriginalHookChartSettings({
           </Section>
         </> : tab === 'chart' ? (
           <VisualProfileEditor
+            includeTerminalContexts={!activeVisualContext || activeVisualContext.startsWith('terminal')}
             visualContext={visualContext}
             visualDevice={visualDevice}
             selectedProfile={getVisualProfile(prefs, visualContext, visualDevice)}

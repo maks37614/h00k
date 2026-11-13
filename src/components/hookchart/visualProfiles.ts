@@ -10,6 +10,14 @@ export const VISUAL_CONTEXTS = [
   { id: 'terminalCompact', label: 'Термінал · Компактний графік' },
 ] as const;
 export type VisualContextId = typeof VISUAL_CONTEXTS[number]['id'];
+
+/** Hide Terminal-only layouts from standalone Screener/Formation chart settings.
+ * Keep all seven profiles available in the account editor and Terminal itself. */
+export function selectableVisualContexts(includeTerminalContexts = true) {
+  return includeTerminalContexts
+    ? VISUAL_CONTEXTS
+    : VISUAL_CONTEXTS.filter(context => !context.id.startsWith('terminal'));
+}
 export type VisualDevice = 'mobile' | 'desktop';
 export type VisualProfileKey = `${VisualContextId}:${VisualDevice}`;
 

@@ -6,7 +6,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { OriginalHookChartSettings, VisualContextPicker, normalizeOriginalHookChartPreferences } from '../src/components/hookchart/OriginalHookChartSettings';
 import {
   VISUAL_CONTEXTS, applyVisualDefaultsForDevice, captureVisualProfile, getVisualProfile, makeVisualProfileKey,
-  normalizeVisualProfile, normalizedVisualProfiles, patchVisualProfile, visualContextForTerminalWidth,
+  normalizeVisualProfile, normalizedVisualProfiles, patchVisualProfile, selectableVisualContexts, visualContextForTerminalWidth,
   visualDeviceForWidth,
 } from '../src/components/hookchart/visualProfiles';
 
@@ -165,6 +165,26 @@ test('making the selected visual scale default applies to seven chart types on j
 });
 
 
+test('standalone chart settings hide Terminal presets without deleting their saved profiles', () => {
+  const all = selectableVisualContexts(true);
+  const standalone = selectableVisualContexts(false);
+  assert.equal(all.length, 7);
+  assert.deepEqual(standalone.map(item => item.id), [
+    'screenerQuick', 'screenerFull', 'formationsQuick', 'formationsFull',
+  ]);
+  assert.ok(all.some(item => item.id === 'terminalLarge'));
+  assert.ok(!standalone.some(item => item.id.startsWith('terminal')));
+  const prefs = patchVisualProfile(undefined, 'terminalCompact:desktop', { visibleBars: 54 });
+  assert.equal(getVisualProfile({ visualProfiles: prefs }, 'terminalCompact', 'desktop').visibleBars, 54);
+
+  const chart = src('../src/components/hookchart/OriginalHookChartSettings.tsx');
+  assert.match(chart, /includeTerminalContexts=\{!activeVisualContext \|\| activeVisualContext\.startsWith\('terminal'\)\}/);
+  assert.match(chart, /includeTerminalContexts=\{includeTerminalContexts\}/);
+  assert.match(chart, /contexts\.map\(\(context, index\)/);
+  assert.match(chart, /selectableVisualContexts\(includeTerminalContexts\)/);
+  assert.match(src('../src/components/hookchart/HookChartCanvas.tsx'), /activeVisualContext=\{activeVisualContext\}/);
+});
+
 test('iOS chart-type picker replaces the native bright select without losing seven contexts', () => {
   const markup = renderToStaticMarkup(React.createElement(VisualContextPicker, {
     value: 'formationsQuick', onChange: () => {},
@@ -179,12 +199,12 @@ test('iOS chart-type picker replaces the native bright select without losing sev
   const editor = src('../src/components/hookchart/OriginalHookChartSettings.tsx');
   const styles = src('../src/components/hookchart/integration.css');
   const chartEditor = editor.slice(editor.indexOf('function VisualProfileEditor'), editor.indexOf('export function OriginalHookChartSettings'));
-  assert.match(chartEditor, /<VisualContextPicker value=\{visualContext\} onChange=\{onContextChange\}/);
+  assert.match(chartEditor, /<VisualContextPicker value=\{visualContext\} onChange=\{onContextChange\} includeTerminalContexts=\{includeTerminalContexts\}/);
   assert.doesNotMatch(chartEditor, /<select/);
   assert.match(editor, /createPortal\(/);
   assert.match(editor, /role="listbox"/);
   assert.match(editor, /role="option" aria-selected=\{active\}/);
-  assert.match(editor, /VISUAL_CONTEXTS\.map\(\(context, index\)/);
+  assert.match(editor, /contexts\.map\(\(context, index\)/);
   assert.match(editor, /const group = index === 0 \? 'Скрінер' : index === 2 \? 'Формації' : index === 4 \? 'Термінал'/);
   assert.match(editor, /onChange\(context\.id\)/);
   assert.match(editor, /document\.addEventListener\('pointerdown', dismiss\)/);
