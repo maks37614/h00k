@@ -61,8 +61,6 @@ export const Header: React.FC<HeaderProps> = ({
   isLoading,
   totalCoins,
   formationsCount,
-  bullishCount,
-  bearishCount,
   watchlistCount,
   archiveCount = 0,
   onRefresh,
@@ -116,11 +114,11 @@ export const Header: React.FC<HeaderProps> = ({
   return (
     <header className="app-header min-w-0 border-b border-slate-800/80 bg-slate-950/80 backdrop-blur-md sticky top-0 z-30" data-page={activePage}>
       <div className="max-w-[1720px] mx-auto px-2.5 sm:px-4 lg:px-6 py-1.5 sm:py-2">
-        <div className="flex min-w-0 flex-wrap items-center justify-center gap-2 sm:gap-3 xl:justify-between xl:gap-2">
+        <div className="flex min-w-0 flex-wrap items-center justify-center gap-2 sm:gap-3 xl:relative xl:justify-between xl:gap-2">
           <div className="flex w-full min-w-0 flex-col items-center gap-2 sm:gap-3 xl:w-auto xl:shrink-0 xl:flex-row xl:gap-2">
-            {/* Symmetric grid keeps the logo at the exact center of the header
-                on small screens; wide screens use a compact inline brand group. */}
-            <div data-header-brand-row className="grid min-h-9 w-full min-w-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-x-1.5 sm:min-h-10 sm:gap-x-2 xl:flex xl:w-auto xl:shrink-0">
+            {/* Keep the mobile brand row unchanged. On desktop, anchor the same
+                logo, fullscreen and language controls to the actual header center. */}
+            <div data-header-brand-row className="grid min-h-9 w-full min-w-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-x-1.5 sm:min-h-10 sm:gap-x-2 xl:absolute xl:left-1/2 xl:top-1/2 xl:z-10 xl:flex xl:w-auto xl:-translate-x-1/2 xl:-translate-y-1/2">
               <span aria-hidden="true" className="xl:hidden" />
               <button
                 type="button"
@@ -247,21 +245,6 @@ export const Header: React.FC<HeaderProps> = ({
 
 
 
-          {/* Quick Stats Bar */}
-          <div className="hidden xl:flex shrink-0 items-center gap-2.5 sm:gap-4 px-3 py-1.5 rounded-xl bg-slate-900/90 border border-slate-800 text-xs">
-            <div className="flex items-center gap-2">
-              <span className="text-slate-400">Формацій:</span>
-              <span className="font-bold text-white font-mono bg-slate-800 px-1.5 py-0.5 rounded">
-                {formationsCount}
-              </span>
-            </div>
-            <div className="h-3.5 w-px bg-slate-800" />
-            <div className="flex items-center gap-2">
-              <span className="text-emerald-400 font-semibold">▲ {bullishCount}</span>
-              <span className="text-slate-600">/</span>
-              <span className="text-rose-400 font-semibold">▼ {bearishCount}</span>
-            </div>
-          </div>
           <div className="flex w-full min-w-0 flex-wrap items-center justify-center gap-1.5 sm:gap-2 xl:w-auto xl:flex-nowrap xl:gap-1.5 [&>button]:shrink-0">
             <button
               id="refresh-screener-btn"
