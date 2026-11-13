@@ -58,14 +58,14 @@ function simulateDesktop() {
     },
   };
   const files=[];
-  const source=fs.readFileSync(mainPath,'utf8')+String.raw\`
+  const source=fs.readFileSync(mainPath,'utf8')+String.raw`
     globalThis.__audit={
       setSettings(value){settings=normalizeSettings(value)},
       getSettings(){return settings},
       acceptWindows, syncWindows, closeProvider, patchQuickProfile,
       getWindows(){return windows},
     };
-  \`;
+  `;
   const actualRequire=createRequire(mainPath);
   const sandbox={
     require:(id)=>{
