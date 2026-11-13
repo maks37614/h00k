@@ -173,8 +173,8 @@ export const FormationCard: React.FC<FormationCardProps> = ({
                     e.stopPropagation();
                     onSendMetaScalp(coin);
                   }}
-                  title={`MetaScalp (${metaScalpBinding})`}
-                  aria-label={`Відправити в MetaScalp (${metaScalpBinding})`}
+                  title={`Термінал (${metaScalpBinding})`}
+                  aria-label={`Відправити в обраний термінал (${metaScalpBinding})`}
                   className="rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 transition-colors cursor-pointer"
                 >
                   <Zap className="w-3.5 h-3.5 text-amber-400 fill-amber-400/30" />
@@ -549,7 +549,7 @@ export const FormationCard: React.FC<FormationCardProps> = ({
                     e.stopPropagation();
                     onSendMetaScalp(coin);
                   }}
-                  title={`Відкрити в MetaScalp (Група ${metaScalpBinding})`}
+                  title={`Відкрити в обраному терміналі (Група ${metaScalpBinding})`}
                   className="flex items-center gap-1 py-1.5 px-2 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-300 hover:text-amber-200 text-xs font-semibold transition-all active:scale-95 cursor-pointer"
                 >
                   <Zap className="w-3.5 h-3.5 text-amber-400 fill-amber-400/30" />
