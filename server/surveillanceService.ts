@@ -224,6 +224,20 @@ export function loadSurveillanceList(userId?: string): SurveillanceCoin[] {
   });
 }
 
+// Realtime updates are available from memory immediately; only routine
+// monitor snapshots are grouped into a bounded number of durable file writes.
+// Explicit user edits and newly delivered Telegram alerts remain synchronous.
+const pendingSurveillanceUsers = new Set<string>();
+
+export function flushDeferredSurveillanceChecks(): boolean {
+  if (pendingSurveillanceUsers.size === 0) return true;
+  if (!saveSurveillanceStore(loadSurveillanceStore())) return false;
+  const changedUsers = [...pendingSurveillanceUsers];
+  pendingSurveillanceUsers.clear();
+  for (const userId of changedUsers) publishSurveillance(userId, true);
+  return true;
+}
+
 export function saveSurveillanceList(userId: string, list: SurveillanceCoin[]): boolean {
   const store = loadSurveillanceStore();
   const uid = (userId && userId.trim() !== '') ? userId.trim() : 'guest';
@@ -232,12 +246,17 @@ export function saveSurveillanceList(userId: string, list: SurveillanceCoin[]): 
   }
   store[uid] = list;
   const saved = saveSurveillanceStore(store);
-  if (saved) publishSurveillance(uid, true);
+  if (saved) {
+    pendingSurveillanceUsers.delete(uid);
+    publishSurveillance(uid, true);
+  }
   return saved;
 }
 
 // An async check must never restore a deleted coin or overwrite a user's edits.
-export function commitSurveillanceCheck(checked: SurveillanceCoin): SurveillanceCoin | null {
+export function commitSurveillanceCheck(
+  checked: SurveillanceCoin, options: { deferPersist?: boolean } = {},
+): SurveillanceCoin | null {
   const found = findSurveillanceCoinById(checked.id, checked.userId);
   if (!found) return null;
   const current = found.coin;
@@ -245,7 +264,15 @@ export function commitSurveillanceCheck(checked: SurveillanceCoin): Surveillance
   const updated = { ...current, state: checked.state, lastCheckedAt: checked.lastCheckedAt,
     lastNotifiedAt: checked.lastNotifiedAt || current.lastNotifiedAt };
   found.list[found.index] = updated;
-  saveSurveillanceList(found.userId, found.list);
+  // A real Telegram dispatch updates lastNotifiedAt and must be written
+  // durably before the next monitor pass, never buffered with routine metrics.
+  const newNotification = !!checked.lastNotifiedAt
+    && checked.lastNotifiedAt !== current.lastNotifiedAt;
+  if (options.deferPersist && !newNotification) {
+    pendingSurveillanceUsers.add(found.userId);
+  } else {
+    saveSurveillanceList(found.userId, found.list);
+  }
   surveillanceManager.updateWorkerCoin(updated);
   return updated;
 }
@@ -792,6 +819,7 @@ export function startSurveillanceMonitor(intervalMs = 25000) {
   setInterval(async () => {
     if (monitorPassInFlight) return;
     monitorPassInFlight = true;
+    let lastPersistAt = Date.now();
     try {
       const activeItems = getAllActiveSurveillanceCoins();
       if (activeItems.length === 0) return;
@@ -799,13 +827,24 @@ export function startSurveillanceMonitor(intervalMs = 25000) {
       for (const { userId, coin } of activeItems) {
         try {
           const { coin: updated } = await checkCoinSurveillance(coin);
-          commitSurveillanceCheck(updated);
+          commitSurveillanceCheck(updated, { deferPersist: true });
         } catch (e) {
           console.error(`[Surveillance] Failed to check coin ${coin.symbol} for user ${userId}:`, e);
+        }
+        // Keep at most a short window of routine measurements unflushed,
+        // including when a full account scan takes longer than 25 seconds.
+        if (Date.now() - lastPersistAt >= 5_000) {
+          if (!flushDeferredSurveillanceChecks())
+            console.error('[Surveillance] Failed to persist batched market measurements');
+          lastPersistAt = Date.now();
         }
       }
     } catch (err) {
       console.error('[Surveillance] Error in monitor loop:', err);
-    } finally { monitorPassInFlight = false; }
+    } finally {
+      if (!flushDeferredSurveillanceChecks())
+        console.error('[Surveillance] Failed to flush final market measurements');
+      monitorPassInFlight = false;
+    }
   }, intervalMs);
 }
