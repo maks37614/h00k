@@ -197,3 +197,29 @@ The two SHA-256 values should match. The current development installer is
 Do not bypass warnings from unknown sources. Publisher signing should be
 configured only after a suitable certificate is available. The changes above
 do not involve production VPS deployment.
+
+## v0.1.5 — exact h00k robot icon in Windows setup
+
+- The Windows **installer .exe** now uses a dedicated
+  `desktop/build/h00k-installer.ico` resource generated from the original
+  `public/h00k-robot-logo.svg` eyes and robot bezel only. No letter h/k,
+  decorative background tile, extra frame, or stripe is added.
+- The **app EXE / desktop and Start menu shortcuts** use the same clean
+  transparent robot artwork (`desktop/build/h00k.ico`) in 16, 24, 32, 48,
+  64, 128 and 256 pixel sizes. This keeps Windows Explorer, taskbar and installer
+  branding consistent.
+- Both icons are generated directly from the repository's vector source;
+  static PNG preview `h00k-robot-preview.png` accompanies the GitHub Actions
+  installer artifact ZIP for visual verification.
+- CI now extracts the **actual embedded icon from the NSIS setup .exe** and
+  compares its visible pixels against the generated h00k source icon. This
+  detects cases where the package config points to the right .ico but the setup
+  executable ends up with a default NSIS/Electron icon.
+- Desktop tests validate transparency, cyan eyes, dark bezel, .ico frame sizes
+  and the generated preview. The installer upgrade/shortcut tests remain intact.
+
+Windows may cache old icons after upgrading. If Windows Explorer or an existing
+pinned taskbar shortcut still shows an old image, unpin the old shortcut, remove
+the existing desktop shortcut if needed, and pin the new h00k Desktop executable
+after installing v0.1.5. That is a Windows icon cache behavior, not a reason
+to overwrite or restart the h00k VPS.

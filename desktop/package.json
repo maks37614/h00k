@@ -1,6 +1,6 @@
 {
   "name": "h00k-desktop",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "h00k Smart Dock for Windows trading terminals",
   "private": true,
   "main": "main.cjs",
@@ -47,8 +47,8 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "installerIcon": "build/h00k.ico",
-      "uninstallerIcon": "build/h00k.ico",
+      "installerIcon": "build/h00k-installer.ico",
+      "uninstallerIcon": "build/h00k-installer.ico",
       "installerSidebar": "build/installerSidebar.bmp",
       "uninstallerSidebar": "build/uninstallerSidebar.bmp",
       "installerHeader": "build/installerHeader.bmp",

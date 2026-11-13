@@ -14,10 +14,10 @@ function robot(x,y,w,h){return '<svg x="'+x+'" y="'+y+'" width="'+w+'" height="'
 function svg(w,h,body){return '<svg xmlns="http://www.w3.org/2000/svg" width="'+w+'" height="'+h+'" viewBox="0 0 '+w+' '+h+'">'+body+'</svg>';}
 const defs='<defs><linearGradient id="night" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#0d1728"/><stop offset=".65" stop-color="#080d1e"/><stop offset="1" stop-color="#111c2f"/></linearGradient></defs>';
 function appIcon(){
- return svg(256,256,defs+'<rect width="256" height="256" rx="54" fill="url(#night)"/>'
- +'<rect x="8" y="8" width="240" height="240" rx="47" fill="none" stroke="'+C+'" stroke-opacity=".65" stroke-width="5"/>'
- +'<circle cx="45" cy="45" r="3" fill="'+LIGHT+'"/><circle cx="211" cy="45" r="3" fill="'+LIGHT+'"/>'
- +robot(27,53,202,153)+'<path d="M74 211H182" stroke="'+C+'" stroke-width="5" stroke-linecap="round" opacity=".8"/>');
+ // The Windows icon is the actual stationary robot bezel and eyes from
+ // public/h00k-robot-logo.svg. No added panel, text, decorative border or stripe.
+ // A transparent background prevents Windows Explorer from showing a square tile.
+ return svg(256,256,robot(15,38,226,180));
 }
 function sidebar(uninstall){
  let grid='';
@@ -76,6 +76,9 @@ async function main(){
  fs.mkdirSync(OUT,{recursive:true});
  const files={
   'h00k.ico':await ico(appIcon()),
+  // A distinct installer asset makes NSIS executable resource verification explicit.
+  'h00k-installer.ico':await ico(appIcon()),
+  'h00k-robot-preview.png':await sharp(Buffer.from(appIcon())).png().toBuffer(),
   'installerSidebar.bmp':await bmp24(sidebar(false),164,314),
   'uninstallerSidebar.bmp':await bmp24(sidebar(true),164,314),
   'installerHeader.bmp':await bmp24(header(),150,57)
