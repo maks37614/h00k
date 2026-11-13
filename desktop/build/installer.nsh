@@ -2,8 +2,10 @@
 !include "LogicLib.nsh"
 
 ; Assisted NSIS installer: preserve electron-builder's install/upgrade/uninstall.
+!ifndef BUILD_UNINSTALLER
 Var /GLOBAL h00kShortcutCheck
 Var /GLOBAL h00kShortcutWanted
+!endif
 
 !macro customWelcomePage
   !define MUI_WELCOMEPAGE_TITLE "h00k Desktop"
