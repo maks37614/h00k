@@ -16,11 +16,17 @@ export class SharedScanJobs<T> {
     const job = new Promise<T>((resolve,reject)=>{
       const start = () => {
         this.active++;
-        void Promise.resolve().then(task).then(resolve,reject).finally(()=>{
+        // Remove the completed flight BEFORE resolving its callers. Otherwise
+        // an immediate retry can receive stale results from the prior request.
+        const finish = () => {
           this.active--;
           this.jobs.delete(key);
           this.waiters.shift()?.();
-        });
+        };
+        void Promise.resolve().then(task).then(
+          value => { finish(); resolve(value); },
+          error => { finish(); reject(error); },
+        );
       };
       if (this.active < this.limit) start();
       else this.waiters.push(start);
