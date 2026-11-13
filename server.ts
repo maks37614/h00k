@@ -1,3 +1,5 @@
+import { usePostgresAuth, initializeIdentity } from './server/pgIdentity';
+import { installPostgresIdentityRoutes } from './server/pgIdentityRoutes';
 import express from 'express';
 import path from 'path';
 import { installProductionAssets } from './server/productionAssets';
@@ -63,7 +65,10 @@ async function startServer() {
   const app = express();
   const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
-  app.use(express.json());
+  app.set('trust proxy', process.env.AUTH_TRUST_PROXY === '1' ? 1 : 'loopback');
+  app.use(express.json({ limit: '384kb' }));
+  if (usePostgresAuth()) await initializeIdentity();
+  installPostgresIdentityRoutes(app);
 
   // Read-only operator endpoint is disabled unless H00K_OPS_TOKEN is configured.
   let chartDepthMetrics: (() => { activeMarkets: number; clients: number }) | null = null;
