@@ -40,4 +40,5 @@ jobs:
       - name: Build
         run: npm run build
       - name: Tests
-        run: npm test
+        timeout-minutes: 12
+        run: node --import ./tests/fixtures/offline-network.mjs --import tsx --test --test-concurrency=1 tests/*.test.ts
