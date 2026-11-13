@@ -47,10 +47,10 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
     catch { return { ...DEFAULT_SITE_NOTIFICATIONS }; }
   };
   const [settingsState, setSettingsState] = useState<{ uid: string; settings: SiteNotificationSettings }>(
-    () => ({ uid, settings: loadSettings(uid, profile?.siteNotificationSettings) })
+    () => ({ uid, settings: loadSettings(uid, profile?.uid === uid ? profile.siteNotificationSettings : undefined) })
   );
   const settings = settingsState.uid === uid ? settingsState.settings
-    : loadSettings(uid, profile?.siteNotificationSettings);
+    : loadSettings(uid, profile?.uid === uid ? profile.siteNotificationSettings : undefined);
   const settingsRef = useRef(settings);
   settingsRef.current = settings;
 
@@ -69,7 +69,7 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    setSettingsState({ uid, settings: loadSettings(uid, profile?.siteNotificationSettings) });
+    setSettingsState({ uid, settings: loadSettings(uid, profile?.uid === uid ? profile.siteNotificationSettings : undefined) });
     setItemState({ uid, items: readNotificationItems(localStorage.getItem(siteNotificationStorageKey(uid))) });
     setError(null);
   }, [uid]);
