@@ -10,7 +10,6 @@ import { fetch24hTradeCount } from './server/chartMarketStats';
 import { analyzeFormationWithAI } from './server/geminiService';
 import { generateSmartAnalysis } from './server/smartAnalysisService';
 import { calculateMarketSentiment, SentimentDataUnavailableError } from './server/sentimentService';
-import { installCryptoNewsRoutes } from './server/cryptoNewsFeed';
 import { installTelegramRoutes } from './server/telegramRoutes';
 import { startSharedTelegramBot } from './server/telegramLinkService';
 import {
@@ -86,9 +85,6 @@ async function startServer() {
       res.status(400).json({ success: false, error: error instanceof Error ? error.message : 'Помилка збереження' });
     }
   });
-
-  // Public, cached crypto headlines and optional free title translations.
-  installCryptoNewsRoutes(app);
 
   // Health check
   app.get('/api/health', (req, res) => {
