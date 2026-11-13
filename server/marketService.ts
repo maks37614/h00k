@@ -132,8 +132,39 @@ export function formationCandleData(klines: Kline[], timeframe: Timeframe, colle
   return { collectedAt, lastClosedAt, contiguous: true as const };
 }
 
+// Concurrent charts and fallback HTTP clients should not start identical
+// Binance/Bybit requests when the 1.5-second cache expires simultaneously.
+const inFlightKlines = new Map<string, Promise<Kline[]>>();
+
+export function fetchKlines(
+  exchange: ExchangeId,
+  market: MarketType,
+  symbol: string,
+  timeframe: Timeframe,
+  limit: number = 70,
+  startTime?: number,
+  endTime?: number,
+  options: { requireFresh?: boolean; chart?: boolean } = {},
+): Promise<Kline[]> {
+  const key = [
+    exchange, market, normalizeExchangeSymbol(symbol), timeframe,
+    Math.min(Math.max(limit, 10), 1000), startTime ?? '', endTime ?? '',
+    options.requireFresh === true ? 'fresh' : 'cache',
+    options.chart === true ? 'chart' : 'scan',
+  ].join(':');
+  const existing = inFlightKlines.get(key);
+  if (existing) return existing;
+  const pending = fetchKlinesUncached(exchange, market, symbol, timeframe, limit, startTime, endTime, options);
+  if (inFlightKlines.size >= 2048) return pending;
+  inFlightKlines.set(key, pending);
+  void pending.finally(() => {
+    if (inFlightKlines.get(key) === pending) inFlightKlines.delete(key);
+  }).catch(() => {});
+  return pending;
+}
+
 // Fetch Klines for a specific coin with multi-mirror resilience
-export async function fetchKlines(
+async function fetchKlinesUncached(
   exchange: ExchangeId,
   market: MarketType,
   symbol: string,
