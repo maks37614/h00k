@@ -88,8 +88,18 @@ export function normalizeTigerGroup(group?: string): string | null {
   return /^[A-Z]$/.test(value) || /^(?:[0-9]|10|11)$/.test(value) ? value : null;
 }
 
-export function getUserTerminalLinkSettings(userId?: string, profile?: Pick<UserProfile, 'uid' | 'terminalLinkSettings'> | null): TerminalLinkSettings {
+export function getUserTerminalLinkSettings(
+  userId?: string,
+  profile?: Pick<UserProfile, 'uid' | 'terminalLinkSettings' | 'metaScalpSettings'> | null
+): TerminalLinkSettings {
   if (!userId || profile?.uid !== userId) return normalizeTerminalLinkSettings({ provider: 'none', enabled: false });
+  // Preserve previous MetaScalp auto-switch choice for accounts created before this feature.
+  if (!profile.terminalLinkSettings) {
+    return normalizeTerminalLinkSettings({
+      switchOnChartOpen: profile.metaScalpSettings?.autoSwitchOnClick !== false,
+      enabled: profile.metaScalpSettings?.enabled !== false,
+    });
+  }
   return normalizeTerminalLinkSettings(profile.terminalLinkSettings);
 }
 
