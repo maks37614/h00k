@@ -108,7 +108,8 @@ export const ProfileTerminalLinkingSettings: React.FC = () => {
     try {
       const result = await sendToSelectedTerminal(
         'BTCUSDT', 'binance', 'futures', 'screener',
-        normalizeTerminalLinkSettings(draft),
+        // A deliberate connection test is not a trading signal: no quality score is invented.
+        normalizeTerminalLinkSettings({ ...draft, minQuality: 0 }),
         { ...meta, enabled: draft.provider === 'metascalp' ? draft.enabled : meta.enabled }
       );
       setMessage({ ok: result.success, text: result.message + (result.copiedToClipboard ? ' · Скопійовано до буфера.' : '') });
