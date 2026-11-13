@@ -275,6 +275,12 @@ export const ProfileNotificationSettings: React.FC = () => {
             onChange={e => update({ telegramEnabled: e.target.checked })}
             className="h-4 w-4 accent-cyan-400" aria-label="Дозволити Telegram-доставку" />
         </label>
+        {settings.telegramEnabled && settings.onlyFavorites && (
+          <p role="status" className="rounded-lg border border-amber-500/30 bg-amber-950/20 p-2 text-[11px] text-amber-200">
+            Режим «Лише обрані» працює для сповіщень на сайті. Серверні Telegram-сповіщення
+            в цьому режимі блокуються, доки список обраних не підтримується серверною перевіркою.
+          </p>
+        )}
         <p className="text-[11px] leading-relaxed text-slate-400">
           Telegram потрібно спочатку підключити до профілю. Цей перемикач дозволяє тільки обрані
           категорії, які сервер уже моніторить: цінові рівні, системний нагляд, OI, щільності,
