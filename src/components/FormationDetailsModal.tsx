@@ -1055,7 +1055,7 @@ export const FormationDetailsModal: React.FC<FormationDetailsModalProps> = ({
               <button
                 onClick={() => onSendMetaScalp(coin)}
                 className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 hover:text-amber-100 border border-amber-500/40 text-xs font-semibold transition-all active:scale-95 shadow-sm whitespace-nowrap cursor-pointer"
-                title={`Відкрити в MetaScalp (Група ${metaScalpBinding})`}
+                title={`Відкрити в обраному терміналі (Група ${metaScalpBinding})`}
               >
                 <Zap className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-400 fill-amber-400/30" />
                 <span className="font-mono text-[10px] px-1 rounded bg-amber-500/20 text-amber-200">
