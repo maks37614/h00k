@@ -14,6 +14,7 @@ const service = await import('../server/alertService');
 const { NotificationRouter } = await import('../server/notificationRouter');
 const surveillance = await import('../server/surveillanceService');
 const users = await import('../server/userTelegram');
+const notificationPrefs = await import('../server/siteNotificationPrefs');
 process.chdir(originalCwd);
 test.after(() => fs.rmSync(fixtureDir, { recursive: true, force: true }));
 
@@ -21,6 +22,11 @@ const connectUser = (userId: string, chatId: string) => {
   const bot = users.getSharedTelegramBot();
   if (!bot) throw new Error('Shared bot fixture is missing');
   users.connectUserTelegram(userId, bot.botId, chatId);
+};
+const allowNotifications = (uid: string, categories: Record<string, boolean>, telegramEnabled = true) => {
+  notificationPrefs.saveUserSiteNotificationSettings(uid, {
+    optedIn: true, enabled: true, telegramEnabled, ...categories,
+  });
 };
 const alert = (id: string, userId = 'test-user') => ({
   id, userId, symbol: 'BTCUSDT', exchange: 'binance' as const, marketType: 'futures' as const,
@@ -112,6 +118,7 @@ test('alert deleted while fetching price cannot fire or be restored', async () =
   const originalFetch = globalThis.fetch;
   let resolvePrice!: (value: Response) => void;
   service.saveAlerts([]);
+  allowNotifications('test-user', { price: true });
   service.createAlert(alert('deleted-during-check'));
   globalThis.fetch = async () => new Promise<Response>(resolve => { resolvePrice = resolve; });
   try {
@@ -127,6 +134,7 @@ test('alert deleted while fetching price cannot fire or be restored', async () =
 test('futures price alerts never trigger from spot or another exchange on an API outage', async () => {
   const originalFetch = globalThis.fetch;
   service.saveAlerts([]);
+  allowNotifications('outage-user', { price: true }, false);
   service.createAlert(alert('futures-api-outage', 'outage-user'));
   const urls: string[] = [];
   globalThis.fetch = async (input) => {
@@ -147,6 +155,7 @@ test('futures price alerts never trigger from spot or another exchange on an API
 test('notification dispatch deduplicates concurrent requests and respects setup switches', async () => {
   const originalFetch = globalThis.fetch;
   connectUser('router-test', '12345');
+  allowNotifications('router-test', { formations: true });
   const router = new NotificationRouter();
   let calls = 0;
   globalThis.fetch = async () => { calls++; return Response.json({ ok: true, result: {} }); };
@@ -166,6 +175,7 @@ test('notification dispatch deduplicates concurrent requests and respects setup 
 
 test('notifications use current pause, deletion, trigger mode and density switches', () => {
   connectUser('gate-user', '23456');
+  allowNotifications('gate-user', { density: true });
   const router = new NotificationRouter();
   const coin: any = { id: 'gate-coin', userId: 'gate-user', symbol: 'BTCUSDT', exchange: 'binance', marketType: 'futures',
     isActive: true, config: { ...surveillance.getDefaultSurveillanceConfig(), triggerModes: ['realtime'], densityAlerts: true } };
@@ -188,6 +198,7 @@ test('a user price alert without a Telegram link never uses a global destination
   process.env.TELEGRAM_BOT_TOKEN = '999:global-fixture';
   process.env.TELEGRAM_CHAT_ID = 'global-fixture-chat';
   service.saveAlerts([]);
+  allowNotifications('unconfigured-user', { price: true });
   service.createAlert(alert('no-user-telegram', 'unconfigured-user'));
   let sends = 0;
   globalThis.fetch = async input => {
@@ -212,6 +223,8 @@ test('per-user alert checks retain every other user in the global WS subscriptio
     watches.push(items.map(i => `${i.exchange}:${i.market}:${i.symbol}`).sort());
   });
   service.saveAlerts([]);
+  allowNotifications('user-a', { price: true });
+  allowNotifications('user-b', { price: true });
   service.createAlert({ ...alert('all-users-a', 'user-a'), targetPrice: 999_999 });
   service.createAlert({ ...alert('all-users-b', 'user-b'), symbol: 'ETHUSDT', targetPrice: 999_999 });
   globalThis.fetch = async () => Response.json({ price: '100' });
