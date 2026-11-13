@@ -104,6 +104,7 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
   // Profile snapshots can arrive out of order while toggles are being saved.
   const pendingSettingsWrites = useRef(new Map<string, number>());
   const pendingSoundWrites = useRef(new Map<string, number>());
+  const lastServerHydration = useRef(new Map<string, string>());
 
   useEffect(() => {
     setSettingsState({ uid, settings: loadSettings(uid, profile?.uid === uid ? profile.siteNotificationSettings : undefined) });
@@ -128,6 +129,28 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
     setSettingsState({ uid, settings: remote });
     try { localStorage.setItem(siteNotificationSettingsKey(uid), JSON.stringify(remote)); } catch {}
   }, [uid, profile?.siteNotificationSettings]);
+
+  // Restore authenticated server delivery permissions after sign-in or deployment.
+  // Never inherit unversioned legacy settings as consent.
+  useEffect(() => {
+    if (!user || (user as any).isLocalUser || profile?.uid !== uid || !profile.siteNotificationSettings
+        || pendingSettingsWrites.current.has(uid)) return;
+    const remote = normalizeSiteNotificationSettings(profile.siteNotificationSettings);
+    const signature = JSON.stringify(remote);
+    if (lastServerHydration.current.get(uid) === signature) return;
+    lastServerHydration.current.set(uid, signature);
+    apiFetch('/api/notification-preferences', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ settings: remote }),
+    }).then(res => {
+      if (!res.ok) throw new Error('Failed to hydrate notification permissions');
+    }).catch(() => {
+      if (uidRef.current === uid) {
+        lastServerHydration.current.delete(uid);
+        setError('Серверні налаштування Telegram не вдалося відновити. Перевірте з’єднання.');
+      }
+    });
+  }, [uid, user?.uid, profile?.siteNotificationSettings]);
 
   const replaceItems = useCallback((next: SiteNotificationItem[]) => {
     const currentUid = uidRef.current;
