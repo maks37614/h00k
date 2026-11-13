@@ -196,6 +196,75 @@ test('liquidation WS shares snapshots, preserves Binance cumulative updates and 
   assert.equal(manager.activeScopes(), 0);
 });
 
+test('reconnecting with a stale snapshot never reduces an already observed cumulative fill', () => {
+  let upstream: {
+    onSnapshot: (rows: Liquidation[], connected: boolean) => void;
+    onLiquidation: (row: Liquidation) => void;
+    onStatus: (connected: boolean) => void;
+  } | undefined;
+  let sockets = 0;
+  const manager = createSharedLiquidationSubscriptions(options => {
+    sockets++;
+    upstream = options;
+    return () => {};
+  });
+  const scope = { exchange: 'binance' as const, symbol: 'BTCUSDT' };
+  const firstSnapshots: Liquidation[][] = [];
+  const laterSnapshots: Liquidation[][] = [];
+  const t = Date.now();
+  const fill = (id: string, usd: number): Liquidation => ({
+    id, side: 'LONG', t, p: 100, q: usd / 100, usd,
+  });
+  const stopFirst = manager.subscribe({
+    ...scope, onSnapshot: rows => firstSnapshots.push(rows),
+    onLiquidation: () => {}, onStatus: () => {},
+  });
+  upstream!.onSnapshot([fill('fill-1', 1000)], true);
+  upstream!.onLiquidation(fill('fill-1', 3000));
+  upstream!.onLiquidation(fill('fill-2', 500));
+  upstream!.onStatus(false);
+  // Simulate a restarted backend with a persisted but older partial snapshot.
+  upstream!.onSnapshot([fill('fill-1', 1200)], true);
+  const stopLater = manager.subscribe({
+    ...scope, onSnapshot: rows => laterSnapshots.push(rows),
+    onLiquidation: () => {}, onStatus: () => {},
+  });
+  const latest = firstSnapshots.at(-1)!;
+  assert.equal(latest.find(row => row.id === 'fill-1')?.usd, 3000);
+  assert.equal(latest.find(row => row.id === 'fill-2')?.usd, 500);
+  assert.deepEqual(latest, laterSnapshots.at(-1));
+  assert.equal(sockets, 1, 'new chart must re-use the same browser socket');
+  upstream!.onSnapshot([fill('fill-1', 4000)], true);
+  assert.equal(firstSnapshots.at(-1)?.find(row => row.id === 'fill-1')?.usd, 4000,
+    'genuine larger cumulative fills from the server must still be accepted');
+  stopFirst(); stopLater();
+});
+
+test('a stale liquidation snapshot does not resurrect expired historical events', () => {
+  let upstream: {
+    onSnapshot: (rows: Liquidation[], connected: boolean) => void;
+    onLiquidation: (row: Liquidation) => void;
+  } | undefined;
+  const manager = createSharedLiquidationSubscriptions(options => {
+    upstream = options;
+    return () => {};
+  });
+  const snapshots: Liquidation[][] = [];
+  const stop = manager.subscribe({
+    exchange: 'bybit', symbol: 'ETHUSDT',
+    onSnapshot: rows => snapshots.push(rows),
+    onLiquidation: () => {}, onStatus: () => {},
+  });
+  const old = { id: 'expired-1', side: 'SHORT' as const,
+    t: Date.now() - 31 * 60_000, p: 100, q: 2, usd: 200 };
+  upstream!.onSnapshot([old], true);
+  assert.deepEqual(snapshots.at(-1), []);
+  upstream!.onLiquidation(old);
+  upstream!.onSnapshot([], true);
+  assert.deepEqual(snapshots.at(-1), []);
+  stop();
+});
+
 test('one independent browser socket per exchange and coin, not one global market feed', () => {
   let created = 0;
   const manager = createSharedLiquidationSubscriptions(() => { created++; return () => {}; });
