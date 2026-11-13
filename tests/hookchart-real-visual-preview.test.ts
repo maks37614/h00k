@@ -37,7 +37,7 @@ test('real settings preview renders the HookChart canvas with actual OHLCV, pric
   assert.match(html, /aria-label="Графік BTCUSDT"/);
   assert.match(html, /class="chartTimeAxis"/);
   assert.match(html, /Binance/);
-  assert.match(html, /Свічки відкритого графіка/);
+  assert.match(html, /Дані відкритого HookChart/);
   assert.match(html, /Зберегти масштаб/);
   assert.doesNotMatch(html, /Приклад відносного масштабу|не реальні котирування/);
 });
@@ -59,7 +59,7 @@ test('live preview never creates another exchange feed or changes drawing and al
   assert.match(previewSource, /import \{\s*Chart, ChartTimeAxis,/);
   assert.match(previewSource, /const useParentCandles = candles !== undefined/);
   assert.match(previewSource, /if \(useParentCandles\) return/);
-  assert.match(previewSource, /fetchDirectKlines\('binance', 'spot', 'BTCUSDT', '1h', 700\)/);
+  assert.match(previewSource, /fetchDirectKlines\(marketExchange, marketTypeSelected, marketSymbol, marketTimeframe, 900\)/);
   assert.match(previewSource, /showLiqRiskBlock=\{false\}/);
   assert.match(previewSource, /controlsContainer=\{null\}/);
   assert.match(previewSource, /onViewportGesture=\{onGesture\}/);
@@ -68,17 +68,36 @@ test('live preview never creates another exchange feed or changes drawing and al
   assert.doesNotMatch(previewSource, /new WebSocket|setInterval|onCreatePriceAlert=|onNeedHistory=/);
 });
 
-test('phone and compact Terminal previews use the real canvas at limited widths', () => {
-  assert.match(previewSource, /if \(device === 'mobile'\) return 354/);
-  assert.match(previewSource, /if \(context === 'terminalCompact'\) return 370/);
-  assert.match(previewSource, /style=\{\{ maxWidth: profilePreviewWidth\(visualContext, visualDevice\) \}\}/);
+test('profile chart uses real measured width, matching engine viewports instead of a fixed-width illustration', () => {
+  assert.match(previewSource, /const \[chartWidth, setChartWidth\] = useState\(0\)/);
+  assert.match(previewSource, /new ResizeObserver\(update\)/);
+  assert.match(previewSource, /hookChartPlotWidth\(chartWidth\) \/ viewport\.barWidth/);
+  assert.doesNotMatch(previewSource, /profilePreviewWidth\(|maxWidth: profilePreviewWidth/);
   const css = source('../src/components/hookchart/integration.css');
   assert.match(css, /hookchart-visual-preview-chart/);
+  assert.match(css, /hookchart-visual-preview-frame \{\s*max-width:none;\s*width:100%;/);
   assert.match(css, /touch-action:none/);
-  assert.match(css, /@media\(max-width:600px\)/);
-  assert.match(previewSource, /Реальні свічки для прикладу/);
+  assert.match(css, /@media \(max-width:600px\)/);
+  assert.match(previewSource, /Свічки вибраної біржі · реальний HookChart/);
 });
 
+test('profile real HookChart picker uses Binance or Bybit spot/futures and the selected timeframe', () => {
+  assert.match(previewSource, /marketDefaults\?: \{ exchange\?: ExchangeId; marketType\?: MarketType; timeframe\?: Timeframe \}/);
+  assert.match(previewSource, /marketDefaults\?\.exchange \|\| 'binance'/);
+  assert.match(previewSource, /marketDefaults\?\.timeframe \|\| '15m'/);
+  assert.match(previewSource, /marketExchange, marketTypeSelected, marketSymbol, marketTimeframe, 900/);
+  assert.match(previewSource, /aria-label="Біржа HookChart у профілі"/);
+  assert.match(previewSource, /aria-label="Ринок HookChart у профілі"/);
+  assert.match(previewSource, /aria-label="Таймфрейм HookChart у профілі"/);
+  assert.match(previewSource, /aria-label="Монета HookChart у профілі"/);
+  assert.match(previewSource, /showVolumes=\{chartPreferences\?\.showVolumes !== false\}/);
+  assert.doesNotMatch(previewSource, /new WebSocket|setInterval/);
+  assert.match(settingsSource, /marketDefaults=\{marketDefaults\}/);
+  assert.match(settingsSource, /chartPreferences=\{prefs\}/);
+  const profile = source('../src/components/profile/ProfileHookChartSettings.tsx');
+  assert.match(profile, /exchange: profile\.defaultExchange === 'all'/);
+  assert.match(profile, /previewLongColor=\{draft\.candleLongColor\}/);
+});
 test('Replay chart is unaffected by the new chart-only settings preview', () => {
   const replay = source('../src/components/replay/ReplayChart.tsx');
   assert.doesNotMatch(replay, /HookChartVisualPreview|previewCandles|visualProfileEditor/);
