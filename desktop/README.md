@@ -164,3 +164,36 @@ Download the installer from the **h00k Desktop Windows** GitHub Actions
 artifact. No Linux VPS deployment is needed. If you previously pinned the
 old Electron icon on the Windows taskbar, unpin it and pin the newly installed
 h00k Desktop again to refresh the taskbar cache.
+
+## v0.1.4 — installer upgrade / shortcut QA
+
+- The **Create h00k desktop shortcut** checkbox remains optional, and now its
+  explicit choice is saved in the installer's registry key. Silent upgrades do
+  not unexpectedly recreate a shortcut that the user previously declined.
+- Unchecking deletes both old and new desktop links; rechecking restores the
+  current link with the correct AppUserModelID, preserving the h00k robot icon
+  even if electron-builder's upgrade logic kept old shortcuts.
+- IT administrators may control shortcuts in a silent installation:
+  `"h00k Desktop Setup 0.1.4.exe" /S /NO_DESKTOP_SHORTCUT` or
+  `"h00k Desktop Setup 0.1.4.exe" /S /DESKTOP_SHORTCUT`.
+  Without either switch, the user's last explicit choice is preserved.
+  Start Menu shortcuts are unaffected.
+- GitHub Actions now **runs the generated installer on Windows**, tests
+  unchecked / silent-upgrade / checked cases and checks that the resulting
+  desktop link points to an installed application carrying a Windows icon.
+  It also publishes a companion `SHA256SUMS.txt` in the same artifact ZIP.
+
+### Verify the downloaded setup file
+
+After extracting the GitHub Actions artifact in PowerShell:
+
+```powershell
+Get-FileHash '.\h00k Desktop Setup 0.1.4.exe' -Algorithm SHA256
+Get-Content .\SHA256SUMS.txt
+```
+
+The two SHA-256 values should match. The current development installer is
+**not Authenticode code-signed**; Windows SmartScreen may warn for this reason.
+Do not bypass warnings from unknown sources. Publisher signing should be
+configured only after a suitable certificate is available. The changes above
+do not involve production VPS deployment.
