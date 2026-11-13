@@ -835,7 +835,9 @@ export function startSurveillanceMonitor(intervalMs = 25000) {
           const { coin: updated } = await checkCoinSurveillance(coin);
           const result = commitSurveillanceCheck(updated, { deferPersist: true });
           if (!result || !result.lastCheckedAt ||
-              result.lastCheckedAt === coin.lastCheckedAt) {
+              result.lastCheckedAt === coin.lastCheckedAt ||
+              !candleCloseCheckPlanner.hasLatestClosedBars(
+                coin.config, result.state?.lastProcessedCandleTimes, Date.now())) {
             // Missing exchange candles, changed account config, or a partial
             // server response: retry, don't sleep until the next bar close.
             candleCloseCheckPlanner.failed(key, coin.config, Date.now());

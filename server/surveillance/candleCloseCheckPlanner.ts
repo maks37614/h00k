@@ -35,6 +35,24 @@ export class CandleCloseCheckPlanner {
     return false;
   }
 
+  /** A query returning stale or incomplete OHLCV is not a successful
+   * bar-close scan, even if the timestamp of the check itself is new. */
+  hasLatestClosedBars(config: SurveillanceConfig,
+    processed: { '4h'?: number; '1h'?: number; '15m'?: number } | undefined,
+    now: number): boolean {
+    const modes=config.triggerModes || (config.triggerMode ? [config.triggerMode] : ['bar_close']);
+    for (const [mode, ms] of Object.entries(BAR_FRAMES_MS)) {
+      if (!modes.includes(mode as typeof modes[number])) continue;
+      const timeframe = mode === 'bar_close' ? '4h'
+        : mode === 'bar_close_1h' ? '1h' : '15m';
+      // Latest candle whose *end* is in the past, using UTC exchange buckets.
+      const expected = Math.floor(now / ms) * ms - ms;
+      if (!(typeof processed?.[timeframe] === 'number') ||
+          processed[timeframe]! < expected) return false;
+    }
+    return true;
+  }
+
   private nextClose(config: SurveillanceConfig, now: number): number {
     const modes = config.triggerModes || (config.triggerMode ? [config.triggerMode] : ['bar_close']);
     let deadline = Infinity;

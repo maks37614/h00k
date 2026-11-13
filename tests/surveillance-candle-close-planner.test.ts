@@ -48,3 +48,25 @@ test('server loops retain manual checks and use candle-aware due gating',()=>{
  assert.match(source,/checkAllUserCoins\(userId: string\)/);
  assert.match(source,/forceCheck: true, forceNotify: false/);
 });
+
+test('late exchange candles trigger retry rather than skipping the next 4h signal',()=>{
+ const planner=new CandleCloseCheckPlanner();
+ const modes=config(['bar_close']);
+ const now=28_805_000;
+ assert.equal(planner.hasLatestClosedBars(modes,{'4h':0},now),false);
+ assert.equal(planner.hasLatestClosedBars(modes,{'4h':14_400_000},now),true);
+ planner.failed('btc',modes,now);
+ assert.equal(planner.due('btc',modes,now+4_999),false);
+ assert.equal(planner.due('btc',modes,now+5_000),true);
+});
+test('all requested bar-close intervals must be up to date',()=>{
+ const planner=new CandleCloseCheckPlanner();
+ const modes=config(['bar_close','bar_close_1h','bar_close_15m','realtime']);
+ const now=15_000_000;
+ assert.equal(planner.hasLatestClosedBars(modes,{
+  '4h':14_400_000,'1h':14_400_000,'15m':13_500_000},now),false);
+ const processed={
+  '4h':14_400_000,'1h':14_400_000,'15m':14_400_000};
+ assert.equal(planner.hasLatestClosedBars(modes,processed,now),true);
+ assert.equal(planner.hasLatestClosedBars(config(['realtime']),undefined,now),true);
+});
