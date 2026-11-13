@@ -9,6 +9,11 @@ It does not execute exchange scanners on the user's computer or change VPS deplo
 - Several terminals can be enabled at once.
 - Full h00k website, selected h00k page panels, or independent floating windows.
 - Attach left, right, top, or bottom **outside** the selected terminal's top-level window.
+- Gapless seam: zero dock-to-terminal spacing and Win32 DWM visible-frame bounds
+  eliminate invisible resize-border gaps; docked h00k panels are frameless and shadowless.
+- A persistent ⚙ gear on every attached h00k panel opens a secure native quick menu
+  (position, mode, full settings, detach); Ctrl+, also opens the settings for that terminal.
+- Faster ~160ms native window position updates while preserving the terminal's order controls.
 - Follow terminal movement and resizing, hide docked views when it is minimized.
 - Manual OS window selector if a terminal executable has an unexpected name.
 - Per-terminal dock size, automatic attach, follow and always-on-top settings.
@@ -74,3 +79,20 @@ Passing Node unit tests is not a substitute for end-to-end Windows tests.
 
 The h00k website query desktopPanel changes presentation only. It does not
 grant access to locked sections or expose desktop IPC.
+
+## v0.1.1 quick control and seam verification
+
+The gear is an isolated local WebContentsView with a minimal IPC preload. The
+remote h00k.top website cannot invoke toolbar commands. Settings opened from
+the gear automatically select the correct provider, including after the settings
+window was closed. Switching from docked to floating recreates a decorated
+movable window; switching back recreates a frameless dock panel.
+
+Verify that the target edge and h00k panel physically meet at 100%, 125%, and
+150% Windows scaling and on a mixed-DPI second monitor. Windows DWM visible
+bounds are used when available, while GetWindowRect remains a fallback.
+A screenshot alone cannot guarantee every OS decoration/theme is pixel-perfect.
+
+For an already-installed copy, use a new Windows installer from this branch's
+successful **h00k Desktop Windows** Actions artifact. Desktop files are not
+replaced by updating the Linux VPS.
