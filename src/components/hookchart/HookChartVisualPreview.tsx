@@ -67,7 +67,7 @@ export function HookChartVisualPreview({
       <svg viewBox={`0 0 ${WIDTH} ${HEIGHT}`} width="100%"
         role="img" aria-label="Маленький штучний графік для попереднього перегляду масштабу та відступів"
         focusable="false" preserveAspectRatio="xMidYMid meet"
-        style={{ display: 'block', maxWidth: '420px', width: '100%', height: 'auto' }}>
+        style={{ display: 'block', width: '100%', height: 'auto' }}>
         <rect width={WIDTH} height={HEIGHT} fill="#0d1523" rx="7" />
         {[.25, .5, .75].map(p => (
           <line key={p} x1="0" y1={TOP + (BOTTOM - TOP) * p} x2={PLOT}
