@@ -15,7 +15,7 @@ export const DEFAULT_APP_PREFERENCES: AppPreferences = {
   defaultExchange: 'all',
   defaultMarketType: 'futures',
   defaultTimeframe: '15m',
-  soundAlertsEnabled: true,
+  soundAlertsEnabled: false,
 };
 
 /**
