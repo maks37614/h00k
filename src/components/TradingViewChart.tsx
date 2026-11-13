@@ -35,7 +35,7 @@ import type { TerminalToolbarVisibility } from './hookchart/HookChartCanvas';
 import type { HookChartHandle } from './hookchart/engine';
 import { subscribeSharedKlines } from './hookchart/sharedKlineStream';
 import { subscribeMarketTrades } from './hookchart/marketTradeStream';
-import { fetchSharedLiveFallbackKline } from './hookchart/sharedLiveFallback';
+import { fetchSharedLiveFallbackKline, shouldApplyLiveFallbackKline } from './hookchart/sharedLiveFallback';
 import type { VisualChartProfile, VisualContextId } from './hookchart/visualProfiles';
 
 interface TradingViewChartProps {
@@ -842,6 +842,7 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
     let disposed = false;
     let wsConnected = false;
     let lastExchangePriceAt = 0;
+    let lastStreamTickReceivedAt = 0;
     let polling = false;
     let fallbackFailures = 0;
     let nextFallbackAt = Date.now() + 2000 + Math.floor(Math.random() * 1000);
@@ -862,6 +863,7 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
         },
         onCandle: candle => {
           if (disposed) return;
+          lastStreamTickReceivedAt = Date.now();
           const eventAt = Number(candle.eventTime) || Date.now();
           const current = currentCandleRef.current;
           // Separate trade and kline sockets are not guaranteed to deliver in
@@ -894,6 +896,7 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
               trade.t < current.time * 1000 ||
               trade.t >= current.time * 1000 + intervalMs) return;
           lastExchangePriceAt = trade.t;
+          lastStreamTickReceivedAt = Date.now();
           liveTickHandlerRef.current({
             ...current, close: trade.p,
             high: Math.max(current.high, trade.p),
@@ -916,10 +919,13 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
         Math.min(20_000, 4000 * 2 ** Math.min(4, fallbackFailures));
       nextFallbackAt = now + wait + Math.floor(Math.random() * 1500);
       polling = true;
+      const requestStartedAt = Date.now();
       try {
         const latest = await fetchSharedLiveFallbackKline(exchange, marketType, cleanSymbol, timeframe);
         if (disposed) return;
         if (!latest) { fallbackFailures++; return; }
+        if (!shouldApplyLiveFallbackKline(latest, currentCandleRef.current,
+          requestStartedAt, lastStreamTickReceivedAt, wsConnected)) return;
         // Even a successful REST fallback must back off while WS stays down;
         // otherwise an exchange outage creates a permanent 4s VPS poll storm.
         if (!wsConnected) fallbackFailures++;
