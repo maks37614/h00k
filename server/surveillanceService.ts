@@ -16,6 +16,7 @@ import {
 import { normalizeKlineTimeMs } from '../src/utils/formationValidation';
 import { getTimeframeMs } from './surveillance/multiTimeframeEngine';
 import { fetchKlines } from './marketService';
+import { surveillanceCheckCandleCache } from './surveillance/checkCandleCache';
 import { getUserTelegram } from './alertService';
 import { surveillanceManager } from './surveillance/surveillanceManager';
 import { notificationRouter } from './notificationRouter';
@@ -642,8 +643,12 @@ async function checkCoinSurveillanceInternal(
   const prevState = coin.state;
   const forceNotify = typeof options === 'object' && Boolean(options.forceNotify);
   const frames = ['1d', '4h', '1h', '15m'] as const;
-  const fetched = await Promise.all(frames.map(tf => fetchKlines(coin.exchange, coin.marketType, coin.symbol, tf,
-    tf === '4h' ? 80 : 60).catch(() => [])));
+  const forceCheck = typeof options === 'object' && Boolean(options.forceCheck);
+  const fetched = await Promise.all(frames.map(tf =>
+    (forceCheck
+      ? fetchKlines(coin.exchange, coin.marketType, coin.symbol, tf, tf === '4h' ? 80 : 60)
+      : surveillanceCheckCandleCache.get(coin.exchange, coin.marketType, coin.symbol, tf,
+          tf === '4h' ? 80 : 60)).catch(() => [])));
   const source = Object.fromEntries(frames.map((tf, i) => [tf, fetched[i]])) as Record<typeof frames[number], Kline[]>;
   const newState = await calculateSurveillanceState(coin.symbol, coin.exchange, coin.marketType, config, source);
   if (!newState) return { coin, newEvents: [] };
@@ -753,6 +758,7 @@ async function checkCoinSurveillanceInternal(
 }
 
 let isLoopRunning = false;
+let monitorPassInFlight = false;
 
 export async function checkAllUserCoins(userId: string): Promise<SurveillanceCoin[]> {
   const uid = userId && userId.trim() !== '' ? userId.trim() : 'guest';
@@ -784,6 +790,8 @@ export function startSurveillanceMonitor(intervalMs = 25000) {
   }
 
   setInterval(async () => {
+    if (monitorPassInFlight) return;
+    monitorPassInFlight = true;
     try {
       const activeItems = getAllActiveSurveillanceCoins();
       if (activeItems.length === 0) return;
@@ -798,6 +806,6 @@ export function startSurveillanceMonitor(intervalMs = 25000) {
       }
     } catch (err) {
       console.error('[Surveillance] Error in monitor loop:', err);
-    }
+    } finally { monitorPassInFlight = false; }
   }, intervalMs);
 }
