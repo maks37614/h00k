@@ -87,6 +87,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [authErrorCode, setAuthErrorCode] = useState<string | null>(null);
   const [authNotice, setAuthNotice] = useState<string | null>(null);
   const [resetToken, setResetToken] = useState(initialResetToken);
+  // React Strict Mode may replay the mount effect: reuse one verification POST.
+  // Otherwise the second mount could check /session before the first request sets its cookie.
+  const verifyTokenRef = useRef<string | null>(
+    typeof window === 'undefined' ? null : new URLSearchParams(window.location.search).get('verifyEmail')
+  );
+  const verifyRequestRef = useRef<Promise<any> | null>(null);
   const userRef = useRef(user);
   const profileRef = useRef(profile);
   const writeQueue = useRef<Promise<void>>(Promise.resolve());
@@ -117,7 +123,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     mounted.current = true;
     // Do not destroy browser-local user settings during auth bootstrap.
     const params = new URLSearchParams(window.location.search);
-    const verifyToken = params.get('verifyEmail');
+    const verifyToken = verifyTokenRef.current;
     if (verifyToken || params.has('resetPassword')) {
       params.delete('verifyEmail');
       params.delete('resetPassword');
@@ -128,7 +134,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const bootstrap = async () => {
       try {
         if (verifyToken) {
-          const response = await authRequest('/api/auth/verify-email', { token: verifyToken });
+          if (!verifyRequestRef.current) {
+            verifyRequestRef.current = authRequest('/api/auth/verify-email', { token: verifyToken });
+          }
+          const response = await verifyRequestRef.current;
           if (!cancelled) {
             setIdentity(response);
             setAuthNotice('Електронну пошту підтверджено. Ви увійшли до h00k.');
