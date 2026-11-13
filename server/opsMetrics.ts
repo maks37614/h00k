@@ -16,6 +16,7 @@ import { surveillanceStreamStats } from './surveillanceEvents';
 import { getSharedScreenerJobStats } from './marketService';
 import { telegramDispatchQueue } from './telegramQueue';
 import { sharedMarketAnalysis } from './surveillance/sharedMarketAnalysis';
+import { sharedCandleFeedStats } from './surveillance/sharedCandleFeed';
 
 function authorized(req: Request): boolean {
   const secret = process.env.H00K_OPS_TOKEN;
@@ -57,6 +58,7 @@ export function installOpsMetrics(app: Express,
       surveillanceStream: surveillanceStreamStats(),
       sharedScreener: getSharedScreenerJobStats(),
       sharedMarketAnalysis: sharedMarketAnalysis.stats(),
+      sharedCandles: sharedCandleFeedStats(),
       telegramQueue: telegramDispatchQueue.stats(),
       historicalOiCache: exchangeHistoryCache.stats(),
       liveOiCache: getLiveOiCacheStats(),

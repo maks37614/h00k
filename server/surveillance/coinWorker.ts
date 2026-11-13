@@ -1,11 +1,12 @@
 import { ExchangeId, MarketType, SurveillanceCoin, Timeframe } from '../../src/types';
-import { fetchSingleExchangeOI, fetchKlines } from '../marketService';
+import { fetchSingleExchangeOI } from '../marketService';
 import { notificationRouter } from '../notificationRouter';
 import { createSetupAlertsGroup, getUserLanguage } from '../alertService';
 import type { RawDepthDelta, RawTradeEvent } from './exchangeStream';
 import { acquireExchangeStream, type SharedExchangeStreamHandle } from './sharedExchangeStream';
 import { publishSurveillance } from '../surveillanceEvents';
 import { sharedMarketAnalysis, candleFingerprint } from './sharedMarketAnalysis';
+import { acquireSharedCandleFeed, type SharedCandleFeedHandle } from './sharedCandleFeed';
 import { LevelsAndFormationsEngine } from './levelsAndFormationsEngine';
 import { MacroAndNewsEngine } from './macroAndNewsEngine';
 import { MultiTimeframeEngine } from './multiTimeframeEngine';
@@ -60,6 +61,7 @@ export class CoinWorker {
   private streamClient: SharedExchangeStreamHandle;
   private orderBookEngine: OrderBookEngine;
   private mtfEngine: MultiTimeframeEngine;
+  private candleFeed: SharedCandleFeedHandle;
   private levelsEngine: LevelsAndFormationsEngine;
   private volumeOIEngine: VolumeAndOIEngine;
   private setupEngine: SetupEngine;
@@ -92,7 +94,8 @@ export class CoinWorker {
   ) {
     this.streamClient = acquireExchangeStream(coin.symbol, coin.exchange, coin.marketType);
     this.orderBookEngine = new OrderBookEngine(coin.symbol, coin.exchange, coin.marketType);
-    this.mtfEngine = new MultiTimeframeEngine();
+    this.candleFeed = acquireSharedCandleFeed(coin.symbol, coin.exchange, coin.marketType);
+    this.mtfEngine = this.candleFeed.engine;
     this.levelsEngine = new LevelsAndFormationsEngine();
     this.volumeOIEngine = new VolumeAndOIEngine();
     this.setupEngine = new SetupEngine();
@@ -135,8 +138,12 @@ export class CoinWorker {
 
   private async init() {
     this.setupStreamListeners();
-    await this.loadInitialHistory();
+    await this.candleFeed.ready;
     if (this.isDestroyed) return;
+    if (this.currentPrice === 0) {
+      const history = this.mtfEngine.getCandles('15m');
+      if (history.length) this.currentPrice = history[history.length - 1].close;
+    }
     this.startPeriodicTasks();
     void this.runDeepAnalysis().catch((err) => console.error(`[CoinWorker ${this.coin.symbol}] Analysis failed:`, err));
   }
@@ -160,7 +167,7 @@ export class CoinWorker {
     this.streamClient.on('trade', (trade: RawTradeEvent) => {
       this.currentPrice = trade.price;
       this.volumeOIEngine.addTrade(trade);
-      this.mtfEngine.updateWithTrade(trade);
+      // SharedCandleFeed updates OHLCV once per exchange instrument.
     });
 
     // 3. Depth Updates for Local Order Book & Densities (Fast Path)
@@ -186,30 +193,6 @@ export class CoinWorker {
       this.lastWsOiAt = now;
       this.volumeOIEngine.recordOI(data.valueUsd, data.amountCoins, this.currentPrice);
     });
-  }
-
-  private async loadInitialHistory() {
-    try {
-      const [k1d, k4h, k1h, k15m, k5m] = await Promise.all([
-        fetchKlines(this.coin.exchange, this.coin.marketType, this.coin.symbol, '1d', 80).catch(() => []),
-        fetchKlines(this.coin.exchange, this.coin.marketType, this.coin.symbol, '4h', 100).catch(() => []),
-        fetchKlines(this.coin.exchange, this.coin.marketType, this.coin.symbol, '1h', 100).catch(() => []),
-        fetchKlines(this.coin.exchange, this.coin.marketType, this.coin.symbol, '15m', 80).catch(() => []),
-        fetchKlines(this.coin.exchange, this.coin.marketType, this.coin.symbol, '5m', 80).catch(() => []),
-      ]);
-
-      if (k1d.length > 0) this.mtfEngine.setCandles('1d', k1d);
-      if (k4h.length > 0) this.mtfEngine.setCandles('4h', k4h);
-      if (k1h.length > 0) this.mtfEngine.setCandles('1h', k1h);
-      if (k15m.length > 0) this.mtfEngine.setCandles('15m', k15m);
-      if (k5m.length > 0) this.mtfEngine.setCandles('5m', k5m);
-
-      if (k15m.length > 0 && this.currentPrice === 0) {
-        this.currentPrice = k15m[k15m.length - 1].close;
-      }
-    } catch (e) {
-      console.warn(`[CoinWorker ${this.coin.symbol}] Error loading initial history:`, e);
-    }
   }
 
   private startPeriodicTasks() {
@@ -648,6 +631,7 @@ export class CoinWorker {
       this.oiFetchInterval = null;
     }
     this.streamClient.destroy();
+    this.candleFeed.destroy();
     this.orderBookEngine.clear();
   }
 }
