@@ -1,5 +1,5 @@
 'use strict';
-const { app, BrowserWindow, ipcMain, screen, shell } = require('electron');
+const { app, BrowserWindow, WebContentsView, Menu, ipcMain, screen, shell } = require('electron');
 const { spawn } = require('node:child_process');
 const path = require('node:path');
 const fs = require('node:fs');
@@ -21,6 +21,7 @@ let windows = new Map(); // provider -> Map(panel -> BrowserWindow)
 let previousSnapshots = '';
 let lastDockStatus = {};
 let standalone = null;
+const toolbarOwners = new Map(); // local-only WebContentsView IDs, never exposed to h00k.top
 
 function loadSettings() {
   statePath = path.join(app.getPath('userData'), 'smartdock.json');
@@ -62,18 +63,62 @@ function guardWebsite(win) {
     }
   });
 }
-function makeContentWindow(provider, id) {
+function attachDockToolbar(win, provider) {
+  // Local, privileged toolbar overlays the *unprivileged* h00k web page.
+  // The remote h00k renderer has no preload and cannot invoke Desktop IPC.
+  const toolbar = new WebContentsView({
+    webPreferences: {
+      preload: path.join(__dirname, 'toolbar-preload.cjs'),
+      nodeIntegration: false, contextIsolation: true, sandbox: true,
+      webSecurity: true,
+    },
+  });
+  toolbar.setBackgroundColor('#00000000');
+  win.contentView.addChildView(toolbar);
+  const place = () => {
+    if (win.isDestroyed()) return;
+    const width = win.getContentBounds().width;
+    toolbar.setBounds({ x: Math.max(0, width - 47), y: 6, width: 41, height: 41 });
+  };
+  place();
+  win.on('resize', place);
+  toolbar.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  toolbar.webContents.on('will-navigate', event => event.preventDefault());
+  toolbar.webContents.loadFile(path.join(__dirname, 'toolbar.html'))
+    .catch(error => console.error('Smart Dock toolbar failed:', error.message));
+  const toolbarId = toolbar.webContents.id;
+  toolbarOwners.set(toolbarId, { win, provider });
+  win.on('closed', () => {
+    toolbarOwners.delete(toolbarId);
+    if (!toolbar.webContents.isDestroyed()) toolbar.webContents.close();
+  });
+}
+
+function makeContentWindow(provider, id, mode = 'full') {
   const win = new BrowserWindow({
     title: 'h00k • ' + LABELS[provider] + ' • ' + (id === 'full' ? 'Desktop' : PANELS.find(x=>x.id===id)?.name),
     x: 100, y: 100, width: 480, height: 470,
     minWidth: 200, minHeight: 140, show: false, backgroundColor: '#070a12',
+    // Docked windows have no shadow/invisible Windows resize border at their seam.
+    frame: mode === 'floating',
+    hasShadow: mode === 'floating',
+    thickFrame: mode === 'floating',
+    roundedCorners: false,
     autoHideMenuBar: true,
     webPreferences: {
       nodeIntegration: false, contextIsolation: true, sandbox: true,
       webSecurity: true, partition: 'persist:h00k',
     },
   });
+  win.__h00kMode = mode === 'floating' ? 'floating' : 'docked';
   guardWebsite(win);
+  attachDockToolbar(win, provider);
+  win.webContents.on('before-input-event', (event, input) => {
+    if (input.type === 'keyDown' && (input.control || input.meta) && input.key === ',') {
+      event.preventDefault();
+      openSettingsWindow(provider);
+    }
+  });
   win.loadURL(webURL(id)).catch(err => console.warn('h00k load error:', err.message));
   win.on('closed', () => {
     const collection = windows.get(provider);
@@ -91,7 +136,60 @@ function createSettingsWindow() {
     },
   });
   settingsWindow.loadFile(path.join(__dirname, 'settings.html'));
+  settingsWindow.webContents.on('did-finish-load', () => {
+    previousSnapshots = '';
+    pushSnapshot();
+  });
   settingsWindow.on('closed', () => { settingsWindow = null; });
+}
+function openSettingsWindow(provider) {
+  if (!settingsWindow || settingsWindow.isDestroyed()) createSettingsWindow();
+  const show = () => {
+    if (!settingsWindow || settingsWindow.isDestroyed()) return;
+    if (settingsWindow.isMinimized()) settingsWindow.restore();
+    settingsWindow.show();
+    settingsWindow.focus();
+    if (PROVIDERS.includes(provider)) settingsWindow.webContents.send('desktop:select-provider', provider);
+  };
+  if (settingsWindow.webContents.isLoading()) settingsWindow.webContents.once('did-finish-load', show);
+  else show();
+}
+function patchQuickProfile(provider, patch) {
+  settings.profiles[provider] = normalizeProfile(provider, { ...settings.profiles[provider], ...patch });
+  saveSettings(); syncWindows(); pushSnapshot();
+}
+function openToolbarMenu(event) {
+  const owner = toolbarOwners.get(event.sender.id);
+  if (!owner || event.sender.isDestroyed() || owner.win.isDestroyed()) return;
+  const { provider, win } = owner;
+  const profile = settings.profiles[provider];
+  const label = LABELS[provider];
+  const sides = [
+    ['right', 'Праворуч'], ['left', 'Ліворуч'], ['top', 'Зверху'], ['bottom', 'Знизу'],
+  ];
+  const modes = [
+    ['full', 'Увесь h00k'], ['blocks', 'Вибрані блоки'], ['floating', 'Плаваючі вікна'],
+  ];
+  const menu = Menu.buildFromTemplate([
+    { label: '⚙ Налаштування прикріплення…', click: () => openSettingsWindow(provider) },
+    { type: 'separator' },
+    { label: 'Розташування', submenu: sides.map(([side, name]) => ({
+      label: name, type: 'radio', checked: profile.side === side,
+      click: () => patchQuickProfile(provider, { side }),
+    })) },
+    { label: 'Режим', submenu: modes.map(([mode, name]) => ({
+      label: name, type: 'radio', checked: profile.mode === mode,
+      click: () => patchQuickProfile(provider, { mode, follow: mode !== 'floating' }),
+    })) },
+    { type: 'separator' },
+    { label: 'Відкрити h00k.top у браузері', click: () => void shell.openExternal(WEBSITE) },
+    { label: 'Відкріпити від ' + label, click: () => {
+      settings.profiles[provider].enabled = false;
+      manualAttached.delete(provider);
+      saveSettings(); closeProvider(provider); pushSnapshot();
+    } },
+  ]);
+  menu.popup({ window: win });
 }
 function candidateWindows() {
   // Only native OS window metadata is exposed to the local settings panel.
@@ -120,11 +218,17 @@ function externalRect(item) {
     width: Math.max(1,bottomRight.x-topLeft.x), height: Math.max(1,bottomRight.y-topLeft.y),
   };
 }
-function ensureContentWindows(provider, ids) {
+function ensureContentWindows(provider, ids, mode = 'full') {
   let group = windows.get(provider);
   if (!group) { group = new Map(); windows.set(provider,group); }
-  for (const [id,win] of group) if (!ids.includes(id)) { group.delete(id); if(!win.isDestroyed())win.destroy(); }
-  for (const id of ids) if (!group.has(id) || group.get(id).isDestroyed()) group.set(id,makeContentWindow(provider,id));
+  const windowMode = mode === 'floating' ? 'floating' : 'docked';
+  for (const [id,win] of group) {
+    if (!ids.includes(id) || win.__h00kMode !== windowMode) {
+      group.delete(id);
+      if (!win.isDestroyed()) win.destroy();
+    }
+  }
+  for (const id of ids) if (!group.has(id) || group.get(id).isDestroyed()) group.set(id,makeContentWindow(provider,id,mode));
   return group;
 }
 function closeProvider(provider) {
@@ -151,7 +255,7 @@ function syncWindows() {
       if (profile.mode === 'floating') {
         // Truly independent floating panels can be launched without a terminal.
         const ids = availablePanels(profile);
-        const group = ensureContentWindows(provider, ids);
+        const group = ensureContentWindows(provider, ids, profile.mode);
         const work = screen.getPrimaryDisplay().workArea;
         const boxes = floatingRects(null, work, profile.width, profile.height, ids.length, profile.side);
         ids.forEach((id, index) => {
@@ -176,7 +280,7 @@ function syncWindows() {
       continue;
     }
     const ids = availablePanels(profile);
-    const group = ensureContentWindows(provider, ids);
+    const group = ensureContentWindows(provider, ids, profile.mode);
     const rect = externalRect(target);
     const work = screen.getDisplayMatching(rect).workArea;
     const boxes = profile.mode === 'floating'
@@ -251,6 +355,7 @@ function verifySettingsSender(event) {
   if (!settingsWindow || event.sender !== settingsWindow.webContents) throw new Error('Untrusted IPC sender');
 }
 function registerIpc() {
+  ipcMain.on('desktop:toolbar-menu', openToolbarMenu);
   ipcMain.handle('desktop:snapshot',event => { verifySettingsSender(event); return snapshot(); });
   ipcMain.handle('desktop:save',(event,provider,patch) => {
     verifySettingsSender(event);
@@ -307,7 +412,6 @@ else {
   app.on('second-instance',()=>{if(settingsWindow&&!settingsWindow.isDestroyed())settingsWindow.show();});
   app.whenReady().then(() => {
     loadSettings();registerIpc();createSettingsWindow();runAgent();
-    settingsWindow.webContents.on('did-finish-load',pushSnapshot);
     if (process.platform !== 'win32') {
       for (const provider of PROVIDERS) lastDockStatus[provider] = 'Smart Dock підтримується лише у Windows';
     }
