@@ -9,6 +9,7 @@ type Connector = (options: Options) => () => void;
 
 type Entry = {
   listeners: Set<Subscriber>;
+  failed: Set<Subscriber>;
   status: ChartDepthStatus;
   sequence: number;
   eventTime: number;
@@ -49,12 +50,21 @@ export function createSharedDepthSubscriptions(connect: Connector = connectHookC
         // The book always precedes LIVE: a chart cannot claim live liquidity
         // before its own local density engine has accepted that snapshot.
         try {
-          if (listener.onBook(snapshot)) listener.onStatus('live');
-          else listener.onStatus('reconnecting');
-        } catch { listener.onStatus('reconnecting'); }
+          if (listener.onBook(snapshot)) {
+            entry.failed.delete(listener);
+            listener.onStatus('live');
+          } else {
+            entry.failed.add(listener);
+            listener.onStatus('reconnecting');
+          }
+        } catch {
+          entry.failed.add(listener);
+          listener.onStatus('reconnecting');
+        }
       } else listener.onStatus(entry.status === 'live' ? 'reconnecting' : entry.status);
       return () => {
         entry!.listeners.delete(listener);
+        entry!.failed.delete(listener);
         if (entry!.listeners.size === 0 && active.get(key) === entry) {
           active.delete(key);
           entry!.stop();
@@ -63,7 +73,7 @@ export function createSharedDepthSubscriptions(connect: Connector = connectHookC
     }
 
     entry = {
-      listeners: new Set([listener]), status: 'connecting', sequence: 0,
+      listeners: new Set([listener]), failed: new Set(), status: 'connecting', sequence: 0,
       eventTime: 0, bids: new Map(), asks: new Map(), stop: () => {},
     };
     const current = entry;
@@ -76,9 +86,9 @@ export function createSharedDepthSubscriptions(connect: Connector = connectHookC
     };
     const fanoutStatus = (status: ChartDepthStatus) => {
       current.status = status;
-      if (status !== 'live') clear();
+      if (status !== 'live') { clear(); current.failed.clear(); }
       for (const subscriber of [...current.listeners]) {
-        try { subscriber.onStatus(status); } catch { /* a chart never interrupts other charts */ }
+        try { subscriber.onStatus(status === 'live' && current.failed.has(subscriber) ? 'reconnecting' : status); } catch { /* a chart never interrupts other charts */ }
       }
     };
     try {
@@ -114,16 +124,19 @@ export function createSharedDepthSubscriptions(connect: Connector = connectHookC
           for (const subscriber of [...current.listeners]) {
             try {
               if (!subscriber.onBook(update)) {
-                // A single chart may be mounted late or have lost its local
-                // book. Repair it from an exact full snapshot rather than
-                // reconnecting the socket for everybody.
+                // Repair one chart from a complete local snapshot; do not
+                // restart every chart's socket when one subscriber is stale.
                 const snapshot = {
                   isSnapshot: true, sequence: current.sequence, eventTime,
                   bids: [...current.bids], asks: [...current.asks],
                 };
-                if (!subscriber.onBook(snapshot)) subscriber.onStatus('reconnecting');
-              }
+                if (!subscriber.onBook(snapshot)) {
+                  current.failed.add(subscriber);
+                  subscriber.onStatus('reconnecting');
+                } else current.failed.delete(subscriber);
+              } else current.failed.delete(subscriber);
             } catch {
+              current.failed.add(subscriber);
               try { subscriber.onStatus('reconnecting'); } catch {}
             }
           }
@@ -137,6 +150,7 @@ export function createSharedDepthSubscriptions(connect: Connector = connectHookC
     }
     return () => {
       current.listeners.delete(listener);
+      current.failed.delete(listener);
       if (current.listeners.size === 0 && active.get(key) === current) {
         active.delete(key);
         current.stop();
