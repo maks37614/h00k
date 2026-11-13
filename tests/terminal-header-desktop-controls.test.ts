@@ -31,7 +31,7 @@ test('on wide screens autoscale comes before 1x–4x on the left, presets and pl
 test('top-right shortcuts are anchored to the right and bordered on desktop', () => {
   assert.match(header, /col-start-3 row-start-1 flex shrink-0 items-center justify-self-end/);
   for (const label of [
-    'Створити сповіщення в Telegram', 'Надіслати в MetaScalp',
+    'Створити сповіщення в Telegram', 'Надіслати в обраний термінал',
     'Налаштування робочого простору', 'На весь екран браузера', 'Закрити термінал',
   ]) assert.ok(header.includes(label));
   assert.equal((header.match(/lg:h-8 lg:w-8 lg:rounded-lg lg:border/g) ?? []).length, 5);
