@@ -16,7 +16,6 @@ import { useAuth } from './AuthContext';
 import { PriceAlert, AlertHistoryItem } from '../types';
 import { handleFirestoreError, OperationType } from '../lib/firestoreErrors';
 import { cleanForFirestore } from '../lib/firestoreUtils';
-import { playAlertChime } from '../utils/domSound';
 import { getAlertMirrorWrites, getAlertMirrorDeletes } from '../utils/alertSync';
 import { normalizeLanguage } from '../locales';
 
@@ -117,13 +116,13 @@ export const AlertsProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const key = `${serverAlert.id}:${serverAlert.triggeredAt ?? 0}`;
     if (notifiedTriggers.current.has(key)) return;
     notifiedTriggers.current.add(key);
-    playAlertChime();
 
     if (typeof window !== 'undefined') {
       window.dispatchEvent(
         new CustomEvent('signalhook:alert-triggered', {
           detail: {
             symbol: serverAlert.symbol,
+            alertId: serverAlert.id + ':' + String(serverAlert.deliveryEpoch ?? 0),
             targetPrice: serverAlert.targetPrice,
             condition: serverAlert.condition,
             triggeredPrice: serverAlert.triggeredPrice,
