@@ -202,11 +202,13 @@ export function matchesNotificationScope(
   settings: SiteNotificationSettings,
   source: { symbol?: string; exchange?: string; marketType?: string; timeframe?: string },
   favoriteIds: readonly string[] = [],
+  options: { timeframeIndependent?: boolean } = {},
 ): boolean {
   // When a specific filter is selected, missing source metadata must NOT bypass it.
   if (settings.scopeExchange !== 'all' && source.exchange !== settings.scopeExchange) return false;
   if (settings.scopeMarket !== 'all' && source.marketType !== settings.scopeMarket) return false;
-  if (settings.scopeTimeframe !== 'all' && source.timeframe !== settings.scopeTimeframe) return false;
+  if (!options.timeframeIndependent && settings.scopeTimeframe !== 'all'
+    && source.timeframe !== settings.scopeTimeframe) return false;
   const symbol = (source.symbol || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
   if (settings.scopeSymbols) {
     if (!symbol || !settings.scopeSymbols.split(/,\s*/).includes(symbol)) return false;
