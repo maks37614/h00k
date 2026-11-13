@@ -12,6 +12,7 @@ import {
   AlertCircle,
   Shield,
   Key,
+  MonitorSmartphone,
   Target,
   ChartCandlestick,
   PlugZap,
@@ -47,7 +48,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
   onOpenArchive,
   initialSection = 'account',
 }) => {
-  const { user, profile, updateProfileData, logout } = useAuth();
+  const { user, profile, updateProfileData, logout, logoutAll, listSessions, revokeSession } = useAuth();
   const { status: telegramStatus } = useTelegram();
   const { alerts, activeAlertsCount } = useAlerts();
   const { archiveCount } = useArchive();
@@ -68,6 +69,10 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [sessions, setSessions] = useState<Array<{id:string;userAgent:string;createdAt:string;expiresAt:string}>>([]);
+  const [sessionsOpen, setSessionsOpen] = useState(false);
+  const [sessionsBusy, setSessionsBusy] = useState(false);
+  const [sessionsError, setSessionsError] = useState<string | null>(null);
 
   const initializedAccount = useRef<string | null>(null);
 
@@ -124,6 +129,33 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
   const handleLogout = async () => {
     await logout();
     onClose();
+  };
+
+  const loadSessions = async () => {
+    setSessionsBusy(true);
+    setSessionsError(null);
+    try { setSessions(await listSessions()); }
+    catch (error: any) { setSessionsError(error?.message || 'Не вдалося отримати сесії.'); }
+    finally { setSessionsBusy(false); }
+  };
+  const toggleSessions = () => {
+    const next = !sessionsOpen;
+    setSessionsOpen(next);
+    if (next) void loadSessions();
+  };
+  const revokeAccountSession = async (id: string) => {
+    setSessionsBusy(true);
+    setSessionsError(null);
+    try { await revokeSession(id); await loadSessions(); }
+    catch (error: any) { setSessionsError(error?.message || 'Не вдалося завершити сесію.'); }
+    finally { setSessionsBusy(false); }
+  };
+  const logoutEverywhere = async () => {
+    setSessionsBusy(true);
+    setSessionsError(null);
+    try { await logoutAll(); onClose(); }
+    catch (error: any) { setSessionsError(error?.message || 'Не вдалося завершити сесії.'); }
+    finally { setSessionsBusy(false); }
   };
 
   const initialLetter = (displayName || user.email || 'U')[0].toUpperCase();
@@ -442,6 +474,40 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
               </div>
 
             </div>
+
+            {/* Sessions are loaded only when the user opens this section. */}
+            <section className="rounded-xl border border-slate-700/80 bg-slate-950/60 p-3 text-xs">
+              <button type="button" onClick={toggleSessions} aria-expanded={sessionsOpen}
+                className="flex w-full items-center justify-between gap-2 text-left font-semibold text-cyan-200">
+                <span className="inline-flex items-center gap-2"><MonitorSmartphone size={16}/> Безпека та активні сеанси</span>
+                <span>{sessionsOpen ? 'Згорнути' : 'Переглянути'}</span>
+              </button>
+              {sessionsOpen && (
+                <div className="mt-3 space-y-2">
+                  <p className="text-slate-400">Завершуйте невідомі сеанси. Список завантажується тільки під час відкриття.</p>
+                  {sessionsError && <p role="alert" className="text-rose-300">{sessionsError}</p>}
+                  {sessionsBusy && <p className="text-cyan-300">Завантаження…</p>}
+                  {!sessionsBusy && sessions.map(session => (
+                    <div key={session.id} className="flex items-center justify-between gap-2 rounded-lg border border-slate-800 p-2">
+                      <div className="min-w-0">
+                        <div className="truncate text-slate-200">{session.userAgent || 'Невідомий пристрій'}</div>
+                        <div className="mt-1 text-slate-500">
+                          Створено: {new Date(session.createdAt).toLocaleDateString()} · До {new Date(session.expiresAt).toLocaleDateString()}
+                        </div>
+                      </div>
+                      <button type="button" disabled={sessionsBusy} onClick={() => void revokeAccountSession(session.id)}
+                        className="shrink-0 rounded-lg border border-rose-900/60 px-2 py-1.5 text-rose-300 hover:bg-rose-950/50 disabled:opacity-50">
+                        Завершити
+                      </button>
+                    </div>
+                  ))}
+                  <button type="button" disabled={sessionsBusy} onClick={() => void logoutEverywhere()}
+                    className="rounded-lg border border-rose-500/40 px-3 py-2 font-semibold text-rose-300 hover:bg-rose-950/30 disabled:opacity-50">
+                    Завершити всі сеанси
+                  </button>
+                </div>
+              )}
+            </section>
 
             {/* Save Buttons */}
             <div className="pt-2 flex items-center justify-between gap-3 border-t border-slate-800">
