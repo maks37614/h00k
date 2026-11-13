@@ -96,7 +96,7 @@ export const MarketSentimentWidget: React.FC<MarketSentimentWidgetProps> = ({ co
 
   if (!data) {
     return (
-      <div className="rounded-2xl border border-slate-800/90 bg-slate-900/90 p-4 text-sm text-slate-300" role="status">
+      <div className="w-full min-w-0 rounded-2xl border border-slate-800/90 bg-slate-900/90 p-4 text-sm text-slate-300" role="status">
         <div className="flex items-center justify-between gap-3">
           <span>Настрій ринку: {loading ? 'Завантаження даних…' : 'Немає достовірних даних'}</span>
           <button type="button" onClick={fetchSentiment} disabled={loading}
@@ -110,7 +110,7 @@ export const MarketSentimentWidget: React.FC<MarketSentimentWidgetProps> = ({ co
   }
 
   return (
-    <div className="rounded-2xl bg-gradient-to-r from-slate-900 via-slate-900/85 to-indigo-950/40 border border-slate-800/90 shadow-lg backdrop-blur-md overflow-hidden lg:mx-auto lg:max-w-5xl">
+    <div className="w-full min-w-0 rounded-2xl bg-gradient-to-r from-slate-900 via-slate-900/85 to-indigo-950/40 border border-slate-800/90 shadow-lg backdrop-blur-md overflow-hidden">
       {/* Compact heading and sentiment segments share a row when space allows. */}
       <div className="flex min-w-0 flex-wrap items-center gap-x-2 border-b border-slate-800/70">
         <div className="flex w-full shrink-0 items-center justify-between gap-3 px-3 pt-3 sm:px-4 md:w-auto md:py-3 md:pl-4 md:pr-0">
