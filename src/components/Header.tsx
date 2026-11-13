@@ -52,6 +52,7 @@ interface HeaderProps {
   onOpenNotificationSettings?: () => void;
   onLinkNotification?: (item: SiteNotificationItem) => void;
   canLinkNotification?: (item: SiteNotificationItem) => boolean;
+  onOpenNotificationChart?: (item: SiteNotificationItem) => void;
   activePage: ActivePageType;
   onPageChange: (page: ActivePageType) => void;
 }
@@ -80,6 +81,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenNotificationSettings,
   onLinkNotification,
   canLinkNotification,
+  onOpenNotificationChart,
   activePage,
   onPageChange,
 }) => {
@@ -275,7 +277,7 @@ export const Header: React.FC<HeaderProps> = ({
              
             </button>
 
-            <SiteNotificationBell onOpenSettings={onOpenNotificationSettings} onLinkNotification={onLinkNotification} canLinkNotification={canLinkNotification} />
+            <SiteNotificationBell onOpenSettings={onOpenNotificationSettings} onOpenChart={onOpenNotificationChart} onLinkNotification={onLinkNotification} canLinkNotification={canLinkNotification} />
 
             <button
               id="open-telegram-btn"

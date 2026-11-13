@@ -37,6 +37,7 @@ import {
 } from './utils/metaScalpService';
 import { getUserTerminalLinkSettings, sendToSelectedTerminal, terminalLabel, notificationTerminalSource, isFreshTerminalNotification, type TerminalLinkSource } from './utils/terminalLinkService';
 import type { SiteNotificationItem } from './utils/siteNotifications';
+import { notificationChartTarget } from './utils/notificationChartLink';
 import { ScannedCoin, DetectedFormation, ScreenerFilterState, PriceAlert, ArchivedFormation, ActivePageType, type FullEarlyScanSnapshot } from './types';
 import { runDirectClientScan, getFallbackScannedCoins, hydrateMissingRegularOIFromBrowser } from './utils/directExchangeClient';
 import { getVisibleFormations, groupVisibleFormations } from './utils/formationList';
@@ -620,6 +621,7 @@ export default function App() {
 
   const handleAlertToast = useCallback(
     (toast: { symbol: string; targetPrice: number; condition: 'gte' | 'lte'; message?: string }) => {
+      if (!notificationEnabled(notificationSettings, 'price')) return;
       setAlertToast({
         id: Date.now(),
         symbol: toast.symbol,
@@ -628,8 +630,15 @@ export default function App() {
         message: toast.message,
       });
     },
-    []
+    [notificationSettings]
   );
+
+  // Hide an already-visible price toast as soon as notifications are disabled.
+  useEffect(() => {
+    if (!notificationEnabled(notificationSettings, 'price')) {
+      setAlertToast(null);
+    }
+  }, [notificationSettings.optedIn, notificationSettings.enabled, notificationSettings.price]);
 
   // Auto-dismiss MetaScalp toast
   useEffect(() => {
@@ -771,6 +780,21 @@ export default function App() {
     else if (currentHash !== nextHash) window.location.hash = nextHash;
     window.scrollTo({ top: 0, behavior: 'auto' });
   }, [user?.uid]);
+
+  // Notification coin links always use the dedicated full-screen HookChart page.
+  // Exact exchange/market metadata is retained; copying the symbol never calls this.
+  const openNotificationCoinChart = useCallback((item: SiteNotificationItem) => {
+    if (!user) {
+      handleOpenAuthModal('signin', 'general');
+      return;
+    }
+    const target = notificationChartTarget(item, coins, preferences);
+    if (!target) return;
+    setSelectedEarly(null);
+    setSelectedArchivedItem(null);
+    setSelectedPair({ coin: target.snapshot.coin });
+    openChartPage(target.route, target.snapshot);
+  }, [user, coins, preferences, handleOpenAuthModal, openChartPage]);
 
   // Handler when selecting pair for details modal
   const handleSelectPair = useCallback(
@@ -1380,6 +1404,7 @@ export default function App() {
         onOpenProfile={() => { setProfileInitialSection('account'); setIsProfileModalOpen(true); }}
         onLinkNotification={handleLinkNotification}
         canLinkNotification={canLinkNotification}
+        onOpenNotificationChart={openNotificationCoinChart}
         onOpenNotificationSettings={() => {
           if (!user) { handleOpenAuthModal('signin', 'general'); return; }
           setProfileInitialSection('notifications');
@@ -1826,6 +1851,7 @@ export default function App() {
         prefill={telegramPrefill}
         onOpenAuth={() => handleOpenAuthModal('signin', 'alerts')}
         onAlertCreated={(alert) => {
+          if (!notificationEnabled(notificationSettings, 'price')) return;
           setAlertToast({
             id: Date.now(),
             symbol: alert.symbol,

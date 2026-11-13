@@ -7,10 +7,11 @@ import { useAppPreferences } from '../utils/userPreferences';
 import {
   DEFAULT_SITE_NOTIFICATIONS, ImpulseTracker, normalizeSiteNotificationSettings,
   notificationEnabled, readNotificationItems, siteNotificationSettingsKey, siteNotificationStorageKey,
-  siteNotificationClearedAtKey, siteNotificationSeenKey,
+  siteNotificationClearedAtKey, siteNotificationSeenKey, siteNotificationMuteKey,
+  applyLocalNotificationMute,
   type SiteNotificationItem, type SiteNotificationKind, type SiteNotificationSettings, type SiteNotificationSound,
 } from '../utils/siteNotifications';
-import { playSiteNotificationSound } from '../utils/domSound';
+import { playSiteNotificationSound, stopCustomNotificationSound } from '../utils/domSound';
 import type { ScannedCoin } from '../types';
 import { scanNotificationSignals, marketSurveillanceSignal, liquidationNotificationSignal, LiquidationCascadeTracker, QualityScoreTracker, ProximityAlertTracker } from '../utils/notificationSignals';
 import { matchesNotificationScope } from '../utils/siteNotifications';
@@ -56,6 +57,10 @@ function loadSeen(uid: string): Set<string> {
     return new Set(Array.isArray(parsed) ? parsed.filter((v): v is string => typeof v === 'string').slice(-5000) : []);
   } catch { return new Set(); }
 }
+function locallyMutedAt(uid: string): number {
+  try { return Math.max(0, Number(localStorage.getItem(siteNotificationMuteKey(uid))) || 0); }
+  catch { return 0; }
+}
 function soundStorageKey(uid: string): string { return 'h00k_site_notification_sound_v1:' + uid; }
 function readStoredSound(uid: string): boolean {
   try { return localStorage.getItem(soundStorageKey(uid)) === 'true'; } catch { return false; }
@@ -74,9 +79,12 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
   const uid = user?.uid || 'guest';
 
   const loadSettings = (id: string, currentProfile: unknown): SiteNotificationSettings => {
-    if (currentProfile) return normalizeSiteNotificationSettings(currentProfile);
-    try { return normalizeSiteNotificationSettings(JSON.parse(localStorage.getItem(siteNotificationSettingsKey(id)) || 'null')); }
-    catch { return { ...DEFAULT_SITE_NOTIFICATIONS }; }
+    let source = currentProfile;
+    if (!source) {
+      try { source = JSON.parse(localStorage.getItem(siteNotificationSettingsKey(id)) || 'null'); }
+      catch { source = null; }
+    }
+    return applyLocalNotificationMute(normalizeSiteNotificationSettings(source), locallyMutedAt(id));
   };
   const [settingsState, setSettingsState] = useState<{ uid: string; settings: SiteNotificationSettings }>(
     () => ({ uid, settings: loadSettings(uid, profile?.uid === uid ? profile.siteNotificationSettings : undefined) })
@@ -113,8 +121,17 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
   const settingsSaveQueue = useRef(new Map<string, Promise<void>>());
   const soundSaveQueue = useRef(new Map<string, Promise<void>>());
   const lastServerHydration = useRef(new Map<string, string>());
+  const visibleBrowserNotificationsRef = useRef(new Set<Notification>());
+  const closeVisibleBrowserNotifications = useCallback(() => {
+    for (const notification of visibleBrowserNotificationsRef.current) {
+      try { notification.close(); } catch { /* Browser already dismissed it. */ }
+    }
+    visibleBrowserNotificationsRef.current.clear();
+  }, []);
 
   useEffect(() => {
+    closeVisibleBrowserNotifications();
+    stopCustomNotificationSound();
     setSettingsState({ uid, settings: loadSettings(uid, profile?.uid === uid ? profile.siteNotificationSettings : undefined) });
     setItemState({ uid, items: loadStoredItems(uid) });
     deliveredSeen.current = { uid, ids: loadSeen(uid) };
@@ -124,29 +141,52 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
       ? (profile?.uid === uid && typeof profile.soundAlertsEnabled === 'boolean'
         ? profile.soundAlertsEnabled : readStoredSound(uid))
       : false;
-    updatePreferences({ soundAlertsEnabled: selectedSound });
-  }, [uid, updatePreferences]);
+    updatePreferences({ soundAlertsEnabled: currentSettings.enabled ? selectedSound : false });
+  }, [uid, updatePreferences, closeVisibleBrowserNotifications]);
 
   useEffect(() => {
-    if (profile?.uid !== uid || !settingsRef.current.optedIn || pendingSoundWrites.current.has(uid) || typeof profile.soundAlertsEnabled !== 'boolean') return;
+    if (profile?.uid !== uid || !settingsRef.current.optedIn || !settingsRef.current.enabled
+      || pendingSoundWrites.current.has(uid) || typeof profile.soundAlertsEnabled !== 'boolean') return;
     try { localStorage.setItem(soundStorageKey(uid), String(profile.soundAlertsEnabled)); } catch {}
     updatePreferences({ soundAlertsEnabled: profile.soundAlertsEnabled });
   }, [uid, profile?.soundAlertsEnabled, updatePreferences]);
 
   useEffect(() => {
     if (profile?.uid !== uid || pendingSettingsWrites.current.has(uid) || !profile.siteNotificationSettings) return;
-    const remote = normalizeSiteNotificationSettings(profile.siteNotificationSettings);
+    const remote = loadSettings(uid, profile.siteNotificationSettings);
     settingsRef.current = remote;
     setSettingsState({ uid, settings: remote });
     try { localStorage.setItem(siteNotificationSettingsKey(uid), JSON.stringify(remote)); } catch {}
-  }, [uid, profile?.siteNotificationSettings]);
+    if (!remote.enabled) closeVisibleBrowserNotifications();
+  }, [uid, profile?.siteNotificationSettings, closeVisibleBrowserNotifications]);
+
+  // A second open tab must stop showing browser notifications immediately.
+  // The storage event fires in the OTHER tabs; the initiating tab updates its
+  // own settingsRef synchronously in updateSettings.
+  useEffect(() => {
+    const onStorage = (event: StorageEvent) => {
+      if (event.key !== siteNotificationMuteKey(uid)
+        && event.key !== siteNotificationSettingsKey(uid)) return;
+      const fromStorage = loadSettings(uid, null);
+      settingsRef.current = fromStorage;
+      setSettingsState({ uid, settings: fromStorage });
+      if (!fromStorage.enabled) {
+        closeVisibleBrowserNotifications();
+        stopCustomNotificationSound();
+        soundEnabledRef.current = false;
+        updatePreferences({ soundAlertsEnabled: false });
+      }
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, [uid, updatePreferences, closeVisibleBrowserNotifications]);
 
   // Restore authenticated server delivery permissions after sign-in or deployment.
   // Never inherit unversioned legacy settings as consent.
   useEffect(() => {
     if (!user || (user as any).isLocalUser || profile?.uid !== uid || !profile.siteNotificationSettings
         || pendingSettingsWrites.current.has(uid)) return;
-    const remote = normalizeSiteNotificationSettings(profile.siteNotificationSettings);
+    const remote = loadSettings(uid, profile.siteNotificationSettings);
     const signature = JSON.stringify(remote);
     if (lastServerHydration.current.get(uid) === signature) return;
     lastServerHydration.current.set(uid, signature);
@@ -173,10 +213,25 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
 
   const updateSettings = useCallback(async (patch: Partial<SiteNotificationSettings>) => {
     const currentUid = uidRef.current;
+    const disabling = patch.enabled === false;
+    const enabling = patch.enabled === true;
     const next = normalizeSiteNotificationSettings({ ...settingsRef.current, ...patch,
-      optedIn: settingsRef.current.optedIn || patch.enabled === true,
-      enabledAt: patch.enabled === true && !settingsRef.current.enabled
+      optedIn: settingsRef.current.optedIn || enabling,
+      enabledAt: enabling && !settingsRef.current.enabled
         ? Date.now() : settingsRef.current.enabledAt });
+    // Persist the deny before any asynchronous profile/Telegram work. Other
+    // tabs and in-flight callbacks check this marker before sending anything.
+    if (disabling) {
+      closeVisibleBrowserNotifications();
+      stopCustomNotificationSound();
+      try { localStorage.setItem(siteNotificationMuteKey(currentUid),
+        String(Math.max(Date.now(), settingsRef.current.enabledAt + 1))); } catch {}
+      soundEnabledRef.current = false;
+      updatePreferences({ soundAlertsEnabled: false });
+      try { localStorage.setItem(soundStorageKey(currentUid), 'false'); } catch {}
+    } else if (enabling) {
+      try { localStorage.removeItem(siteNotificationMuteKey(currentUid)); } catch {}
+    }
     settingsRef.current = next;
     setSettingsState({ uid: currentUid, settings: next });
     try { localStorage.setItem(siteNotificationSettingsKey(currentUid), JSON.stringify(next)); } catch {}
@@ -187,8 +242,9 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
       const previous = settingsSaveQueue.current.get(currentUid) ?? Promise.resolve();
       const task: Promise<void> = previous.catch(() => {}).then(async () => {
         if (uidRef.current !== currentUid) return;
-        await updateProfileData({ siteNotificationSettings: next });
-        if (uidRef.current !== currentUid) return;
+        // Critical: mute the server BEFORE waiting for Firestore writes,
+        // otherwise automatic Telegram alerts can keep arriving while
+        // the profile spinner still says "off".
         if (!(user as any)?.isLocalUser) {
           const res = await apiFetch('/api/notification-preferences', {
             method: 'PUT', headers: { 'Content-Type': 'application/json' },
@@ -196,8 +252,15 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
           });
           if (!res.ok) throw new Error('Сервер відхилив налаштування доставки');
         }
+        if (uidRef.current !== currentUid) return;
+        await updateProfileData({
+          siteNotificationSettings: next,
+          ...(disabling ? { soundAlertsEnabled: false } : {}),
+        });
       }).catch(() => {
-        if (uidRef.current === currentUid) setError('Не вдалося синхронізувати серверні сповіщення. Локальні налаштування збережено, але Telegram може не запрацювати.');
+        if (uidRef.current === currentUid) setError(
+          'Не вдалося синхронізувати налаштування із сервером. Сповіщення цього браузера вимкнено, але Telegram може продовжувати надсилати повідомлення. Перевірте підключення та повторіть вимкнення.'
+        );
       }).finally(() => {
         changePendingCount(pendingSettingsWrites.current, currentUid, -1);
         if (settingsSaveQueue.current.get(currentUid) === task) settingsSaveQueue.current.delete(currentUid);
@@ -205,18 +268,21 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
       settingsSaveQueue.current.set(currentUid, task);
       await task;
     }
-  }, [user?.uid, updateProfileData]);
+  }, [user?.uid, updateProfileData, updatePreferences, closeVisibleBrowserNotifications]);
 
   const setSoundEnabled = useCallback(async (enabled: boolean) => {
-    updatePreferences({ soundAlertsEnabled: enabled });
-    setError(null);
     const currentUid = uidRef.current;
-    try { localStorage.setItem(soundStorageKey(currentUid), String(enabled)); } catch {}
+    const allowed = Boolean(enabled && settingsRef.current.optedIn && settingsRef.current.enabled
+      && !(locallyMutedAt(currentUid) > 0 && settingsRef.current.enabledAt <= locallyMutedAt(currentUid)));
+    updatePreferences({ soundAlertsEnabled: allowed });
+    soundEnabledRef.current = allowed;
+    setError(null);
+    try { localStorage.setItem(soundStorageKey(currentUid), String(allowed)); } catch {}
     if (user?.uid === currentUid) {
       changePendingCount(pendingSoundWrites.current, currentUid, 1);
       const previous = soundSaveQueue.current.get(currentUid) ?? Promise.resolve();
       const task: Promise<void> = previous.catch(() => {}).then(async () => {
-        if (uidRef.current === currentUid) await updateProfileData({ soundAlertsEnabled: enabled });
+        if (uidRef.current === currentUid) await updateProfileData({ soundAlertsEnabled: allowed });
       }).catch(() => {
         if (uidRef.current === currentUid) setError('Не вдалося зберегти налаштування звуку в профілі.');
       }).finally(() => {
@@ -229,6 +295,11 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
   }, [user?.uid, updatePreferences, updateProfileData]);
 
   const emit = useCallback((event: NewSiteNotification) => {
+    // A different tab can disable everything while this callback is still
+    // processing market data. The persisted deny takes precedence over stale
+    // React state and even a granted browser Notification permission.
+    const mutedAt = locallyMutedAt(uidRef.current);
+    if (mutedAt > 0 && settingsRef.current.enabledAt <= mutedAt) return;
     if (!notificationEnabled(settingsRef.current, event.kind)) return;
     if (!event.id || !event.title) return;
     const streamEvent = event.kind === 'price' || event.kind === 'liquidations'
@@ -246,10 +317,25 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
       ...event, timestamp: event.timestamp ?? Date.now(), read: false,
     };
     replaceItems([notification, ...itemsRef.current]);
-    if (soundEnabledRef.current) playSiteNotificationSound(settingsRef.current.sound);
+    if (soundEnabledRef.current) {
+      const soundOwner = uidRef.current;
+      const soundKind = event.kind;
+      playSiteNotificationSound(settingsRef.current.sound, soundOwner, () => {
+        const mutedAt = locallyMutedAt(soundOwner);
+        return uidRef.current === soundOwner && soundEnabledRef.current
+          && !(mutedAt > 0 && settingsRef.current.enabledAt <= mutedAt)
+          && notificationEnabled(settingsRef.current, soundKind);
+      });
+    }
     if (settingsRef.current.browserPush && typeof document !== 'undefined' && document.hidden
       && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
-      try { new Notification(event.title, { body: event.description, icon: '/favicon.ico' }); } catch {}
+      try {
+        const visible = new Notification(event.title, {
+          body: event.description, icon: '/favicon.ico',
+        });
+        visibleBrowserNotificationsRef.current.add(visible);
+        visible.onclose = () => { visibleBrowserNotificationsRef.current.delete(visible); };
+      } catch { /* Browser may forbid native notification displays. */ }
     }
   }, [replaceItems]);
 
@@ -258,6 +344,8 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
   }, []);
 
   const processScan = useCallback((coins: readonly ScannedCoin[], favorites: readonly string[] = []) => {
+    const mutedAt = locallyMutedAt(uidRef.current);
+    if (mutedAt > 0 && settingsRef.current.enabledAt <= mutedAt) return;
     if (!settingsRef.current.optedIn || !settingsRef.current.enabled) return;
     favoritesRef.current = [...favorites];
     const currentUid = uidRef.current;
