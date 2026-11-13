@@ -559,6 +559,7 @@ export default function App() {
   const { activeAlertsCount } = useAlerts();
   const { emit: emitSiteNotification } = useSiteNotifications();
   const seenStrongFormations = useRef(new Set<string>());
+  const strongFormationsOwner = useRef('');
   const [isTelegramModalOpen, setIsTelegramModalOpen] = useState<boolean>(false);
   const [telegramPrefill, setTelegramPrefill] = useState<any>(null);
   const [alertToast, setAlertToast] = useState<AlertToastState | null>(null);
@@ -994,13 +995,28 @@ export default function App() {
   // Strong formations enter the on-site notification center once per unique setup.
   // The id is stable across repeated scans and browser reloads (persisted by the center).
   const reportStrongFormations = useCallback((scanned: ScannedCoin[]) => {
+    const owner = user?.uid || 'guest';
+    const storageKey = 'h00k_seen_strong_formations_v1:' + owner;
+    if (strongFormationsOwner.current !== owner) {
+      strongFormationsOwner.current = owner;
+      try {
+        const saved: unknown = JSON.parse(localStorage.getItem(storageKey) || '[]');
+        seenStrongFormations.current = new Set(
+          Array.isArray(saved) ? saved.filter((item): item is string => typeof item === 'string').slice(-2000) : []
+        );
+      } catch {
+        seenStrongFormations.current = new Set();
+      }
+    }
     let reported = 0;
+    let changed = false;
     for (const coin of scanned) {
       for (const formation of coin.formations) {
         if (formation.confidence < 88) continue;
         const id = ['formation', coin.exchange, coin.marketType, coin.timeframe, coin.symbol, formation.id].join(':');
         if (seenStrongFormations.current.has(id)) continue;
         seenStrongFormations.current.add(id);
+        changed = true;
         if (reported++ >= 3) continue; // Never flood the user on a bulk scan.
         emitSiteNotification({
           id, kind: 'formation', symbol: coin.symbol,
@@ -1009,7 +1025,12 @@ export default function App() {
         });
       }
     }
-  }, [emitSiteNotification]);
+    if (changed) {
+      const bounded = Array.from(seenStrongFormations.current).slice(-2000);
+      seenStrongFormations.current = new Set(bounded);
+      try { localStorage.setItem(storageKey, JSON.stringify(bounded)); } catch {}
+    }
+  }, [emitSiteNotification, user?.uid]);
 
   // Fetch screener data from API
   const fetchScreenerData = useCallback(async (currentTf = filters.timeframe, currentExchange = filters.exchange, currentMarket = filters.marketType) => {
