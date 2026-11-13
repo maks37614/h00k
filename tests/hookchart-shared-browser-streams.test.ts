@@ -108,6 +108,51 @@ test('a broken chart gets a complete local resync without restarting everybody',
   stopA(); stopB();
 });
 
+test('a subscriber with a failed local snapshot must not show LIVE until recovered', () => {
+  let source: { onBook: (book: BookUpdate) => boolean; onStatus: (status: ChartDepthStatus) => void } | undefined;
+  const manager = createSharedDepthSubscriptions(options => {
+    source = options;
+    return () => {};
+  });
+  const scope = { exchange: 'bybit' as const, marketType: 'futures' as const, symbol: 'ADAUSDT' };
+  const stopA = manager.subscribe({ ...scope, onBook: () => true, onStatus: () => {} });
+  source!.onBook(initialBook()); source!.onStatus('live');
+  const statuses: ChartDepthStatus[] = [];
+  let accept = false;
+  const stopB = manager.subscribe({
+    ...scope,
+    onBook: () => accept,
+    onStatus: status => statuses.push(status),
+  });
+  assert.equal(statuses.at(-1), 'reconnecting');
+  source!.onBook({ sequence: 101, eventTime: Date.now(), bids: [[99, 0]], asks: [] });
+  source!.onStatus('live');
+  assert.equal(statuses.at(-1), 'reconnecting',
+    'shared transport cannot claim a broken chart is already live');
+  accept = true;
+  source!.onBook({ sequence: 102, eventTime: Date.now(), bids: [[100, 25]], asks: [] });
+  source!.onStatus('live');
+  assert.equal(statuses.at(-1), 'live');
+  stopA(); stopB();
+});
+
+test('large grid with 120 HookCharts still opens one browser depth connection per symbol', () => {
+  let connects = 0, disconnects = 0;
+  const manager = createSharedDepthSubscriptions(() => {
+    connects++;
+    return () => { disconnects++; };
+  });
+  const stops = Array.from({ length: 120 }, () => manager.subscribe({
+    exchange: 'binance', marketType: 'futures', symbol: 'BTCUSDT',
+    onBook: () => true, onStatus: () => {},
+  }));
+  assert.equal(connects, 1);
+  stops.slice(0, 119).forEach(fn => fn());
+  assert.equal(disconnects, 0);
+  stops[119]();
+  assert.equal(disconnects, 1);
+});
+
 test('liquidation WS shares snapshots, preserves Binance cumulative updates and session de-dup', () => {
   type LiqOptions = { onSnapshot: (rows: Liquidation[], live: boolean) => void;
     onLiquidation: (event: Liquidation) => void; onStatus: (live: boolean) => void };
