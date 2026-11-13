@@ -1,3 +1,5 @@
+import { usePostgresAuth } from './pgIdentity';
+import { requirePostgresSession } from './pgIdentityRoutes';
 import { verify, createPublicKey } from 'node:crypto';
 import fs from 'node:fs';
 import type { Request, Response, NextFunction } from 'express';
@@ -60,6 +62,7 @@ export async function verifyFirebaseToken(token: string): Promise<string> {
 
 /** An authenticated UID is authoritative; request parameters cannot select another owner. */
 export async function requireUserAuth(req: Request, res: Response, next: NextFunction) {
+  if (usePostgresAuth()) return requirePostgresSession(req, res, next);
   try {
     const authorization = req.get('Authorization') || '';
     const match = authorization.match(/^Bearer ([A-Za-z0-9_.-]+)$/i);

@@ -1,22 +1,7 @@
 import { apiFetch } from '../utils/apiFetch';
 import React, { createContext, useContext, useEffect, useState, useCallback, useRef } from 'react';
-import {
-  collection,
-  doc,
-  setDoc,
-  deleteDoc,
-  onSnapshot,
-  query,
-  orderBy,
-  writeBatch,
-  getDocs,
-} from 'firebase/firestore';
-import { db } from '../firebase';
 import { useAuth } from './AuthContext';
 import { PriceAlert, AlertHistoryItem } from '../types';
-import { handleFirestoreError, OperationType } from '../lib/firestoreErrors';
-import { cleanForFirestore } from '../lib/firestoreUtils';
-import { getAlertMirrorWrites, getAlertMirrorDeletes } from '../utils/alertSync';
 import { normalizeLanguage } from '../locales';
 
 interface AlertsContextType {
@@ -62,42 +47,11 @@ export const AlertsProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   });
 
   const notifiedTriggers = useRef(new Set<string>());
-  const firestoreAlertsRef = useRef<PriceAlert[]>([]);
-  const pendingMirrors = useRef(new Set<string>());
-  useEffect(() => {
-    notifiedTriggers.current.clear();
-    firestoreAlertsRef.current = [];
-    pendingMirrors.current.clear();
-  }, [user?.uid]);
-
+  useEffect(() => { notifiedTriggers.current.clear(); }, [user?.uid]);
   const alertsRef = useRef(alerts);
   alertsRef.current = alerts;
   const userRef = useRef(user);
   userRef.current = user;
-  const profileRef = useRef(profile);
-  profileRef.current = profile;
-
-  const mirrorServerAlerts = useCallback((userId: string, serverAlerts: PriceAlert[], syncedAlerts: PriceAlert[] = []) => {
-    if (userRef.current?.uid !== userId) return;
-    // Delete only documents sent in this request; a newer snapshot may contain
-    // an alert created while the response was in flight.
-    for (const id of getAlertMirrorDeletes(serverAlerts, syncedAlerts)) {
-      const key = `${userId}:${id}`;
-      if (pendingMirrors.current.has(key)) continue;
-      pendingMirrors.current.add(key);
-      deleteDoc(doc(db, 'users', userId, 'alerts', id))
-        .catch(() => {})
-        .finally(() => pendingMirrors.current.delete(key));
-    }
-    for (const alert of getAlertMirrorWrites(serverAlerts, firestoreAlertsRef.current)) {
-      const key = `${userId}:${alert.id}`;
-      if (pendingMirrors.current.has(key)) continue;
-      pendingMirrors.current.add(key);
-      setDoc(doc(db, 'users', userId, 'alerts', alert.id), cleanForFirestore(alert))
-        .catch(() => {})
-        .finally(() => pendingMirrors.current.delete(key));
-    }
-  }, []);
 
   const requestNotificationPermission = useCallback(async (): Promise<NotificationPermission> => {
     if (typeof window !== 'undefined' && 'Notification' in window) {
@@ -137,75 +91,18 @@ export const AlertsProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   }, []);
 
-  // Fetch notification history from server & Firestore
   const fetchHistory = useCallback(async () => {
-    if (!user) {
-      setHistory([]);
-      return;
-    }
-
+    if (!user) { setHistory([]); return; }
     setLoadingHistory(true);
     try {
-      // 1. Fetch from server endpoint (stores all alerts triggered even when site was closed)
-      const res = await apiFetch(`/api/alerts/history?userId=${encodeURIComponent(user.uid)}`);
-      let serverItems: AlertHistoryItem[] = [];
-      if (res.ok) {
-        const data = await res.json();
-        if (data.success && Array.isArray(data.history)) {
-          serverItems = data.history;
-        }
-      }
-
-      // 2. If Firebase user, also merge with Firestore history
-      const isFirebase = Boolean(user && !(user as any).isLocalUser);
-      let firestoreItems: AlertHistoryItem[] = [];
-      if (isFirebase) {
-        try {
-          const histColRef = collection(db, 'users', user.uid, 'history');
-          const q = query(histColRef, orderBy('triggeredAt', 'desc'));
-          const snap = await getDocs(q);
-          snap.forEach((d) => {
-            firestoreItems.push(d.data() as AlertHistoryItem);
-          });
-        } catch {
-          // Firestore optional
-        }
-      }
-
-      // Combine and deduplicate by id
-      const combinedMap = new Map<string, AlertHistoryItem>();
-      serverItems.forEach((item) => combinedMap.set(item.id, item));
-      firestoreItems.forEach((item) => {
-        if (!combinedMap.has(item.id)) {
-          combinedMap.set(item.id, item);
-        }
-      });
-
-      const sorted = Array.from(combinedMap.values()).sort((a, b) => b.triggeredAt - a.triggeredAt);
+      const response = await apiFetch('/api/alerts/history?userId=' + encodeURIComponent(user.uid));
+      if (!response.ok) throw new Error('History unavailable');
+      const data = await response.json();
       if (userRef.current?.uid !== user.uid) return;
-      setHistory(sorted);
-
-      // Backfill server items to Firestore if needed
-      if (isFirebase && serverItems.length > 0) {
-        const batch = writeBatch(db);
-        let batchCount = 0;
-        const existingSet = new Set(firestoreItems.map((f) => f.id));
-        for (const item of serverItems) {
-          if (!existingSet.has(item.id) && batchCount < 20) {
-            const docRef = doc(db, 'users', user.uid, 'history', item.id);
-            batch.set(docRef, cleanForFirestore(item));
-            batchCount++;
-          }
-        }
-        if (batchCount > 0) {
-          batch.commit().catch(() => {});
-        }
-      }
-    } catch (err) {
-      console.error('Failed to fetch alert history:', err);
-    } finally {
-      setLoadingHistory(false);
-    }
+      const items: AlertHistoryItem[] = Array.isArray(data.history) ? data.history : [];
+      setHistory(items.sort((a, b) => b.triggeredAt - a.triggeredAt));
+    } catch (error) { console.warn('[Alerts] History unavailable:', error); }
+    finally { setLoadingHistory(false); }
   }, [user?.uid]);
 
   const fetchHistoryRef = useRef(fetchHistory);
@@ -213,112 +110,47 @@ export const AlertsProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const handleServerAlertTriggeredRef = useRef(handleServerAlertTriggered);
   handleServerAlertTriggeredRef.current = handleServerAlertTriggered;
 
-  // Sync with Firestore or local storage depending on whether user is Firebase or local
+  // Server is the only source of truth for 24/7 monitoring.
+  // Browser storage is a display cache, never a replacement for server alerts.
   useEffect(() => {
-    if (!user) {
-      setAlerts([]);
-      setHistory([]);
-      setLoading(false);
-      return;
+    if (!user?.uid) {
+      setAlerts([]); setHistory([]); setLoading(false); return;
     }
-
-    const isLocal = Boolean((user as any).isLocalUser);
-
-    if (isLocal) {
-      try {
-        const saved = localStorage.getItem(`signalhook_user_alerts_${user.uid}`);
-        const list: PriceAlert[] = saved ? JSON.parse(saved) : [];
-        setAlerts(list);
-        setLoading(false);
-
-        // Sync with backend monitor and obtain merged state
-        apiFetch('/api/alerts/sync', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            userId: user.uid,
-            language: normalizeLanguage(localStorage.getItem('crypto_screener_language')),
-            alerts: list,
-          }),
-        })
-          .then((r) => r.json())
-          .then((data) => {
-            if (data.success && Array.isArray(data.alerts)) {
-              if (userRef.current?.uid !== user.uid) return;
-              data.alerts.forEach((serverAlert: PriceAlert) => {
-                const local = list.find(a => a.id === serverAlert.id);
-                if (local && !local.triggered && serverAlert.triggered) handleServerAlertTriggeredRef.current(serverAlert);
-              });
-              alertsRef.current = data.alerts;
-              setAlerts(data.alerts);
-              try {
-                localStorage.setItem(`signalhook_user_alerts_${user.uid}`, JSON.stringify(data.alerts));
-              } catch {}
-            }
-          })
-          .catch(() => {});
-      } catch {
-        setAlerts([]);
-        setLoading(false);
-      }
-
-      fetchHistory();
-      return;
-    }
-
+    const uid = user.uid;
+    let cancelled = false;
+    setAlerts([]);
+    setHistory([]);
     setLoading(true);
-    const alertsColRef = collection(db, 'users', user.uid, 'alerts');
-    const q = query(alertsColRef, orderBy('createdAt', 'desc'));
-
-    const unsubscribe = onSnapshot(
-      q,
-      (snapshot) => {
-        if (userRef.current?.uid !== user.uid) return;
-        const list: PriceAlert[] = [];
-        snapshot.forEach((docSnap) => {
-          list.push(docSnap.data() as PriceAlert);
-        });
-        firestoreAlertsRef.current = list;
-        alertsRef.current = list;
-        setAlerts(list);
-        setLoading(false);
-
-        // Sync active alerts with backend background monitor so Telegram alerts fire
-        apiFetch('/api/alerts/sync', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+    const initialize = async () => {
+      try {
+        const response = await apiFetch('/api/alerts/sync', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            userId: user.uid,
+            userId: uid,
             language: normalizeLanguage(localStorage.getItem('crypto_screener_language')),
-            alerts: list,
+            alerts: [],
           }),
-        })
-          .then((r) => r.json())
-          .then((data) => {
-            if (userRef.current?.uid !== user.uid) return;
-            if (data.success && Array.isArray(data.alerts)) {
-              data.alerts.forEach((serverAlert: PriceAlert) => {
-                const localMatch = list.find((a) => a.id === serverAlert.id);
-                if (localMatch && serverAlert.triggered && !localMatch.triggered) {
-                  handleServerAlertTriggeredRef.current(serverAlert);
-                }
-              });
-              alertsRef.current = data.alerts;
-              setAlerts(data.alerts);
-              mirrorServerAlerts(user.uid, data.alerts, list);
-            }
-          })
-          .catch(() => {});
-      },
-      (error) => {
-        handleFirestoreError(error, OperationType.LIST, `users/${user.uid}/alerts`);
-        setLoading(false);
+        });
+        if (!response.ok) throw new Error('Alerts unavailable');
+        const data = await response.json();
+        if (cancelled || userRef.current?.uid !== uid) return;
+        const serverAlerts: PriceAlert[] = Array.isArray(data.alerts) ? data.alerts : [];
+        alertsRef.current = serverAlerts;
+        setAlerts(serverAlerts);
+        try { localStorage.setItem('signalhook_user_alerts_' + uid, JSON.stringify(serverAlerts)); } catch {}
+      } catch {
+        if (cancelled || userRef.current?.uid !== uid) return;
+        try {
+          const cached = JSON.parse(localStorage.getItem('signalhook_user_alerts_' + uid) || '[]');
+          if (Array.isArray(cached)) setAlerts(cached.filter(a => a.userId === uid));
+        } catch {}
+      } finally {
+        if (!cancelled && userRef.current?.uid === uid) setLoading(false);
       }
-    );
-
-    fetchHistory();
-
-    return () => unsubscribe();
+    };
+    void initialize();
+    void fetchHistory();
+    return () => { cancelled = true; };
   }, [user?.uid]);
 
   // Adaptive UI sync only. The server monitors and delivers price alerts 24/7
@@ -341,14 +173,7 @@ export const AlertsProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       try {
         const currentUser = userRef.current;
         if (!currentUser || currentUser.uid !== user.uid) return;
-        const isLocal = Boolean((currentUser as any).isLocalUser);
-        let currentAlertsList = alertsRef.current;
-        if (isLocal) {
-          const saved = localStorage.getItem(`signalhook_user_alerts_${currentUser.uid}`);
-          if (saved) {
-            try { currentAlertsList = JSON.parse(saved); } catch {}
-          }
-        }
+        const currentAlertsList = alertsRef.current;
 
         const res = await apiFetch('/api/alerts/sync', {
           method: 'POST',
@@ -378,13 +203,7 @@ export const AlertsProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           alertsRef.current = data.alerts;
           if (changed) {
             setAlerts(data.alerts);
-            if (isLocal) {
-              try {
-                localStorage.setItem(`signalhook_user_alerts_${currentUser.uid}`, JSON.stringify(data.alerts));
-              } catch {}
-            } else {
-              mirrorServerAlerts(currentUser.uid, data.alerts, currentAlertsList);
-            }
+            try { localStorage.setItem('signalhook_user_alerts_' + currentUser.uid, JSON.stringify(data.alerts)); } catch {}
           }
 
           if (hasNewlyTriggered) {
@@ -409,44 +228,6 @@ export const AlertsProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', onVisible);
     };
   }, [user?.uid]);
-
-  // Migrate local alerts to user profile on first login if any
-  useEffect(() => {
-    if (user && !(user as any).isLocalUser) {
-      try {
-        const raw = localStorage.getItem('signalhook_local_alerts');
-        if (raw) {
-          const localList: PriceAlert[] = JSON.parse(raw);
-          if (Array.isArray(localList) && localList.length > 0) {
-            const batch = writeBatch(db);
-            const owned = localList.filter(la => la.userId === user.uid);
-            if (!owned.length) return;
-            owned.forEach((la) => {
-              const alertRef = doc(db, 'users', user.uid, 'alerts', la.id);
-              batch.set(
-                alertRef,
-                cleanForFirestore({
-                  ...la,
-                  userId: user.uid,
-                  updatedAt: new Date().toISOString(),
-                })
-              );
-            });
-            batch
-              .commit()
-              .then(() => {
-                const others = localList.filter(la => la.userId !== user.uid);
-                if (others.length) localStorage.setItem('signalhook_local_alerts', JSON.stringify(others));
-                else localStorage.removeItem('signalhook_local_alerts');
-              })
-              .catch(() => {});
-          }
-        }
-      } catch (e) {
-        console.error('Error migrating local alerts:', e);
-      }
-    }
-  }, [user]);
 
   const addAlert = useCallback(
     async (
@@ -482,61 +263,16 @@ export const AlertsProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         language: currentLanguage,
       };
 
-      const isFirebase = Boolean(user && !(user as any).isLocalUser);
-
-      if (isFirebase && user) {
-        // Save to Firestore under user profile subcollection
-        try {
-          const alertDocRef = doc(db, 'users', user.uid, 'alerts', alertId);
-          await setDoc(alertDocRef, cleanForFirestore(newAlert));
-        } catch (err) {
-          handleFirestoreError(err, OperationType.CREATE, `users/${user.uid}/alerts/${alertId}`);
-          throw err;
-        }
-
-        // Confirm durable server monitoring before reporting creation success.
-        // Without this, charts may show a Telegram alert that never reaches cron.
-        try {
-          const response = await apiFetch('/api/alerts', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(newAlert),
-          });
-          const result = await response.json();
-          if (!response.ok || !result.success) throw new Error(result.error || 'Сервер не зберіг сповіщення');
-        } catch (error) {
-          await deleteDoc(doc(db, 'users', user.uid, 'alerts', alertId)).catch(() => {});
-          throw error;
-        }
-      } else {
-        // Local registered user fallback
-        const storageKey = `signalhook_user_alerts_${user.uid}`;
-        setAlerts((prev) => {
-          const updated = [newAlert, ...prev];
-          try {
-            localStorage.setItem(storageKey, JSON.stringify(updated));
-          } catch {}
-          return updated;
-        });
-
-        // Server confirmation is required even for local registered users.
-        // If monitoring cannot start, restore local state and tell the user.
-        try {
-          const response = await apiFetch('/api/alerts', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(newAlert),
-          });
-          const result = await response.json();
-          if (!response.ok || !result.success) throw new Error(result.error || 'Сервер не зберіг сповіщення');
-        } catch (error) {
-          setAlerts((prev) => {
-            const updated = prev.filter((alert) => alert.id !== alertId);
-            try { localStorage.setItem(storageKey, JSON.stringify(updated)); } catch {}
-            return updated;
-          });
-          throw error;
-        }
+      const response = await apiFetch('/api/alerts', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newAlert),
+      });
+      const result = await response.json();
+      if (!response.ok || !result.success) throw new Error(result.error || 'Сервер не зберіг сповіщення.');
+      if (userRef.current?.uid === user.uid) {
+        const updated = [newAlert, ...alertsRef.current];
+        alertsRef.current = updated;
+        setAlerts(updated);
+        try { localStorage.setItem('signalhook_user_alerts_' + user.uid, JSON.stringify(updated)); } catch {}
       }
 
       return newAlert;
@@ -585,54 +321,20 @@ export const AlertsProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         };
       });
 
-      const isFirebase = Boolean(user && !(user as any).isLocalUser);
-
-      if (isFirebase && user) {
-        // Atomic batch write to Firestore
-        try {
-          const batch = writeBatch(db);
-          for (const alert of newAlerts) {
-            const alertDocRef = doc(db, 'users', user.uid, 'alerts', alert.id);
-            batch.set(alertDocRef, cleanForFirestore(alert));
-          }
-          await batch.commit();
-        } catch (err) {
-          handleFirestoreError(err, OperationType.WRITE, `users/${user.uid}/alerts/batch`);
-          throw err;
-        }
-
-        // Concurrently post to server batch endpoint so backend monitor immediately starts price tracking
-        apiFetch('/api/alerts/batch', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            userId: user.uid,
-            alerts: newAlerts,
-            language: normalizeLanguage(localStorage.getItem('crypto_screener_language')),
-          }),
-        }).catch((err) => {
-          console.error('Failed to notify server of alerts batch:', err);
-        });
-      } else {
-        // Local registered user fallback
-        const storageKey = `signalhook_user_alerts_${user.uid}`;
-        setAlerts((prev) => {
-          const updated = [...newAlerts, ...prev];
-          try {
-            localStorage.setItem(storageKey, JSON.stringify(updated));
-          } catch {}
-          return updated;
-        });
-
-        apiFetch('/api/alerts/batch', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            userId: user.uid,
-            alerts: newAlerts,
-            language: normalizeLanguage(localStorage.getItem('crypto_screener_language')),
-          }),
-        }).catch(() => {});
+      const response = await apiFetch('/api/alerts/batch', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: user.uid, alerts: newAlerts,
+          language: normalizeLanguage(localStorage.getItem('crypto_screener_language')),
+        }),
+      });
+      const result = await response.json();
+      if (!response.ok || !result.success) throw new Error(result.error || 'Сервер не зберіг сповіщення.');
+      if (userRef.current?.uid === user.uid) {
+        const updated = [...newAlerts, ...alertsRef.current];
+        alertsRef.current = updated;
+        setAlerts(updated);
+        try { localStorage.setItem('signalhook_user_alerts_' + user.uid, JSON.stringify(updated)); } catch {}
       }
 
       return newAlerts;
@@ -643,8 +345,6 @@ export const AlertsProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const deleteAlert = useCallback(
     async (id: string): Promise<boolean> => {
       if (!user) return false;
-      const isFirebase = Boolean(user && !(user as any).isLocalUser);
-
       // Delete from server FIRST, so a disappearing chart marker can never
       // leave an active Telegram notification monitoring the price.
       try {
@@ -660,28 +360,11 @@ export const AlertsProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         console.error('Failed to delete alert from server:', err);
         return false;
       }
-      setAlerts((prev) => prev.filter((a) => a.id !== id));
-
-      // 2. Delete from Firestore if authenticated
-      if (isFirebase && user) {
-        try {
-          const alertDocRef = doc(db, 'users', user.uid, 'alerts', id);
-          await deleteDoc(alertDocRef);
-        } catch (err) {
-          handleFirestoreError(err, OperationType.DELETE, `users/${user.uid}/alerts/${id}`);
-          return false;
-        }
-      } else {
-        const storageKey = `signalhook_user_alerts_${user.uid}`;
-        try {
-          const raw = localStorage.getItem(storageKey);
-          if (raw) {
-            const updated = JSON.parse(raw).filter((a: any) => a.id !== id);
-            localStorage.setItem(storageKey, JSON.stringify(updated));
-          }
-        } catch {}
-      }
-
+      if (userRef.current?.uid !== user.uid) return false;
+      const remaining = alertsRef.current.filter((a) => a.id !== id);
+      alertsRef.current = remaining;
+      setAlerts(remaining);
+      try { localStorage.setItem('signalhook_user_alerts_' + user.uid, JSON.stringify(remaining)); } catch {}
       return true;
     },
     [user]
@@ -694,7 +377,6 @@ export const AlertsProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       if (!existing) return;
 
       const newActive = !existing.isActive;
-      const isFirebase = Boolean(user && !(user as any).isLocalUser);
       const response = await apiFetch(`/api/alerts/${encodeURIComponent(id)}/toggle?userId=${encodeURIComponent(user.uid)}`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ isActive: newActive }),
       });
@@ -704,16 +386,9 @@ export const AlertsProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       const updated = alertsRef.current.map(a => a.id === id ? data.alert as PriceAlert : a);
       alertsRef.current = updated;
       setAlerts(updated);
-      if (isFirebase) {
-        mirrorServerAlerts(user.uid, updated);
-      } else {
-        const storageKey = `signalhook_user_alerts_${user.uid}`;
-        try {
-          localStorage.setItem(storageKey, JSON.stringify(updated));
-        } catch {}
-      }
+      try { localStorage.setItem('signalhook_user_alerts_' + user.uid, JSON.stringify(updated)); } catch {}
     },
-    [user, alerts, mirrorServerAlerts]
+    [user, alerts]
   );
 
   const clearTriggered = useCallback(async (): Promise<number> => {
@@ -721,66 +396,37 @@ export const AlertsProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const triggered = alerts.filter((a) => a.triggered);
     if (triggered.length === 0) return 0;
 
-    // Optimistically update React state
-    setAlerts((prev) => prev.filter((a) => !a.triggered));
-
-    // Clear on server first
-    try {
-      await apiFetch(`/api/alerts/clear-triggered?userId=${encodeURIComponent(user.uid)}`, {
-        method: 'POST',
-      });
-    } catch (err) {
-      console.error('Failed to clear triggered on server:', err);
-    }
-
-    const isFirebase = Boolean(user && !(user as any).isLocalUser);
-
-    if (isFirebase && user) {
-      try {
-        const batch = writeBatch(db);
-        triggered.forEach((a) => {
-          const ref = doc(db, 'users', user.uid, 'alerts', a.id);
-          batch.delete(ref);
-        });
-        await batch.commit();
-      } catch (err) {
-        handleFirestoreError(err, OperationType.DELETE, `users/${user.uid}/alerts`);
-      }
-    } else {
-      const storageKey = `signalhook_user_alerts_${user.uid}`;
-      try {
-        const remaining = alerts.filter((a) => !a.triggered);
-        localStorage.setItem(storageKey, JSON.stringify(remaining));
-      } catch {}
-    }
-
-    return triggered.length;
+    // Confirm durable deletion before removing anything from browser state.
+    const response = await apiFetch(`/api/alerts/clear-triggered?userId=${encodeURIComponent(user.uid)}`, {
+      method: 'POST',
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || !result.success) throw new Error(result.error || 'Не вдалося очистити сповіщення.');
+    if (userRef.current?.uid !== user.uid) return 0;
+    const remaining = alertsRef.current.filter((a) => !a.triggered);
+    alertsRef.current = remaining;
+    setAlerts(remaining);
+    try { localStorage.setItem('signalhook_user_alerts_' + user.uid, JSON.stringify(remaining)); } catch {}
+    return Number.isFinite(result.count) ? result.count : triggered.length;
   }, [user, alerts]);
 
   // Delete single history record
   const deleteHistoryItem = useCallback(
     async (id: string): Promise<boolean> => {
       if (!user) return false;
-      setHistory((prev) => prev.filter((h) => h.id !== id));
-
-      // Delete on server
+      // Do not hide a history item until the server confirms its deletion.
       try {
-        await apiFetch(`/api/alerts/history/${encodeURIComponent(id)}?userId=${encodeURIComponent(user.uid)}`, {
+        const response = await apiFetch(`/api/alerts/history/${encodeURIComponent(id)}?userId=${encodeURIComponent(user.uid)}`, {
           method: 'DELETE',
         });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok || !result.success || userRef.current?.uid !== user.uid) return false;
+        setHistory((prev) => prev.filter((h) => h.id !== id));
+        return true;
       } catch (err) {
         console.error('Failed to delete history item on server:', err);
+        return false;
       }
-
-      const isFirebase = Boolean(user && !(user as any).isLocalUser);
-      if (isFirebase) {
-        try {
-          const docRef = doc(db, 'users', user.uid, 'history', id);
-          await deleteDoc(docRef);
-        } catch {}
-      }
-
-      return true;
     },
     [user]
   );
@@ -788,32 +434,15 @@ export const AlertsProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   // Clear entire history
   const clearHistory = useCallback(async (): Promise<number> => {
     if (!user) return 0;
-    const count = history.length;
+    const response = await apiFetch('/api/alerts/history/clear', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: user.uid }),
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || !result.success) throw new Error(result.error || 'Не вдалося очистити історію.');
+    if (userRef.current?.uid !== user.uid) return 0;
     setHistory([]);
-
-    // Clear on server
-    try {
-      await apiFetch('/api/alerts/history/clear', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: user.uid }),
-      });
-    } catch (err) {
-      console.error('Failed to clear history on server:', err);
-    }
-
-    const isFirebase = Boolean(user && !(user as any).isLocalUser);
-    if (isFirebase) {
-      try {
-        const histColRef = collection(db, 'users', user.uid, 'history');
-        const snap = await getDocs(histColRef);
-        const batch = writeBatch(db);
-        snap.forEach((d) => batch.delete(d.ref));
-        await batch.commit();
-      } catch {}
-    }
-
-    return count;
+    return Number.isFinite(result.cleared) ? result.cleared : history.length;
   }, [user, history]);
 
   // Reactivate an alert from history or triggered list

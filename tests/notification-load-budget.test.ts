@@ -16,13 +16,14 @@ test('alert sync is adaptive and no network request runs in a background tab', (
   assert.doesNotMatch(client, /setInterval\(pollSync, 5000\)/);
 });
 
-test('unchanged client alert snapshots do not re-mirror Firestore or rewrite local storage', () => {
-  const sync = client.slice(client.indexOf('const pollSync = async'), client.indexOf('// Migrate local alerts'));
+test('unchanged client alert snapshots do not rewrite user-scoped local storage or invoke Firestore', () => {
+  const sync = client.slice(client.indexOf('const pollSync = async'), client.indexOf('  const addAlert = useCallback'));
   assert.match(sync, /const changed = JSON\.stringify\(alertsRef\.current\) !== JSON\.stringify\(data\.alerts\)/);
   assert.match(sync, /if \(changed\) \{\s*setAlerts\(data\.alerts\)/);
-  assert.match(sync, /if \(isLocal\) \{[\s\S]*?localStorage\.setItem/);
-  assert.match(sync, /mirrorServerAlerts\(currentUser\.uid, data\.alerts, currentAlertsList\)/);
+  assert.match(sync, /if \(changed\) \{[\s\S]*?localStorage\.setItem\('signalhook_user_alerts_'/);
+  assert.doesNotMatch(sync, /mirrorServerAlerts|onSnapshot|isFirebase|Firestore|writeBatch\(/);
 });
+
 
 test('unchanged server alert sync returns user data without rewriting global alert file', () => {
   const sync = server.slice(server.indexOf('export function syncUserAlerts'), server.indexOf('// Delete alert'));

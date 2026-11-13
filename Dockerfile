@@ -24,6 +24,7 @@ COPY --from=build --chown=node:node /app/server ./server
 COPY --from=build --chown=node:node /app/src ./src
 COPY --from=build --chown=node:node /app/scripts/benchmark-http.mjs ./scripts/benchmark-http.mjs
 COPY --from=build --chown=node:node /app/scripts/benchmark-ws.mjs ./scripts/benchmark-ws.mjs
+COPY --from=build --chown=node:node /app/scripts/import-firebase-users.ts ./scripts/import-firebase-users.ts
 
 RUN mkdir -p /app/server/data && chown -R node:node /app/server/data
 

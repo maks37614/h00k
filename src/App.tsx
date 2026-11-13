@@ -157,7 +157,7 @@ export default function App() {
 
   // Auth & Profile
   const { user, profile, loading: authLoading, updateProfileData } = useAuth();
-  const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(() => typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('resetPassword'));
   const [authPromptReason, setAuthPromptReason] = useState<AuthPromptReason>(null);
   const [authInitialMode, setAuthInitialMode] = useState<'signin' | 'signup'>('signin');
   const [earlyMode, setEarlyMode] = useState(false);
