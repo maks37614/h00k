@@ -47,7 +47,9 @@ test('tap on coin name offers chart and copy in a matching dark popup without ch
   assert.match(drawer, /role="menuitem"/);
   assert.match(drawer, /Відкрити графік/);
   assert.match(drawer, /Копіювати/);
-  assert.match(drawer, /copyTextToClipboard\(watchlistDisplayName\(entry\)\)/);
+  assert.match(drawer, /copyTextToClipboard\(entry\.symbol\)/);
+  assert.doesNotMatch(drawer, /copyTextToClipboard\(watchlistDisplayName\(entry\)\)/);
+  assert.match(drawer, /`Копіювати \$\{symbol\}`/);
   assert.match(drawer, /onOpenChart\(entry\)/);
   assert.match(drawer, /data-watchlist-folder-menu/);
   assert.match(drawer, /moveCoin\(entry, folder\)/);
@@ -55,4 +57,15 @@ test('tap on coin name offers chart and copy in a matching dark popup without ch
   assert.match(app, /onOpenChart=\{handleOpenWatchlistChart\}/);
   assert.match(app, /watchlistEntryToChartCoin\(entry, preferences\.defaultTimeframe\)/);
   assert.match(app, /setIsWatchlistOpen\(false\);\s*openChartPage\(/);
+});
+
+test('favorite name action copies only the normalized exchange symbol, with no separator or exchange', () => {
+  const [bybit, binance] = resolveWatchlistEntries(
+    ['bybit:futures:BTCUSDT', 'binance:spot:ETHUSDT'], [],
+  );
+  assert.equal(bybit.symbol, 'BTCUSDT');
+  assert.equal(binance.symbol, 'ETHUSDT');
+  assert.equal(watchlistDisplayName(bybit), 'BTC');
+  assert.notEqual(bybit.symbol, 'BTC/USDT');
+  assert.notEqual(bybit.symbol, bybit.key);
 });

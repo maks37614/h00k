@@ -320,7 +320,7 @@ export const WatchlistDrawer: React.FC<WatchlistDrawerProps> = ({
   };
 
   const copyCoinName = async (entry: ResolvedWatchlistEntry) => {
-    const copied = await copyTextToClipboard(watchlistDisplayName(entry));
+    const copied = await copyTextToClipboard(entry.symbol);
     setCoinMenuFeedback({ entryKey: entry.key, status: copied ? 'copied' : 'failed' });
   };
 
@@ -572,7 +572,7 @@ export const WatchlistDrawer: React.FC<WatchlistDrawerProps> = ({
             {(() => {
               const entry = entries.find(item => item.key === coinMenu.entryKey);
               if (!entry) return null;
-              const name = watchlistDisplayName(entry);
+              const symbol = entry.symbol;
               const copied = coinMenuFeedback?.entryKey === entry.key && coinMenuFeedback.status === 'copied';
               const failed = coinMenuFeedback?.entryKey === entry.key && coinMenuFeedback.status === 'failed';
               return (
@@ -598,7 +598,7 @@ export const WatchlistDrawer: React.FC<WatchlistDrawerProps> = ({
                     {copied ? <Check aria-hidden="true" className="h-4 w-4 shrink-0 text-emerald-400" />
                       : <Copy aria-hidden="true" className="h-4 w-4 shrink-0 text-cyan-400" />}
                     <span role="status" aria-live="polite">
-                      {copied ? `Скопійовано: ${name}` : failed ? 'Не вдалося скопіювати' : `Копіювати ${name}`}
+                      {copied ? `Скопійовано: ${symbol}` : failed ? 'Не вдалося скопіювати' : `Копіювати ${symbol}`}
                     </span>
                   </button>
                 </>
