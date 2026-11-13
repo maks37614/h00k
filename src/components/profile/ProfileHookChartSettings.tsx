@@ -81,7 +81,7 @@ export function ProfileHookChartSettings() {
   }, [user?.uid, profile?.uid]);
 
   // Read account updates (including changes made in another chart/page), but
-  // never replace unsaved local input with an older Firestore snapshot.
+  // never replace unsaved local input with an older remote profile snapshot.
   useEffect(() => {
     if (!user?.uid || profile?.uid !== user.uid) return;
     if (pendingRef.current || writingRef.current) return;

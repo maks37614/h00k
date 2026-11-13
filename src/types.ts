@@ -432,7 +432,6 @@ export interface UserProfile {
   chartTradeMarkers?: ChartTradeMarkerSettings;
   terminalSettings?: TerminalWorkspaceSettings;
   searchSettings?: SearchUserSettings;
-  inviteCode?: string;
   /** One-time install tip after account registration. Missing on older accounts = already handled. */
   installGuideTipShown?: boolean;
   createdAt?: string;

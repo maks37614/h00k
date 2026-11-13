@@ -1,6 +1,6 @@
 import type { Express, Request, Response, NextFunction } from 'express';
 import {
-  AuthFailure, COOKIE_NAME, usePostgresAuth, registerAccount, checkCredentials,
+  AuthFailure, COOKIE_NAME, registerAccount, checkCredentials,
   verifyEmailToken, resendVerification, sendReset, changePasswordWithToken, readAccount,
   createSession, currentSession, revokeSession, revokeAllSessions, listSessions,
   updateAccountProfile, loadArchive, saveArchive, deleteArchive, clearArchive, touchSession,
@@ -87,7 +87,6 @@ export async function requirePostgresSession(req: Request, res: Response, next: 
 }
 
 export function installPostgresIdentityRoutes(app: Express) {
-  if (!usePostgresAuth()) return;
   // Schema initialization is shared and idempotent; startServer awaits it first.
   app.disable('x-powered-by');
   app.get('/api/auth/config', (_req, res) => res.setHeader('Cache-Control', 'no-store').json({ backend: 'postgres' }));

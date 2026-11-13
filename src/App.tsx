@@ -66,7 +66,7 @@ import {
   Sliders,
   CheckCircle2,
 } from 'lucide-react';
-import { AUTHOR_TELEGRAM_CHANNEL_URL, AUTHOR_TELEGRAM_USERNAME } from './utils/accessCodes';
+import { AUTHOR_TELEGRAM_CHANNEL_URL, AUTHOR_TELEGRAM_USERNAME } from './utils/authorLinks';
 import { getStoredPreferences, useAppPreferences } from './utils/userPreferences';
 import { loadMarketCoins } from './utils/marketCoinLoader';
 import { marketQuoteToChartCoin } from './utils/chartPageCoin';

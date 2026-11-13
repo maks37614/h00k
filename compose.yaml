@@ -8,7 +8,6 @@ services:
     environment:
       NODE_ENV: production
       PORT: 3000
-      H00K_AUTH_BACKEND: postgres
       PGHOST: postgres
       PGDATABASE: h00k_users
       PGUSER: h00k
