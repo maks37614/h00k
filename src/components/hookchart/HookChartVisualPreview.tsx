@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { createSyntheticPreviewCandles } from './syntheticPreviewCandles';
-import type { VisualChartProfile } from './visualProfiles';
+import { VISUAL_GAP_MAX, type VisualChartProfile } from './visualProfiles';
 
 interface HookChartVisualPreviewProps {
   profile: VisualChartProfile;
@@ -28,7 +28,7 @@ export function HookChartVisualPreview({
   const candles = useMemo(() => createSyntheticPreviewCandles(560), []);
   const geometry = useMemo(() => {
     const visible = Math.max(15, Math.min(500, Math.round(profile.visibleBars)));
-    const rightGap = Math.max(0, Math.min(200, Math.round(profile.rightGapBars)));
+    const rightGap = Math.max(0, Math.min(VISUAL_GAP_MAX, Math.round(profile.rightGapBars)));
     const view = candles.slice(-visible);
     const naturalLow = Math.min(...view.map(c => c.l));
     const naturalHigh = Math.max(...view.map(c => c.h));
@@ -36,13 +36,15 @@ export function HookChartVisualPreview({
     const zoom = profile.autoPriceScale ? 1 : clamp(profile.verticalZoom, .01, 100);
     const range = Math.max((naturalHigh - naturalLow) / zoom, 1);
     const step = PLOT / (visible + rightGap);
+    const gapPixels = rightGap * step;
+    const gapStart = PLOT - gapPixels;
     const stride = Math.max(1, Math.ceil(view.length / 110));
     const y = (price: number) => clamp(
       (TOP + BOTTOM) / 2 - ((price - middle) / range) * (BOTTOM - TOP) * .88,
       TOP, BOTTOM,
     );
     return {
-      visible, rightGap, step,
+      visible, rightGap, step, gapPixels, gapStart,
       bodies: view.flatMap((c, index) => {
         if (index % stride !== 0) return [];
         const x = (index + .5) * step;
@@ -59,7 +61,7 @@ export function HookChartVisualPreview({
   }, [candles, profile.visibleBars, profile.rightGapBars, profile.verticalZoom, profile.autoPriceScale]);
 
   return (
-    <div className="hookchart-mini-preview" data-synthetic-hookchart="true">
+    <div className="hookchart-mini-preview" data-synthetic-hookchart="true" data-right-gap-bars={geometry.rightGap}>
       <div className="hookchart-mini-title">
         <span>DEMO · 15m</span>
         <span>Штучні свічки · без підключень до бірж</span>
@@ -73,6 +75,12 @@ export function HookChartVisualPreview({
           <line key={p} x1="0" y1={TOP + (BOTTOM - TOP) * p} x2={PLOT}
             y2={TOP + (BOTTOM - TOP) * p} stroke="#253449" strokeWidth=".7" />
         ))}
+        {geometry.rightGap > 0 && <>
+          <rect x={geometry.gapStart} y={TOP} width={geometry.gapPixels} height={BOTTOM - TOP}
+            fill="#22d3ee" fillOpacity=".12" />
+          <line x1={geometry.gapStart} x2={geometry.gapStart} y1={TOP} y2={BOTTOM}
+            stroke="#22d3ee" strokeWidth="1.2" strokeDasharray="4 3" strokeOpacity=".85" />
+        </>}
         <line x1={PLOT} y1="0" x2={PLOT} y2={HEIGHT} stroke="#34475e" strokeWidth="1" />
         {geometry.bodies.map((c, i) => (
           <g key={i} fill={c.rising ? longColor : shortColor}
@@ -93,10 +101,13 @@ export function HookChartVisualPreview({
           {geometry.visible} видимих барів · умовний ціновий діапазон
         </text>
       </svg>
+      <div className="hookchart-mini-gap-status" role="status" aria-live="polite">
+        Вільний простір праворуч: <strong>{geometry.rightGap} барів</strong>
+        <span> · {Math.round(geometry.gapPixels / PLOT * 100)}% ширини схеми</span>
+      </div>
       <p className="hookchart-mini-note">
-        Цей графік лише показує приблизне розташування свічок. Точний масштаб
-        і відступ на кожному реальному HookChart визначаються повзунками нижче
-        та фактичною шириною його екрана. Редагування на графіку вимкнено.
+        Це схематичний перегляд. Під час зміни повзунка підсвічена зона та кількість вільних барів
+        оновлюються одразу. На реальному HookChart масштаб залежить від ширини екрана й обраного типу графіка.
       </p>
     </div>
   );

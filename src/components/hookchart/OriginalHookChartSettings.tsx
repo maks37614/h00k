@@ -570,9 +570,7 @@ function VisualProfileEditor({
           <b className="valueBadge">×</b>
         </div>
       </Setting>
-      <SwitchRow label="Автоматичний масштаб ціни" desc="Автоматично підлаштовувати висоту свічок до поточного видимого діапазону."
-        value={selectedProfile.autoPriceScale} onChange={value => onProfileChange({ autoPriceScale: value })}/>
-      <Setting label="Відступ праворуч" desc="Вільний простір праворуч від останньої свічки (у барах). Великий відступ може зменшити видиму область свічок на вузькому екрані.">
+      <Setting label="Відступ праворуч" desc="Вільний простір праворуч від останньої свічки (у барах). Відступ показується одразу на схемі вище й на графіку після застосування цього профілю.">
         <div className="flex items-center gap-2">
           <input aria-label="Відступ праворуч у барах" type="range" className="visualProfileRange" min="0" max={VISUAL_GAP_MAX} step="1"
             value={selectedProfile.rightGapBars} onChange={event => onProfileChange({ rightGapBars: Number(event.target.value) })}/>
@@ -581,6 +579,8 @@ function VisualProfileEditor({
           <b className="valueBadge">барів</b>
         </div>
       </Setting>
+      <SwitchRow label="Автоматичний масштаб ціни" desc="Автоматично підлаштовувати висоту свічок до поточного видимого діапазону."
+        value={selectedProfile.autoPriceScale} onChange={value => onProfileChange({ autoPriceScale: value })}/>
       </div>
       <div className="visualProfileActions">
         {onCapture && <button type="button" className="hotkeyResetOne" onClick={onCapture}>

@@ -5,7 +5,8 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { HookChartVisualPreview } from '../src/components/hookchart/HookChartVisualPreview';
 import { createSyntheticPreviewCandles } from '../src/components/hookchart/syntheticPreviewCandles';
-import { getVisualProfile } from '../src/components/hookchart/visualProfiles';
+import { getVisualProfile, patchVisualProfile, VISUAL_GAP_MAX } from '../src/components/hookchart/visualProfiles';
+import { hookChartHorizontalRange } from '../src/utils/hookchartData';
 
 const source = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf8');
 const previewSource = source('../src/components/hookchart/HookChartVisualPreview.tsx');
@@ -69,6 +70,73 @@ test('Graph settings center the preview and put full-width controls below it on 
   assert.match(css, /\.visualProfileControls \.visualProfileRange\s*\{[^}]*width:100%/s);
   assert.match(css, /@media \(max-width:620px\)\s*\{[\s\S]*?\.visualProfileActions button\s*\{\s*width:100%/);
   assert.doesNotMatch(previewSource, /maxWidth: '420px'/);
+});
+
+test('right-gap slider sits directly above automatic price scaling', () => {
+  const editor = settingsSource.slice(settingsSource.indexOf('function VisualProfileEditor'),
+    settingsSource.indexOf('export function OriginalHookChartSettings'));
+  const zoom = editor.indexOf('label="Вертикальний зум"');
+  const gap = editor.indexOf('label="Відступ праворуч"');
+  const auto = editor.indexOf('label="Автоматичний масштаб ціни"');
+  assert.ok(zoom > 0 && gap > zoom && auto > gap);
+  assert.match(editor, /onChange=\{event => onProfileChange\(\{ rightGapBars: Number\(event.target.value\) \}\)\}/);
+  assert.match(editor, /onChange=\{value => onProfileChange\(\{ autoPriceScale: value \}\)\}/);
+});
+
+test('right-gap preview changes visibly over the entire saved 0–2000 bar range', () => {
+  const renderGap = (bars: number) => renderToStaticMarkup(React.createElement(HookChartVisualPreview, {
+    profile: { ...base, rightGapBars: bars },
+  }));
+  const a = renderGap(0), b = renderGap(80), c = renderGap(250), d = renderGap(VISUAL_GAP_MAX);
+  assert.match(a, /data-right-gap-bars="0"/);
+  assert.match(b, /data-right-gap-bars="80"/);
+  assert.match(c, /data-right-gap-bars="250"/);
+  assert.match(d, /data-right-gap-bars="2000"/);
+  assert.match(b, /Вільний простір праворуч/);
+  assert.match(d, /2000 барів/);
+  assert.doesNotMatch(a, /fill="#22d3ee"/);
+  assert.match(b, /fill="#22d3ee"/);
+  assert.notEqual(b, c, 'preview must not freeze past 200 bars');
+  assert.notEqual(c, d, 'preview must continue to move up to the full slider maximum');
+  assert.match(previewSource, /VISUAL_GAP_MAX/);
+  assert.doesNotMatch(previewSource, /Math\.min\(200,/);
+});
+
+test('real HookChart geometry responds to gap changes even when all other controls stay fixed', () => {
+  const plot = 600, candleCount = 300;
+  const vp = { barWidth: 6, rightOffset: 0 };
+  const lastX = (gap: number) => {
+    const geom = hookChartHorizontalRange(candleCount, plot, vp, gap);
+    return (candleCount - .5 - geom.virtualStart) * geom.step;
+  };
+  assert.ok(lastX(0) > lastX(10));
+  assert.ok(lastX(10) > lastX(30));
+  assert.equal(Math.round(lastX(0) - lastX(30)), 180);
+
+  const original = getVisualProfile(undefined, 'screenerFull', 'desktop');
+  const saved = patchVisualProfile(undefined, 'screenerFull:desktop', {
+    visibleBars: 85, verticalZoom: 1.7, autoPriceScale: false, rightGapBars: 120,
+  });
+  assert.equal(getVisualProfile({ visualProfiles: saved }, 'screenerFull', 'desktop').rightGapBars, 120);
+  assert.equal(original.rightGapBars, 12);
+  const chart = source('../src/components/hookchart/HookChartCanvas.tsx');
+  const engine = source('../src/components/hookchart/engine.tsx');
+  assert.match(chart, /rightPaddingBars=\{rightPaddingBars\}/);
+  assert.match(engine, /visualProfile\?\.rightGapBars/);
+  assert.match(engine, /hookChartHorizontalRange\(candles.length,plotW,vp,rightPaddingBars,rightPadding\)/);
+});
+
+test('all four visual settings update the read-only preview without extra market requests', () => {
+  const renderProfile = (changes: Partial<typeof base>) => renderToStaticMarkup(
+    React.createElement(HookChartVisualPreview, { profile: { ...base, ...changes } }),
+  );
+  const initial = renderProfile({});
+  assert.notEqual(renderProfile({ visibleBars: 180 }), initial);
+  assert.notEqual(renderProfile({ verticalZoom: 2, autoPriceScale: false }), initial);
+  assert.notEqual(renderProfile({ autoPriceScale: false }), initial);
+  assert.notEqual(renderProfile({ rightGapBars: 35 }), initial);
+  assert.match(renderProfile({ autoPriceScale: true }), />AUTO</);
+  assert.match(renderProfile({ autoPriceScale: false }), />×1</);
 });
 
 test('synthetic candles are deterministic, valid and do not depend on real prices', () => {

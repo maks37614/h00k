@@ -1971,6 +1971,24 @@
   padding-bottom:6px;
 }
 .hookchart-root .hookchart-mini-title span:first-child { color:#c8e9ff; font-weight:800; }
+.hookchart-root .hookchart-mini-gap-status {
+  display:flex;
+  flex-wrap:wrap;
+  align-items:center;
+  gap:3px;
+  margin-top:8px;
+  padding:7px 9px;
+  border:1px solid #225c6d;
+  border-radius:7px;
+  background:#123044;
+  color:#a6d7ea;
+  font:500 11px/1.35 system-ui;
+}
+.hookchart-root .hookchart-mini-gap-status strong {
+  margin-inline:3px;
+  color:#5eead4;
+  font-weight:700;
+}
 .hookchart-root .hookchart-mini-note {
   margin:6px 0 0;
   font:400 10px/1.45 system-ui;
