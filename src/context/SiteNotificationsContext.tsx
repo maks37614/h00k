@@ -273,7 +273,11 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
     }
     const tracker = qualityRef.current.tracker;
     const proximity = proximityRef.current.tracker;
-    for (const event of scanNotificationSignals(coins, settingsRef.current, favorites, Date.now(), tracker, proximity)) emit(event);
+    if (deliveredSeen.current.uid !== currentUid)
+      deliveredSeen.current = { uid: currentUid, ids: loadSeen(currentUid) };
+    const wasDelivered = (id: string) => deliveredSeen.current.ids.has(id);
+    for (const event of scanNotificationSignals(coins, settingsRef.current, favorites,
+      Date.now(), tracker, proximity, wasDelivered)) emit(event);
     try {
       localStorage.setItem('h00k_quality_history_v1:' + currentUid, JSON.stringify(tracker.snapshot()));
       localStorage.setItem('h00k_proximity_history_v1:' + currentUid, JSON.stringify(proximity.snapshot()));
