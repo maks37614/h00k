@@ -40,8 +40,9 @@ test('grouping shows one coin per exchange/market/timeframe but preserves distin
 test('regular Formation density and ROUND filters use compact icons in original toolbar position', () => {
   const source = readFileSync(new URL('../src/components/ScreenerFilters.tsx', import.meta.url), 'utf8');
   const start = source.indexOf('role="group" aria-label="Фільтри рівнів"');
-  const end = source.indexOf('Статус', start);
+  const end = source.indexOf('\n          </div>\n\n          <label', start);
   assert.ok(start > 0 && end > start, 'icon group remains immediately before original status select');
+  assert.ok(source.indexOf('Статус', end) > end, 'original status control follows icon group');
   const group = source.slice(start, end);
   assert.match(group, /<Layers className="h-4 w-4"/);
   assert.match(group, /<CircleDot className="h-4 w-4"/);
