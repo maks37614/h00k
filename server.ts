@@ -55,8 +55,9 @@ import { installHookChartDepthStream } from './server/hookChartDepth';
 import { installLiquidationStream } from './server/liquidationFeed';
 import { installOpsMetrics } from './server/opsMetrics';
 import { subscribeSurveillance } from './server/surveillanceEvents';
+import { SharedScanBusyError } from './server/sharedScanJobs';
 import { MAX_SURVEILLANCE_ACTIVE, MAX_SURVEILLANCE_SAVED,
-  canActivateSurveillance, canSaveSurveillance, userWorkThrottle } from './server/surveillanceLimits';
+  canActivateSurveillance, canSaveSurveillance, userWorkThrottle, userWorkQuota } from './server/surveillanceLimits';
 import { binanceTickerStream } from './server/binanceTickerStream';
 
 async function startServer() {
@@ -214,6 +215,10 @@ async function startServer() {
         data: results,
       });
     } catch (err: any) {
+      if (err instanceof SharedScanBusyError) {
+        return res.status(503).setHeader('Retry-After', '10')
+          .json({ success:false, error:err.message });
+      }
       console.error('Error during screener scan:', err);
       res.status(500).json({ success: false, error: err.message || 'Scan failed' });
     }
@@ -846,9 +851,6 @@ async function startServer() {
     try {
       const { symbol, exchange, marketType, timeframe } = req.body;
       const owner = String(res.locals.userId || '');
-      if (!userWorkThrottle.allow(owner, 'backtest', 30000))
-        return res.status(429).setHeader('Retry-After', '30').json({ success:false,
-          error: 'Повторний бектест доступний через 30 секунд.' });
       if (typeof symbol !== 'string' || !symbol.trim()) {
         return res.status(400).json({ success: false, error: 'Оберіть монету для бектесту' });
       }
@@ -861,6 +863,12 @@ async function startServer() {
         return res.status(400).json({ success: false, error: 'Невірні параметри бектесту' });
       }
 
+      // Deduplicate repeated backtests for one instrument and cap even attempts
+      // on many different symbols to five per account per minute.
+      if (!userWorkThrottle.allow(owner, 'backtest:' + ex + ':' + mkt + ':' + sym + ':' + tf, 30000)
+          || !userWorkQuota.allow(owner, 'backtest', 5, 60000))
+        return res.status(429).setHeader('Retry-After', '30').json({ success:false,
+          error: 'Занадто часті бектести. Повторіть пізніше.' });
       const asOf = Date.now();
       const klines = await fetchKlines(ex, mkt, sym, tf, tf === '1m' ? 500 : 200,
         undefined, undefined, { requireFresh: true }).catch(() => []);

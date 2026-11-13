@@ -5,6 +5,7 @@ import { createSetupAlertsGroup, getUserLanguage } from '../alertService';
 import type { RawDepthDelta, RawTradeEvent } from './exchangeStream';
 import { acquireExchangeStream, type SharedExchangeStreamHandle } from './sharedExchangeStream';
 import { publishSurveillance } from '../surveillanceEvents';
+import { sharedMarketAnalysis, candleFingerprint } from './sharedMarketAnalysis';
 import { LevelsAndFormationsEngine } from './levelsAndFormationsEngine';
 import { MacroAndNewsEngine } from './macroAndNewsEngine';
 import { MultiTimeframeEngine } from './multiTimeframeEngine';
@@ -269,8 +270,21 @@ export class CoinWorker {
     const candles1h = this.mtfEngine.getCandles('1h');
     const candles15m = this.mtfEngine.getCandles('15m');
 
+    // Share public market-only calculations across every user following the
+    // same exchange:market:symbol and identical OHLCV snapshot. Personal rules,
+    // thresholds, third-touch state, DOM mode and notification history stay local.
+    const shared = sharedMarketAnalysis.get(
+      `${this.coin.exchange}:${this.coin.marketType}:${this.coin.symbol}`,
+      candleFingerprint([candles1d, candles4h, candles1h, candles15m, this.mtfEngine.getCandles('5m')]),
+      () => ({
+        structures: this.mtfEngine.getMultiTimeframeStructures(price),
+        zones: this.levelsEngine.findSupportResistanceZones(candles1d, candles4h, candles1h),
+        patterns: this.levelsEngine.detectFormations(candles1h, price),
+      }),
+    );
     // 1. Multi-timeframe structure
-    this.structures = this.mtfEngine.getMultiTimeframeStructures(price);
+    this.structures = structuredClone(shared.structures);
+    this.levelsEngine.adoptSharedZones(shared.zones);
 
     // Check BOS / CHoCH structure change alerts
     for (const [tf, struct] of Object.entries(this.structures)) {
@@ -318,7 +332,7 @@ export class CoinWorker {
     }
 
     // 2. Strong S/R Zones
-    this.levelZones = this.levelsEngine.findSupportResistanceZones(candles1d, candles4h, candles1h);
+    this.levelZones = shared.zones.map(zone => ({ ...zone }));
 
     // 3. Third Touch Tracking
     this.thirdTouches = this.levelsEngine.trackThirdTouch(price, candles1h);
@@ -367,7 +381,7 @@ export class CoinWorker {
     }
 
     // 4. Formations
-    this.patterns = this.levelsEngine.detectFormations(candles1h, price)
+    this.patterns = structuredClone(shared.patterns)
       .filter(p => p.score >= (this.coin.config.formationThreshold ?? 0));
 
     // 5. Volume, RVOL, Trade Flow, OI

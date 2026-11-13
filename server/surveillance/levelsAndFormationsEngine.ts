@@ -19,6 +19,11 @@ export class LevelsAndFormationsEngine {
     this.mode = mode;
   }
 
+  /** Adopt public precomputed S/R zones; third-touch state remains per worker. */
+  public adoptSharedZones(zones: readonly LevelZone[]) {
+    this.levelZones = zones.map(zone => ({ ...zone }));
+  }
+
   public findSupportResistanceZones(
     candles1d: Kline[],
     candles4h: Kline[],

@@ -13,6 +13,9 @@ import { publicQuoteResponseCache } from './marketQuoteResponse';
 import { cronManager } from './cronService';
 import { surveillanceManager } from './surveillance/surveillanceManager';
 import { surveillanceStreamStats } from './surveillanceEvents';
+import { getSharedScreenerJobStats } from './marketService';
+import { telegramDispatchQueue } from './telegramQueue';
+import { sharedMarketAnalysis } from './surveillance/sharedMarketAnalysis';
 
 function authorized(req: Request): boolean {
   const secret = process.env.H00K_OPS_TOKEN;
@@ -52,6 +55,9 @@ export function installOpsMetrics(app: Express,
       cronJobs: cronManager.getOperatorJobStats(),
       activeSurveillanceWorkers: surveillanceManager.getActiveWorkerCount(),
       surveillanceStream: surveillanceStreamStats(),
+      sharedScreener: getSharedScreenerJobStats(),
+      sharedMarketAnalysis: sharedMarketAnalysis.stats(),
+      telegramQueue: telegramDispatchQueue.stats(),
       historicalOiCache: exchangeHistoryCache.stats(),
       liveOiCache: getLiveOiCacheStats(),
       marketTickerFeed: marketTickerFeed.diagnostics(),

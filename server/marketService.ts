@@ -13,6 +13,7 @@ import { fetchExchangeTickSize } from '../src/utils/exchangeTickSize';
 import { MarketLocationCache } from '../src/utils/marketLocationCache';
 import { marketTickerFeed, type RawTicker } from './marketTickerFeed';
 import { formationScanPlan, FORMATION_CANDIDATE_BUDGET } from './formationScanPlan';
+import { SharedScanJobs } from './sharedScanJobs';
 
 // Cache structure
 interface CacheEntry {
@@ -22,6 +23,8 @@ interface CacheEntry {
 }
 
 const scanCache = new Map<string, CacheEntry>();
+const scanJobs = new SharedScanJobs<ScannedCoin[]>(2, 16);
+export const getSharedScreenerJobStats = () => scanJobs.stats();
 const CACHE_TTL_MS = 45 * 1000; // 45 seconds
 
 /** Read existing results only. Exporting never starts another formation scan. */
@@ -353,7 +356,20 @@ export async function loadScreenerTickers(params: ScreenerScanParams): Promise<R
   return uniqueTickers;
 }
 
-export async function runScreenerScan(params: ScreenerScanParams,
+/** Identical concurrent requests reuse the same work and the same results.
+ * Foreground and background jobs have distinct keys to respect ticker scope. */
+export function runScreenerScan(params: ScreenerScanParams,
+  context?: { tickers: readonly RawTicker[]; maxCandidates: number }): Promise<ScannedCoin[]> {
+  const candidateLimit = context && Number.isFinite(context.maxCandidates)
+    ? Math.max(1,Math.min(FORMATION_CANDIDATE_BUDGET,Math.floor(context.maxCandidates)))
+    : FORMATION_CANDIDATE_BUDGET;
+  const minVol = typeof params.minVolumeUsd === 'number' ? params.minVolumeUsd : 50_000;
+  const key = JSON.stringify([params.exchange,params.marketType,params.timeframe,minVol,candidateLimit,
+    context ? 'background' : 'foreground']);
+  return scanJobs.run(key,()=>computeScreenerScan(params,context));
+}
+
+async function computeScreenerScan(params: ScreenerScanParams,
   context?: { tickers: readonly RawTicker[]; maxCandidates: number }): Promise<ScannedCoin[]> {
   const minVol = typeof params.minVolumeUsd === 'number' ? params.minVolumeUsd : 50_000;
   const candidateLimit = context && Number.isFinite(context.maxCandidates)
@@ -482,11 +498,17 @@ export async function runScreenerScan(params: ScreenerScanParams,
   }
 
   // Update cache
+  scanCache.delete(cacheKey);
   scanCache.set(cacheKey, {
     timestamp: Date.now(),
     data: scannedCoins,
     candidateLimit,
   });
+  // Keep the shared scan cache bounded; evict expired and oldest snapshots.
+  for (const [key, value] of scanCache) {
+    if (Date.now() - value.timestamp > 180_000) scanCache.delete(key);
+  }
+  while (scanCache.size > 48) scanCache.delete(scanCache.keys().next().value!);
 
   return scannedCoins;
 }

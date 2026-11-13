@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { canSaveSurveillance, canActivateSurveillance, MAX_SURVEILLANCE_ACTIVE,
-  MAX_SURVEILLANCE_SAVED, UserWorkThrottle } from '../server/surveillanceLimits';
+  MAX_SURVEILLANCE_SAVED, UserWorkThrottle, UserWorkQuota } from '../server/surveillanceLimits';
 
 test('24/7 workers are capped per account without pausing grandfathered active coins',()=>{
   const active = Array.from({length:MAX_SURVEILLANCE_ACTIVE},(_,i)=>({id:'coin'+i,isActive:true}));
@@ -32,5 +32,14 @@ test('server enforces limits at all activation and manual analysis entry points'
   assert.match(server,/loadSurveillanceList\(uid\)\.length > MAX_SURVEILLANCE_ACTIVE/);
   assert.match(server,/userWorkThrottle\.allow\(uid, 'check-all', 60000\)/);
   assert.match(server,/userWorkThrottle\.allow\(found\.userId, 'check:' \+ id, 20000\)/);
-  assert.match(server,/userWorkThrottle\.allow\(owner, 'backtest', 30000\)/);
+  assert.match(server,/userWorkThrottle\.allow\(owner, 'backtest:' \+ ex/);
+  assert.match(server,/userWorkQuota\.allow\(owner, 'backtest', 5, 60000\)/);
+});
+
+test('per-user rolling quota caps distinct heavy analyses',()=>{
+  const quota=new UserWorkQuota();
+  for(let i=0;i<5;i++) assert.equal(quota.allow('alice','backtest',5,60000,20000+i),true);
+  assert.equal(quota.allow('alice','backtest',5,60000,30000),false);
+  assert.equal(quota.allow('bob','backtest',5,60000,30000),true);
+  assert.equal(quota.allow('alice','backtest',5,60000,90000),true);
 });

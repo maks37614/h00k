@@ -33,3 +33,21 @@ export class UserWorkThrottle {
   }
 }
 export const userWorkThrottle = new UserWorkThrottle();
+
+/** Sliding per-user cap for distinct expensive tasks (e.g. backtests of
+ * different symbols), independent from the same-task cooldown above. */
+export class UserWorkQuota {
+  private history = new Map<string, number[]>();
+  allow(userId: string, action: string, maxCalls: number, windowMs: number, now=Date.now()): boolean {
+    if (!userId || userId === 'guest' || !(maxCalls > 0) || !(windowMs > 0)) return false;
+    const key = JSON.stringify([userId,action]);
+    const recent = (this.history.get(key) || []).filter(at => now - at < windowMs && now >= at);
+    if (recent.length >= maxCalls) { this.history.set(key,recent); return false; }
+    recent.push(now);
+    this.history.delete(key);
+    this.history.set(key,recent);
+    if (this.history.size > 3000) this.history.delete(this.history.keys().next().value!);
+    return true;
+  }
+}
+export const userWorkQuota = new UserWorkQuota();
