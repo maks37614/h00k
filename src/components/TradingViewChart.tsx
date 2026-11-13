@@ -33,7 +33,7 @@ import { CHART_TRADE_LEVELS_EVENT, chartTradeLevelStorageKey, normalizeChartTrad
 import { HookChart } from './HookChart';
 import type { TerminalToolbarVisibility } from './hookchart/HookChartCanvas';
 import type { HookChartHandle } from './hookchart/engine';
-import type { VisualContextId } from './hookchart/visualProfiles';
+import type { VisualChartProfile, VisualContextId } from './hookchart/visualProfiles';
 
 interface TradingViewChartProps {
   klines: Kline[];
@@ -67,6 +67,7 @@ interface TradingViewChartProps {
   hideSymbolAndPrice?: boolean;
   terminalMode?: boolean;
   terminalAutoScale?: boolean;
+  terminalInitialView?: VisualChartProfile;
   visualContext?: VisualContextId;
   terminalToolbarVisibility?: TerminalToolbarVisibility;
   hookchartToolbarActions?: React.ReactNode;
@@ -202,6 +203,7 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
   hideSymbolAndPrice = false,
   terminalMode = false,
   terminalAutoScale = false,
+  terminalInitialView,
   visualContext = 'screenerQuick',
   terminalToolbarVisibility,
   hookchartToolbarActions,
@@ -1312,7 +1314,7 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
         {/* TradingView Chart Container */}
         {chartProvider === 'hookchart' ? <HookChart ref={hookChartRef} klines={effectiveKlines}
           symbol={symbol} timeframe={timeframe} exchange={exchange} marketType={marketType}
-          terminalMode={terminalMode} terminalAutoScale={terminalAutoScale} visualContext={visualContext} terminalToolbarVisibility={terminalToolbarVisibility} focusFormation={formation}
+          terminalMode={terminalMode} terminalAutoScale={terminalAutoScale} terminalInitialView={terminalInitialView} visualContext={visualContext} terminalToolbarVisibility={terminalToolbarVisibility} focusFormation={formation}
           markers={hookMarkers} expandPriceScaleToMarkers={previewMarkers} savedChartParams={savedChartParams} onTimeframeChange={onTimeframeChange}
           onCrosshairPriceChange={onCrosshairPriceChange}
           tradeLevelToggle={previewMarkers ? undefined : combinedTradeLevels}
