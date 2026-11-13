@@ -1521,7 +1521,8 @@ export default function App() {
               watchlist={watchlist}
               onToggleWatchlist={handleToggleWatchlist}
               onClose={closeChartPage}
-              onSendMetaScalp={(coin) => handleSendToMetaScalp(coin, 'formations')}
+              onSendMetaScalp={(coin) => handleSendToMetaScalp(coin,
+                chartPageVisualOrigin(chartRoute) === 'screener' ? 'screener' : 'formations')}
               metaScalpBinding={activeTerminalGroup}
               onOpenTelegramModal={handleOpenTelegramAlerts}
               onOpenAuth={() => setIsAuthModalOpen(true)}
