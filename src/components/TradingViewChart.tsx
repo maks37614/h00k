@@ -307,6 +307,10 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
   const [tickPulse, setTickPulse] = useState<boolean>(false);
 
   useEffect(() => {
+    // HookChart has its own shared clock. This legacy countdown is never
+    // rendered for HookChart and used to cause one redundant interval and
+    // two React state updates per second per Terminal chart.
+    if (chartProvider === 'hookchart') return;
     const updateCountdown = () => {
       const countdown = calculateBarCloseCountdown(timeframe);
       setBarCountdown(countdown);
@@ -318,7 +322,7 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
     updateCountdown();
     const interval = setInterval(updateCountdown, 1000);
     return () => clearInterval(interval);
-  }, [timeframe]);
+  }, [timeframe, chartProvider]);
 
   const [effectiveKlines, setEffectiveKlines] = useState<Kline[]>(klines);
 
