@@ -48,9 +48,11 @@ public static class H00kWindowAgent {
         if (len < 2 || len > 512) return true;
         var title = new StringBuilder(len + 1);
         GetWindowTextW(hwnd, title, title.Capacity);
-        if (!GetWindowRect(hwnd, out RECT bounds)) return true;
+        RECT bounds;
+        if (!GetWindowRect(hwnd, out bounds)) return true;
         if (bounds.Right - bounds.Left < 140 || bounds.Bottom - bounds.Top < 80) return true;
-        GetWindowThreadProcessId(hwnd, out uint pid);
+        uint pid;
+        GetWindowThreadProcessId(hwnd, out pid);
         if (pid == 0 || pid == Process.GetCurrentProcess().Id) return true;
         var process = Process.GetProcessById((int)pid);
         windows.Add(new WindowSnapshot {
