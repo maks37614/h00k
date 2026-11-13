@@ -58,13 +58,20 @@ export function categoryForServerEvent(eventType: string, source: string): SiteN
   return 'surveillance';
 }
 
-export function isUserTelegramCategoryAllowed(
-  uid: string,
-  params: { source: string; eventType: string; symbol: string; exchange: string; marketType: string; timeframe?: string },
-): boolean {
+export interface ServerNotificationContext {
+  source: string;
+  eventType: string;
+  symbol: string;
+  exchange: string;
+  marketType: string;
+  timeframe?: string;
+}
+export function isUserNotificationCategoryAllowed(uid: string, params: ServerNotificationContext): boolean {
   const cfg = getUserSiteNotificationSettings(uid);
-  if (!cfg.enabled || !cfg.optedIn || !cfg.telegramEnabled) return false;
-  const kind = categoryForServerEvent(params.eventType, params.source);
-  return notificationEnabled(cfg, kind)
+  return notificationEnabled(cfg, categoryForServerEvent(params.eventType, params.source))
     && matchesNotificationScope(cfg, params);
+}
+export function isUserTelegramCategoryAllowed(uid: string, params: ServerNotificationContext): boolean {
+  const cfg = getUserSiteNotificationSettings(uid);
+  return cfg.telegramEnabled && isUserNotificationCategoryAllowed(uid, params);
 }
