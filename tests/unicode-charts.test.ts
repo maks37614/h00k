@@ -97,6 +97,8 @@ test('terminal charts respect provider selection while fullscreen always uses Ho
       user: { uid } as User, profile: { uid, defaultChartProvider: provider }, loading: false,
       signInWithGoogle: async () => {}, signInWithEmail: async () => {}, registerWithEmail: async () => {},
       updateProfileData: async () => {}, logout: async () => {},
+      resendVerification: async () => {}, requestPasswordReset: async () => {}, resetPassword: async () => {},
+      resetToken: null, authNotice: null, listSessions: async () => [], revokeSession: async () => {}, logoutAll: async () => {},
       authError: null, authErrorCode: null, clearAuthError: noop,
     };
     for (const [symbol, expected] of [
