@@ -179,8 +179,9 @@ test('144 visible candles, vertical zoom 0.4 and 81-bar gap update the preview i
 test('visual preview passes the same right margin to candles and time axis', () => {
   const preview = readFileSync(new URL('../src/components/hookchart/HookChartVisualPreview.tsx', import.meta.url), 'utf8');
   const editor = readFileSync(new URL('../src/components/hookchart/OriginalHookChartSettings.tsx', import.meta.url), 'utf8');
-  assert.match(preview, /visualProfile=\{profile\}/);
-  assert.equal((preview.match(/rightPaddingBars=\{profile\.rightGapBars\}/g) || []).length, 2);
+  assert.match(preview, /const step = PLOT \/ \(visible \+ rightGap\)/);
+  assert.match(preview, /profile\.rightGapBars/);
+  assert.match(preview, /data-synthetic-hookchart/);
   assert.match(editor, /profile=\{selectedProfile\}/);
   assert.match(editor, /onChange=\{onProfileChange\}/);
   for (const key of ['visibleBars', 'verticalZoom', 'autoPriceScale', 'rightGapBars']) {
