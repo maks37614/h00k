@@ -16,6 +16,7 @@ import {
 import { Timeframe, TerminalWorkspaceConfig } from '../../types';
 import type { MarketSelection } from '../../utils/marketCoinLoader';
 import { TERMINAL_PRESET_PAGE_SIZES } from '../../utils/terminalPresetPaging';
+import { getVisualProfile, VISUAL_GAP_MAX, VISUAL_ZOOM_MIN, VISUAL_ZOOM_MAX } from '../hookchart/visualProfiles';
 
 interface TerminalSettingsDrawerProps {
   isOpen: boolean;
@@ -42,6 +43,10 @@ export const TerminalSettingsDrawer: React.FC<TerminalSettingsDrawerProps> = ({
   onResetWorkspace,
   totalBlocks,
 }) => {
+  const initial = config.initialChartView ?? getVisualProfile(undefined, 'terminalMedium', 'desktop');
+  const updateInitial = (patch: Partial<typeof initial>) =>
+    onUpdateConfig({ initialChartView: { ...initial, ...patch } });
+
   if (!isOpen) return null;
 
   return (
@@ -226,6 +231,68 @@ export const TerminalSettingsDrawer: React.FC<TerminalSettingsDrawerProps> = ({
               </div>
             </div>
           )}
+
+          {/* Initial viewport is terminal-only, persisted in workspace config. */}
+          <section className="space-y-3 rounded-xl border border-cyan-800/50 bg-slate-950/65 p-3.5"
+            aria-label="Початковий показ графіків Термінала">
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <h4 className="text-sm font-bold text-cyan-200">Початковий показ графіків</h4>
+                <p className="mt-1 text-[11px] leading-relaxed text-slate-400">
+                  Масштаб і відступ під час відкриття кожного графіка Термінала.
+                  Зміни застосовуються лише тут і зберігаються для вашого робочого простору.
+                </p>
+              </div>
+              <button type="button" aria-label="Відновити типовий показ графіків"
+                onClick={() => onUpdateConfig({ initialChartView: undefined })}
+                className="shrink-0 rounded-lg border border-slate-700 p-2 text-slate-400 hover:text-cyan-300">
+                <RotateCcw className="h-4 w-4"/>
+              </button>
+            </div>
+            <label className="block space-y-1.5">
+              <span className="flex justify-between gap-2 text-slate-300">
+                <span>Видимі свічки при відкритті</span>
+                <b className="font-mono text-cyan-300">{initial.visibleBars}</b>
+              </span>
+              <input aria-label="Початкова кількість свічок Термінала" type="range"
+                min="15" max="500" step="5" value={initial.visibleBars}
+                onChange={event => updateInitial({ visibleBars: Number(event.target.value) })}
+                className="w-full accent-cyan-500" />
+            </label>
+            <label className="block space-y-1.5">
+              <span className="flex justify-between gap-2 text-slate-300">
+                <span>Відступ від шкали ціни праворуч</span>
+                <b className="font-mono text-cyan-300">{initial.rightGapBars} барів</b>
+              </span>
+              <input aria-label="Початковий відступ Термінала в барах" type="range"
+                min="0" max={VISUAL_GAP_MAX} step="1" value={initial.rightGapBars}
+                onChange={event => updateInitial({ rightGapBars: Number(event.target.value) })}
+                className="w-full accent-cyan-500" />
+            </label>
+            <label className="block space-y-1.5">
+              <span className="flex justify-between gap-2 text-slate-300">
+                <span>Вертикальний масштаб ціни</span>
+                <b className="font-mono text-cyan-300">{initial.verticalZoom.toFixed(2)}×</b>
+              </span>
+              <input aria-label="Початковий вертикальний масштаб Термінала" type="range"
+                min={Math.log10(VISUAL_ZOOM_MIN)} max={Math.log10(VISUAL_ZOOM_MAX)}
+                step=".02" value={Math.log10(initial.verticalZoom)}
+                onChange={event => updateInitial({ verticalZoom: Number((10 ** Number(event.target.value)).toFixed(3)) })}
+                className="w-full accent-cyan-500" />
+            </label>
+            <label className="flex items-center justify-between gap-3 text-slate-300">
+              <span>Автомасштабування ціни при відкритті</span>
+              <input type="checkbox" checked={initial.autoPriceScale}
+                aria-label="Початковий автоматичний масштаб ціни Термінала"
+                onChange={event => updateInitial({ autoPriceScale: event.target.checked })}
+                className="h-4 w-4 accent-cyan-500" />
+            </label>
+            <p className="text-[10px] leading-relaxed text-slate-500">
+              Якщо зверху Термінала ввімкнено автоматичне масштабування свічок,
+              воно має пріоритет над вертикальним масштабом.
+              Без власних значень використовуються збережені профілі HookChart.
+            </p>
+          </section>
 
           {/* Global Timeframe Switcher */}
           <div className="space-y-2.5">
