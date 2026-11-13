@@ -1,6 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { useAuth } from './AuthContext';
-import { apiFetch } from '../utils/apiFetch';
 import { useAlerts } from './AlertsContext';
 import { useSurveillance } from './SurveillanceContext';
 import { useAppPreferences } from '../utils/userPreferences';
@@ -123,7 +122,6 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
   const pendingSoundWrites = useRef(new Map<string, number>());
   const settingsSaveQueue = useRef(new Map<string, Promise<void>>());
   const soundSaveQueue = useRef(new Map<string, Promise<void>>());
-  const lastServerHydration = useRef(new Map<string, string>());
   const visibleBrowserNotificationsRef = useRef(new Set<Notification>());
   const closeVisibleBrowserNotifications = useCallback(() => {
     for (const notification of visibleBrowserNotificationsRef.current) {
@@ -184,27 +182,8 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
     return () => window.removeEventListener('storage', onStorage);
   }, [uid, updatePreferences, closeVisibleBrowserNotifications]);
 
-  // Restore authenticated server delivery permissions after sign-in or deployment.
-  // Never inherit unversioned legacy settings as consent.
-  useEffect(() => {
-    if (!user || (user as any).isLocalUser || profile?.uid !== uid || !profile.siteNotificationSettings
-        || pendingSettingsWrites.current.has(uid)) return;
-    const remote = loadSettings(uid, profile.siteNotificationSettings);
-    const signature = JSON.stringify(remote);
-    if (lastServerHydration.current.get(uid) === signature) return;
-    lastServerHydration.current.set(uid, signature);
-    apiFetch('/api/notification-preferences', {
-      method: 'PUT', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ settings: remote }),
-    }).then(res => {
-      if (!res.ok) throw new Error('Failed to hydrate notification permissions');
-    }).catch(() => {
-      if (uidRef.current === uid) {
-        lastServerHydration.current.delete(uid);
-        setError('Серверні налаштування Telegram не вдалося відновити. Перевірте з’єднання.');
-      }
-    });
-  }, [uid, user?.uid, profile?.siteNotificationSettings]);
+  // This center is browser-only. Server-side Telegram controls belong to
+  // independent price-alert and surveillance pages, never to this profile tab.
 
   const replaceItems = useCallback((next: SiteNotificationItem[]) => {
     const currentUid = uidRef.current;
@@ -225,8 +204,8 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
       optedIn: settingsRef.current.optedIn || enabling,
       enabledAt: enabling && !settingsRef.current.enabled
         ? Date.now() : settingsRef.current.enabledAt });
-    // Persist the deny before any asynchronous profile/Telegram work. Other
-    // tabs and in-flight callbacks check this marker before sending anything.
+    // Persist local opt-out synchronously. Other tabs and in-flight callbacks
+    // consult the marker before showing a sound or browser notification.
     if (disabling) {
       closeVisibleBrowserNotifications();
       stopCustomNotificationSound();
@@ -248,16 +227,9 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
       const previous = settingsSaveQueue.current.get(currentUid) ?? Promise.resolve();
       const task: Promise<void> = previous.catch(() => {}).then(async () => {
         if (uidRef.current !== currentUid) return;
-        // Critical: mute the server BEFORE waiting for Firestore writes,
-        // otherwise automatic Telegram alerts can keep arriving while
-        // the profile spinner still says "off".
-        if (!(user as any)?.isLocalUser) {
-          const res = await apiFetch('/api/notification-preferences', {
-            method: 'PUT', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ settings: next }),
-          });
-          if (!res.ok) throw new Error('Сервер відхилив налаштування доставки');
-        }
+        // The local notification center never posts preferences to VPS.
+        // Profile synchronization (when supported) only restores UI preferences
+        // on the user's own devices; it does not create market-data workers.
         if (uidRef.current !== currentUid) return;
         await updateProfileData({
           siteNotificationSettings: next,
@@ -265,7 +237,7 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
         });
       }).catch(() => {
         if (uidRef.current === currentUid) setError(
-          'Не вдалося синхронізувати налаштування із сервером. Сповіщення цього браузера вимкнено, але Telegram може продовжувати надсилати повідомлення. Перевірте підключення та повторіть вимкнення.'
+          'Не вдалося зберегти налаштування у профілі. Локальний вибір у цьому браузері збережено.'
         );
       }).finally(() => {
         changePendingCount(pendingSettingsWrites.current, currentUid, -1);
@@ -348,13 +320,9 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
   const setFavoriteIds = useCallback((favorites: readonly string[]) => {
     const normalized = normalizeNotificationFavoriteIds(favorites);
     favoritesRef.current = normalized;
-    // Sync only when the user asked the server to restrict alerts to favorites.
-    // A changed list is persisted with their own notification preferences, never
-    // broadcast or shared with other accounts. No new market subscriptions.
-    if (uidRef.current === 'guest' || !settingsRef.current.onlyFavorites) return;
-    if (JSON.stringify(settingsRef.current.favoriteIds) === JSON.stringify(normalized)) return;
-    void updateSettings({ favoriteIds: normalized });
-  }, [updateSettings]);
+    // Favorites are matched inside this browser; there is no server write when
+    // a user edits their watchlist, and no additional exchange subscription.
+  }, []);
 
   const processScan = useCallback((coins: readonly ScannedCoin[], favorites: readonly string[] = []) => {
     const mutedAt = locallyMutedAt(uidRef.current);

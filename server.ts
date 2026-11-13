@@ -46,7 +46,6 @@ import { surveillanceManager } from './server/surveillance/surveillanceManager';
 import { surveillanceReplayEngine } from './server/surveillance/replayEngine';
 import { fetchHookChartOIHistory } from './server/hookchartOI';
 import { requireUserAuth } from './server/userAuth';
-import { getUserSiteNotificationSettings, saveUserSiteNotificationSettings, isUserTelegramCategoryAllowed } from './server/siteNotificationPrefs';
 import { sendUserTelegramMessage, startTelegramDeliveryWorker } from './server/telegramDelivery';
 import { installPaperFeed } from './server/paperFeed';
 import { installMonMarketFeed } from './server/monMarketFeed';
@@ -76,19 +75,10 @@ async function startServer() {
   // Register API routes BEFORE the SPA HTML fallback.
   installMonMarketFeed(app);
 
-  app.use(['/api/alerts', '/api/telegram', '/api/surveillance', '/api/cron', '/api/notification-preferences'], requireUserAuth);
-
-  app.get('/api/notification-preferences', (_req, res) => {
-    res.json({ success: true, settings: getUserSiteNotificationSettings(res.locals.userId) });
-  });
-  app.put('/api/notification-preferences', (req, res) => {
-    try {
-      const settings = saveUserSiteNotificationSettings(res.locals.userId, req.body?.settings);
-      res.json({ success: true, settings });
-    } catch (error) {
-      res.status(400).json({ success: false, error: error instanceof Error ? error.message : 'Помилка збереження' });
-    }
-  });
+  // The profile notification center is browser-only, so it has no API
+  // for synchronizing its category switches or modifying Telegram delivery.
+  // Existing price alerts, surveillance and Telegram retain separate routes.
+  app.use(['/api/alerts', '/api/telegram', '/api/surveillance', '/api/cron'], requireUserAuth);
 
   // Health check
   app.get('/api/health', (req, res) => {
@@ -124,22 +114,15 @@ async function startServer() {
     try {
       const { userId, symbol, note, language } = req.body;
       const testSymbol = (symbol || 'BTCUSDT').toUpperCase();
-      const allowed = isUserTelegramCategoryAllowed(res.locals.userId, {
-        source: 'PRICE_ALERT', eventType: 'PRICE_ALERT',
-        symbol: testSymbol, exchange: 'binance', marketType: 'futures',
-      });
-      if (!allowed) return res.status(403).json({
-        success: false, error: 'У профілі увімкніть сповіщення, категорію «Цінові алерти» та доставку Telegram.',
-      });
       const userTg = getUserTelegram(res.locals.userId);
       const selectedLanguage = normalizeLanguage(language || userTg?.language);
       const effectiveToken = userTg?.botToken;
       const effectiveChat = userTg?.chatId;
 
-      if (!effectiveToken || !effectiveChat) {
+      if (!effectiveToken || !effectiveChat || !userTg?.confirmedAt) {
         return res.status(400).json({
           success: false,
-          error: 'Спочатку підключіть свій Telegram у профілі або налаштуваннях сповіщень.',
+          error: 'Спочатку підключіть і підтвердьте Telegram у відповідному розділі.',
         });
       }
 

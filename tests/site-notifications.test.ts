@@ -104,13 +104,13 @@ test('header opens site event center and profile exposes notification settings',
   assert.match(app, /reportStrongFormations\(data\.data/);
 });
 
-test('turning the master switch off revokes push and Telegram transport even when browser permission was granted', () => {
+test('master opt-out revokes browser push without affecting independent Telegram pages', () => {
   const active = normalizeSiteNotificationSettings({
     optedIn: true, enabled: true, enabledAt: 100,
     price: true, impulses: true, browserPush: true, telegramEnabled: true,
   });
   assert.equal(active.browserPush, true);
-  assert.equal(active.telegramEnabled, true);
+  assert.equal(active.telegramEnabled, false, 'legacy flag stays off for site-only notifications');
   const disabled = normalizeSiteNotificationSettings({ ...active, enabled: false });
   assert.equal(disabled.enabled, false);
   assert.equal(disabled.browserPush, false);
@@ -120,7 +120,7 @@ test('turning the master switch off revokes push and Telegram transport even whe
   assert.equal(disabled.price, true, 'categories can remain selected while master stays off');
   const renewed = normalizeSiteNotificationSettings({ ...disabled, enabled: true, enabledAt: 300 });
   assert.equal(renewed.browserPush, false, 're-enabling the center must not reactivate browser pushes automatically');
-  assert.equal(renewed.telegramEnabled, false, 'Telegram transport requires a separate new opt-in');
+  assert.equal(renewed.telegramEnabled, false, 'the site center never enables independent Telegram');
 });
 
 test('a mute stored in another tab wins over an older enabled profile snapshot', () => {
@@ -153,9 +153,8 @@ test('browser notifications, sounds, old price toasts and cross-tab state are al
   assert.match(provider, /notification\.close\(\)/);
   assert.match(provider, /if \(disabling\) \{\s*closeVisibleBrowserNotifications\(\)/);
   assert.match(provider, /if \(!fromStorage\.enabled\) \{\s*closeVisibleBrowserNotifications\(\)/);
-  assert.ok(provider.indexOf("apiFetch('/api/notification-preferences'", provider.indexOf('const updateSettings')) <
-    provider.indexOf('await updateProfileData({', provider.indexOf('const updateSettings')),
-    'mute the server first before the profile update');
+  assert.doesNotMatch(provider, /apiFetch\('\/api\/notification-preferences'/);
+  assert.match(provider, /localStorage\.setItem\(siteNotificationSettingsKey\(currentUid\)/);
   assert.match(profile, /settingsRef\.current\.enabled \|\| !settingsRef\.current\.optedIn/);
   assert.match(app, /if \(!notificationEnabled\(notificationSettings, 'price'\)\) return;/);
   assert.match(app, /setAlertToast\(null\)/);

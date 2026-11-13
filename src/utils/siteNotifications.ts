@@ -185,7 +185,9 @@ export function normalizeSiteNotificationSettings(input: unknown): SiteNotificat
     // The master switch also revokes delivery channels; merely keeping a browser
     // permission granted is never consent to receive notifications.
     browserPush: consent && d.enabled === true && d.browserPush === true,
-    telegramEnabled: consent && d.enabled === true && d.telegramEnabled === true,
+    // Kept as a legacy data field only. This on-site center never enables
+    // server Telegram delivery or controls another page's Telegram settings.
+    telegramEnabled: false,
     impulseSymbol: normalizeImpulseSymbol(d.impulseSymbol || ''),
     impulseThresholdPct: bounded(d.impulseThresholdPct, 2, .1, 50),
     impulseWindowMinutes: d.impulseWindowMinutes === 1 || d.impulseWindowMinutes === 15 ? d.impulseWindowMinutes : 5,

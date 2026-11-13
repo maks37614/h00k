@@ -165,10 +165,10 @@ export const ProfileNotificationSettings: React.FC = () => {
     else setFormError('Браузер не надав дозвіл. Перевірте налаштування браузера.');
   };
   const reset = () => {
-    const patch: Partial<SiteNotificationSettings> = { enabled: false, browserPush: false, telegramEnabled: false };
+    const patch: Partial<SiteNotificationSettings> = { enabled: false, browserPush: false };
     for (const item of NOTIFICATION_CATEGORIES) (patch as Record<string, unknown>)[keyFor(item.key)] = false;
     update(patch);
-    setMessage('Сповіщення на сайті, звуки, браузерна й автоматична Telegram-доставка вимкнені.');
+    setMessage('Сповіщення на сайті, звуки та повідомлення браузера вимкнені. Інші розділи не змінено.');
   };
 
   return (
@@ -180,8 +180,8 @@ export const ProfileNotificationSettings: React.FC = () => {
               <Bell className="h-4 w-4 text-cyan-300" /> Центр сповіщень
             </h3>
             <p className="mt-1 text-xs leading-relaxed text-slate-400">
-              За замовчуванням усе вимкнено. Спочатку дозвольте сповіщення,
-              потім оберіть категорії. Жодна категорія не вмикається автоматично.
+              Сповіщення обробляються у вашому браузері з уже доступних даних сайту.
+              Додатковий повний пошук монет не запускається. Спочатку увімкніть потрібні категорії.
             </p>
           </div>
           <label className="flex shrink-0 cursor-pointer items-center gap-2 rounded-lg border border-cyan-500/25 bg-slate-900 px-3 py-2 text-xs font-semibold">
@@ -189,14 +189,14 @@ export const ProfileNotificationSettings: React.FC = () => {
             <input type="checkbox" checked={settings.enabled} onChange={e => update({
               enabled: e.target.checked,
               optedIn: e.target.checked || settings.optedIn,
-              ...(e.target.checked ? {} : { browserPush: false, telegramEnabled: false }),
+              ...(e.target.checked ? {} : { browserPush: false }),
             })} className="h-4 w-4 accent-cyan-400" aria-label="Дозволити сповіщення на сайті" />
           </label>
         </div>
         <p className="mt-2 text-[11px] text-slate-400">
-          Вимкнення тут блокує сповіщення на сайті, звуки й автоматичну доставку Telegram.
-          Раніше створені цінові алерти зберігаються, але не спрацьовують до повторного ввімкнення категорії.
-          Дозвіл браузера може залишатися наданим, проте h00k.top більше не створюватиме нових браузерних повідомлень.
+          Цей перемикач керує тільки сповіщеннями та звуком на відкритому h00k.top.
+          Він не впливає на цінові алерти або персональний нагляд, налаштовані в інших розділах.
+          Коли сайт закрито, локальні сповіщення не працюють.
         </p>
       </div>
 
@@ -390,27 +390,8 @@ export const ProfileNotificationSettings: React.FC = () => {
           <input type="checkbox" checked={settings.browserPush} disabled={!settings.enabled}
             onChange={e => void enableBrowser(e.target.checked)} className="h-4 w-4 accent-cyan-400"/>
         </label>
-        <label className="flex items-center justify-between gap-3 text-xs">
-          <span>Надсилати дозволені серверні події в Telegram</span>
-          <input type="checkbox" checked={settings.telegramEnabled} disabled={!settings.enabled}
-            onChange={e => update({ telegramEnabled: e.target.checked })}
-            className="h-4 w-4 accent-cyan-400" aria-label="Дозволити Telegram-доставку" />
-        </label>
-        {settings.telegramEnabled && settings.onlyFavorites && (
-          <p role="status" className="rounded-lg border border-amber-500/30 bg-amber-950/20 p-2 text-[11px] text-amber-200">
-            Режим «Лише обрані» працює для сповіщень на сайті. Серверні Telegram-сповіщення
-            в цьому режимі блокуються, доки список обраних не підтримується серверною перевіркою.
-          </p>
-        )}
-        <p className="text-[11px] leading-relaxed text-slate-400">
-          Telegram потрібно спочатку підключити до профілю. Цей перемикач дозволяє тільки обрані
-          категорії, які сервер уже моніторить: цінові рівні, системний нагляд, OI, щільності,
-          пробої та інші його підтверджені події. Нові сигнали, які обчислюються лише у браузері
-          (власні імпульси, комплекс Quant, ROUND, RVOL та ранні W/M), наразі приходять тільки на сайт.
-          Без увімкнених головного перемикача, категорії та Telegram доставку буде заблоковано.
-        </p>
         <p className="text-[11px] text-slate-500">
-          Браузерні повідомлення вимагають окремого дозволу й активної сторінки; iPhone може обмежувати фонову роботу.
+          Звук і браузерні повідомлення вимагають відкритого сайту. У фонових вкладках Android та iOS сповіщення можуть призупинятися.
         </p>
       </section>
 

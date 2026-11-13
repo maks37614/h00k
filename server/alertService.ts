@@ -4,7 +4,6 @@ import fs from 'fs';
 import path from 'path';
 import type { PriceAlert, AlertHistoryItem, ExchangeId, MarketType } from '../src/types';
 import { sendUserTelegramMessage, getTelegramDelivery } from './telegramDelivery';
-import { isUserTelegramCategoryAllowed, isUserNotificationCategoryAllowed } from './siteNotificationPrefs';
 import { getUserTelegram, saveUserTelegram, loadUserTelegram } from './userTelegram';
 export { getUserTelegram, saveUserTelegram, loadUserTelegram } from './userTelegram';
 import type { SetupInstance } from './surveillance/types';
@@ -612,13 +611,10 @@ export async function checkAlertsOnce(userId?: string) {
 
 async function checkAlertsInternal(userId?: string) {
   const alerts = loadAlerts();
-  // Disabled users' alerts remain pending: no silent consumption and no
-  // exchange subscription until the user enables the price category.
+  // These alerts were explicitly created on the independent Price Alerts page.
+  // Browser-only profile switches must not block monitoring or Telegram here.
   const allActive = alerts.filter(a => a.isActive && !a.triggered
-    && isUserNotificationCategoryAllowed(a.userId || '', {
-      source: 'PRICE_ALERT', eventType: 'PRICE_ALERT',
-      symbol: a.symbol, exchange: a.exchange, marketType: a.marketType,
-    }));
+    && Boolean(a.userId) && a.userId !== 'guest');
   // A manual /api/cron/run for one user must NEVER replace the global
   // exchange subscription universe with that user's private subset.
   // Keep network subscriptions global but evaluate/notify only the caller.
@@ -741,13 +737,12 @@ async function checkAlertsInternal(userId?: string) {
       let telegramMessageIds: number[] | undefined;
       let telegramPending = false;
 
-      const userAllowedTelegram = isUserTelegramCategoryAllowed(alert.userId || '', {
-        source: 'PRICE_ALERT', eventType: 'PRICE_ALERT',
-        symbol: alert.symbol, exchange: alert.exchange, marketType: alert.marketType,
-      });
+      const telegramConfig = getUserTelegram(alert.userId || '');
+      const userAllowedTelegram = Boolean(telegramConfig?.botToken
+        && telegramConfig?.chatId && telegramConfig?.confirmedAt);
       try {
         if (!userAllowedTelegram) {
-          telegramError = 'Telegram-відправлення вимкнено в профілі користувача';
+          telegramError = 'Telegram не підключено або не підтверджено';
         } else {
         const sendRes = await sendUserTelegramMessage(alert.userId || '', message, `price:${alert.id}:epoch:${alert.deliveryEpoch ?? 0}`);
         telegramDeliveryId = sendRes.deliveryId;

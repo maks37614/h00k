@@ -91,20 +91,29 @@ export const SurveillanceProvider: React.FC<{ children: React.ReactNode }> = ({ 
     }
   }, [user?.uid]);
 
+  // Use the existing authenticated event stream when available; a second
+  // periodic GET every minute would duplicate the same snapshots for every user.
+  const streamConnected = useRef(false);
   useEffect(() => {
+    streamConnected.current = false;
     setCoins([]);
     setLoading(true);
-    fetchCoins();
+    void fetchCoins();
     const interval = setInterval(() => {
-      fetchCoins();
+      if (streamConnected.current || (typeof document !== 'undefined' && document.hidden)) return;
+      void fetchCoins();
     }, 60000);
-    return () => clearInterval(interval);
+    return () => { clearInterval(interval); streamConnected.current = false; };
   }, [fetchCoins]);
 
-  // Authenticated fetch-stream SSE because EventSource cannot attach Firebase
-  // Authorization headers. Polling every 60s remains the offline fallback.
+  // Use SSE only for accounts with active personal surveillance. Users who
+  // never added active monitors should not occupy a persistent VPS connection.
+  const hasActiveMonitors = coins.some(coin => coin.isActive);
   useEffect(() => {
-    if (!user || (user as { isLocalUser?: boolean }).isLocalUser) return;
+    if (!user || (user as { isLocalUser?: boolean }).isLocalUser || !hasActiveMonitors) {
+      streamConnected.current = false;
+      return;
+    }
     let stopped = false;
     let controller: AbortController | undefined;
     let retry: ReturnType<typeof setTimeout> | undefined;
@@ -118,6 +127,7 @@ export const SurveillanceProvider: React.FC<{ children: React.ReactNode }> = ({ 
           signal: controller.signal, headers: { Accept: 'text/event-stream' },
         });
         if (!response.ok || !response.body) throw new Error('Live stream unavailable');
+        streamConnected.current = true;
         attempt = 0;
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
@@ -141,12 +151,12 @@ export const SurveillanceProvider: React.FC<{ children: React.ReactNode }> = ({ 
           }
         }
       } catch { /* Polling fallback remains active. */ }
-      finally { controller?.abort(); }
+      finally { streamConnected.current = false; controller?.abort(); }
       if (!stopped) retry = setTimeout(connect, Math.min(60000, 3000 * 2 ** Math.min(attempt++, 5)));
     };
     void connect();
-    return () => { stopped = true; controller?.abort(); if (retry) clearTimeout(retry); };
-  }, [user?.uid, fetchCoins]);
+    return () => { stopped = true; streamConnected.current = false; controller?.abort(); if (retry) clearTimeout(retry); };
+  }, [user?.uid, fetchCoins, hasActiveMonitors]);
 
   const mutate = async (userId: string, url: string, options: RequestInit) => {
     const finish = requestGuard.current.beginWrite(userId);

@@ -1,23 +1,21 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import {
-  getUserSiteNotificationSettings, isUserTelegramCategoryAllowed, categoryForServerEvent,
-} from '../server/siteNotificationPrefs';
+import { categoryForServerEvent, getUserSiteNotificationSettings } from '../server/siteNotificationPrefs';
 import { normalizeSiteNotificationSettings, notificationEnabled } from '../src/utils/siteNotifications';
 
-test('background Telegram fails closed for guests and unconfigured profiles', () => {
+const read=(path:string)=>readFileSync(new URL(path,import.meta.url),'utf8');
+
+test('on-site notification preferences never enable automatic Telegram', () => {
   assert.equal(getUserSiteNotificationSettings('guest').enabled, false);
-  const source = { source: 'PRICE_ALERT', eventType: 'PRICE_ALERT', symbol: 'BTCUSDT',
-    exchange: 'binance', marketType: 'futures' };
-  assert.equal(isUserTelegramCategoryAllowed('guest', source), false);
-  assert.equal(isUserTelegramCategoryAllowed('user-without-preferences', source), false);
-  assert.equal(notificationEnabled(normalizeSiteNotificationSettings({
-    optedIn: true, enabled: true, price: true, telegramEnabled: false,
-  }), 'price'), true, 'site notification may be on while Telegram remains separately off');
+  const prefs = normalizeSiteNotificationSettings({
+    optedIn: true, enabled: true, price: true, telegramEnabled: true,
+  });
+  assert.equal(prefs.telegramEnabled, false);
+  assert.equal(notificationEnabled(prefs, 'price'), true);
 });
 
-test('server category routing uses event taxonomy rather than guessing by coin', () => {
+test('existing server event taxonomy remains available for independent alert pages', () => {
   assert.equal(categoryForServerEvent('PRICE_ALERT', 'PRICE_ALERT'), 'price');
   assert.equal(categoryForServerEvent('FORMATION_DETECTED', 'SCREENER'), 'formation');
   assert.equal(categoryForServerEvent('DENSITY_APPEARED', 'SURVEILLANCE'), 'density');
@@ -28,16 +26,23 @@ test('server category routing uses event taxonomy rather than guessing by coin',
   assert.equal(categoryForServerEvent('MOMENTUM', 'SURVEILLANCE'), 'impulse');
 });
 
-test('preferences endpoint is authenticated, and all automatic Telegram send paths are gated', () => {
-  const server = readFileSync(new URL('../server.ts', import.meta.url), 'utf8');
-  const router = readFileSync(new URL('../server/notificationRouter.ts', import.meta.url), 'utf8');
-  const price = readFileSync(new URL('../server/alertService.ts', import.meta.url), 'utf8');
-  const context = readFileSync(new URL('../src/context/SiteNotificationsContext.tsx', import.meta.url), 'utf8');
-  assert.match(server, /'\/api\/notification-preferences'\], requireUserAuth/);
-  assert.match(server, /app\.put\('\/api\/notification-preferences'/);
-  assert.match(router, /isUserTelegramCategoryAllowed\(params\.userId/);
-  assert.match(price, /if \(!userAllowedTelegram\)/);
-  assert.match(price, /isUserNotificationCategoryAllowed\(a\.userId/);
-  assert.match(server, /isUserTelegramCategoryAllowed\(res\.locals\.userId/);
-  assert.match(context, /apiFetch\('\/api\/notification-preferences'/);
+test('browser settings are not written to VPS and separate Telegram alert routes remain guarded', () => {
+  const server = read('../server.ts');
+  const router = read('../server/notificationRouter.ts');
+  const price = read('../server/alertService.ts');
+  const ctx = read('../src/context/SiteNotificationsContext.tsx');
+  const profile = read('../src/components/profile/ProfileNotificationSettings.tsx');
+  assert.doesNotMatch(server, /app\.(?:get|put)\('\/api\/notification-preferences'/);
+  assert.doesNotMatch(ctx, /\/api\/notification-preferences/);
+  assert.doesNotMatch(profile, /[Tt]elegram/);
+  assert.match(server, /app\.use\(\['\/api\/alerts', '\/api\/telegram', '\/api\/surveillance', '\/api\/cron'\], requireUserAuth\)/);
+  assert.match(server, /installTelegramRoutes\(app\)/);
+  assert.match(router, /params\.userId === 'guest'/);
+  assert.match(router, /getUserTelegram\(params\.userId\)/);
+  assert.match(router, /telegram_not_confirmed/);
+  assert.match(router, /coin\.config\?\.telegramEnabled === false/);
+  assert.match(price, /allActive = alerts\.filter\(a => a\.isActive && !a\.triggered/);
+  assert.match(price, /telegramConfig\?\.confirmedAt/);
+  assert.doesNotMatch(price, /isUserNotificationCategoryAllowed|isUserTelegramCategoryAllowed/);
+  assert.doesNotMatch(router, /isUserTelegramCategoryAllowed/);
 });

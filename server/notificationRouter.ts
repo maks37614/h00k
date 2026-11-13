@@ -1,6 +1,5 @@
 import { SurveillanceCoin } from '../src/types';
 import { getUserTelegram } from './userTelegram';
-import { isUserTelegramCategoryAllowed } from './siteNotificationPrefs';
 import { sendUserTelegramMessage, lastTelegramDeliveryAt } from './telegramDelivery';
 import { findSurveillanceCoinById } from './surveillanceService';
 
@@ -132,12 +131,12 @@ export class NotificationRouter {
     const scopedKey = this.buildScopedKey(params);
     const now = Date.now();
 
-    // Nothing is sent by a background job without explicit profile opt-in.
-    if (!isUserTelegramCategoryAllowed(params.userId, {
-      source: params.source, eventType: params.eventType, symbol: params.symbol,
-      exchange: params.exchange, marketType: params.marketType,
-      timeframe: params.timeframe,
-    })) return { allowed: false, reason: 'user_notifications_disabled', scopedKey };
+    // The dedicated surveillance / Telegram page owns its alert controls.
+    // Browser notification settings must never control server Telegram.
+    // The coin ownership, active state, Telegram connection and cooldown
+    // are checked independently below.
+    if (!params.userId || params.userId === 'guest')
+      return { allowed: false, reason: 'unauthenticated_user', scopedKey };
 
     // 1. If coin context provided, check active status & config toggles
     if (params.coin) {

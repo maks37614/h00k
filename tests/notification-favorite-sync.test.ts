@@ -28,11 +28,10 @@ test('server-side favorite scope matches actual selected exchange and market onl
     {symbol:'ETHUSDT',exchange:'bybit',marketType:'spot'},cfg.favoriteIds,{timeframeIndependent:true}),false);
 });
 
-test('server checks persisted favoriteIds, client syncs a changing list and opt-in enables with current favorites', () => {
-  const server=readFileSync(new URL('../server/siteNotificationPrefs.ts',import.meta.url),'utf8');
+test('favorite scopes are checked locally and no watchlist edit writes to VPS', () => {
   const client=readFileSync(new URL('../src/context/SiteNotificationsContext.tsx',import.meta.url),'utf8');
-  assert.match(server, /matchesNotificationScope\(cfg, params, cfg\.favoriteIds,/);
-  assert.match(client, /void updateSettings\(\{ favoriteIds: normalized \}\)/);
+  assert.match(client, /favoritesRef\.current = normalized/);
+  assert.doesNotMatch(client, /void updateSettings\(\{ favoriteIds: normalized \}\)/);
   assert.match(client, /patch\.onlyFavorites === true && patch\.favoriteIds === undefined/);
-  assert.match(client, /uidRef\.current === 'guest'/);
+  assert.doesNotMatch(client, /\/api\/notification-preferences/);
 });
