@@ -105,6 +105,7 @@ byId('attach').onclick=async()=>{try{snap=await api.save(active,form());snap=awa
 byId('detach').onclick=async()=>{try{snap=await api.detach(active);render();byId('feedback').textContent='Відкріплено';}catch(e){error(e);}};
 byId('target').onchange=async e=>{if(!e.target.value)return;try{snap=await api.pick(active,e.target.value);drawStatus();}catch(err){error(err);}};
 byId('standalone').onclick=async()=>{try{await api.openStandalone();}catch(e){error(e);}};
+api.onSelectProvider(provider=>{if(providers.some(([id])=>id===provider)){active=provider;render();}});
 api.onSnapshot(value=>{snap=value;drawStatus();});
 api.snapshot().then(value=>{snap=value;render();}).catch(error);
 </script></body></html>
