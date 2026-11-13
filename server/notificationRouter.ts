@@ -18,6 +18,8 @@ export interface NotificationEventPayload {
   symbol: string;
   exchange: string;
   marketType: string;
+  /** The actual event timeframe, not the coin's selected default chart. */
+  timeframe?: string;
   eventType: string;
   eventIdentity: string;
   triggerMode?: 'realtime' | 'bar_close' | 'bar_close_1h' | 'bar_close_15m' | 'manual';
@@ -37,6 +39,8 @@ export interface ShouldNotifyParams {
   symbol: string;
   exchange: string;
   marketType: string;
+  /** The actual event timeframe, not the coin's selected default chart. */
+  timeframe?: string;
   eventType: string;
   eventIdentity: string;
   triggerMode?: 'realtime' | 'bar_close' | 'bar_close_1h' | 'bar_close_15m' | 'manual';
@@ -132,7 +136,7 @@ export class NotificationRouter {
     if (!isUserTelegramCategoryAllowed(params.userId, {
       source: params.source, eventType: params.eventType, symbol: params.symbol,
       exchange: params.exchange, marketType: params.marketType,
-      timeframe: params.coin?.config?.timeframe,
+      timeframe: params.timeframe,
     })) return { allowed: false, reason: 'user_notifications_disabled', scopedKey };
 
     // 1. If coin context provided, check active status & config toggles
@@ -228,6 +232,7 @@ export class NotificationRouter {
       symbol: payload.symbol,
       exchange: payload.exchange,
       marketType: payload.marketType,
+      timeframe: payload.timeframe,
       eventType: payload.eventType,
       eventIdentity: payload.eventIdentity,
       triggerMode: payload.triggerMode,

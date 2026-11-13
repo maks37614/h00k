@@ -738,6 +738,7 @@ async function checkCoinSurveillanceInternal(
       source: 'SURVEILLANCE', userId: coin.userId, coinId: coin.id, symbol: coin.symbol,
       exchange: coin.exchange, marketType: coin.marketType,
       eventType: selected.details?.notificationType || 'MANUAL_CHECK',
+      timeframe: selected.details?.timeframe,
       eventIdentity: selected.details?.eventIdentity || selected.id,
       triggerMode: forceNotify ? 'manual' : selected.details?.triggerMode,
       htmlMessage: formatSurveillanceTelegramMessage(updatedCoin, { ...newState, currentPrice: selected.price }, selected),
