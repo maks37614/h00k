@@ -31,7 +31,7 @@ export const MarketSentimentWidget: React.FC<MarketSentimentWidgetProps> = ({ co
   const { user, profile, updateProfileData } = useAuth();
   const accountUid = user?.uid ?? null;
   const accountScope = accountUid ?? 'guest';
-  // Optimistic UI while Firestore persists the user's choice; newer clicks win.
+  // Optimistic UI while the account settings are saved; newer clicks win.
   const [localExpansion, setLocalExpansion] = useState<{
     accountScope: string;
     value: boolean;
