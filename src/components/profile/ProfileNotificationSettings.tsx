@@ -155,7 +155,7 @@ export const ProfileNotificationSettings: React.FC = () => {
 
       <section className="space-y-3 rounded-xl border border-slate-700 bg-slate-950/60 p-3 sm:p-4">
         <h4 className="flex items-center gap-2 text-sm font-bold"><SlidersHorizontal className="h-4 w-4 text-cyan-300"/> Що саме відстежувати</h4>
-        <p className="text-[11px] text-slate-400">Ці фільтри застосовуються до подій, де доступні відповідні біржа, ринок і таймфрейм.</p>
+        <p className="text-[11px] text-slate-400">Вибрані фільтри застосовуються точно: якщо для події немає потрібної біржі, ринку або таймфрейму, вона не надходитиме.</p>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <label className="space-y-1 text-xs">Біржа
             <select value={settings.scopeExchange} onChange={e => update({ scopeExchange: e.target.value as SiteNotificationSettings['scopeExchange'] })}
