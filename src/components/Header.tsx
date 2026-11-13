@@ -387,6 +387,8 @@ export const Header: React.FC<HeaderProps> = ({
                 </span>
               </button>
             ) : (
+              <>
+              <a href="/welcome" className="hidden sm:inline-flex items-center rounded-lg px-2 py-1.5 text-[11px] font-semibold text-cyan-300 hover:text-white" title="Огляд можливостей h00k">Можливості</a>
               <button
                 id="auth-login-btn"
                 onClick={onOpenAuth}
@@ -396,6 +398,7 @@ export const Header: React.FC<HeaderProps> = ({
                 <UserPlus className="w-3.5 h-3.5 text-emerald-400" />
                 <span className="hidden xs:inline">Увійти</span>
               </button>
+              </>
             )}
           </div>
         </div>

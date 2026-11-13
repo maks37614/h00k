@@ -3,4 +3,5 @@
   <url><loc>https://h00k.top/</loc></url>
   <url><loc>https://h00k.top/terms</loc></url>
   <url><loc>https://h00k.top/privacy</loc></url>
+  <url><loc>https://h00k.top/welcome</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
 </urlset>

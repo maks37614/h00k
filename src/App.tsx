@@ -21,6 +21,7 @@ import { MetaScalpModal } from './components/MetaScalpModal';
 import { MetaScalpToast, MetaScalpToastState } from './components/MetaScalpToast';
 import { TelegramAlertsModal } from './components/TelegramAlertsModal';
 import { AuthModal, AuthPromptReason } from './components/AuthModal';
+import { WelcomeTour } from './components/WelcomeTour';
 import { UserProfileModal } from './components/UserProfileModal';
 import { ArchiveModal } from './components/ArchiveModal';
 import { AlertToast, AlertToastState } from './components/AlertToast';
@@ -144,6 +145,8 @@ export default function App() {
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
   const [authPromptReason, setAuthPromptReason] = useState<AuthPromptReason>(null);
   const [authInitialMode, setAuthInitialMode] = useState<'signin' | 'signup'>('signin');
+  const [tourDismissed, setTourDismissed] = useState(false);
+  useEffect(() => setTourDismissed(false), [user?.uid]);
   const [earlyMode, setEarlyMode] = useState(false);
   useEffect(() => {
     try {
@@ -1790,6 +1793,17 @@ export default function App() {
           setAuthPromptReason(null);
         }}
       />
+
+      {!authLoading && user && profile?.onboardingCompleted === false && !tourDismissed && (
+        <WelcomeTour
+          onFinish={() => {
+            setTourDismissed(true);
+            void updateProfileData({ onboardingCompleted: true }).catch(error =>
+              console.error('[Onboarding] Could not save completion:', error));
+          }}
+          onNavigate={handlePageChange}
+        />
+      )}
 
       {/* User Profile & Isolated Settings Modal */}
       <UserProfileModal

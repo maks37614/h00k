@@ -399,6 +399,8 @@ export interface SearchUserSettings {
 
 export interface UserProfile {
   uid: string;
+  /** Explicit false only for new accounts; older profiles do not show the first-run tour. */
+  onboardingCompleted?: boolean;
   email?: string | null;
   displayName?: string | null;
   photoURL?: string | null;
