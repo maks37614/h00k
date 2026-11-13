@@ -139,6 +139,69 @@ test('all four visual settings update the read-only preview without extra market
   assert.match(renderProfile({ autoPriceScale: false }), />×1</);
 });
 
+test('visual chart editor moves descriptions into accessible question-mark help controls', () => {
+  const editor = settingsSource.slice(settingsSource.indexOf('function VisualProfileEditor'),
+    settingsSource.indexOf('export function OriginalHookChartSettings'));
+  const help = settingsSource.slice(settingsSource.indexOf('function VisualSettingHelp'),
+    settingsSource.indexOf('function LiquidationHelp'));
+  for (const label of [
+    'Тип графіка', 'Пристрій', 'Кількість видимих свічок',
+    'Вертикальний зум', 'Відступ праворуч', 'Автоматичний масштаб ціни',
+  ]) {
+    assert.match(editor, new RegExp('label="' + label + '"'));
+  }
+  assert.equal((editor.match(/help="/g) || []).length, 7, 'six controls and one general help');
+  assert.doesNotMatch(editor, /desc="/, 'long descriptions should no longer occupy the settings screen');
+  assert.match(help, /aria-label=\{\`Пояснення: \$\{label\}\`\}/);
+  assert.match(help, /aria-expanded=\{open\}/);
+  assert.match(help, /createPortal\(/);
+  assert.match(help, /role="tooltip"/);
+  assert.match(help, /onClick=\{\(\) => setOpen\(previous => !previous\)\}/);
+  assert.match(help, /event\.key === 'Escape'/);
+  const css = source('../src/components/hookchart/integration.css');
+  assert.match(css, /\.hookchartVisualHelpPopover\s*\{/);
+  assert.match(css, /z-index:2147483000/);
+});
+
+test('preview and sliders are compact enough for usual laptop and mobile viewport sizes', () => {
+  const editor = settingsSource.slice(settingsSource.indexOf('function VisualProfileEditor'),
+    settingsSource.indexOf('export function OriginalHookChartSettings'));
+  const css = source('../src/components/hookchart/integration.css');
+  assert.match(editor, /className="visualProfileEditor visualProfileCompact"/);
+  assert.match(css, /\.visualProfileCompact \.visualProfilePreviewStage \.hookchart-mini-preview\s*\{[^}]*width:min\(100%, 600px, 58dvh\)/s);
+  assert.match(css, /\.visualProfileCompact \.hookchart-mini-note\s*\{[^}]*display:none/s);
+  assert.match(css, /\.visualProfileCompact \.visualProfileControls\s*\{[^}]*grid-template-columns:minmax\(0,1fr\)/s);
+  assert.match(css, /@media \(max-width:680px\)/);
+  assert.match(css, /@media \(max-height:710px\) and \(min-width:681px\)/);
+  assert.match(css, /@media \(max-height:600px\) and \(max-width:680px\)/);
+  assert.match(css, /@media \(max-height:650px\) and \(min-width:490px\) and \(max-width:680px\)/);
+  assert.match(css, /\.visualProfileCompact \.visualProfileSelection\s*\{[^}]*grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/s);
+  assert.ok(editor.indexOf('visualProfilePreviewStage') < editor.indexOf('visualProfileControls'));
+});
+
+test('capture, make-default, and reset actions are buttons wired to live visual-profile handlers', () => {
+  const editor = settingsSource.slice(settingsSource.indexOf('function VisualProfileEditor'),
+    settingsSource.indexOf('export function OriginalHookChartSettings'));
+  assert.match(editor, /className="visualProfileActionButton visualProfileActionPrimary"/);
+  assert.match(editor, /disabled=\{!onCapture\} onClick=\{capture\}/);
+  assert.match(editor, /onClick=\{applyToAll\}/);
+  assert.match(editor, /onClick=\{reset\}/);
+  assert.match(editor, /const capture = \(\) => \{ if \(!onCapture\) return; onCapture\(\);/);
+  assert.match(editor, /const applyToAll = \(\) => \{ onApplyToAll\(\);/);
+  assert.match(editor, /const reset = \(\) => \{ onReset\(\);/);
+  assert.match(editor, /role="status" aria-live="polite"/);
+  assert.match(settingsSource, /onApplyToAll=\{\(\) => \{[\s\S]*?applyVisualDefaultsForDevice\(prefs\.visualProfiles, visualDevice, selected\)/);
+  assert.match(settingsSource, /onReset=\{\(\) => \{[\s\S]*?patchVisualProfile\(prefs\.visualProfiles, key, null\)/);
+  assert.match(settingsSource, /onCaptureVisual\(makeVisualProfileKey\(visualContext, visualDevice\)\)/);
+  const canvas = source('../src/components/hookchart/HookChartCanvas.tsx');
+  assert.match(canvas, /const captureCurrentVisual = \(key: VisualProfileKey\) => \{/);
+  assert.match(canvas, /changeSettings\(\{ visualProfiles: patchVisualProfile\(settings\.visualProfiles,key,profile\) \}\)/);
+  const css = source('../src/components/hookchart/integration.css');
+  assert.match(css, /\.visualProfileActionButton\s*\{/);
+  assert.match(css, /\.visualProfileActionButton:disabled\s*\{/);
+  assert.match(css, /\.visualProfileActionButton:focus-visible\s*\{/);
+});
+
 test('synthetic candles are deterministic, valid and do not depend on real prices', () => {
   const a = createSyntheticPreviewCandles(560);
   const b = createSyntheticPreviewCandles(560);

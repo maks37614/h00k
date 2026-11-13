@@ -161,7 +161,10 @@ test('making the selected visual scale default applies to seven chart types on j
   assert.equal(defaults[desktop]?.rightGapBars, 88);
   const code = src('../src/components/hookchart/OriginalHookChartSettings.tsx');
   assert.match(code, /applyVisualDefaultsForDevice\(prefs\.visualProfiles, visualDevice, selected\)/);
-  assert.match(code, /Зробити типовими для всіх графіків цього пристрою/);
+  assert.match(code, /Зробити типовими для всіх графіків/);
+  assert.match(code, /onApplyToAll=\{\(\) => \{/);
+  assert.match(code, /applyVisualDefaultsForDevice\(prefs\.visualProfiles, visualDevice, selected\)/);
+  assert.match(code, /role="group" aria-label="Збереження та скидання вигляду графіка"/);
 });
 
 

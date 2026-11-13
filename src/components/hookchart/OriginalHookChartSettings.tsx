@@ -256,17 +256,67 @@ const HOTKEY_GROUPS: Array<{ title: string; rows: Array<{ id: HookChartHotkeyAct
   ] },
 ];
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return <section className="settingsSection"><h3>{title}</h3>{children}</section>;
+function Section({ title, help, children }: { title: string; help?: string; children: React.ReactNode }) {
+  return <section className="settingsSection"><h3>{title}{help && <VisualSettingHelp label={title} text={help}/>}</h3>{children}</section>;
+}
+/** Accessible, tap-to-open help. The portal escapes the scroll-clipped chart settings dialog. */
+function VisualSettingHelp({ text, label }: { text: string; label: string }) {
+  const [open, setOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const tooltipId = React.useId();
+  const [position, setPosition] = useState({ left: 8, top: 8, width: 280 });
+  useEffect(() => {
+    if (!open || typeof document === 'undefined') return;
+    const place = () => {
+      const bounds = triggerRef.current?.getBoundingClientRect();
+      if (!bounds) return;
+      const width = Math.min(320, Math.max(160, window.innerWidth - 16));
+      const left = Math.max(8, Math.min(window.innerWidth - width - 8, bounds.left - width / 2 + bounds.width / 2));
+      const below = window.innerHeight - bounds.bottom >= 170 || bounds.top < 170;
+      const top = below ? bounds.bottom + 7 : Math.max(8, bounds.top - 160);
+      setPosition({ left, top, width });
+    };
+    place();
+    const dismissOutside = (event: PointerEvent) => {
+      const target = event.target;
+      if (target instanceof Node && !triggerRef.current?.contains(target) &&
+          !document.getElementById(tooltipId)?.contains(target)) setOpen(false);
+    };
+    const dismissEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('pointerdown', dismissOutside);
+    window.addEventListener('keydown', dismissEscape);
+    window.addEventListener('resize', place);
+    window.addEventListener('scroll', place, true);
+    return () => {
+      document.removeEventListener('pointerdown', dismissOutside);
+      window.removeEventListener('keydown', dismissEscape);
+      window.removeEventListener('resize', place);
+      window.removeEventListener('scroll', place, true);
+    };
+  }, [open, tooltipId]);
+
+  return <span className="visualSettingHelp">
+    <button ref={triggerRef} type="button" className="visualSettingHelpButton"
+      aria-label={`Пояснення: ${label}`} aria-expanded={open} aria-controls={open ? tooltipId : undefined}
+      title={text} onClick={() => setOpen(previous => !previous)}>?</button>
+    {open && typeof document !== 'undefined' && createPortal(
+      <span id={tooltipId} className="hookchartVisualHelpPopover" role="tooltip"
+        style={{ position: 'fixed', left: position.left, top: position.top, width: position.width }}>
+        {text}
+      </span>, document.body,
+    )}
+  </span>;
 }
 function LiquidationHelp({ text, label }: { text: string; label: string }) {
   return <span className="liqSettingHelp"><button type="button" aria-label={label + '. ' + text} title={text}>?</button><span role="tooltip">{text}</span></span>;
 }
-function Setting({ label, desc, help, unavailable = false, children }: { label: string; desc?: string; help?: string; unavailable?: boolean; children: React.ReactNode }) {
-  return <div className={'settingRow' + (unavailable ? ' settingUnavailable' : '')}><div className="settingText"><b>{label}{help && <LiquidationHelp label={label} text={help} />}</b>{desc && <small>{desc}</small>}{unavailable && <small className="settingUnavailableNote">Ще не реалізовано</small>}</div><div className="settingControl">{unavailable ? <fieldset disabled className="settingUnavailableControl" aria-label={label}>{children}</fieldset> : children}</div></div>;
+function Setting({ label, desc, help, rowClassName, unavailable = false, children }: { label: string; desc?: string; help?: string; rowClassName?: string; unavailable?: boolean; children: React.ReactNode }) {
+  return <div className={'settingRow' + (unavailable ? ' settingUnavailable' : '') + (rowClassName ? ' ' + rowClassName : '')}><div className="settingText"><b>{label}{help && <LiquidationHelp label={label} text={help} />}</b>{desc && <small>{desc}</small>}{unavailable && <small className="settingUnavailableNote">Ще не реалізовано</small>}</div><div className="settingControl">{unavailable ? <fieldset disabled className="settingUnavailableControl" aria-label={label}>{children}</fieldset> : children}</div></div>;
 }
-function SwitchRow({ label, desc, help, unavailable, value, onChange }: { label: string; desc?: string; help?: string; unavailable?: boolean; value: boolean; onChange: (value: boolean) => void }) {
-  return <Setting label={label} desc={desc} help={help} unavailable={unavailable}><label className="settingsSwitch"><input type="checkbox" aria-label={label} checked={value} onChange={event => onChange(event.target.checked)} /><span /></label></Setting>;
+function SwitchRow({ label, desc, help, rowClassName, unavailable, value, onChange }: { label: string; desc?: string; help?: string; rowClassName?: string; unavailable?: boolean; value: boolean; onChange: (value: boolean) => void }) {
+  return <Setting label={label} desc={desc} help={help} rowClassName={rowClassName} unavailable={unavailable}><label className="settingsSwitch"><input type="checkbox" aria-label={label} checked={value} onChange={event => onChange(event.target.checked)} /><span /></label></Setting>;
 }
 function LiquidationMinimum({ value, disabled, onChange }: { value?: number | null; disabled?: boolean; onChange: (value: number | null) => void }) {
   return <input className="numInput" type="number" min={0} max={1_000_000_000_000} step={100} inputMode="decimal" placeholder="Авто" disabled={disabled} value={value ?? ''}
@@ -297,8 +347,8 @@ function Num({ value, set, min, max, step = 1, disabled = false, ariaLabel }: { 
     onKeyDown={event => { if (event.key === 'Enter') event.currentTarget.blur(); }}
   />;
 }
-function Choice({ label, desc, unavailable, values, labels, value, set }: { label: string; desc?: string; unavailable?: boolean; values: Array<string | number>; labels?: string[]; value: unknown; set: (value: any) => void }) {
-  return <Setting label={label} desc={desc} unavailable={unavailable}><div className="settingsChips">{values.map((entry, index) => <button type="button" key={String(entry)} value={String(entry)} aria-pressed={value === entry} className={value === entry ? 'sel' : ''} onClick={() => set(entry)}>{labels?.[index] ?? String(entry)}</button>)}</div></Setting>;
+function Choice({ label, desc, help, unavailable, values, labels, value, set }: { label: string; desc?: string; help?: string; unavailable?: boolean; values: Array<string | number>; labels?: string[]; value: unknown; set: (value: any) => void }) {
+  return <Setting label={label} desc={desc} help={help} unavailable={unavailable}><div className="settingsChips">{values.map((entry, index) => <button type="button" key={String(entry)} value={String(entry)} aria-pressed={value === entry} className={value === entry ? 'sel' : ''} onClick={() => set(entry)}>{labels?.[index] ?? String(entry)}</button>)}</div></Setting>;
 }
 function MultiChoice({ label, desc, unavailable, values, selected, toggle, max }: { label: string; desc?: string; unavailable?: boolean; values: string[]; selected: string[]; toggle: (value: string) => void; max?: number }) {
   return <Setting label={label} desc={desc} unavailable={unavailable}><div className="settingsChips">{values.map(entry => <button type="button" key={entry} aria-pressed={selected.includes(entry)} className={selected.includes(entry) ? 'sel' : ''} disabled={!selected.includes(entry) && max !== undefined && selected.length >= max} onClick={() => toggle(entry)}>{entry}</button>)}</div></Setting>;
@@ -507,8 +557,7 @@ export function VisualContextPicker({ value, onChange, includeTerminalContexts =
 function VisualProfileEditor({
   visualContext, visualDevice, selectedProfile, onContextChange, onDeviceChange,
   onProfileChange, onReset, onApplyToAll, onCapture, includeTerminalContexts,
-  live, previewTimezone,
-  previewLongColor, previewShortColor, chartPreferences, saveStatus,
+  live, previewLongColor, previewShortColor, saveStatus,
 }: {
   visualContext: VisualContextId;
   visualDevice: VisualDevice;
@@ -527,75 +576,88 @@ function VisualProfileEditor({
   previewShortColor?: string;
   chartPreferences?: HookChartPreferences;
 }) {
-  return <div className="visualProfileEditor space-y-4">
-    <Section title="Компактний перегляд масштабу">
-      <div className="settingsHint">
-        Невелика нерухома схема не завантажує ринкові дані та не запускає рушій графіка.
-        Редагування лише повзунками нижче: справжній HookChart застосує точні значення до
-        свого розміру. Профілі Скрінера, Формацій, Термінала, телефона й комп’ютера окремі.
-      </div>
+  const [lastAction, setLastAction] = useState<'capture' | 'all' | 'reset' | null>(null);
+  useEffect(() => { setLastAction(null); }, [visualContext, visualDevice]);
+  const capture = () => { if (!onCapture) return; onCapture(); setLastAction('capture'); };
+  const applyToAll = () => { onApplyToAll(); setLastAction('all'); };
+  const reset = () => { onReset(); setLastAction('reset'); };
+
+  return <div className="visualProfileEditor visualProfileCompact">
+    <Section title="Компактний перегляд масштабу"
+      help="Схема показує зміни налаштувань без звернень до бірж. У реальному HookChart масштаб залежить від розміру вікна. Типи графіків та налаштування телефона і комп'ютера зберігаються окремо.">
       <div className="visualProfileSelection">
-      <Setting label="Тип графіка">
-        <VisualContextPicker value={visualContext} onChange={onContextChange} includeTerminalContexts={includeTerminalContexts} />
-      </Setting>
-      <Choice label="Пристрій" values={['mobile', 'desktop']} labels={['Телефон', 'Комп’ютер']}
-        value={visualDevice} set={value => onDeviceChange(value as VisualDevice)} />
+        <Setting label="Тип графіка" help="Оберіть, для якого графіка Скрінера, Формацій або Термінала змінюєте вигляд. Інші типи не змінюються, якщо не натиснути «Зробити типовими».">
+          <VisualContextPicker value={visualContext} onChange={onContextChange} includeTerminalContexts={includeTerminalContexts} />
+        </Setting>
+        <Choice label="Пристрій" help="Телефон і комп'ютер мають окремі профілі. Редагування одного не змінює вигляд іншого."
+          values={['mobile', 'desktop']} labels={['Телефон', 'Комп’ютер']}
+          value={visualDevice} set={value => onDeviceChange(value as VisualDevice)} />
       </div>
       <div className="visualProfilePreviewStage" aria-label="Попередній перегляд графіка">
-      <HookChartVisualPreview
-        longColor={previewLongColor}
-        shortColor={previewShortColor}
-        profile={selectedProfile}
-      />
+        <HookChartVisualPreview
+          longColor={previewLongColor}
+          shortColor={previewShortColor}
+          profile={selectedProfile}
+        />
       </div>
       <div className="visualProfileControls" role="group" aria-label="Повзунки налаштування графіка">
-      <Setting label="Кількість видимих свічок" desc="Кількість на ширину графіка; на вузькому екрані обмежується мінімальною шириною свічки.">
-        <div className="flex items-center gap-2">
-          <input aria-label="Кількість видимих свічок" type="range" className="visualProfileRange" min="15" max="500" step="5"
-            value={selectedProfile.visibleBars} onChange={event => onProfileChange({ visibleBars: Number(event.target.value) })}/>
-          <b className="valueBadge">{selectedProfile.visibleBars}</b>
-        </div>
-      </Setting>
-      {visualContext.startsWith('terminal') && <div className="settingsHint">
-        Коли в Терміналі ввімкнено глобальний автомасштаб свічок, він має пріоритет над вертикальним зумом
-        та перемикачем автоматичного масштабу ціни з цього профілю. Щоб використовувати їх вручну,
-        вимкніть глобальний автомасштаб у панелі Термінала.
-      </div>}
-      <Setting label="Вертикальний зум" desc="1× — природний діапазон. Розширений зум від 0,01× до 100×; значення можна вписати вручну.">
-        <div className="flex items-center gap-2">
-          <input aria-label="Вертикальний зум" type="range" className="visualProfileRange" min="-2" max="2" step="0.01"
-            value={Math.log10(selectedProfile.verticalZoom)} onChange={event => onProfileChange({ verticalZoom: Number((10 ** Number(event.target.value)).toFixed(3)), autoPriceScale: false })}/>
-          <Num ariaLabel="Точний вертикальний зум" value={selectedProfile.verticalZoom} min={VISUAL_ZOOM_MIN} max={VISUAL_ZOOM_MAX} step={0.01}
-            set={value => onProfileChange({ verticalZoom: value, autoPriceScale: false })}/>
-          <b className="valueBadge">×</b>
-        </div>
-      </Setting>
-      <Setting label="Відступ праворуч" desc="Вільний простір праворуч від останньої свічки (у барах). Відступ показується одразу на схемі вище й на графіку після застосування цього профілю.">
-        <div className="flex items-center gap-2">
-          <input aria-label="Відступ праворуч у барах" type="range" className="visualProfileRange" min="0" max={VISUAL_GAP_MAX} step="1"
-            value={selectedProfile.rightGapBars} onChange={event => onProfileChange({ rightGapBars: Number(event.target.value) })}/>
-          <Num ariaLabel="Точний відступ праворуч у барах" value={selectedProfile.rightGapBars} min={0} max={VISUAL_GAP_MAX} step={1}
-            set={value => onProfileChange({ rightGapBars: Math.round(value) })}/>
-          <b className="valueBadge">барів</b>
-        </div>
-      </Setting>
-      <SwitchRow label="Автоматичний масштаб ціни" desc="Автоматично підлаштовувати висоту свічок до поточного видимого діапазону."
-        value={selectedProfile.autoPriceScale} onChange={value => onProfileChange({ autoPriceScale: value })}/>
+        <Setting label="Кількість видимих свічок"
+          help="Визначає бажану кількість свічок на ширину графіка. На маленькому екрані фактична кількість обмежується мінімальною шириною свічки.">
+          <div className="flex items-center gap-2">
+            <input aria-label="Кількість видимих свічок" type="range" className="visualProfileRange" min="15" max="500" step="5"
+              value={selectedProfile.visibleBars} onChange={event => onProfileChange({ visibleBars: Number(event.target.value) })}/>
+            <b className="valueBadge">{selectedProfile.visibleBars}</b>
+          </div>
+        </Setting>
+        <Setting label="Вертикальний зум"
+          help="Збільшує або зменшує висоту свічок. 1× — природний масштаб. Діапазон 0,01×–100×, можна ввести число вручну. Зміна вимикає автоматичний масштаб ціни.">
+          <div className="flex items-center gap-2">
+            <input aria-label="Вертикальний зум" type="range" className="visualProfileRange" min="-2" max="2" step="0.01"
+              value={Math.log10(selectedProfile.verticalZoom)} onChange={event => onProfileChange({ verticalZoom: Number((10 ** Number(event.target.value)).toFixed(3)), autoPriceScale: false })}/>
+            <Num ariaLabel="Точний вертикальний зум" value={selectedProfile.verticalZoom} min={VISUAL_ZOOM_MIN} max={VISUAL_ZOOM_MAX} step={0.01}
+              set={value => onProfileChange({ verticalZoom: value, autoPriceScale: false })}/>
+            <b className="valueBadge">×</b>
+          </div>
+        </Setting>
+        <Setting label="Відступ праворуч"
+          help="Вільний простір праворуч від останньої свічки (у барах). Значення відображається на схемі одразу. На реальному графіку відступ застосовується для вибраного профілю.">
+          <div className="flex items-center gap-2">
+            <input aria-label="Відступ праворуч у барах" type="range" className="visualProfileRange" min="0" max={VISUAL_GAP_MAX} step="1"
+              value={selectedProfile.rightGapBars} onChange={event => onProfileChange({ rightGapBars: Number(event.target.value) })}/>
+            <Num ariaLabel="Точний відступ праворуч у барах" value={selectedProfile.rightGapBars} min={0} max={VISUAL_GAP_MAX} step={1}
+              set={value => onProfileChange({ rightGapBars: Math.round(value) })}/>
+            <b className="valueBadge">барів</b>
+          </div>
+        </Setting>
+        <SwitchRow label="Автоматичний масштаб ціни" rowClassName="visualProfileAutoScaleRow"
+          help="HookChart підлаштовує діапазон цін під видимі свічки. Вимкніть для ручного вертикального зуму. У Терміналі глобальний автомасштаб свічок, якщо увімкнений, має пріоритет над цим перемикачем."
+          value={selectedProfile.autoPriceScale} onChange={value => onProfileChange({ autoPriceScale: value })}/>
       </div>
-      <div className="visualProfileActions">
-        {onCapture && <button type="button" className="hotkeyResetOne" onClick={onCapture}>
+      <div className="visualProfileActions" role="group" aria-label="Збереження та скидання вигляду графіка">
+        <button type="button" className="visualProfileActionButton visualProfileActionPrimary"
+          disabled={!onCapture} onClick={capture}
+          title={!onCapture ? 'Доступно лише для відкритого графіка з вибраним типом і пристроєм. У профілі налаштування зберігаються автоматично.' : 'Зберегти масштаб і положення свічок із відкритого графіка'}>
           Зберегти поточний вигляд графіка
-        </button>}
-        <button type="button" className="hotkeyResetOne" onClick={onApplyToAll}>Зробити типовими для всіх графіків цього пристрою</button>
-        <button type="button" className="hotkeyResetOne" onClick={onReset}>Скинути цей профіль</button>
+        </button>
+        <button type="button" className="visualProfileActionButton visualProfileActionSecondary"
+          onClick={applyToAll} title="Застосувати цей профіль до всіх типів графіків вибраного пристрою">
+          Зробити типовими для всіх графіків
+        </button>
+        <button type="button" className="visualProfileActionButton visualProfileActionReset"
+          onClick={reset} title="Повернути стандартні параметри тільки вибраного профілю">
+          Скинути цей профіль
+        </button>
       </div>
-      <div className="settingsHint">
-        «Зробити типовими» копіює вибраний масштаб у всі графіки Скрінера, Формацій і Термінала
-        тільки для вибраного пристрою. Інший пристрій і сторінка відтворення не змінюються.
-      </div>
-      {live && <div className="settingsHint">
-        Для збереження зуму, налаштованого безпосередньо пальцями/мишкою, натисни «Зберегти поточний вигляд графіка».
-        Кнопка доступна, коли обрано поточний тип графіка та пристрій.
+      {lastAction && <div className="visualProfileActionStatus" role="status" aria-live="polite">
+        {lastAction === 'capture' ? 'Поточний вигляд передано на збереження.' :
+         lastAction === 'all' ? 'Профіль застосовано до всіх графіків цього пристрою.' :
+         'Стандартні параметри вибраного профілю відновлено.'}
+        {saveStatus === 'saving' ? ' Зберігаємо…' :
+         saveStatus === 'saved' ? ' Збережено.' :
+         saveStatus === 'error' ? ' Помилка збереження: перевірте підключення.' : ''}
+      </div>}
+      {live && visualContext.startsWith('terminal') && <div className="visualProfileTransientHint">
+        Глобальний автомасштаб Термінала може мати пріоритет над вертикальним зумом.
       </div>}
     </Section>
   </div>;
