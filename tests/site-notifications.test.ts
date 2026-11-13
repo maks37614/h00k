@@ -12,6 +12,7 @@ test('notification categories have independent opt-out and a master disable', ()
   assert.deepEqual(defaults, DEFAULT_SITE_NOTIFICATIONS);
   assert.equal(defaults.enabled, false);
   assert.equal(defaults.optedIn, false);
+  assert.equal(defaults.enabledAt, 0);
   for (const type of ['price', 'formation', 'impulse', 'volatility', 'surveillance', 'density', 'round', 'composite', 'system'] as const)
     assert.equal(notificationEnabled(defaults, type), false, 'all default categories must be silent');
   const legacy = normalizeSiteNotificationSettings({ enabled: true, price: true, formations: true, impulses: true });
@@ -21,6 +22,7 @@ test('notification categories have independent opt-out and a master disable', ()
     optedIn: true, enabled: true, price: true, formations: true, impulses: true, surveillance: true,
   });
   assert.equal(notificationEnabled(opted, 'price'), true);
+  assert.equal(normalizeSiteNotificationSettings({ ...opted, enabledAt: 123456 }).enabledAt, 123456);
   assert.equal(notificationEnabled(opted, 'formation'), true);
   assert.equal(notificationEnabled(opted, 'impulse'), true);
   assert.equal(notificationEnabled(opted, 'volatility'), true);
