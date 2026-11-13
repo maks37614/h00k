@@ -61,7 +61,6 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     env:
-      H00K_AUTH_BACKEND: postgres
       H00K_PG_INTEGRATION_TEST: '1'
       PGHOST: localhost
       PGUSER: h00k_test
