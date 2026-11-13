@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import type { AddressInfo } from 'node:net';
+import type { Server } from 'node:http';
 import express from 'express';
 import nodemailer from 'nodemailer';
 import { installPostgresIdentityRoutes } from '../server/pgIdentityRoutes';
@@ -41,7 +42,7 @@ test('real PostgreSQL and captured SMTP: register, verify, login, recover, resen
       return { accepted: [item.to] };
     },
   }));
-  let server: ReturnType<typeof express.application.listen> | undefined;
+  let server: Server | undefined;
   let db: ReturnType<typeof identityPool> | undefined;
   try {
     process.env.SMTP_HOST = '';
@@ -52,7 +53,7 @@ test('real PostgreSQL and captured SMTP: register, verify, login, recover, resen
     const app = express();
     app.use(express.json());
     installPostgresIdentityRoutes(app);
-    server = await new Promise<ReturnType<typeof express.application.listen>>((resolve, reject) => {
+    server = await new Promise<Server>((resolve, reject) => {
       const listener = app.listen(0, '127.0.0.1', () => resolve(listener));
       listener.once('error', reject);
     });
@@ -92,8 +93,9 @@ test('real PostgreSQL and captured SMTP: register, verify, login, recover, resen
     assert.equal((await beforeVerification.json()).code, 'EMAIL_UNVERIFIED');
 
     const verify = await post('/api/auth/verify-email', { token: verifyToken });
-    assert.equal(verify.status, 200, await verify.text());
-    assert.equal((await verify.json()).user.emailVerified, true);
+    const verifyBody = await verify.json();
+    assert.equal(verify.status, 200, JSON.stringify(verifyBody));
+    assert.equal(verifyBody.user.emailVerified, true);
     const verifyAgain = await post('/api/auth/verify-email', { token: verifyToken });
     assert.equal(verifyAgain.status, 400, 'email action links are one-use');
 
