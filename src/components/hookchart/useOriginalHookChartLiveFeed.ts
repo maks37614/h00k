@@ -86,7 +86,13 @@ export function useOriginalHookChartLiveFeed({
 
     let dead = false;
     const depthBook = new HookChartDensityBook();
+    let depthPublishTimer: ReturnType<typeof setTimeout> | null = null;
+    let lastDepthPublishAt = 0;
     const clearDepth = () => {
+      if (depthPublishTimer !== null) {
+        clearTimeout(depthPublishTimer);
+        depthPublishTimer = null;
+      }
       depthScopeRef.current = '';
       depthBook.clear();
       setDepthReady(false);
@@ -108,13 +114,33 @@ export function useOriginalHookChartLiveFeed({
       if (!next.depthReady) setDepthStatus(current => current === 'live' ? 'reconnecting' : current);
       return next.depthReady;
     };
+    // Apply every depth delta to each chart's exact local order book, but
+    // throttle only expensive derived-density rendering (at most 5 per second).
+    // Never throttle or drop a deletion/sequence update itself.
+    const queueDepthPublish = () => {
+      if (depthPublishTimer !== null || dead) return;
+      const remaining = 200 - (Date.now() - lastDepthPublishAt);
+      if (remaining <= 0) {
+        lastDepthPublishAt = Date.now();
+        applyBook();
+      } else {
+        depthPublishTimer = setTimeout(() => {
+          depthPublishTimer = null;
+          if (!dead) {
+            lastDepthPublishAt = Date.now();
+            applyBook();
+          }
+        }, remaining);
+      }
+    };
     applyBookRef.current = applyBook;
     clearDepth();
     const stopDepth = connectSharedHookChartDepth({
       exchange, marketType, symbol,
       onBook: update => {
         if (dead || !depthBook.apply(update)) return false;
-        return applyBook();
+        queueDepthPublish();
+        return true;
       },
       onStatus: status => {
         if (dead) return;
@@ -149,6 +175,7 @@ export function useOriginalHookChartLiveFeed({
       stopTrades();
       stopDepth();
       clearInterval(depthPublish);
+      if (depthPublishTimer !== null) clearTimeout(depthPublishTimer);
       depthBook.clear();
     };
   }, [
