@@ -5,6 +5,7 @@ import {
   DEFAULT_SITE_NOTIFICATIONS, ImpulseTracker, normalizeImpulseSymbol,
   normalizeSiteNotificationSettings, notificationEnabled,
   readNotificationItems, siteNotificationSettingsKey, siteNotificationStorageKey,
+  siteNotificationMuteKey, applyLocalNotificationMute,
 } from '../src/utils/siteNotifications';
 
 test('notification categories have independent opt-out and a master disable', () => {
@@ -101,4 +102,57 @@ test('header opens site event center and profile exposes notification settings',
   assert.match(profile, /<ProfileNotificationSettings/);
   assert.doesNotMatch(alerts, /playAlertChime\(\)/);
   assert.match(app, /reportStrongFormations\(data\.data/);
+});
+
+test('turning the master switch off revokes push and Telegram transport even when browser permission was granted', () => {
+  const active = normalizeSiteNotificationSettings({
+    optedIn: true, enabled: true, enabledAt: 100,
+    price: true, impulses: true, browserPush: true, telegramEnabled: true,
+  });
+  assert.equal(active.browserPush, true);
+  assert.equal(active.telegramEnabled, true);
+  const disabled = normalizeSiteNotificationSettings({ ...active, enabled: false });
+  assert.equal(disabled.enabled, false);
+  assert.equal(disabled.browserPush, false);
+  assert.equal(disabled.telegramEnabled, false);
+  assert.equal(notificationEnabled(disabled, 'price'), false);
+  assert.equal(notificationEnabled(disabled, 'impulse'), false);
+  assert.equal(disabled.price, true, 'categories can remain selected while master stays off');
+  const renewed = normalizeSiteNotificationSettings({ ...disabled, enabled: true, enabledAt: 300 });
+  assert.equal(renewed.browserPush, false, 're-enabling the center must not reactivate browser pushes automatically');
+  assert.equal(renewed.telegramEnabled, false, 'Telegram transport requires a separate new opt-in');
+});
+
+test('a mute stored in another tab wins over an older enabled profile snapshot', () => {
+  const oldProfile = normalizeSiteNotificationSettings({
+    optedIn: true, enabled: true, enabledAt: 1000,
+    price: true, browserPush: true, telegramEnabled: true,
+  });
+  const muted = applyLocalNotificationMute(oldProfile, 1001);
+  assert.equal(muted.enabled, false);
+  assert.equal(muted.browserPush, false);
+  assert.equal(muted.telegramEnabled, false);
+  assert.equal(notificationEnabled(muted, 'price'), false);
+  assert.equal(applyLocalNotificationMute(oldProfile, 0).enabled, true);
+  assert.equal(applyLocalNotificationMute({ ...oldProfile, enabledAt: 2000 }, 1001).enabled, true);
+  assert.notEqual(siteNotificationMuteKey('user-a'), siteNotificationMuteKey('user-b'));
+});
+
+test('browser notifications, sounds, old price toasts and cross-tab state are all gated by master opt-out', () => {
+  const provider = readFileSync(new URL('../src/context/SiteNotificationsContext.tsx', import.meta.url), 'utf8');
+  const profile = readFileSync(new URL('../src/components/profile/ProfileNotificationSettings.tsx', import.meta.url), 'utf8');
+  const app = readFileSync(new URL('../src/App.tsx', import.meta.url), 'utf8');
+  assert.match(provider, /window\.addEventListener\('storage', onStorage\)/);
+  assert.match(provider, /locallyMutedAt\(uidRef\.current\)/);
+  assert.match(provider, /if \(!notificationEnabled\(settingsRef\.current, event\.kind\)\) return/);
+  assert.match(provider, /soundEnabledRef\.current = false/);
+  assert.match(provider, /updatePreferences\(\{ soundAlertsEnabled: false \}\)/);
+  assert.match(provider, /localStorage\.setItem\(siteNotificationMuteKey\(currentUid\)/);
+  assert.match(provider, /browserPush && typeof document/);
+  assert.ok(provider.indexOf("apiFetch('/api/notification-preferences'", provider.indexOf('const updateSettings')) <
+    provider.indexOf('await updateProfileData({', provider.indexOf('const updateSettings')),
+    'mute the server first before the profile update');
+  assert.match(profile, /settingsRef\.current\.enabled \|\| !settingsRef\.current\.optedIn/);
+  assert.match(app, /if \(!notificationEnabled\(notificationSettings, 'price'\)\) return;/);
+  assert.match(app, /setAlertToast\(null\)/);
 });
