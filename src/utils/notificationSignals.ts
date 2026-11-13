@@ -169,17 +169,24 @@ export function scanNotificationSignals(
         }
       }
       if (v?.closedCandleOnly && v.breakoutConfirmed) {
-        emit(coin, 'breakouts', formId, 'Підтверджений пробій · ' + coin.symbol,
+        emit(coin, 'breakouts', formId + ':breakout', 'Підтверджений пробій · ' + coin.symbol,
           formation.name + ' · закрита свічка · ' + score + '/100', true);
+        if (formation.status === 'retest' && v.entryMode === 'RETEST') {
+          emit(coin, 'breakouts', formId + ':retest', 'Підтверджений ретест · ' + coin.symbol,
+            formation.name + ' · закрита свічка · ' + score + '/100', true);
+        }
         if (finite(v.volumeRatio) && v.volumeRatio >= settings.minBreakoutRvol) {
           emit(coin, 'volume', formId, 'Підвищений обсяг · ' + coin.symbol,
             'Обсяг свічки пробою: RVOL ' + v.volumeRatio.toFixed(2) + '×', true);
         }
       }
-      if (ctx?.detected === true && finite(ctx.distancePct) && ctx.distancePct <= settings.roundDistancePct) {
-        emit(coin, 'round', formId, 'ROUND · ' + coin.symbol,
-          'Біля круглого рівня ' + (finite(ctx.level) ? formatPrice(ctx.level) : '')
-          + ' · відстань ' + ctx.distancePct.toFixed(2) + '%', true);
+      // A stored ROUND badge can outlive a move away from its level. Check
+      // the actual scan price, not the original badge distance.
+      const roundDistance = finite(ctx?.level) ? distance(coin.currentPrice, ctx.level) : Infinity;
+      if (ctx?.detected === true && roundDistance <= settings.roundDistancePct) {
+        emit(coin, 'round', formId + ':' + ctx!.level, 'ROUND · ' + coin.symbol,
+          'Біля круглого рівня ' + formatPrice(ctx!.level!) +
+          ' · відстань ' + roundDistance.toFixed(2) + '%', true);
       }
       if (ctx?.densityConfirmed === true && finite(ctx.densityUsd) && ctx.densityUsd > 0) {
         emit(coin, 'density', formId, 'Підтверджена щільність · ' + coin.symbol,
@@ -213,11 +220,13 @@ export function scanNotificationSignals(
         const reasons: string[] = [];
         if (v.breakoutConfirmed) reasons.push('підтверджена структура');
         if (finite(v.volumeRatio) && v.volumeRatio >= settings.minBreakoutRvol) reasons.push('RVOL');
-        if (coin.marketType === 'futures' && finite(i?.oiChangePct)
-          && i.oiChangePct >= settings.oiThresholdPct) reasons.push('OI');
-        if (coin.exchange === 'binance' && finite(i?.deltaPct)
-          && i.deltaPct * directional >= settings.flowThresholdPct) reasons.push('Delta/CVD');
-        if (ctx?.detected && ctx.distancePct <= settings.roundDistancePct) reasons.push('ROUND');
+        if (coin.marketType === 'futures' && i?.oiAvailability === 'available'
+          && finite(i?.oiChangePct) && i.oiChangePct >= settings.oiThresholdPct) reasons.push('OI');
+        if (coin.exchange === 'binance'
+          && (finite(i?.deltaPct) && i.deltaPct * directional >= settings.flowThresholdPct
+            || finite(i?.cvd20Pct) && i.cvd20Pct * directional >= settings.flowThresholdPct))
+          reasons.push('Delta або CVD20');
+        if (ctx?.detected && roundDistance <= settings.roundDistancePct) reasons.push('ROUND');
         if (ctx?.densityConfirmed && finite(ctx.densityUsd) && ctx.densityUsd > 0) reasons.push('стакан BID/ASK');
         if (reasons.length >= settings.minConfirmations) {
           emit(coin, 'composite', formId, 'Комплексне Quant-підтвердження · ' + coin.symbol,
@@ -235,7 +244,8 @@ export function scanNotificationSignals(
         'Причина: ' + oiFault + ' · перевірка потоку даних потрібна');
     }
     // These are exchange-data anomalies, not inferred position directions.
-    if (coin.marketType === 'futures' && finite(i?.oiChangePct)
+    if (coin.marketType === 'futures' && i?.oiAvailability === 'available'
+        && finite(i?.oiChangePct)
         && Math.abs(i.oiChangePct) >= settings.oiThresholdPct) {
       emit(coin, 'openInterest', 'oi', 'Аномалія OI · ' + coin.symbol,
         'Open Interest ' + pct(i.oiChangePct) + ' за ' + coin.timeframe);
