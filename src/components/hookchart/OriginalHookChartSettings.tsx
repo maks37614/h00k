@@ -312,11 +312,11 @@ function VisualSettingHelp({ text, label }: { text: string; label: string }) {
 function LiquidationHelp({ text, label }: { text: string; label: string }) {
   return <span className="liqSettingHelp"><button type="button" aria-label={label + '. ' + text} title={text}>?</button><span role="tooltip">{text}</span></span>;
 }
-function Setting({ label, desc, help, unavailable = false, children }: { label: string; desc?: string; help?: string; unavailable?: boolean; children: React.ReactNode }) {
-  return <div className={'settingRow' + (unavailable ? ' settingUnavailable' : '')}><div className="settingText"><b>{label}{help && <LiquidationHelp label={label} text={help} />}</b>{desc && <small>{desc}</small>}{unavailable && <small className="settingUnavailableNote">Ще не реалізовано</small>}</div><div className="settingControl">{unavailable ? <fieldset disabled className="settingUnavailableControl" aria-label={label}>{children}</fieldset> : children}</div></div>;
+function Setting({ label, desc, help, rowClassName, unavailable = false, children }: { label: string; desc?: string; help?: string; rowClassName?: string; unavailable?: boolean; children: React.ReactNode }) {
+  return <div className={'settingRow' + (unavailable ? ' settingUnavailable' : '') + (rowClassName ? ' ' + rowClassName : '')}><div className="settingText"><b>{label}{help && <LiquidationHelp label={label} text={help} />}</b>{desc && <small>{desc}</small>}{unavailable && <small className="settingUnavailableNote">Ще не реалізовано</small>}</div><div className="settingControl">{unavailable ? <fieldset disabled className="settingUnavailableControl" aria-label={label}>{children}</fieldset> : children}</div></div>;
 }
-function SwitchRow({ label, desc, help, unavailable, value, onChange }: { label: string; desc?: string; help?: string; unavailable?: boolean; value: boolean; onChange: (value: boolean) => void }) {
-  return <Setting label={label} desc={desc} help={help} unavailable={unavailable}><label className="settingsSwitch"><input type="checkbox" aria-label={label} checked={value} onChange={event => onChange(event.target.checked)} /><span /></label></Setting>;
+function SwitchRow({ label, desc, help, rowClassName, unavailable, value, onChange }: { label: string; desc?: string; help?: string; rowClassName?: string; unavailable?: boolean; value: boolean; onChange: (value: boolean) => void }) {
+  return <Setting label={label} desc={desc} help={help} rowClassName={rowClassName} unavailable={unavailable}><label className="settingsSwitch"><input type="checkbox" aria-label={label} checked={value} onChange={event => onChange(event.target.checked)} /><span /></label></Setting>;
 }
 function LiquidationMinimum({ value, disabled, onChange }: { value?: number | null; disabled?: boolean; onChange: (value: number | null) => void }) {
   return <input className="numInput" type="number" min={0} max={1_000_000_000_000} step={100} inputMode="decimal" placeholder="Авто" disabled={disabled} value={value ?? ''}
@@ -629,7 +629,7 @@ function VisualProfileEditor({
             <b className="valueBadge">барів</b>
           </div>
         </Setting>
-        <SwitchRow label="Автоматичний масштаб ціни"
+        <SwitchRow label="Автоматичний масштаб ціни" rowClassName="visualProfileAutoScaleRow"
           help="HookChart підлаштовує діапазон цін під видимі свічки. Вимкніть для ручного вертикального зуму. У Терміналі глобальний автомасштаб свічок, якщо увімкнений, має пріоритет над цим перемикачем."
           value={selectedProfile.autoPriceScale} onChange={value => onProfileChange({ autoPriceScale: value })}/>
       </div>
