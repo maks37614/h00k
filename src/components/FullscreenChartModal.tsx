@@ -453,10 +453,10 @@ export const FullscreenChartModal: React.FC<FullscreenChartModalProps> = ({
             <button
               onClick={() => onSendMetaScalp(activeCoin)}
               className="p-1.5 sm:px-2.5 sm:py-1.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 text-xs font-semibold transition-all active:scale-95 flex items-center gap-1.5 cursor-pointer"
-              title={`Надіслати в MetaScalp (Група ${metaScalpBinding})`}
+              title={`Надіслати в обраний термінал (Група ${metaScalpBinding})`}
             >
               <Zap className="w-3.5 h-3.5 text-amber-400 fill-amber-400/20" />
-              <span className="hidden xl:inline">MetaScalp</span>
+              <span className="hidden xl:inline">Лінковка</span>
             </button>
           )}
 

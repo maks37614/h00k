@@ -1,5 +1,6 @@
 import type { TpSlConstructorSettings, TpSlTouchState } from './utils/tpSlConstructor';
 import type { WickTouchBar } from './utils/wickTouchEvidence';
+import type { TerminalLinkSettings } from './utils/terminalLinkService';
 export type ExchangeId = 'binance' | 'bybit';
 export type MarketType = 'futures' | 'spot';
 export type ChartProvider = 'tradingview' | 'hookchart';
@@ -423,6 +424,8 @@ export interface UserProfile {
   watchlist?: string[];
   watchlistFolders?: Record<string, string[]>;
   metaScalpSettings?: MetaScalpSettings;
+  /** User-specific external desktop terminal and permitted linking sources. */
+  terminalLinkSettings?: TerminalLinkSettings;
   chartTradeMarkers?: ChartTradeMarkerSettings;
   terminalSettings?: TerminalWorkspaceSettings;
   searchSettings?: SearchUserSettings;

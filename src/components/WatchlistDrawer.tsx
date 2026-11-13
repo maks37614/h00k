@@ -505,7 +505,7 @@ export const WatchlistDrawer: React.FC<WatchlistDrawerProps> = ({
                     {onSendMetaScalp && entry.coin && (
                       <button
                         onClick={() => entry.coin && onSendMetaScalp(entry.coin)}
-                        title={`Відкрити в MetaScalp [${metaScalpBinding}]`}
+                        title={`Відкрити в обраному терміналі [${metaScalpBinding}]`}
                         className="text-amber-400/80 hover:text-amber-300 p-1 rounded hover:bg-amber-500/10 transition-colors"
                       >
                         <Zap className="w-3.5 h-3.5" />

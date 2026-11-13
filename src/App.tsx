@@ -17,7 +17,6 @@ import { FormationDetailsModal } from './components/FormationDetailsModal';
 import { FullscreenChartModal } from './components/FullscreenChartModal';
 import { FormationGuideModal } from './components/FormationGuideModal';
 import { WatchlistDrawer } from './components/WatchlistDrawer';
-import { MetaScalpModal } from './components/MetaScalpModal';
 import { MetaScalpToast, MetaScalpToastState } from './components/MetaScalpToast';
 import { TelegramAlertsModal } from './components/TelegramAlertsModal';
 import { AuthModal, AuthPromptReason } from './components/AuthModal';
@@ -26,18 +25,19 @@ import { ArchiveModal } from './components/ArchiveModal';
 import { AlertToast, AlertToastState } from './components/AlertToast';
 import { useAlerts } from './context/AlertsContext';
 import { useOptionalSiteNotifications } from './context/SiteNotificationsContext';
-import { DEFAULT_SITE_NOTIFICATIONS, notificationEnabled, type SiteNotificationItem } from './utils/siteNotifications';
-import { notificationChartTarget } from './utils/notificationChartLink';
+import { DEFAULT_SITE_NOTIFICATIONS, notificationEnabled } from './utils/siteNotifications';
 import { useAuth } from './context/AuthContext';
 import { useArchive } from './context/ArchiveContext';
 import { useSurveillance } from './context/SurveillanceContext';
 import { useLanguage } from './context/LanguageContext';
 import {
-  MetaScalpSettings,
+  type MetaScalpSettings,
+  playMetaScalpClickSound,
   getUserMetaScalpSettings,
-  saveStoredMetaScalpSettings,
-  sendTickerToMetaScalp,
 } from './utils/metaScalpService';
+import { getUserTerminalLinkSettings, sendToSelectedTerminal, terminalLabel, notificationTerminalSource, isFreshTerminalNotification, type TerminalLinkSource } from './utils/terminalLinkService';
+import type { SiteNotificationItem } from './utils/siteNotifications';
+import { notificationChartTarget } from './utils/notificationChartLink';
 import { ScannedCoin, DetectedFormation, ScreenerFilterState, PriceAlert, ArchivedFormation, ActivePageType, type FullEarlyScanSnapshot } from './types';
 import { runDirectClientScan, getFallbackScannedCoins, hydrateMissingRegularOIFromBrowser } from './utils/directExchangeClient';
 import { getVisibleFormations, groupVisibleFormations } from './utils/formationList';
@@ -524,7 +524,6 @@ export default function App() {
   const [lastUpdated, setLastUpdated] = useState<number | null>(null);
 
   // MetaScalp terminal settings state (isolated per user)
-  const [isLinkingModalOpen, setIsLinkingModalOpen] = useState<boolean>(false);
   const [metaScalpToast, setMetaScalpToast] = useState<MetaScalpToastState | null>(null);
   const metaScalpUserIdRef = useRef(user?.uid);
   const [metaScalpSettingsState, setMetaScalpSettingsState] = useState<{
@@ -534,6 +533,11 @@ export default function App() {
   const metaScalpSettings = metaScalpSettingsState.userId === user?.uid
     ? metaScalpSettingsState.settings
     : getUserMetaScalpSettings(user?.uid, profile);
+  const terminalLinkSettings = getUserTerminalLinkSettings(user?.uid, profile);
+  const activeTerminalGroup = terminalLinkSettings.provider === 'tiger'
+    ? terminalLinkSettings.tigerGroup
+    : terminalLinkSettings.provider === 'metascalp' ? metaScalpSettings.binding : '—';
+  const lastTerminalCommand = useRef<{ key: string; at: number }>({ key: '', at: 0 });
 
   useEffect(() => {
     const next = getUserMetaScalpSettings(user?.uid, profile);
@@ -552,16 +556,9 @@ export default function App() {
 
   useLayoutEffect(() => {
     metaScalpUserIdRef.current = user?.uid;
-    setIsLinkingModalOpen(false);
     setMetaScalpToast(null);
   }, [user?.uid]);
 
-  const handleMetaScalpSettingsChange = useCallback((newSettings: MetaScalpSettings) => {
-    if (!user || metaScalpUserIdRef.current !== user.uid) return;
-    setMetaScalpSettingsState({ userId: user.uid, settings: newSettings });
-    saveStoredMetaScalpSettings(newSettings, user.uid);
-    updateProfileData({ metaScalpSettings: newSettings }).catch(() => {});
-  }, [user, updateProfileData]);
 
   // Telegram price alerts state
   const { activeAlertsCount } = useAlerts();
@@ -582,7 +579,7 @@ export default function App() {
 
   // Authentication & Profile modals
   const [isProfileModalOpen, setIsProfileModalOpen] = useState<boolean>(false);
-  const [profileInitialSection, setProfileInitialSection] = useState<'account' | 'chart' | 'notifications'>('account');
+  const [profileInitialSection, setProfileInitialSection] = useState<'account' | 'chart' | 'notifications' | 'linking'>('account');
 
   // Auto-dismiss Alert toast
   useEffect(() => {
@@ -653,51 +650,107 @@ export default function App() {
     }
   }, [metaScalpToast]);
 
-  // Send ticker to MetaScalp terminal
+  // Routes all existing external-terminal buttons through the user-selected adapter.
   const handleSendToMetaScalp = useCallback(
-    async (coin: ScannedCoin) => {
-      if (!user) {
-        handleOpenAuthModal('signin', 'linking');
+    async (coin: ScannedCoin, source: TerminalLinkSource = 'screener', isBackground = false) => {
+      if (!user) { handleOpenAuthModal('signin', 'linking'); return; }
+      if (terminalLinkSettings.provider === 'none' || !terminalLinkSettings.enabled) {
+        setProfileInitialSection('linking');
+        setIsProfileModalOpen(true);
         return;
       }
-
-      if (!metaScalpSettings.enabled) {
-        setIsLinkingModalOpen(true);
+      const now = Date.now();
+      const key = [user.uid, terminalLinkSettings.provider, source, coin.exchange, coin.marketType, coin.symbol].join(':');
+      if (terminalLinkSettings.cooldownMs > 0
+        && lastTerminalCommand.current.key === key
+        && now - lastTerminalCommand.current.at < terminalLinkSettings.cooldownMs) return;
+      lastTerminalCommand.current = { key, at: now };
+      const quality = coin.bestFormation?.confidence ?? coin.formations?.[0]?.confidence;
+      let res;
+      try {
+        res = await sendToSelectedTerminal(
+          coin.symbol, coin.exchange, coin.marketType, source,
+          terminalLinkSettings, metaScalpSettings, quality, !isBackground
+        );
+      } catch {
+        // Allow immediate retry and report a failure instead of leaving an unhandled rejection.
+        if (lastTerminalCommand.current.key === key) lastTerminalCommand.current = { key: '', at: 0 };
+        if (metaScalpUserIdRef.current === user.uid) setMetaScalpToast({
+          id: Date.now(), type: 'error', title: terminalLabel(terminalLinkSettings.provider),
+          ticker: coin.symbol, binding: '',
+          message: 'Не вдалося надіслати тикер. Перевірте з’єднання з локальним терміналом.',
+        });
         return;
       }
-
-      const res = await sendTickerToMetaScalp(
-        coin.symbol,
-        coin.exchange,
-        coin.marketType,
-        metaScalpSettings
-      );
+      if (!res.success && lastTerminalCommand.current.key === key)
+        lastTerminalCommand.current = { key: '', at: 0 };
       if (metaScalpUserIdRef.current !== user.uid) return;
-
-      if (res.success) {
-        setMetaScalpToast({
-          id: Date.now(),
-          type: 'success',
-          title: 'MetaScalp Оновлено',
-          ticker: res.ticker,
-          binding: res.binding,
-          message: res.message,
-        });
-      } else {
-        setMetaScalpToast({
-          id: Date.now(),
-          type: 'warning',
-          title: 'MetaScalp',
-          ticker: res.ticker,
-          binding: res.binding,
-          message: res.copiedToClipboard
-            ? `${res.message} (Тікер скопійовано у буфер: Ctrl+V)`
-            : res.message,
-        });
-      }
+      if (res.success && metaScalpSettings.soundFeedback) playMetaScalpClickSound();
+      setMetaScalpToast({
+        id: Date.now(), type: res.success ? 'success' : 'warning',
+        title: res.success ? `${terminalLabel(res.terminal)}: синхронізовано` : terminalLabel(res.terminal),
+        ticker: res.ticker, binding: res.group,
+        message: res.copiedToClipboard ? `${res.message} (Тікер скопійовано)` : res.message,
+      });
     },
-    [user, metaScalpSettings, handleOpenAuthModal]
+    [user, metaScalpSettings, terminalLinkSettings, handleOpenAuthModal]
   );
+
+  const canLinkNotification = useCallback((item: SiteNotificationItem): boolean => {
+    const source = notificationTerminalSource(item.kind);
+    return Boolean(user && terminalLinkSettings.enabled && terminalLinkSettings.provider !== 'none'
+      && source && terminalLinkSettings.sources[source]
+      && typeof item.symbol === 'string' && /^[A-Z0-9:_-]{2,40}$/i.test(item.symbol)
+      && (item.exchange === 'binance' || item.exchange === 'bybit')
+      && (item.marketType === 'futures' || item.marketType === 'spot'));
+  }, [user, terminalLinkSettings]);
+
+  const handleLinkNotification = useCallback((item: SiteNotificationItem, isBackground = false) => {
+    if (!canLinkNotification(item)) return;
+    const source = notificationTerminalSource(item.kind);
+    if (!source || !item.symbol || (item.exchange !== 'binance' && item.exchange !== 'bybit')
+      || (item.marketType !== 'spot' && item.marketType !== 'futures')) return;
+    const exchange = item.exchange;
+    const marketType = item.marketType;
+    const symbol = item.symbol.toUpperCase();
+    const found = coins.find(coin => coin.symbol === symbol && coin.exchange === exchange && coin.marketType === marketType);
+    const minimalCoin: ScannedCoin = found || {
+      symbol, baseAsset: symbol.replace(/USDT$/, ''), quoteAsset: 'USDT',
+      exchange, marketType, timeframe: '5m',
+      currentPrice: 0, priceChange24h: 0, highPrice24h: 0, lowPrice24h: 0,
+      volume24hUsd: 0, formations: [], lastUpdated: Date.now(), exchangeUrl: '',
+    };
+    void handleSendToMetaScalp(minimalCoin, source, isBackground);
+  }, [canLinkNotification, coins, handleSendToMetaScalp]);
+
+  // Only newly emitted notifications qualify for optional auto-linking.
+  // Existing history, cross-account events, and stale notifications are never replayed.
+  const autoLinkCursor = useRef<{ uid: string | null; id: string | null; enabled: boolean; since: number }>({
+    uid: user?.uid ?? null, id: notificationCenter?.items?.[0]?.id ?? null,
+    enabled: terminalLinkSettings.autoSignals, since: Date.now(),
+  });
+  useEffect(() => {
+    const uid = user?.uid ?? null;
+    const item = notificationCenter?.items?.[0];
+    const cursor = autoLinkCursor.current;
+    if (cursor.uid !== uid || cursor.enabled !== terminalLinkSettings.autoSignals) {
+      // New user or newly granted consent: the currently visible history is the baseline.
+      autoLinkCursor.current = {
+        uid, id: item?.id ?? null, enabled: terminalLinkSettings.autoSignals, since: Date.now(),
+      };
+      return;
+    }
+    const isNew = !!item?.id && cursor.id !== item.id;
+    cursor.id = item?.id ?? null;
+    if (!isNew || !item || !terminalLinkSettings.autoSignals ||
+      terminalLinkSettings.provider === 'vataga' ||
+      !notificationCenter?.settings.enabled || !notificationCenter.settings.optedIn ||
+      item.read || !isFreshTerminalNotification(item.timestamp, cursor.since, Date.now())
+      || !canLinkNotification(item)) return;
+    handleLinkNotification(item, true);
+  }, [user?.uid, notificationCenter?.items, notificationCenter?.settings.enabled,
+    notificationCenter?.settings.optedIn, terminalLinkSettings.autoSignals,
+    canLinkNotification, handleLinkNotification]);
 
   // Enter a dedicated chart URL without losing the originating Screener tab.
   // A small per-user session snapshot restores the exact formation/archive
@@ -765,14 +818,12 @@ export default function App() {
         symbol: selected.coin.symbol.toUpperCase(), timeframe: selected.coin.timeframe || preferences.defaultTimeframe,
         kind: 'coin', formationId: rawFormation?.id,
       }, selected);
-      const shouldAutoSwitch =
-        metaScalpSettings.enabled && metaScalpSettings.autoSwitchOnClick;
-
-      if (shouldAutoSwitch) {
-        handleSendToMetaScalp(coin);
+      if (terminalLinkSettings.enabled && terminalLinkSettings.switchOnChartOpen
+        && (activePage !== 'patterns' || !earlyMode || terminalLinkSettings.sources.early)) {
+        handleSendToMetaScalp(coin, activePage === 'patterns' ? (earlyMode ? 'early' : 'formations') : 'screener');
       }
     },
-    [user, coins, metaScalpSettings, handleSendToMetaScalp, handleOpenAuthModal, openChartPage, preferences.defaultTimeframe]
+    [user, coins, terminalLinkSettings, activePage, earlyMode, handleSendToMetaScalp, handleOpenAuthModal, openChartPage, preferences.defaultTimeframe]
   );
 
   const [selectedEarly, setSelectedEarly] = useState<{ coin: ScannedCoin; candidate: EarlyFormationCandidate } | null>(null);
@@ -794,7 +845,10 @@ export default function App() {
       timeframe: selectedCoin.timeframe,
       kind: 'coin',
     }, { coin: selectedCoin });
-  }, [user, handleOpenAuthModal, preferences.defaultTimeframe, openChartPage]);
+    if (terminalLinkSettings.enabled && terminalLinkSettings.switchOnChartOpen && terminalLinkSettings.sources.favorites) {
+      void handleSendToMetaScalp(selectedCoin, 'favorites');
+    }
+  }, [user, handleOpenAuthModal, preferences.defaultTimeframe, openChartPage, terminalLinkSettings, handleSendToMetaScalp]);
 
   // A's chart and projected trade levels must never remain open for user B
   // after switching accounts on the same browser.
@@ -835,7 +889,10 @@ export default function App() {
       symbol: raw.coin.symbol.toUpperCase(), timeframe: raw.coin.timeframe,
       kind: 'early', formationId: raw.candidate.id,
     }, { coin: raw.coin, earlyCandidate: raw.candidate });
-  }, [user, handleOpenAuthModal, fullEarlyScan?.data, openChartPage]);
+    if (terminalLinkSettings.enabled && terminalLinkSettings.switchOnChartOpen && terminalLinkSettings.sources.early) {
+      void handleSendToMetaScalp(raw.coin, 'early');
+    }
+  }, [user, handleOpenAuthModal, fullEarlyScan?.data, openChartPage, terminalLinkSettings, handleSendToMetaScalp]);
 
   // Handler when selecting archived formation to restore
   const handleSelectArchivedFormation = useCallback(
@@ -878,14 +935,11 @@ export default function App() {
         kind: 'archive', formationId: archived.formation.id,
       }, { coin: matchingCoin, formation: archived.formation, archived });
       setIsArchiveModalOpen(false);
-      const shouldAutoSwitch =
-        metaScalpSettings.enabled && metaScalpSettings.autoSwitchOnClick;
-
-      if (shouldAutoSwitch) {
-        handleSendToMetaScalp(matchingCoin);
+      if (terminalLinkSettings.enabled && terminalLinkSettings.switchOnChartOpen) {
+        handleSendToMetaScalp(matchingCoin, 'formations');
       }
     },
-    [coins, metaScalpSettings, handleSendToMetaScalp, openChartPage]
+    [coins, terminalLinkSettings, handleSendToMetaScalp, openChartPage]
   );
 
   // Browser Back/Forward switches between real Screener and chart pages.
@@ -1337,21 +1391,25 @@ export default function App() {
             handleOpenAuthModal('signin', 'linking');
             return;
           }
-          setIsLinkingModalOpen(true);
+          setProfileInitialSection('linking');
+          setIsProfileModalOpen(true);
         }}
         metaScalpSettings={metaScalpSettings}
+        terminalLinkSettings={terminalLinkSettings}
         onOpenTelegramAlerts={() => handleOpenTelegramAlerts()}
         telegramAlertsCount={activeAlertsCount}
         surveillanceCount={surveillanceActiveCount}
         lastUpdated={lastUpdated}
         onOpenAuth={() => handleOpenAuthModal('signin', null)}
         onOpenProfile={() => { setProfileInitialSection('account'); setIsProfileModalOpen(true); }}
+        onLinkNotification={handleLinkNotification}
+        canLinkNotification={canLinkNotification}
+        onOpenNotificationChart={openNotificationCoinChart}
         onOpenNotificationSettings={() => {
           if (!user) { handleOpenAuthModal('signin', 'general'); return; }
           setProfileInitialSection('notifications');
           setIsProfileModalOpen(true);
         }}
-        onOpenNotificationChart={openNotificationCoinChart}
         activePage={activePage}
         onPageChange={handlePageChange}
       />}
@@ -1395,8 +1453,8 @@ export default function App() {
               watchlist={watchlist}
               onToggleWatchlist={handleToggleWatchlist}
               onOpenTelegramModal={handleOpenTelegramAlerts}
-              onSendMetaScalp={handleSendToMetaScalp}
-              metaScalpBinding={metaScalpSettings.binding}
+              onSendMetaScalp={(coin) => handleSendToMetaScalp(coin, 'early')}
+              metaScalpBinding={activeTerminalGroup}
               onClose={closeChartPage}
               onPageCoinChange={selectFavoriteOnChartPage}
             />
@@ -1434,8 +1492,8 @@ export default function App() {
               watchlist={watchlist}
               onToggleWatchlist={handleToggleWatchlist}
               onClose={closeChartPage}
-              onSendMetaScalp={handleSendToMetaScalp}
-              metaScalpBinding={metaScalpSettings.binding}
+              onSendMetaScalp={(coin) => handleSendToMetaScalp(coin, 'formations')}
+              metaScalpBinding={activeTerminalGroup}
               onOpenTelegramModal={handleOpenTelegramAlerts}
               onOpenAuth={() => setIsAuthModalOpen(true)}
               onAlertToast={handleAlertToast}
@@ -1459,8 +1517,8 @@ export default function App() {
                 watchlist={watchlist}
                 onToggleWatchlist={handleToggleWatchlist}
                 onClose={closeChartPage}
-                onSendMetaScalp={handleSendToMetaScalp}
-                metaScalpBinding={metaScalpSettings.binding}
+                onSendMetaScalp={(coin) => handleSendToMetaScalp(coin, 'chart')}
+                metaScalpBinding={activeTerminalGroup}
                 onOpenTelegramModal={handleOpenTelegramAlerts}
               />
             </>
@@ -1476,8 +1534,8 @@ export default function App() {
             coins={coins}
             watchlist={watchlist}
             onToggleWatchlist={handleToggleWatchlist}
-            onSendMetaScalp={handleSendToMetaScalp}
-            metaScalpBinding={metaScalpSettings.binding}
+            onSendMetaScalp={(coin) => handleSendToMetaScalp(coin, 'terminal')}
+            metaScalpBinding={activeTerminalGroup}
             onOpenTelegramAlerts={handleOpenTelegramAlerts}
             onOpenFullscreenModal={(coin, formation) => handleSelectPair(coin, formation)}
             onReturnToPatterns={() => handlePageChange('screener')}
@@ -1502,8 +1560,8 @@ export default function App() {
         ) : activePage === 'screener' ? (
           <CoinScreenerPage
             onSelectCoin={handleSelectPair}
-            onSendMetaScalp={handleSendToMetaScalp}
-            metaScalpBinding={metaScalpSettings.binding}
+            onSendMetaScalp={(coin) => handleSendToMetaScalp(coin, 'screener')}
+            metaScalpBinding={activeTerminalGroup}
             watchlist={watchlist}
             onToggleWatchlist={handleToggleWatchlist}
             onOpenTelegramAlerts={handleOpenTelegramAlerts}
@@ -1586,8 +1644,8 @@ export default function App() {
                 watchlist={watchlist}
                 onToggleWatchlist={handleToggleWatchlist}
                 onOpen={handleOpenEarly}
-                onSendMetaScalp={handleSendToMetaScalp}
-                metaScalpBinding={metaScalpSettings.binding}
+                onSendMetaScalp={(coin) => handleSendToMetaScalp(coin, 'early')}
+                metaScalpBinding={activeTerminalGroup}
                 onOpenPriceAlert={(coin) => handleOpenTelegramAlerts({
                   symbol: coin.symbol,
                   exchange: coin.exchange,
@@ -1703,8 +1761,8 @@ export default function App() {
                     isWatchlisted={watchlist.includes(coin.symbol)}
                     onToggleWatchlist={handleToggleWatchlist}
                     onSelect={handleSelectPair}
-                    onSendMetaScalp={handleSendToMetaScalp}
-                    metaScalpBinding={metaScalpSettings.binding}
+                    onSendMetaScalp={(coin) => handleSendToMetaScalp(coin, 'formations')}
+                    metaScalpBinding={activeTerminalGroup}
                     onOpenAlert={(c, f) =>
                       handleOpenTelegramAlerts({
                         symbol: c.symbol,
@@ -1725,8 +1783,8 @@ export default function App() {
                 watchlist={watchlist}
                 onToggleWatchlist={handleToggleWatchlist}
                 onSelect={handleSelectPair}
-                onSendMetaScalp={handleSendToMetaScalp}
-                metaScalpBinding={metaScalpSettings.binding}
+                onSendMetaScalp={(coin) => handleSendToMetaScalp(coin, 'formations')}
+                metaScalpBinding={activeTerminalGroup}
                 onOpenAlert={(c, f) =>
                   handleOpenTelegramAlerts({
                     symbol: c.symbol,
@@ -1774,21 +1832,9 @@ export default function App() {
         onRemove={handleRemoveWatchlistEntries}
         folders={watchlistFolders}
         onFoldersChange={handleWatchlistFoldersChange}
-        onSendMetaScalp={handleSendToMetaScalp}
+        onSendMetaScalp={(coin) => handleSendToMetaScalp(coin, 'favorites')}
         onOpenChart={handleOpenWatchlistChart}
-        metaScalpBinding={metaScalpSettings.binding}
-      />
-
-      {/* MetaScalp Terminal Linking Modal */}
-      <MetaScalpModal
-        key={user?.uid || 'guest'}
-        isOpen={isLinkingModalOpen}
-        onClose={() => setIsLinkingModalOpen(false)}
-        settings={metaScalpSettings}
-        onSettingsChange={handleMetaScalpSettingsChange}
-        currentSymbol={selectedPair?.coin.symbol || coins[0]?.symbol || 'BTCUSDT'}
-        currentExchange={selectedPair?.coin.exchange || coins[0]?.exchange || 'binance'}
-        currentMarketType={selectedPair?.coin.marketType || coins[0]?.marketType || 'futures'}
+        metaScalpBinding={activeTerminalGroup}
       />
 
       {/* MetaScalp Notification Toast */}

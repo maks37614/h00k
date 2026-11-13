@@ -111,7 +111,9 @@ function hasFreshVerifiedOI(coin: ScannedCoin, now: number): boolean {
     || oi?.oiAvailability !== 'available' || !finite(oi.oiChangePct)
     || !finite(oi.oiUpdatedAt)) return false;
   const age = now - oi.oiUpdatedAt;
-  return age >= -60_000 && age <= interval * 2 + 90_000;
+  // OI is sampled approximately every minute, independently of the chart timeframe.
+  // A 15m/1h chart must never make a 10-minute-old OI reading actionable.
+  return age >= -60_000 && age <= Math.min(interval * 2 + 90_000, 180_000);
 }
 
 const distance = (price: number, level: number) =>

@@ -124,7 +124,8 @@ export async function sendTickerToMetaScalp(
   symbol: string,
   exchange: ExchangeId,
   marketType: MarketType,
-  settings: Partial<MetaScalpSettings> = {}
+  settings: Partial<MetaScalpSettings> = {},
+  allowClipboardFallback = true
 ): Promise<SendToMetaScalpResult> {
   const port = settings.port || 17845;
   const binding = settings.binding || '001';
@@ -172,7 +173,7 @@ export async function sendTickerToMetaScalp(
   // Fallback: Copy to clipboard if local API is not answering
   let copied = false;
   try {
-    if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+    if (allowClipboardFallback && typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
       await navigator.clipboard.writeText(ticker);
       copied = true;
     }

@@ -41,9 +41,9 @@ export const MetaScalpToast: React.FC<MetaScalpToastProps> = ({ toast, onDismiss
           <div className="space-y-0.5 text-xs">
             <div className="flex items-center gap-1.5 font-semibold text-white">
               <span>{toast.title}</span>
-              <span className="font-mono text-[10px] bg-amber-500/20 text-amber-300 px-1.5 py-0.2 rounded border border-amber-500/30">
+              {toast.binding && <span className="font-mono text-[10px] bg-amber-500/20 text-amber-300 px-1.5 py-0.2 rounded border border-amber-500/30">
                 Група {toast.binding}
-              </span>
+              </span>}
             </div>
             <div className="font-mono text-[11px] text-cyan-300 font-bold">{toast.ticker}</div>
             {toast.message && (

@@ -116,8 +116,8 @@ export function EarlyFormationCard({
             <div className="formation-chart-header-actions">
               {onSendMetaScalp && (
                 <button type="button" onClick={() => onSendMetaScalp(coin)}
-                  title={`MetaScalp (${metaScalpBinding})`}
-                  aria-label={`Відправити в MetaScalp (${metaScalpBinding})`}
+                  title={`Термінал (${metaScalpBinding})`}
+                  aria-label={`Відправити в обраний термінал (${metaScalpBinding})`}
                   className="rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30">
                   <Zap className="w-3.5 h-3.5 text-amber-400" />
                 </button>
@@ -323,7 +323,7 @@ export function EarlyFormationCard({
               {onSendMetaScalp && (
                 <button type="button" onClick={() => onSendMetaScalp(coin)}
                   className="p-2 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-300"
-                  title={`Відкрити в MetaScalp (${metaScalpBinding})`} aria-label="MetaScalp">
+                  title={`Відкрити в обраному терміналі (${metaScalpBinding})`} aria-label="Лінковка з терміналом">
                   <Zap className="w-3.5 h-3.5 text-amber-400" />
                 </button>
               )}

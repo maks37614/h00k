@@ -833,7 +833,7 @@ export const CoinScreenerPage: React.FC<CoinScreenerPageProps> = ({
                 </span>
               </div>
               <p className="text-slate-300 text-[11px] sm:text-xs leading-relaxed">
-                Вам доступний перегляд списку монет, котирувань та аналітичних фільтрів. Щоб відкривати <strong>графіки</strong>, налаштовувати <strong>сповіщення в Telegram</strong> та використовувати <strong>лінковку з MetaScalp</strong>, увійдіть або зареєструйтесь.
+                Вам доступний перегляд списку монет, котирувань та аналітичних фільтрів. Щоб відкривати <strong>графіки</strong>, налаштовувати <strong>сповіщення в Telegram</strong> та використовувати <strong>лінковку з торговим терміналом</strong>, увійдіть або зареєструйтесь.
               </p>
             </div>
           </div>
@@ -1061,7 +1061,7 @@ export const CoinScreenerPage: React.FC<CoinScreenerPageProps> = ({
                                   ? 'bg-slate-800/80 text-slate-400 hover:text-amber-300 hover:bg-slate-800'
                                   : 'bg-amber-500/10 hover:bg-amber-500/20 text-amber-300'
                               }`}
-                              title={isGuest ? 'Лінковка з MetaScalp (тільки для зареєстрованих)' : `Відкрити в MetaScalp (${metaScalpBinding})`}
+                              title={isGuest ? 'Лінковка з торговим терміналом (тільки для зареєстрованих)' : `Відкрити в обраному терміналі (${metaScalpBinding})`}
                             >
                               <Zap className="w-3 h-3" />
                               {isGuest && (
@@ -1363,7 +1363,7 @@ export const CoinScreenerPage: React.FC<CoinScreenerPageProps> = ({
                             ? 'bg-slate-800/80 text-slate-400 hover:text-amber-300 hover:bg-slate-800 border-slate-700/60'
                             : 'bg-amber-500/10 hover:bg-amber-500/20 border-amber-500/30 text-amber-300'
                         }`}
-                        title={isGuest ? 'Лінковка з MetaScalp (тільки для зареєстрованих)' : 'Відкрити в MetaScalp'}
+                        title={isGuest ? 'Лінковка з торговим терміналом (тільки для зареєстрованих)' : 'Відкрити в обраному терміналі'}
                       >
                         <Zap className="w-3.5 h-3.5" />
                         {isGuest && (
