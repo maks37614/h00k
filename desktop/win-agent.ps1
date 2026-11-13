@@ -68,7 +68,7 @@ public static class H00kWindowAgent {
 [H00kWindowAgent]::EnablePhysicalDpi()
 while ($true) {
   try {
-    $current = [H00kWindowAgent]::Snapshot()
+    $current = @([H00kWindowAgent]::Snapshot())
     $json = ConvertTo-Json -InputObject $current -Depth 4 -Compress
     [Console]::Out.WriteLine($json)
     [Console]::Out.Flush()
