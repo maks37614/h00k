@@ -26,7 +26,8 @@ import { ArchiveModal } from './components/ArchiveModal';
 import { AlertToast, AlertToastState } from './components/AlertToast';
 import { useAlerts } from './context/AlertsContext';
 import { useOptionalSiteNotifications } from './context/SiteNotificationsContext';
-import { DEFAULT_SITE_NOTIFICATIONS, notificationEnabled } from './utils/siteNotifications';
+import { DEFAULT_SITE_NOTIFICATIONS, notificationEnabled, type SiteNotificationItem } from './utils/siteNotifications';
+import { notificationChartTarget } from './utils/notificationChartLink';
 import { useAuth } from './context/AuthContext';
 import { useArchive } from './context/ArchiveContext';
 import { useSurveillance } from './context/SurveillanceContext';
@@ -719,6 +720,21 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: 'auto' });
   }, [user?.uid]);
 
+  // Notification coin links always use the dedicated full-screen HookChart page.
+  // Exact exchange/market metadata is retained; copying the symbol never calls this.
+  const openNotificationCoinChart = useCallback((item: SiteNotificationItem) => {
+    if (!user) {
+      handleOpenAuthModal('signin', 'general');
+      return;
+    }
+    const target = notificationChartTarget(item, coins, preferences);
+    if (!target) return;
+    setSelectedEarly(null);
+    setSelectedArchivedItem(null);
+    setSelectedPair({ coin: target.snapshot.coin });
+    openChartPage(target.route, target.snapshot);
+  }, [user, coins, preferences, handleOpenAuthModal, openChartPage]);
+
   // Handler when selecting pair for details modal
   const handleSelectPair = useCallback(
     (coin: ScannedCoin, formation?: DetectedFormation) => {
@@ -1327,6 +1343,7 @@ export default function App() {
           setProfileInitialSection('notifications');
           setIsProfileModalOpen(true);
         }}
+        onOpenNotificationChart={openNotificationCoinChart}
         activePage={activePage}
         onPageChange={handlePageChange}
       />}
