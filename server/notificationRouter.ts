@@ -140,7 +140,7 @@ export class NotificationRouter {
       }
 
       // Central telegramEnabled gate (#3)
-      if (coin.config?.telegramEnabled === false) {
+      if (coin.config?.telegramEnabled !== true) {
         return { allowed: false, reason: 'telegram_disabled_for_coin', scopedKey };
       }
 
