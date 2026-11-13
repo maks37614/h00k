@@ -1979,3 +1979,179 @@
 @media (max-width:600px) {
   .hookchart-root .hookchart-mini-preview { padding:6px; max-width:100%; }
 }
+
+
+/* Chart visual settings: a centered preview with every adjustment underneath.
+   Scoped to the editor, so other HookChart settings and Terminal layouts are unchanged. */
+.hookchart-root .visualProfileEditor {
+  width:100%;
+  min-width:0;
+}
+.hookchart-root .visualProfileEditor .visualProfileSelection,
+.hookchart-root .visualProfileEditor .visualProfileControls,
+.hookchart-root .visualProfileEditor .visualProfileActions {
+  box-sizing:border-box;
+  width:min(100%, 760px);
+  max-width:100%;
+  margin-inline:auto;
+}
+.hookchart-root .visualProfileEditor .visualProfileSelection {
+  display:grid;
+  grid-template-columns:minmax(0, 1fr);
+  gap:6px;
+}
+.hookchart-root .visualProfileEditor .visualProfileSelection .settingRow {
+  display:flex;
+  flex-direction:column;
+  align-items:stretch;
+  gap:8px;
+  padding:9px 0;
+}
+.hookchart-root .visualProfileEditor .visualProfileSelection .settingControl {
+  width:100%;
+  justify-content:flex-start;
+}
+.hookchart-root .visualProfileEditor .visualProfileSelection .settingControl > .visualContextPicker {
+  width:100%;
+  max-width:100%;
+}
+.hookchart-root .visualProfileEditor .visualProfilePreviewStage {
+  box-sizing:border-box;
+  width:100%;
+  min-width:0;
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  margin:14px auto 20px;
+  padding-inline:clamp(0px, 1vw, 12px);
+}
+.hookchart-root .visualProfileEditor .visualProfilePreviewStage .hookchart-mini-preview {
+  width:min(100%, 760px);
+  max-width:760px;
+  margin-inline:auto;
+  padding:clamp(8px, 1.6vw, 16px);
+}
+.hookchart-root .visualProfileEditor .visualProfilePreviewStage .hookchart-mini-preview svg {
+  display:block;
+  width:100%;
+  height:auto;
+  max-width:none;
+}
+.hookchart-root .visualProfileEditor .visualProfilePreviewStage .hookchart-mini-title,
+.hookchart-root .visualProfileEditor .visualProfilePreviewStage .hookchart-mini-note {
+  font-size:clamp(10px, 1.15vw, 12px);
+  line-height:1.5;
+}
+.hookchart-root .visualProfileEditor .visualProfileControls {
+  display:grid;
+  grid-template-columns:minmax(0, 1fr);
+  gap:12px;
+  margin-bottom:16px;
+}
+.hookchart-root .visualProfileEditor .visualProfileControls .settingRow {
+  box-sizing:border-box;
+  display:flex;
+  flex-direction:column;
+  align-items:stretch;
+  min-width:0;
+  min-height:0;
+  gap:11px;
+  padding:clamp(12px, 1.6vw, 18px);
+  border:1px solid #263b50;
+  border-radius:12px;
+  background:#111d2b;
+}
+.hookchart-root .visualProfileEditor .visualProfileControls .settingText {
+  width:100%;
+  min-width:0;
+}
+.hookchart-root .visualProfileEditor .visualProfileControls .settingControl {
+  width:100%;
+  min-width:0;
+  display:flex;
+  justify-content:flex-start;
+  align-items:center;
+  gap:12px;
+}
+.hookchart-root .visualProfileEditor .visualProfileControls .settingControl > div {
+  display:flex;
+  flex:1 1 auto;
+  width:100%;
+  min-width:0;
+  max-width:100%;
+  align-items:center;
+  gap:12px;
+}
+.hookchart-root .visualProfileEditor .visualProfileControls .visualProfileRange {
+  display:block;
+  flex:1 1 auto;
+  width:100%;
+  min-width:0;
+  height:40px;
+  touch-action:pan-y;
+}
+.hookchart-root .visualProfileEditor .visualProfileControls .numInput {
+  box-sizing:border-box;
+  flex:0 0 98px;
+  width:98px;
+  min-width:80px;
+  max-width:115px;
+  height:40px;
+  font-size:14px;
+}
+.hookchart-root .visualProfileEditor .visualProfileControls .valueBadge {
+  flex:0 0 auto;
+  min-width:35px;
+  text-align:right;
+  font-size:12px;
+}
+.hookchart-root .visualProfileEditor .visualProfileActions {
+  display:flex;
+  flex-wrap:wrap;
+  align-items:stretch;
+  justify-content:center;
+  gap:10px;
+  margin-top:16px;
+  margin-bottom:15px;
+}
+.hookchart-root .visualProfileEditor .visualProfileActions button {
+  min-height:40px;
+  white-space:normal;
+  text-align:center;
+}
+@media (max-width:620px) {
+  .hookchart-root .visualProfileEditor .visualProfilePreviewStage {
+    margin:10px auto 16px;
+    padding-inline:0;
+  }
+  .hookchart-root .visualProfileEditor .visualProfileControls {
+    gap:9px;
+  }
+  .hookchart-root .visualProfileEditor .visualProfileControls .settingRow {
+    display:flex;
+    padding:12px;
+    gap:9px;
+  }
+  .hookchart-root .visualProfileEditor .visualProfileControls .settingControl,
+  .hookchart-root .visualProfileEditor .visualProfileControls .settingControl > div {
+    flex-wrap:nowrap;
+    gap:8px;
+  }
+  .hookchart-root .visualProfileEditor .visualProfileControls .visualProfileRange {
+    width:100%;
+    min-width:0;
+  }
+  .hookchart-root .visualProfileEditor .visualProfileControls .numInput {
+    flex:0 0 78px;
+    width:78px;
+    min-width:70px;
+    font-size:13px;
+  }
+  .hookchart-root .visualProfileEditor .visualProfileActions {
+    flex-direction:column;
+    align-items:stretch;
+  }
+  .hookchart-root .visualProfileEditor .visualProfileActions button {
+    width:100%;
+  }
+}
