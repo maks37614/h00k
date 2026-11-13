@@ -7,6 +7,7 @@ import type { RawDepthDelta, RawTradeEvent } from './exchangeStream';
 import { acquireExchangeStream, type SharedExchangeStreamHandle } from './sharedExchangeStream';
 import { publishSurveillance } from '../surveillanceEvents';
 import { sharedMarketAnalysis } from './sharedMarketAnalysis';
+import { sharedWorkerAnalysisClock } from './sharedWorkerAnalysisClock';
 import { acquireSharedCandleFeed, type SharedCandleFeedHandle } from './sharedCandleFeed';
 import { LevelsAndFormationsEngine } from './levelsAndFormationsEngine';
 import { MacroAndNewsEngine } from './macroAndNewsEngine';
@@ -70,7 +71,7 @@ export class CoinWorker {
   private isDestroyed = false;
   /** Immutable underlying market; user edits may mutate this.coin in place. */
   private readonly marketIdentity: string;
-  private slowAnalysisInterval: NodeJS.Timeout | null = null;
+  private releaseAnalysisClock: (() => void) | null = null;
   private releaseOiSubscription: (() => void) | null = null;
   private lastWsOiAt = 0;
 
@@ -210,11 +211,17 @@ export class CoinWorker {
   }
 
   private startPeriodicTasks() {
-    // 1. Slow Path Deep Analysis every 6 seconds
-    this.slowAnalysisInterval = setInterval(() => {
-      if (this.isDestroyed) return;
-      void this.runDeepAnalysis().catch((err) => console.error(`[CoinWorker ${this.coin.symbol}] Analysis failed:`, err));
-    }, 6000);
+    // One 6-second clock for all watchers; grouped by exact instrument.
+    // The shared market-only analysis is calculated once per matching candle
+    // revision while personal threshold, OI baseline and Telegram state stay local.
+    this.releaseAnalysisClock = sharedWorkerAnalysisClock.subscribe(
+      `${this.coin.exchange}:${this.coin.marketType}:${normalizeExchangeSymbol(this.coin.symbol)}`,
+      () => {
+        if (this.isDestroyed) return;
+        void this.runDeepAnalysis().catch(err =>
+          console.error(`[CoinWorker ${this.coin.symbol}] Analysis failed:`, err));
+      },
+    );
 
     // 2. All owners of one instrument now share a single 60s REST fallback
     // schedule. Exchange OI observations and personal baselines remain separate.
@@ -613,10 +620,8 @@ export class CoinWorker {
 
   public destroy() {
     this.isDestroyed = true;
-    if (this.slowAnalysisInterval) {
-      clearInterval(this.slowAnalysisInterval);
-      this.slowAnalysisInterval = null;
-    }
+    this.releaseAnalysisClock?.();
+    this.releaseAnalysisClock = null;
     this.releaseOiSubscription?.();
     this.releaseOiSubscription = null;
     this.streamClient.destroy();

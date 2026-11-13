@@ -16,6 +16,7 @@ import { surveillanceStreamStats } from './surveillanceEvents';
 import { getSharedScreenerJobStats } from './marketService';
 import { telegramDispatchQueue } from './telegramQueue';
 import { sharedMarketAnalysis } from './surveillance/sharedMarketAnalysis';
+import { sharedWorkerAnalysisClock } from './surveillance/sharedWorkerAnalysisClock';
 import { sharedCandleFeedStats } from './surveillance/sharedCandleFeed';
 import { sharedOiPoller } from './surveillance/sharedOiPoller';
 import { surveillanceCheckCandleCache } from './surveillance/checkCandleCache';
@@ -61,6 +62,7 @@ export function installOpsMetrics(app: Express,
       surveillanceStream: surveillanceStreamStats(),
       sharedScreener: getSharedScreenerJobStats(),
       sharedMarketAnalysis: sharedMarketAnalysis.stats(),
+      sharedWorkerAnalysisClock: sharedWorkerAnalysisClock.stats(),
       sharedCandles: sharedCandleFeedStats(),
       sharedOiPolling: sharedOiPoller.stats(),
       surveillanceCheckCandles: surveillanceCheckCandleCache.stats(),
