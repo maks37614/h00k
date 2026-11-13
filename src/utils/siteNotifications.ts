@@ -154,7 +154,9 @@ export function normalizeSiteNotificationSettings(input: unknown): SiteNotificat
     cooldownMinutes: Math.round(bounded(d.cooldownMinutes, 15, 1, 240)),
   };
   for (const key of CATEGORY_KEYS) {
-    (result as unknown as Record<string, unknown>)[key] = consent && d[key] === true;
+    const settingKey = key === 'formation' ? 'formations' : key === 'impulse' ? 'impulses' : key;
+    (result as unknown as Record<string, unknown>)[settingKey] = consent &&
+      (d as unknown as Record<string, unknown>)[settingKey] === true;
   }
   return result;
 }
