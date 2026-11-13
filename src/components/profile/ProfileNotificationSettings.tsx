@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Bell, BellOff, Volume2, Play, Save, CircleHelp, ShieldAlert, SlidersHorizontal } from 'lucide-react';
 import { useSiteNotifications } from '../../context/SiteNotificationsContext';
 import {
@@ -35,6 +35,8 @@ const keyFor = (key: NotificationCategoryKey): keyof SiteNotificationSettings =>
 
 export const ProfileNotificationSettings: React.FC = () => {
   const { settings, updateSettings, soundEnabled, setSoundEnabled, error } = useSiteNotifications();
+  const settingsRef = useRef(settings);
+  settingsRef.current = settings;
   const [help, setHelp] = useState<string | null>(null);
   const [symbol, setSymbol] = useState(settings.impulseSymbol.replace(/USDT$/, ''));
   const [threshold, setThreshold] = useState(String(settings.impulseThresholdPct));
@@ -79,6 +81,12 @@ export const ProfileNotificationSettings: React.FC = () => {
       return;
     }
     const result = await Notification.requestPermission();
+    // Permission dialogs are asynchronous. The master switch could be turned
+    // off before the browser answers: never re-enable pushes after opt-out.
+    if (!settingsRef.current.enabled || !settingsRef.current.optedIn) {
+      setFormError('Центр сповіщень вимкнено. Дозвіл браузера не активує доставку.');
+      return;
+    }
     if (result === 'granted') { update({ browserPush: true }); setFormError(null); }
     else setFormError('Браузер не надав дозвіл. Перевірте налаштування браузера.');
   };
@@ -86,8 +94,7 @@ export const ProfileNotificationSettings: React.FC = () => {
     const patch: Partial<SiteNotificationSettings> = { enabled: false, browserPush: false, telegramEnabled: false };
     for (const item of NOTIFICATION_CATEGORIES) (patch as Record<string, unknown>)[keyFor(item.key)] = false;
     update(patch);
-    void setSoundEnabled(false);
-    setMessage('Усі типи сповіщень на сайті вимкнено.');
+    setMessage('Сповіщення на сайті, звуки, браузерна й автоматична Telegram-доставка вимкнені.');
   };
 
   return (
@@ -108,12 +115,14 @@ export const ProfileNotificationSettings: React.FC = () => {
             <input type="checkbox" checked={settings.enabled} onChange={e => update({
               enabled: e.target.checked,
               optedIn: e.target.checked || settings.optedIn,
+              ...(e.target.checked ? {} : { browserPush: false, telegramEnabled: false }),
             })} className="h-4 w-4 accent-cyan-400" aria-label="Дозволити сповіщення на сайті" />
           </label>
         </div>
         <p className="mt-2 text-[11px] text-slate-400">
           Вимкнення тут блокує сповіщення на сайті, звуки й автоматичну доставку Telegram.
           Раніше створені цінові алерти зберігаються, але не спрацьовують до повторного ввімкнення категорії.
+          Дозвіл браузера може залишатися наданим, проте h00k.top більше не створюватиме нових браузерних повідомлень.
         </p>
       </div>
 
