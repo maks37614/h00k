@@ -2,6 +2,40 @@ import type { ScannedCoin, SurveillanceEvent, DetectedFormation } from '../types
 import type { SiteNotificationKind, SiteNotificationSettings } from './siteNotifications';
 import { DEFAULT_SITE_NOTIFICATIONS, matchesNotificationScope, notificationEnabled } from './siteNotifications';
 
+type ProximitySample = { near: boolean; lastFiredAt: number };
+/** Notify on an actual entry into the proximity zone; rearm only after leaving. */
+export class ProximityAlertTracker {
+  private readonly states = new Map<string, ProximitySample>();
+  constructor(snapshot: unknown = {}) {
+    if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot)) return;
+    for (const [key, value] of Object.entries(snapshot).slice(-2500)) {
+      if (value && typeof value === 'object') {
+        const data = value as Record<string, unknown>;
+        if (typeof data.near === 'boolean' && Number.isFinite(data.lastFiredAt)) {
+          this.states.set(key, { near: data.near, lastFiredAt: Number(data.lastFiredAt) });
+        }
+      }
+    }
+  }
+  enter(key: string, near: boolean, now: number, cooldownMinutes: number): boolean {
+    if (!key || !Number.isFinite(now)) return false;
+    const state = this.states.get(key);
+    if (!state) {
+      this.states.set(key, { near, lastFiredAt: near ? now : 0 });
+      return near;
+    }
+    if (!near) { state.near = false; return false; }
+    if (state.near) return false;
+    state.near = true;
+    if (state.lastFiredAt && now - state.lastFiredAt < cooldownMinutes * 60_000) return false;
+    state.lastFiredAt = now;
+    return true;
+  }
+  snapshot(): Record<string, ProximitySample> {
+    return Object.fromEntries([...this.states].slice(-2500));
+  }
+}
+
 export interface QualityTransition {
   kind: 'reached' | 'crossed' | 'improved';
   current: number;
@@ -116,6 +150,7 @@ export function scanNotificationSignals(
   favorites: readonly string[] = [],
   now = Date.now(),
   qualityTracker?: QualityScoreTracker,
+  proximityTracker?: ProximityAlertTracker,
 ): MarketNotificationSignal[] {
   if (!settings.optedIn || !settings.enabled || !Array.isArray(coins)) return [];
   const result: MarketNotificationSignal[] = [];
@@ -162,10 +197,17 @@ export function scanNotificationSignals(
       ];
       if (notificationEnabled(settings, 'levels')) {
         for (const [label, level] of levelFields) {
-          if (!finite(level) || distance(coin.currentPrice, level) > settings.levelDistancePct) continue;
-          emit(coin, 'levels', formId + ':' + label, 'Наближення до ' + label + ' · ' + coin.symbol,
+          if (!finite(level)) continue;
+          const levelDistance = distance(coin.currentPrice, level);
+          const near = levelDistance <= settings.levelDistancePct;
+          const levelKey = [coin.exchange, coin.marketType, coin.timeframe, coin.symbol,
+            formId, 'level', label, level].join(':');
+          if (!proximityTracker ? !near
+            : !proximityTracker.enter(levelKey, near, now, settings.cooldownMinutes)) continue;
+          emit(coin, 'levels', formId + ':' + label + ':' + level,
+            'Наближення до ' + label + ' · ' + coin.symbol,
             formatPrice(coin.currentPrice) + ' · ' + label + ' ' + formatPrice(level)
-            + ' · відстань ' + distance(coin.currentPrice, level).toFixed(2) + '%', true);
+            + ' · відстань ' + levelDistance.toFixed(2) + '%', !proximityTracker);
         }
       }
       if (v?.closedCandleOnly && v.breakoutConfirmed) {
@@ -183,10 +225,16 @@ export function scanNotificationSignals(
       // A stored ROUND badge can outlive a move away from its level. Check
       // the actual scan price, not the original badge distance.
       const roundDistance = finite(ctx?.level) ? distance(coin.currentPrice, ctx.level) : Infinity;
-      if (ctx?.detected === true && roundDistance <= settings.roundDistancePct) {
-        emit(coin, 'round', formId + ':' + ctx!.level, 'ROUND · ' + coin.symbol,
-          'Біля круглого рівня ' + formatPrice(ctx!.level!) +
-          ' · відстань ' + roundDistance.toFixed(2) + '%', true);
+      if (ctx?.detected === true && finite(ctx.level)) {
+        const near = roundDistance <= settings.roundDistancePct;
+        const roundKey = [coin.exchange, coin.marketType, coin.timeframe, coin.symbol,
+          formId, 'round', ctx.level].join(':');
+        if (!proximityTracker ? near
+          : proximityTracker.enter(roundKey, near, now, settings.cooldownMinutes)) {
+          emit(coin, 'round', formId + ':' + ctx.level, 'ROUND · ' + coin.symbol,
+            'Біля круглого рівня ' + formatPrice(ctx.level) +
+            ' · відстань ' + roundDistance.toFixed(2) + '%', !proximityTracker);
+        }
       }
       if (ctx?.densityConfirmed === true && finite(ctx.densityUsd) && ctx.densityUsd > 0) {
         emit(coin, 'density', formId, 'Підтверджена щільність · ' + coin.symbol,
