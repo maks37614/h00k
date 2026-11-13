@@ -57,7 +57,7 @@ test('profile supports importing multiple sounds without altering mute or Telegr
   assert.match(profile, /aria-label="Вибрати одну зі своїх мелодій"/);
   assert.match(profile, /playSiteNotificationSound\(settings\.sound, soundUid\)/);
   assert.match(service, /const issue = validateCustomNotificationSound\(file\)/);
-  assert.match(service, /await checkAudioDuration\(file\)/);
+  assert.match(service, /await checkAudioDuration\(files\[i\]\)/);
   assert.match(service, /await write\(uid, \{ version: 2, selectedId: added\[0\]\.id/);
   assert.doesNotMatch(service, /fetch\(|uploadBytes|firebase/);
   assert.doesNotMatch(profile, /update\(\{\s*enabled:\s*true/);
