@@ -832,6 +832,9 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
     }
   }, [effectiveKlines, formation, customMarkers, showEntryLevel, showTargetLevel, showStopLevel, savedChartParams, chartProvider, previewMarkers]);
 
+  const liveTickHandlerRef = useRef(handleLiveTick);
+  liveTickHandlerRef.current = handleLiveTick;
+
   // Live mode only: ReplayChart is a separate historical renderer and NEVER
   // subscribes to these public-market streams. A browser tab shares one
   // exchange kline feed per instrument/TF and one trade feed per instrument.
@@ -872,7 +875,7 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
             : candle;
           if (!current || candle.time > current.time) lastExchangePriceAt = eventAt;
           else lastExchangePriceAt = Math.max(lastExchangePriceAt, eventAt);
-          handleLiveTick(corrected, 'ws');
+          liveTickHandlerRef.current(corrected, 'ws');
         },
       },
     );
@@ -891,7 +894,7 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
               trade.t < current.time * 1000 ||
               trade.t >= current.time * 1000 + intervalMs) return;
           lastExchangePriceAt = trade.t;
-          handleLiveTick({
+          liveTickHandlerRef.current({
             ...current, close: trade.p,
             high: Math.max(current.high, trade.p),
             low: Math.min(current.low, trade.p),
@@ -918,7 +921,7 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
         if (disposed) return;
         if (!latest) { fallbackFailures++; return; }
         fallbackFailures = 0;
-        handleLiveTick(latest, 'rest');
+        liveTickHandlerRef.current(latest, 'rest');
       } catch {
         fallbackFailures++;
       } finally {
@@ -932,7 +935,7 @@ export const TradingViewChart: React.FC<TradingViewChartProps> = ({
       stopTrades();
       stopKlines();
     };
-  }, [symbol, timeframe, exchange, marketType, handleLiveTick]);
+  }, [symbol, timeframe, exchange, marketType]);
 
   // One control always changes all three plotted levels together, regardless
   // of chart provider, page or fullscreen state.
