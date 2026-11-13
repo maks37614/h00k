@@ -13,7 +13,7 @@ services:
       PGDATABASE: h00k_users
       PGUSER: h00k
       PGPASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
-      AUTH_TRUST_PROXY: ${AUTH_TRUST_PROXY:-0}
+      AUTH_TRUST_PROXY: ${AUTH_TRUST_PROXY:-1}
     depends_on:
       postgres:
         condition: service_healthy
