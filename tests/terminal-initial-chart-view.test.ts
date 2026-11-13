@@ -39,6 +39,10 @@ test('terminal settings show starting chart view controls independently of globa
     'Відновити типовий показ графіків',
   ]) assert.ok(html.includes(name), name);
   assert.match(html, /Масштаб і відступ під час відкриття/);
+  assert.match(html, /Застосувати початковий вигляд/);
+  const settings = source('../src/components/terminal/TerminalSettingsDrawer.tsx');
+  assert.match(settings, /setInitial\(previous => \(\{ \.\.\.previous, \.\.\.patch \}\)\)/);
+  assert.match(settings, /onClick=\{\(\) => onUpdateConfig\(\{ initialChartView: initial \}\)\}/);
 });
 
 test('saved terminal values appear in the terminal drawer and invalid values are clamped', () => {
