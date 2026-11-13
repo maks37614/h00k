@@ -23,7 +23,8 @@ test('profile editor shows small read-only SVG preview, not an interactive canva
   assert.match(html, /aria-label="Маленький штучний графік/);
   assert.match(html, /Без підключень до бірж|без підключень до бірж/);
   assert.doesNotMatch(html, /<canvas|chartWrap|type="range"|BTCUSDT|Binance|Bybit/);
-  assert.match(previewSource, /maxWidth: '420px'/);
+  assert.doesNotMatch(previewSource, /maxWidth: '420px'/);
+  assert.match(previewSource, /style=\{\{ display: 'block', width: '100%', height: 'auto' \}\}/);
   const css = source('../src/components/hookchart/integration.css');
   assert.match(css, /hookchart-mini-preview/);
   assert.match(css, /pointer-events:none/);
@@ -51,6 +52,23 @@ test('profile can only be edited with sliders below the fixed mini preview', () 
   assert.match(rest, /Автоматичний масштаб ціни/);
   assert.ok(rest.indexOf('Кількість видимих свічок') > rest.indexOf('<HookChartVisualPreview'));
   assert.doesNotMatch(rest.slice(0, rest.indexOf('/>', rest.indexOf('<HookChartVisualPreview'))), /onChange=/);
+});
+
+test('Graph settings center the preview and put full-width controls below it on every breakpoint', () => {
+  const editor = settingsSource.slice(settingsSource.indexOf('function VisualProfileEditor'),
+    settingsSource.indexOf('export function OriginalHookChartSettings'));
+  assert.ok(editor.indexOf('className="visualProfileSelection"') < editor.indexOf('className="visualProfilePreviewStage"'));
+  assert.ok(editor.indexOf('className="visualProfilePreviewStage"') < editor.indexOf('className="visualProfileControls"'));
+  assert.ok(editor.indexOf('className="visualProfileControls"') < editor.indexOf('className="visualProfileActions"'));
+
+  const css = source('../src/components/hookchart/integration.css');
+  assert.match(css, /\.visualProfilePreviewStage\s*\{[^}]*justify-content:center/s);
+  assert.match(css, /\.visualProfilePreviewStage \.hookchart-mini-preview\s*\{[^}]*width:min\(100%, 760px\)/s);
+  assert.match(css, /\.visualProfileControls\s*\{[^}]*grid-template-columns:minmax\(0, 1fr\)/s);
+  assert.match(css, /\.visualProfileControls \.settingRow\s*\{[^}]*flex-direction:column/s);
+  assert.match(css, /\.visualProfileControls \.visualProfileRange\s*\{[^}]*width:100%/s);
+  assert.match(css, /@media \(max-width:620px\)\s*\{[\s\S]*?\.visualProfileActions button\s*\{\s*width:100%/);
+  assert.doesNotMatch(previewSource, /maxWidth: '420px'/);
 });
 
 test('synthetic candles are deterministic, valid and do not depend on real prices', () => {
