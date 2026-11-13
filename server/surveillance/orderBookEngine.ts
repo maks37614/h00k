@@ -43,6 +43,10 @@ export class OrderBookEngine {
   public sequenceGap = false;
   public status: OrderBookStatus = 'CONNECTING';
   private volume24hUsd = 0;
+  private bookRevision = 0;
+  private thresholdMemo: {revision: number; volume: number; mode: string;
+    manual: number; value: number} | null = null;
+  private medianComputations = 0;
 
   constructor(
     public readonly symbol: string,
@@ -57,10 +61,17 @@ export class OrderBookEngine {
     const previous = JSON.stringify(this.config);
     this.config = { ...this.config, ...newConfig };
     if (!(this.config.manualThresholdUsd > 0) || !Number.isFinite(this.config.manualThresholdUsd)) this.config.manualThresholdUsd = 1000000;
-    if (previous !== JSON.stringify(this.config) && this.dataValid && Date.now() - this.lastReceivedAt <= 5000) this.evaluateDensities();
+    if (previous !== JSON.stringify(this.config)) {
+      this.thresholdMemo = null;
+      if (this.dataValid && Date.now() - this.lastReceivedAt <= 5000) this.evaluateDensities();
+    }
   }
   public setVolume24hUsd(volume: number) {
-    this.volume24hUsd = Number.isFinite(volume) && volume > 0 ? volume : 0;
+    const next = Number.isFinite(volume) && volume > 0 ? volume : 0;
+    if (this.volume24hUsd !== next) {
+      this.volume24hUsd = next;
+      this.thresholdMemo = null;
+    }
   }
   public setStatus(newStatus: OrderBookStatus) {
     this.status = newStatus;
@@ -92,6 +103,8 @@ export class OrderBookEngine {
       return;
     }
     this.lastReceivedAt = now;
+    this.bookRevision++;
+    this.thresholdMemo = null;
     this.lastExchangeTimestamp = delta.eventTime || 0;
     this.sequenceGap = false;
     this.lastUpdateId = seq;
@@ -155,16 +168,28 @@ export class OrderBookEngine {
 
   public calculateAdaptiveThreshold(volume24hUsd = this.volume24hUsd): number {
     if (this.config.mode === 'MANUAL') return this.config.manualThresholdUsd;
+    const memo = this.thresholdMemo;
+    if (memo && memo.revision === this.bookRevision &&
+      memo.volume === volume24hUsd && memo.mode === this.config.mode &&
+      memo.manual === this.config.manualThresholdUsd) return memo.value;
     const all = [...Array.from(this.bids, ([p,q])=>p*q), ...Array.from(this.asks, ([p,q])=>p*q)];
     if (!all.length) return this.config.manualThresholdUsd || 1000000;
     // Exact lower median (including even-length books), without sorting every level.
     // A large wall must not raise its own detection threshold above itself.
     const median = lowerMedian(all);
+    this.medianComputations++;
     const turnoverBaseline = volume24hUsd > 0 ? Math.max(1000, volume24hUsd * 0.0001) : 1000;
     const autoVal = Math.max(turnoverBaseline, median * 5);
     // #13: HYBRID takes the maximum so manual threshold is strictly respected and never diluted
-    if (this.config.mode === 'HYBRID') return Math.max(this.config.manualThresholdUsd, autoVal);
-    return autoVal;
+    const value = this.config.mode === 'HYBRID'
+      ? Math.max(this.config.manualThresholdUsd, autoVal) : autoVal;
+    this.thresholdMemo = { revision: this.bookRevision, volume: volume24hUsd,
+      mode: this.config.mode, manual: this.config.manualThresholdUsd, value };
+    return value;
+  }
+
+  public thresholdStats() {
+    return { medianComputations: this.medianComputations, bookRevision: this.bookRevision };
   }
 
   private newlyAppearedDensities: DensityItem[] = [];
@@ -294,5 +319,5 @@ export class OrderBookEngine {
   private hasFreshData(): boolean {
     return isFreshDepthTime(this.lastReceivedAt) && (!this.lastExchangeTimestamp || isFreshDepthTime(this.lastExchangeTimestamp));
   }
-  public clear(){this.bids.clear();this.asks.clear();this.activeDensities.clear();this.densityStats.clear();this.dataValid=false;this.sequenceGap=false;this.status='CONNECTING';this.lastUpdateId=0;this.lastReceivedAt=0;this.lastExchangeTimestamp=0;this.bestBid=0;this.bestAsk=0;this.newlyAppearedDensities=[];}
+  public clear(){this.bookRevision++;this.thresholdMemo=null;this.bids.clear();this.asks.clear();this.activeDensities.clear();this.densityStats.clear();this.dataValid=false;this.sequenceGap=false;this.status='CONNECTING';this.lastUpdateId=0;this.lastReceivedAt=0;this.lastExchangeTimestamp=0;this.bestBid=0;this.bestAsk=0;this.newlyAppearedDensities=[];}
 }
