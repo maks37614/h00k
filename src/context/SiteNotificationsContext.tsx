@@ -104,6 +104,8 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
   // Profile snapshots can arrive out of order while toggles are being saved.
   const pendingSettingsWrites = useRef(new Map<string, number>());
   const pendingSoundWrites = useRef(new Map<string, number>());
+  const settingsSaveQueue = useRef(new Map<string, Promise<void>>());
+  const soundSaveQueue = useRef(new Map<string, Promise<void>>());
   const lastServerHydration = useRef(new Map<string, string>());
 
   useEffect(() => {
@@ -175,8 +177,12 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
     setError(null);
     if (user?.uid === currentUid) {
       changePendingCount(pendingSettingsWrites.current, currentUid, 1);
-      try {
+      // Serialize writes per account: rapid toggles cannot complete in reverse order.
+      const previous = settingsSaveQueue.current.get(currentUid) ?? Promise.resolve();
+      const task: Promise<void> = previous.catch(() => {}).then(async () => {
+        if (uidRef.current !== currentUid) return;
         await updateProfileData({ siteNotificationSettings: next });
+        if (uidRef.current !== currentUid) return;
         if (!(user as any)?.isLocalUser) {
           const res = await apiFetch('/api/notification-preferences', {
             method: 'PUT', headers: { 'Content-Type': 'application/json' },
@@ -184,9 +190,14 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
           });
           if (!res.ok) throw new Error('Сервер відхилив налаштування доставки');
         }
-      } catch {
+      }).catch(() => {
         if (uidRef.current === currentUid) setError('Не вдалося синхронізувати серверні сповіщення. Локальні налаштування збережено, але Telegram може не запрацювати.');
-      } finally { changePendingCount(pendingSettingsWrites.current, currentUid, -1); }
+      }).finally(() => {
+        changePendingCount(pendingSettingsWrites.current, currentUid, -1);
+        if (settingsSaveQueue.current.get(currentUid) === task) settingsSaveQueue.current.delete(currentUid);
+      });
+      settingsSaveQueue.current.set(currentUid, task);
+      await task;
     }
   }, [user?.uid, updateProfileData]);
 
@@ -197,9 +208,17 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
     try { localStorage.setItem(soundStorageKey(currentUid), String(enabled)); } catch {}
     if (user?.uid === currentUid) {
       changePendingCount(pendingSoundWrites.current, currentUid, 1);
-      try { await updateProfileData({ soundAlertsEnabled: enabled }); }
-      catch { if (uidRef.current === currentUid) setError('Не вдалося зберегти налаштування звуку в профілі.'); }
-      finally { changePendingCount(pendingSoundWrites.current, currentUid, -1); }
+      const previous = soundSaveQueue.current.get(currentUid) ?? Promise.resolve();
+      const task: Promise<void> = previous.catch(() => {}).then(async () => {
+        if (uidRef.current === currentUid) await updateProfileData({ soundAlertsEnabled: enabled });
+      }).catch(() => {
+        if (uidRef.current === currentUid) setError('Не вдалося зберегти налаштування звуку в профілі.');
+      }).finally(() => {
+        changePendingCount(pendingSoundWrites.current, currentUid, -1);
+        if (soundSaveQueue.current.get(currentUid) === task) soundSaveQueue.current.delete(currentUid);
+      });
+      soundSaveQueue.current.set(currentUid, task);
+      await task;
     }
   }, [user?.uid, updatePreferences, updateProfileData]);
 
