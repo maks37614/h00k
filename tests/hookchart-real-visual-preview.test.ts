@@ -44,8 +44,8 @@ test('Graph tab uses the shared chart engine but no live exchange candles', () =
 
 test('offline preview never fetches prices, opens WebSockets or duplicates the parent live feed', () => {
   assert.match(previewSource, /import \{\s*Chart, ChartTimeAxis,/);
-  assert.match(previewSource, /const OFFLINE_CANDLES = createSyntheticPreviewCandles\(900\)/);
-  assert.match(previewSource, /const activeCandles = OFFLINE_CANDLES/);
+  assert.match(previewSource, /const activeCandles = useMemo\(\(\) => createSyntheticPreviewCandles\(900\), \[\]\)/);
+  assert.doesNotMatch(previewSource, /const OFFLINE_CANDLES =/);
   assert.match(previewSource, /showLiqRiskBlock=\{false\}/);
   assert.match(previewSource, /controlsContainer=\{null\}/);
   assert.match(previewSource, /onViewportGesture=\{onGesture\}/);
