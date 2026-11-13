@@ -10,6 +10,9 @@ import {
   type SiteNotificationItem, type SiteNotificationKind, type SiteNotificationSettings, type SiteNotificationSound,
 } from '../utils/siteNotifications';
 import { playSiteNotificationSound } from '../utils/domSound';
+import type { ScannedCoin } from '../types';
+import { scanNotificationSignals, marketSurveillanceSignal, liquidationNotificationSignal } from '../utils/notificationSignals';
+import { matchesNotificationScope } from '../utils/siteNotifications';
 
 interface NewSiteNotification {
   id: string;
@@ -20,6 +23,9 @@ interface NewSiteNotification {
   symbol?: string;
   changePct?: number;
   rangePct?: number;
+  exchange?: string;
+  marketType?: string;
+  timeframe?: string;
 }
 interface SiteNotificationsValue {
   settings: SiteNotificationSettings;
@@ -29,6 +35,8 @@ interface SiteNotificationsValue {
   items: SiteNotificationItem[];
   unreadCount: number;
   emit: (event: NewSiteNotification) => void;
+  processScan: (coins: readonly ScannedCoin[], favorites?: readonly string[]) => void;
+  setFavoriteIds: (favorites: readonly string[]) => void;
   markAllRead: () => void;
   clear: () => void;
   error: string | null;
@@ -43,7 +51,7 @@ function loadStoredItems(uid: string): SiteNotificationItem[] {
 
 function soundStorageKey(uid: string): string { return 'h00k_site_notification_sound_v1:' + uid; }
 function readStoredSound(uid: string): boolean {
-  try { return localStorage.getItem(soundStorageKey(uid)) !== 'false'; } catch { return true; }
+  try { return localStorage.getItem(soundStorageKey(uid)) === 'true'; } catch { return false; }
 }
 function changePendingCount(map: Map<string, number>, uid: string, delta: number): void {
   const next = (map.get(uid) || 0) + delta;
@@ -80,6 +88,7 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
   itemsRef.current = items;
   const surveillanceSeen = useRef<{ uid: string; initialized: boolean; ids: Set<string> }>({ uid, initialized: false, ids: new Set() });
   const uidRef = useRef(uid);
+  const favoritesRef = useRef<readonly string[]>([]);
   uidRef.current = uid;
   const soundEnabledRef = useRef(preferences.soundAlertsEnabled);
   soundEnabledRef.current = preferences.soundAlertsEnabled;
@@ -121,7 +130,8 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
 
   const updateSettings = useCallback(async (patch: Partial<SiteNotificationSettings>) => {
     const currentUid = uidRef.current;
-    const next = normalizeSiteNotificationSettings({ ...settingsRef.current, ...patch });
+    const next = normalizeSiteNotificationSettings({ ...settingsRef.current, ...patch,
+      optedIn: settingsRef.current.optedIn || patch.enabled === true });
     settingsRef.current = next;
     setSettingsState({ uid: currentUid, settings: next });
     try { localStorage.setItem(siteNotificationSettingsKey(currentUid), JSON.stringify(next)); } catch {}
@@ -150,17 +160,28 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
   const emit = useCallback((event: NewSiteNotification) => {
     if (!notificationEnabled(settingsRef.current, event.kind)) return;
     if (!event.id || !event.title) return;
+    if (event.kind !== 'system' && !matchesNotificationScope(settingsRef.current, event, favoritesRef.current)) return;
     if (itemsRef.current.some(item => item.id === event.id)) return;
     const notification: SiteNotificationItem = {
       ...event, timestamp: event.timestamp ?? Date.now(), read: false,
     };
     replaceItems([notification, ...itemsRef.current]);
     if (soundEnabledRef.current) playSiteNotificationSound(settingsRef.current.sound);
-    if (typeof document !== 'undefined' && document.hidden
+    if (settingsRef.current.browserPush && typeof document !== 'undefined' && document.hidden
       && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
       try { new Notification(event.title, { body: event.description, icon: '/favicon.ico' }); } catch {}
     }
   }, [replaceItems]);
+
+  const setFavoriteIds = useCallback((favorites: readonly string[]) => {
+    favoritesRef.current = [...favorites];
+  }, []);
+
+  const processScan = useCallback((coins: readonly ScannedCoin[], favorites: readonly string[] = []) => {
+    if (!settingsRef.current.optedIn || !settingsRef.current.enabled) return;
+    favoritesRef.current = [...favorites];
+    for (const event of scanNotificationSignals(coins, settingsRef.current, favorites)) emit(event);
+  }, [emit]);
 
   // The server owns actual price-alert delivery. This is a local on-site view only.
   useEffect(() => {
@@ -199,8 +220,8 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
     if (collected.length) replaceItems([...itemsRef.current, ...collected].sort((a, b) => b.timestamp - a.timestamp));
   }, [uid, settings.enabled, settings.price, history, replaceItems]);
 
-  // Existing surveillance events are read-only history; only genuinely new events
-  // generate a badge and optional sound after the first complete per-user fetch.
+  // Surveillance is already monitored by the server. Only new, explicitly
+  // enabled per-category events are shown as unread; old events stay silent.
   useEffect(() => {
     if (uid === 'guest' || surveillanceLoading) return;
     if (surveillanceSeen.current.uid !== uid) {
@@ -213,38 +234,17 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
     if (!previous.initialized) {
       previous.initialized = true;
       for (const { id } of events) previous.ids.add(id);
-      if (!settings.enabled || !settings.surveillance) return;
-      let clearedAt = 0;
-      try { clearedAt = Number(localStorage.getItem(siteNotificationClearedAtKey(uid))) || 0; } catch {}
-      const stored = new Set(itemsRef.current.map(item => item.id));
-      const old: SiteNotificationItem[] = [];
-      for (const { event, id } of events.slice(0, 80)) {
-        if (!Number.isFinite(event.timestamp) || event.timestamp <= clearedAt || stored.has(id)) continue;
-        stored.add(id);
-        old.push({
-          id, kind: 'surveillance', symbol: event.symbol,
-          title: event.title || 'Нагляд · ' + event.symbol,
-          description: event.description || event.type,
-          timestamp: event.timestamp, read: true,
-        });
-      }
-      if (old.length) replaceItems([...itemsRef.current, ...old].sort((a, b) => b.timestamp - a.timestamp));
       return;
     }
     for (const { event, id } of events) {
       if (previous.ids.has(id)) continue;
       previous.ids.add(id);
       if (!Number.isFinite(event.timestamp) || Date.now() - event.timestamp > 3 * 60_000) continue;
-      emit({
-        id, kind: 'surveillance', symbol: event.symbol,
-        title: event.title || 'Нагляд · ' + event.symbol,
-        description: event.description || event.type,
-        timestamp: event.timestamp,
-      });
+      const notification = marketSurveillanceSignal(event, settingsRef.current, favoritesRef.current);
+      if (notification) emit(notification);
     }
-    // Keep the memory bounded with the current recent-events batch.
     if (previous.ids.size > 1000) previous.ids = new Set(events.map(item => item.id));
-  }, [uid, allEvents, surveillanceCoins, surveillanceLoading, settings.enabled, settings.surveillance, emit, replaceItems]);
+  }, [uid, allEvents, surveillanceCoins, surveillanceLoading, emit]);
 
   // One direct WS per selected coin, never a global ticker REST loop.
   useEffect(() => {
@@ -337,6 +337,63 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
     settings.impulseExchange, settings.impulseMarket, settings.impulseWindowMinutes,
     settings.impulseThresholdPct, emit]);
 
+  // Explicit opt-in chart-feed liquidation monitor. No additional REST polling.
+  // Uses a single selected symbol and ignores the server's historical snapshot.
+  useEffect(() => {
+    const cfg = settings;
+    if (!notificationEnabled(cfg, 'liquidations') || !cfg.impulseSymbol
+        || typeof window === 'undefined' || typeof WebSocket === 'undefined') return;
+    const symbol = cfg.impulseSymbol, exchange = cfg.impulseExchange;
+    let socket: WebSocket | null = null, stopped = false;
+    let retry: ReturnType<typeof setTimeout> | undefined;
+    let attempt = 0;
+    const connect = () => {
+      if (stopped) return;
+      try {
+        const url = new URL('/api/hookchart/liquidations', window.location.origin);
+        url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+        url.searchParams.set('exchange', exchange);
+        url.searchParams.set('symbol', symbol);
+        socket = new WebSocket(url);
+        socket.onopen = () => { attempt = 0; };
+        socket.onmessage = message => {
+          if (stopped) return;
+          try {
+            const data = JSON.parse(String(message.data));
+            if (data.type !== 'liquidation' || !data.event) return;
+            const signal = liquidationNotificationSignal(data.event, settingsRef.current,
+              { symbol, exchange, marketType: 'futures' });
+            if (signal) emit(signal);
+          } catch { /* Ignore malformed live frames. */ }
+        };
+        socket.onclose = () => {
+          if (!stopped) retry = setTimeout(connect, Math.min(30_000, 2000 * 2 ** Math.min(attempt++, 4)));
+        };
+        socket.onerror = () => socket?.close();
+      } catch {
+        if (!stopped) retry = setTimeout(connect, 10_000);
+      }
+    };
+    connect();
+    return () => {
+      stopped = true;
+      if (retry) clearTimeout(retry);
+      if (socket) { socket.onmessage = null; socket.onclose = null; socket.close(); }
+    };
+  }, [uid, settings.optedIn, settings.enabled, settings.liquidations,
+    settings.impulseSymbol, settings.impulseExchange, settings.liquidationMinUsd, emit]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const onDisconnect = () => emit({
+      id: 'system:offline:' + Math.floor(Date.now() / 60000),
+      kind: 'system', title: 'З’єднання втрачено',
+      description: 'Пристрій перейшов в офлайн. Ринкові дані можуть бути застарілими.',
+    });
+    window.addEventListener('offline', onDisconnect);
+    return () => window.removeEventListener('offline', onDisconnect);
+  }, [emit]);
+
   const markAllRead = useCallback(() => replaceItems(itemsRef.current.map(item => ({ ...item, read: true }))), [replaceItems]);
   const clear = useCallback(() => {
     try { localStorage.setItem(siteNotificationClearedAtKey(uidRef.current), String(Date.now())); } catch {}
@@ -346,7 +403,7 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
 
   return <Context.Provider value={{
     settings, updateSettings, soundEnabled: preferences.soundAlertsEnabled, setSoundEnabled,
-    items, unreadCount, emit, markAllRead, clear, error,
+    items, unreadCount, emit, processScan, setFavoriteIds, markAllRead, clear, error,
   }}>{children}</Context.Provider>;
 };
 
