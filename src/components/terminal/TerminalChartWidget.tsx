@@ -275,9 +275,16 @@ export const TerminalChartWidget: React.FC<TerminalChartWidgetProps> = ({
     }
   }, [coin?.currentPrice]);
 
-  // Connect to lightweight real-time ticker stream
+  const handleChartPrice = useCallback((price: number) => {
+    if (!Number.isFinite(price) || price <= 0) return;
+    setCurrentPrice(previous => previous === price ? previous : price);
+    setLivePrice(previous => previous === price ? previous : price);
+  }, []);
+
+  // Only legacy chart layouts need their own ticker; the HookChart already
+  // receives its latest price via the shared kline/trade stream.
   useEffect(() => {
-    if (!shouldLoadWidgets) return;
+    if (!shouldLoadWidgets || useIntegratedHookChartToolbar) return;
     let ws: WebSocket | null = null;
     let isDisposed = false;
 
@@ -285,9 +292,7 @@ export const TerminalChartWidget: React.FC<TerminalChartWidgetProps> = ({
     if (!cleanSymbol) return;
 
     const handlePriceUpdate = (price: number) => {
-      if (isDisposed || !price || isNaN(price)) return;
-      setCurrentPrice(price);
-      setLivePrice(price);
+      if (!isDisposed) handleChartPrice(price);
     };
 
     if (block.exchange === 'binance') {
@@ -350,7 +355,7 @@ export const TerminalChartWidget: React.FC<TerminalChartWidgetProps> = ({
         } catch {}
       }
     };
-  }, [block.symbol, block.exchange, block.marketType, shouldLoadWidgets]);
+  }, [block.symbol, block.exchange, block.marketType, shouldLoadWidgets, useIntegratedHookChartToolbar, handleChartPrice]);
 
   // Correlation/ATR are only needed in TradingView's extra status strip.
   useEffect(() => {
@@ -879,6 +884,7 @@ export const TerminalChartWidget: React.FC<TerminalChartWidgetProps> = ({
               </>
             ) : (
               <ExchangeCandlestickChart
+                onLivePriceUpdate={useIntegratedHookChartToolbar ? handleChartPrice : undefined}
                 terminalAutoScale={terminalAutoScale && useIntegratedHookChartToolbar}
                 terminalInitialView={useIntegratedHookChartToolbar ? terminalInitialView : undefined}
                 terminalMode={useIntegratedHookChartToolbar}
