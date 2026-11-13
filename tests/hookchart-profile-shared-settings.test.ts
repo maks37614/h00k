@@ -22,7 +22,8 @@ test('one shared chart editor can render inside the profile without a nested dia
   assert.match(html, /embeddedSettingsBackdrop/);
   assert.match(html, /role="region"/);
   assert.doesNotMatch(html, /aria-modal="true"/);
-  assert.match(html, /Налаштування графіка/);
+  assert.match(html, /<b>Налаштування<\/b>/);
+  assert.doesNotMatch(html, /<b>Налаштування графіка<\/b>/);
   assert.match(html, /aria-label="Про налаштування графіка"/);
   assert.match(html, /aria-expanded="false"/);
   assert.doesNotMatch(html, /Параметри зберігаються автоматично/);
@@ -122,7 +123,8 @@ test('profile chart tab stays in flow on mobile and fills a taller desktop panel
   assert.match(modal, /activeProfileSection === 'chart'/);
   assert.match(modal, /h-\[min\(92dvh,1000px\)\]/);
   assert.match(modal, /max-h-\[calc\(100dvh-32px\)\]/);
-  assert.match(modal, /activeProfileSection === 'chart' \? 'flex-1'/);
+  assert.match(modal, /'min-h-0 flex-1 overflow-hidden p-0'/);
+  assert.doesNotMatch(modal, /overflow-y-auto p-3 sm:p-6 \$\\{/);
 
   const begin = styles.lastIndexOf('/* Profile-only embedded chart settings.');
   const end = styles.indexOf('/* Help beside the Long / Short controls;', begin);
@@ -135,6 +137,10 @@ test('profile chart tab stays in flow on mobile and fills a taller desktop panel
   assert.match(profileStyles, /background:transparent!important/);
   assert.match(profileStyles, /height:100%!important/);
   assert.match(profileStyles, /max-height:100%!important/);
+  assert.match(profileStyles, /border:0!important/);
+  assert.match(profileStyles, /border-radius:0!important/);
+  assert.match(profileStyles, /background:transparent!important/);
+  assert.match(profileStyles, /profile-hookchart-settings \\.originalSettingsPanel \\.settingsHeader/);
   assert.match(profileStyles, /-webkit-overflow-scrolling:touch/);
   assert.doesNotMatch(profileStyles, /height:min\(65dvh,620px\)/);
 });
