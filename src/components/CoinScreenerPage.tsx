@@ -53,6 +53,7 @@ import { matchesExchangeInstrumentSearch } from '../utils/marketSymbols';
 import { isVolumeWithinCap } from '../utils/screenerVolume';
 import { ScreenerVolumeDropdown } from './ScreenerVolumeDropdown';
 import { ScreenerSortDropdown } from './ScreenerSortDropdown';
+import { ScreenerCopySymbolButton } from './ScreenerCopySymbolButton';
 import { isCoinInWatchlist, type CoinIdentifier } from '../utils/watchlistUtils';
 
 interface CoinScreenerPageProps {
@@ -1006,6 +1007,7 @@ export const CoinScreenerPage: React.FC<CoinScreenerPageProps> = ({
                               {coin.baseAsset}
                             </span>
                             <span className="text-[10px] text-slate-500">/USDT</span>
+                            <ScreenerCopySymbolButton symbol={coin.symbol} />
 
                             {isGuest && (
                               <span
@@ -1225,6 +1227,7 @@ export const CoinScreenerPage: React.FC<CoinScreenerPageProps> = ({
                         {coin.baseAsset}
                       </span>
                       <span className="text-xs text-slate-500 font-mono">/USDT</span>
+                      <ScreenerCopySymbolButton symbol={coin.symbol} />
                       {isGuest && (
                         <span
                           className="inline-flex items-center gap-0.5 px-1 py-0.2 rounded text-[8.5px] bg-slate-800/80 text-slate-400 font-sans border border-slate-700/60"
