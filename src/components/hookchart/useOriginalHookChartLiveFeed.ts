@@ -206,8 +206,14 @@ export function useOriginalHookChartLiveFeed({
 
     let dead = false;
     let raw: Liquidation[] = [];
+    let latestEventAt = 0;
+    let pendingLiquidationPublish: ReturnType<typeof setTimeout> | null = null;
     const publish = () => {
       if (dead) return;
+      if (pendingLiquidationPublish !== null) {
+        clearTimeout(pendingLiquidationPublish);
+        pendingLiquidationPublish = null;
+      }
       const now = Date.now();
       raw.sort((a, b) => a.t - b.t);
       while (raw.length && now - raw[0].t > 30 * 60_000) raw.shift();
@@ -218,7 +224,15 @@ export function useOriginalHookChartLiveFeed({
         ? quantile(values, .75)
         : Math.max(quantile(values, .8), adaptiveCut(values, .8, .98, 2.5));
       setLiquidationCut(values.length ? Math.max(1000, adaptive) : 0);
+      setLiquidationLastEventAt(latestEventAt || null);
       setLiquidations([...raw]);
+    };
+    const scheduleLiquidationPublish = () => {
+      if (dead || pendingLiquidationPublish !== null) return;
+      pendingLiquidationPublish = setTimeout(() => {
+        pendingLiquidationPublish = null;
+        publish();
+      }, 200);
     };
     const push = (row: Liquidation) => {
       if (dead || !Number.isFinite(row.usd) || row.usd <= 0) return;
@@ -229,8 +243,10 @@ export function useOriginalHookChartLiveFeed({
         if (row.usd <= raw[index].usd) return; // replayed event or older fill
         raw[index] = { ...row, id };
       } else raw.push({ ...row, id });
-      setLiquidationLastEventAt(current => Math.max(current || 0, row.t));
-      publish();
+      latestEventAt = Math.max(latestEventAt, row.t);
+      // Preserve every event and the immediate session counter update; only
+      // group React renders while bursts arrive at high frequency.
+      scheduleLiquidationPublish();
     };
 
     setLiquidations([]);
@@ -244,7 +260,7 @@ export function useOriginalHookChartLiveFeed({
         // Recover session-era events from a reconnect snapshot, without counting
         // pre-session historical events or repeating IDs already received.
         for (const row of events) recordSessionLiquidation(liquidationScope, row, 'snapshot');
-        setLiquidationLastEventAt(raw.length ? Math.max(...raw.map(row => row.t)) : null);
+        latestEventAt = raw.length ? Math.max(...raw.map(row => row.t)) : 0;
         setLiquidationStreamLive(connected);
         publish();
       },
@@ -254,6 +270,7 @@ export function useOriginalHookChartLiveFeed({
     const publishTimer = setInterval(publish, 2000);
     return () => {
       dead = true;
+      if (pendingLiquidationPublish !== null) clearTimeout(pendingLiquidationPublish);
       clearInterval(publishTimer);
       stop();
     };
