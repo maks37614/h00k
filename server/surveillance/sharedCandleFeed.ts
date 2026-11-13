@@ -5,6 +5,7 @@ import { acquireExchangeStream, type SharedExchangeStreamHandle } from './shared
 import { MultiTimeframeEngine } from './multiTimeframeEngine';
 import type { RawTradeEvent } from './exchangeStream';
 import { SharedMarketTradeWindow } from './sharedMarketTradeWindow';
+import { TradeRingBuffer } from './tradeRingBuffer';
 
 interface SharedCandleEntry {
   key: string;
@@ -17,7 +18,7 @@ interface SharedCandleEntry {
   ready: Promise<void>;
   initialized: boolean;
   destroyed: boolean;
-  pending: RawTradeEvent[];
+  pending: TradeRingBuffer<RawTradeEvent>;
 }
 const candleFeeds = new Map<string,SharedCandleEntry>();
 let nextFeedGeneration = 0;
@@ -41,7 +42,7 @@ async function prime(entry: SharedCandleEntry, exchange: ExchangeId,
       entry.initialized=true;
       // Trades received during historical hydration are replayed exactly once.
       const lastSnapshotBucket = entry.engine.getCandles('5m').at(-1)?.time ?? 0;
-      for (const trade of entry.pending) {
+      for (const trade of entry.pending.drain()) {
         // An initial historical request can complete after a newer candle.
         // Never replay older buffered trades backwards into the candle timeline.
         if (trade.time >= lastSnapshotBucket) {
@@ -50,7 +51,7 @@ async function prime(entry: SharedCandleEntry, exchange: ExchangeId,
         }
       }
     }
-    entry.pending.length=0;
+    entry.pending.clear();
   }
 }
 
@@ -76,7 +77,8 @@ export function acquireSharedCandleFeed(symbol: string,exchange: ExchangeId,
       key,refs:0,source,engine:new MultiTimeframeEngine(),
       tradeWindow:new SharedMarketTradeWindow(),
       generation:++nextFeedGeneration,revision:0,
-      ready:Promise.resolve(),initialized:false,destroyed:false,pending:[],
+      ready:Promise.resolve(),initialized:false,destroyed:false,
+      pending:new TradeRingBuffer<RawTradeEvent>(5000),
     };
     candleFeeds.set(key,created);
     source.on('trade',(trade:RawTradeEvent)=>{
@@ -86,7 +88,6 @@ export function acquireSharedCandleFeed(symbol: string,exchange: ExchangeId,
         created.engine.updateWithTrade(trade);
         created.revision++;
       } else {
-        if(created.pending.length>=5000) created.pending.shift();
         created.pending.push(trade);
       }
     });
@@ -104,7 +105,7 @@ export function acquireSharedCandleFeed(symbol: string,exchange: ExchangeId,
       released=true;
       if(--current.refs===0 && candleFeeds.get(key)===current){
         current.destroyed=true;
-        current.pending.length=0;
+        current.pending.clear();
         candleFeeds.delete(key);
         current.source.destroy();
       }
