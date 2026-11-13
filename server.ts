@@ -47,6 +47,7 @@ import { surveillanceManager } from './server/surveillance/surveillanceManager';
 import { surveillanceReplayEngine } from './server/surveillance/replayEngine';
 import { fetchHookChartOIHistory } from './server/hookchartOI';
 import { requireUserAuth } from './server/userAuth';
+import { getUserSiteNotificationSettings, saveUserSiteNotificationSettings } from './server/siteNotificationPrefs';
 import { sendUserTelegramMessage, startTelegramDeliveryWorker } from './server/telegramDelivery';
 import { installPaperFeed } from './server/paperFeed';
 import { installMonMarketFeed } from './server/monMarketFeed';
@@ -72,7 +73,19 @@ async function startServer() {
   // Register API routes BEFORE the SPA HTML fallback.
   installMonMarketFeed(app);
 
-  app.use(['/api/alerts', '/api/telegram', '/api/surveillance', '/api/cron'], requireUserAuth);
+  app.use(['/api/alerts', '/api/telegram', '/api/surveillance', '/api/cron', '/api/notification-preferences'], requireUserAuth);
+
+  app.get('/api/notification-preferences', (_req, res) => {
+    res.json({ success: true, settings: getUserSiteNotificationSettings(res.locals.userId) });
+  });
+  app.put('/api/notification-preferences', (req, res) => {
+    try {
+      const settings = saveUserSiteNotificationSettings(res.locals.userId, req.body?.settings);
+      res.json({ success: true, settings });
+    } catch (error) {
+      res.status(400).json({ success: false, error: error instanceof Error ? error.message : 'Помилка збереження' });
+    }
+  });
 
   // Public, cached crypto headlines and optional free title translations.
   installCryptoNewsRoutes(app);
