@@ -193,8 +193,9 @@ function openToolbarMenu(event) {
 }
 function candidateWindows() {
   // Only native OS window metadata is exposed to the local settings panel.
+  // Exclude only this app, not every Electron.exe window (some terminals use Electron).
   return detected.filter(item => item.width >= 140 && item.height >= 80
-    && !/^(?:h00k desktop|electron)$/i.test(item.exe));
+    && item.pid !== process.pid && !/^h00k desktop$/i.test(item.exe));
 }
 function findTarget(provider) {
   const all = candidateWindows();
@@ -409,7 +410,7 @@ function registerIpc() {
 }
 if(!app.requestSingleInstanceLock()) app.quit();
 else {
-  app.on('second-instance',()=>{if(settingsWindow&&!settingsWindow.isDestroyed())settingsWindow.show();});
+  app.on('second-instance', () => openSettingsWindow());
   app.whenReady().then(() => {
     loadSettings();registerIpc();createSettingsWindow();runAgent();
     if (process.platform !== 'win32') {
