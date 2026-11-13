@@ -28,6 +28,12 @@ jobs:
           npx playwright install chromium --with-deps
       - name: Capture live public screener
         run: node scripts/capture-public-screener.mjs
+      - name: Attach authentic screenshots to workflow run
+        uses: actions/upload-artifact@v4
+        with:
+          name: h00k-real-guest-screen-captures
+          path: public/guest-shots/*.png
+          if-no-files-found: error
       - name: Commit captured images to this PR branch
         run: |
           git config user.name 'github-actions[bot]'
