@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {
   DEFAULT_TERMINAL_LINK_SETTINGS,
   getUserTerminalLinkSettings, normalizeMetaScalpGroup, normalizeTigerGroup,
-  normalizeTerminalLinkSettings, sendToSelectedTerminal, testTigerConnection, matchesTigerAcknowledgement, isFreshTerminalNotification,
+  normalizeTerminalLinkSettings, sendToSelectedTerminal, testTigerConnection, matchesTigerAcknowledgement, isFreshTerminalNotification, tigerExchangeCode,
 } from '../src/utils/terminalLinkService';
 import { DEFAULT_METASCALP_SETTINGS } from '../src/utils/metaScalpService';
 
@@ -36,7 +36,12 @@ test('terminal settings normalize corrupt or incomplete persisted objects', () =
   assert.equal(normalizeMetaScalpGroup('500'), '500');
   assert.equal(normalizeMetaScalpGroup('0'), null);
   assert.equal(normalizeTigerGroup('z'), 'Z');
-  assert.equal(normalizeTigerGroup('12'), null);
+  assert.equal(normalizeTigerGroup('12'), '12');
+  assert.equal(normalizeTigerGroup('18'), '18');
+  assert.equal(normalizeTigerGroup('19'), null);
+  assert.equal(tigerExchangeCode('binance', 'futures'), 'BINANCE-FUT');
+  assert.equal(tigerExchangeCode('binance', 'spot'), 'BINANCE');
+  assert.equal(tigerExchangeCode('bybit', 'futures'), 'BYBIT');
 });
 
 test('permissions prevent all terminal commands, including alerts disabled by default', async (t) => {
@@ -100,7 +105,13 @@ test('Tiger acknowledges a correctly formatted setLinkSymbol command', async (t)
   const result = await sendToSelectedTerminal('btcusdt', 'binance', 'futures', 'formations', settings, DEFAULT_METASCALP_SETTINGS, 90);
   assert.equal(result.success, true);
   assert.equal(result.group, 'B');
-  assert.deepEqual(commands, [{ type: 'setLinkSymbol', e: 'BINANCE', m: 'FUTURES', symbol: 'BTCUSDT', linkGroup: 'B' }]);
+  assert.deepEqual(commands, [{ type: 'setLinkSymbol', e: 'BINANCE-FUT', m: 'FUTURES', symbol: 'BTCUSDT', linkGroup: 'B' }]);
+  const bybitResult = await sendToSelectedTerminal('ETHUSDT', 'bybit', 'futures', 'formations', settings, DEFAULT_METASCALP_SETTINGS, 90);
+  assert.equal(bybitResult.success, true);
+  assert.deepEqual(commands[1], { type: 'setLinkSymbol', e: 'BYBIT', m: 'FUTURES', symbol: 'ETHUSDT', linkGroup: 'B' });
+  const spotResult = await sendToSelectedTerminal('BTCUSDT', 'binance', 'spot', 'formations', settings, DEFAULT_METASCALP_SETTINGS, 90);
+  assert.equal(spotResult.success, true);
+  assert.deepEqual(commands[2], { type: 'setLinkSymbol', e: 'BINANCE', m: 'SPOT', symbol: 'BTCUSDT', linkGroup: 'B' });
   assert.equal((await testTigerConnection(7819)).ok, true);
 });
 
