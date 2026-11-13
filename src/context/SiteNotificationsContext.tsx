@@ -136,7 +136,8 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
   }, [uid, updatePreferences]);
 
   useEffect(() => {
-    if (profile?.uid !== uid || !settingsRef.current.optedIn || pendingSoundWrites.current.has(uid) || typeof profile.soundAlertsEnabled !== 'boolean') return;
+    if (profile?.uid !== uid || !settingsRef.current.optedIn || !settingsRef.current.enabled
+      || pendingSoundWrites.current.has(uid) || typeof profile.soundAlertsEnabled !== 'boolean') return;
     try { localStorage.setItem(soundStorageKey(uid), String(profile.soundAlertsEnabled)); } catch {}
     updatePreferences({ soundAlertsEnabled: profile.soundAlertsEnabled });
   }, [uid, profile?.soundAlertsEnabled, updatePreferences]);
