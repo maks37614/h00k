@@ -166,7 +166,9 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
   const updateSettings = useCallback(async (patch: Partial<SiteNotificationSettings>) => {
     const currentUid = uidRef.current;
     const next = normalizeSiteNotificationSettings({ ...settingsRef.current, ...patch,
-      optedIn: settingsRef.current.optedIn || patch.enabled === true });
+      optedIn: settingsRef.current.optedIn || patch.enabled === true,
+      enabledAt: patch.enabled === true && !settingsRef.current.enabled
+        ? Date.now() : settingsRef.current.enabledAt });
     settingsRef.current = next;
     setSettingsState({ uid: currentUid, settings: next });
     try { localStorage.setItem(siteNotificationSettingsKey(currentUid), JSON.stringify(next)); } catch {}
@@ -240,6 +242,7 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
       emit({
         id: 'price:' + String(data.alertId || data.symbol + ':' + data.targetPrice + ':' + Date.now()),
         kind: 'price', symbol: data.symbol,
+        exchange: data.exchange, marketType: data.marketType,
         title: 'Ціновий рівень досягнуто · ' + data.symbol,
         description: String(data.message || 'Рівень ' + data.targetPrice + ' досягнуто'),
       });
@@ -250,13 +253,15 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
 
   // Backfill price alerts from server history after login, without sound.
   useEffect(() => {
-    if (uid === 'guest' || !settings.enabled || !settings.price) return;
+    if (uid === 'guest' || !settings.optedIn || !settings.enabled || !settings.price || !settings.enabledAt) return;
     const existing = new Set(itemsRef.current.map(item => item.id));
     let clearedAt = 0;
     try { clearedAt = Number(localStorage.getItem(siteNotificationClearedAtKey(uid))) || 0; } catch {}
     const collected: SiteNotificationItem[] = [];
     for (const h of history.slice(0, 80)) {
-      if (h.userId !== uid || !Number.isFinite(h.triggeredAt) || h.triggeredAt <= clearedAt) continue;
+      if (h.userId !== uid || !Number.isFinite(h.triggeredAt)
+          || h.triggeredAt <= Math.max(clearedAt, settings.enabledAt)) continue;
+      if (!matchesNotificationScope(settings, h, favoritesRef.current)) continue;
       const id = h.alertId ? 'price:' + h.alertId + ':' + String(h.deliveryEpoch ?? 0) : 'price-history:' + h.id;
       if (existing.has(id)) continue;
       existing.add(id);
@@ -267,7 +272,9 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
       });
     }
     if (collected.length) replaceItems([...itemsRef.current, ...collected].sort((a, b) => b.timestamp - a.timestamp));
-  }, [uid, settings.enabled, settings.price, history, replaceItems]);
+  }, [uid, settings.optedIn, settings.enabled, settings.enabledAt, settings.price,
+    settings.scopeExchange, settings.scopeMarket, settings.scopeTimeframe, settings.scopeSymbols,
+    settings.onlyFavorites, history, replaceItems]);
 
   // Surveillance is already monitored by the server. Only new, explicitly
   // enabled per-category events are shown as unread; old events stay silent.
