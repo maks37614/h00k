@@ -74,6 +74,10 @@ export function siteNotificationSettingsKey(uid: string): string {
   return 'h00k_site_notification_settings_v1:' + (uid || 'guest');
 }
 
+export function siteNotificationClearedAtKey(uid: string): string {
+  return 'h00k_site_notifications_cleared_at_v1:' + (uid || 'guest');
+}
+
 export function notificationEnabled(settings: SiteNotificationSettings, kind: SiteNotificationKind): boolean {
   if (!settings.enabled) return false;
   return kind === 'price' ? settings.price
