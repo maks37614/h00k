@@ -55,6 +55,8 @@ import { installHookChartDepthStream } from './server/hookChartDepth';
 import { installLiquidationStream } from './server/liquidationFeed';
 import { installOpsMetrics } from './server/opsMetrics';
 import { subscribeSurveillance } from './server/surveillanceEvents';
+import { MAX_SURVEILLANCE_ACTIVE, MAX_SURVEILLANCE_SAVED,
+  canActivateSurveillance, canSaveSurveillance, userWorkThrottle } from './server/surveillanceLimits';
 import { binanceTickerStream } from './server/binanceTickerStream';
 
 async function startServer() {
@@ -655,6 +657,9 @@ async function startServer() {
 
       const existing = list.find((c) => c.symbol === cleanSymbol && c.exchange === (exchange || 'binance') && c.marketType === (marketType || 'futures'));
       if (existing) {
+        if (!canActivateSurveillance(list, existing.id))
+          return res.status(429).json({ success:false,
+            error: `Ліміт: ${MAX_SURVEILLANCE_ACTIVE} активних монет у нагляді на користувача.` });
         // Coin already on surveillance: ensure it is active and update config/analysis
         existing.isActive = true; // Always active upon user add/resume
         existing.updatedAt = new Date().toISOString();
@@ -669,6 +674,12 @@ async function startServer() {
         return res.json({ success: true, coin: committed, message: 'Монету активовано для системного нагляду' });
       }
 
+      if (!canSaveSurveillance(list))
+        return res.status(429).json({ success:false,
+          error: `Ліміт: ${MAX_SURVEILLANCE_SAVED} збережених монет на користувача.` });
+      if (!canActivateSurveillance(list))
+        return res.status(429).json({ success:false,
+          error: `Ліміт: ${MAX_SURVEILLANCE_ACTIVE} активних монет у нагляді на користувача.` });
       const defaultCfg = getDefaultSurveillanceConfig();
       const newCoin = {
         id: `surv_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
@@ -711,6 +722,9 @@ async function startServer() {
 
       const coin = found.coin;
       const nextActive = isActive !== undefined ? Boolean(isActive) : coin.isActive;
+      if (nextActive && !canActivateSurveillance(found.list, coin.id))
+        return res.status(429).json({ success:false,
+          error: `Ліміт: ${MAX_SURVEILLANCE_ACTIVE} активних монет у нагляді на користувача.` });
       const updatedCoin = {
         ...coin,
         isActive: nextActive,
@@ -739,6 +753,9 @@ async function startServer() {
     try {
       const { userId, isActive } = req.body;
       const uid = (userId && String(userId).trim()) || 'guest';
+      if (Boolean(isActive) && loadSurveillanceList(uid).length > MAX_SURVEILLANCE_ACTIVE)
+        return res.status(429).json({ success:false,
+          error: `Можна активувати одночасно не більше ${MAX_SURVEILLANCE_ACTIVE} монет.` });
       const updatedList = setAllSurveillanceCoinsActive(uid, Boolean(isActive));
       res.json({ success: true, data: updatedList });
     } catch (err: any) {
@@ -769,6 +786,9 @@ async function startServer() {
     try {
       const { userId } = req.body;
       const uid = userId || 'guest';
+      if (!userWorkThrottle.allow(uid, 'check-all', 60000))
+        return res.status(429).setHeader('Retry-After', '60').json({ success:false,
+          error: 'Повторна повна перевірка доступна раз на хвилину.' });
       const updatedList = await checkAllUserCoins(uid);
       res.json({ success: true, data: updatedList });
     } catch (err: any) {
@@ -786,7 +806,10 @@ async function startServer() {
         return res.status(404).json({ success: false, error: 'Монету не знайдено' });
       }
 
-      // #6: Single coin manual check explicitly supports forceNotify if requested by user
+      if (!userWorkThrottle.allow(found.userId, 'check:' + id, 20000))
+        return res.status(429).setHeader('Retry-After', '20').json({ success:false,
+          error: 'Повторна перевірка монети доступна через 20 секунд.' });
+      // Manual checks never bypass the server's notification cooldown by default.
       const { coin: updated } = await checkCoinSurveillance(found.coin, {
         forceCheck: true,
         forceNotify: Boolean(forceNotify),
@@ -822,6 +845,10 @@ async function startServer() {
   app.post('/api/surveillance/backtest', async (req, res) => {
     try {
       const { symbol, exchange, marketType, timeframe } = req.body;
+      const owner = String(res.locals.userId || '');
+      if (!userWorkThrottle.allow(owner, 'backtest', 30000))
+        return res.status(429).setHeader('Retry-After', '30').json({ success:false,
+          error: 'Повторний бектест доступний через 30 секунд.' });
       if (typeof symbol !== 'string' || !symbol.trim()) {
         return res.status(400).json({ success: false, error: 'Оберіть монету для бектесту' });
       }
