@@ -45,3 +45,11 @@ test('auth schema preserves original UIDs and creates per-user archive access pa
   assert.match(schema, /CREATE INDEX IF NOT EXISTS auth_archives_recent_idx/);
   assert.equal(typeof usePostgresAuth(), 'boolean');
 });
+
+
+test('new account bootstrap never destroys legacy browser accounts before migration', () => {
+  const source = readFileSync(new URL('../src/context/AuthContext.tsx', import.meta.url), 'utf8');
+  assert.doesNotMatch(source, /localStorage\.removeItem\(['"]signalhook_local_accounts/);
+  assert.doesNotMatch(source, /localStorage\.removeItem\(['"]signalhook_local_session/);
+  assert.doesNotMatch(source, /localStorage\.removeItem\(['"]signalhook_tg_token/);
+});
