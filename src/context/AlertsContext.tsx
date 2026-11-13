@@ -173,14 +173,7 @@ export const AlertsProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       try {
         const currentUser = userRef.current;
         if (!currentUser || currentUser.uid !== user.uid) return;
-        const isLocal = Boolean((currentUser as any).isLocalUser);
-        let currentAlertsList = alertsRef.current;
-        if (isLocal) {
-          const saved = localStorage.getItem(`signalhook_user_alerts_${currentUser.uid}`);
-          if (saved) {
-            try { currentAlertsList = JSON.parse(saved); } catch {}
-          }
-        }
+        const currentAlertsList = alertsRef.current;
 
         const res = await apiFetch('/api/alerts/sync', {
           method: 'POST',
@@ -210,13 +203,7 @@ export const AlertsProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           alertsRef.current = data.alerts;
           if (changed) {
             setAlerts(data.alerts);
-            if (isLocal) {
-              try {
-                localStorage.setItem(`signalhook_user_alerts_${currentUser.uid}`, JSON.stringify(data.alerts));
-              } catch {}
-            } else {
-              try { localStorage.setItem('signalhook_user_alerts_' + currentUser.uid, JSON.stringify(data.alerts)); } catch {}
-            }
+            try { localStorage.setItem('signalhook_user_alerts_' + currentUser.uid, JSON.stringify(data.alerts)); } catch {}
           }
 
           if (hasNewlyTriggered) {
