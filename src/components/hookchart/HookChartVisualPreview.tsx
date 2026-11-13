@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { ExchangeId, MarketType, Timeframe } from '../../types';
+import type { ExchangeId, MarketType, Timeframe, HookChartPreferences } from '../../types';
 import { fetchDirectKlines } from '../../utils/directExchangeClient';
 import { toHookCandles } from '../../utils/hookchartData';
 import {
@@ -28,6 +28,8 @@ interface HookChartVisualPreviewProps {
   timezone?: string;
   longColor?: string;
   shortColor?: string;
+  marketDefaults?: { exchange?: ExchangeId; marketType?: MarketType; timeframe?: Timeframe };
+  chartPreferences?: HookChartPreferences;
   visualContext: VisualContextId;
   visualDevice: VisualDevice;
   profile: VisualChartProfile;
@@ -35,19 +37,10 @@ interface HookChartVisualPreviewProps {
   saveStatus?: 'idle' | 'saving' | 'saved' | 'error';
 }
 
-function profilePreviewWidth(context: VisualContextId, device: VisualDevice): number {
-  if (device === 'mobile') return 354;
-  if (context === 'terminalCompact') return 370;
-  if (context === 'terminalMedium') return 570;
-  if (context === 'screenerQuick' || context === 'formationsQuick') return 550;
-  return 760;
-}
-
 /**
- * Identical HookChart canvas engine to the live graph. It is mounted only when
- * the Graph tab is active and uses existing candles. In the account editor,
- * where there is no selected market, load real BTCUSDT spot candles once and
- * never start an exchange websocket or polling loop.
+ * Actual HookChart canvas engine used by live graphs, not an illustrative mock.
+ * Standalone profile editor fetches OHLCV only for the explicitly selected
+ * symbol/exchange/market/timeframe. No extra WebSockets or polling loops.
  */
 export function HookChartVisualPreview({
   candles,
@@ -58,13 +51,22 @@ export function HookChartVisualPreview({
   timezone = 'Europe/Warsaw',
   longColor = '#0ECB81',
   shortColor = '#F6465D',
+  marketDefaults,
+  chartPreferences,
   visualContext,
   visualDevice,
   profile,
   onChange,
   saveStatus = 'idle',
 }: HookChartVisualPreviewProps) {
-  const [sample, setSample] = useState<Candle[]>(EMPTY_CANDLES);
+  const [marketSymbolDraft, setMarketSymbolDraft] = useState('BTCUSDT');
+  const [marketSymbol, setMarketSymbol] = useState('BTCUSDT');
+  const [marketExchange, setMarketExchange] = useState<ExchangeId>(marketDefaults?.exchange || 'binance');
+  const [marketTypeSelected, setMarketTypeSelected] = useState<MarketType>(marketDefaults?.marketType || 'futures');
+  const [marketTimeframe, setMarketTimeframe] = useState<Timeframe>(marketDefaults?.timeframe || '15m');
+  const [requestVersion, setRequestVersion] = useState(0);
+  const [sample, setSample] = useState<{ scope: string; rows: Candle[] }>({ scope: '', rows: EMPTY_CANDLES });
+  const [chartWidth, setChartWidth] = useState(0);
   const [sampleLoading, setSampleLoading] = useState(false);
   const [sampleError, setSampleError] = useState(false);
   const [visualProfileCaptureVersion, setVisualProfileCaptureVersion] = useState(0);
@@ -85,33 +87,59 @@ export function HookChartVisualPreview({
   // An attached live chart may still be waiting for its first candle. In that
   // case don't make a redundant REST call just to fill the preview.
   const useParentCandles = candles !== undefined;
+  const sampleScope = [marketExchange, marketTypeSelected, marketSymbol, marketTimeframe].join(':');
+  const applySymbol = () => {
+    const cleaned = marketSymbolDraft.trim().toUpperCase().replace(/[\s/-]/g, '');
+    if (!/^[A-Z0-9]{2,25}(USDT|USDC|BTC|ETH)$/.test(cleaned)) {
+      setSampleError(true);
+      return;
+    }
+    setSampleError(false);
+    setMarketSymbol(cleaned);
+    setMarketSymbolDraft(cleaned);
+  };
 
   useEffect(() => {
     if (useParentCandles) return;
     let active = true;
     setSampleLoading(true);
     setSampleError(false);
-    void fetchDirectKlines('binance', 'spot', 'BTCUSDT', '1h', 700)
+    // Fetch only on explicit market selection, never on slider or zoom updates.
+    void fetchDirectKlines(marketExchange, marketTypeSelected, marketSymbol, marketTimeframe, 900)
       .then(rows => {
         if (!active) return;
         const converted = toHookCandles(rows);
-        setSample(converted);
+        setSample({ scope: sampleScope, rows: converted });
         setSampleError(converted.length === 0);
       })
       .catch(() => { if (active) setSampleError(true); })
       .finally(() => { if (active) setSampleLoading(false); });
     return () => { active = false; };
-  }, [useParentCandles]);
+  }, [useParentCandles, sampleScope, requestVersion, marketExchange, marketTypeSelected, marketSymbol, marketTimeframe]);
+  
+  // Measure the rendered canvas instead of simulating a fixed 354/550/760px chart.
+  useEffect(() => {
+    const root = previewRef.current;
+    if (!root || typeof ResizeObserver === 'undefined') return;
+    const update = () => setChartWidth(Math.max(0, Math.round(root.getBoundingClientRect().width)));
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(root);
+    return () => observer.disconnect();
+  }, [useParentCandles, sampleScope, sample.scope]);
 
   const activeCandles = useMemo(
-    () => (useParentCandles ? candles! : sample).slice(-700),
-    [useParentCandles, candles, sample],
+    () => (useParentCandles ? candles! : sample.scope === sampleScope ? sample.rows : EMPTY_CANDLES).slice(-900),
+    [useParentCandles, candles, sample, sampleScope],
   );
-  const activeSymbol = useParentCandles ? (symbol || '—') : 'BTCUSDT';
-  const activeTimeframe = useParentCandles ? (timeframe || '1h') : '1h';
-  const marketDescription = useParentCandles
-    ? `${exchange === 'bybit' ? 'Bybit' : 'Binance'} · ${marketType === 'spot' ? 'Spot' : 'Futures'}`
-    : 'Binance · Spot';
+  const activeSymbol = useParentCandles ? (symbol || '—') : marketSymbol;
+  const activeTimeframe = useParentCandles ? (timeframe || '15m') : marketTimeframe;
+  const selectedExchange = useParentCandles ? (exchange || 'binance') : marketExchange;
+  const selectedMarket = useParentCandles ? (marketType || 'futures') : marketTypeSelected;
+  const marketDescription = `${selectedExchange === 'bybit' ? 'Bybit' : 'Binance'} · ${selectedMarket === 'spot' ? 'Spot' : 'Futures'}`;
+  const measuredSlots = chartWidth > 0 && viewport.barWidth > 0
+    ? Math.max(0, Math.round(hookChartPlotWidth(chartWidth) / viewport.barWidth - profile.rightGapBars))
+    : null;
   const previewKey = makeVisualProfileKey(visualContext, visualDevice);
   useEffect(() => {
     setSaveRequested(false);
