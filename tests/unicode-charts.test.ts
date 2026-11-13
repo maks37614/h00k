@@ -2,10 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import React from 'react';
 import { renderToString } from 'react-dom/server';
-import type { User } from 'firebase/auth';
-import { terminate } from 'firebase/firestore';
-import { db } from '../src/firebase';
-import { AuthContext, AuthProvider } from '../src/context/AuthContext';
+import { AuthContext, AuthProvider, type H00kUser } from '../src/context/AuthContext';
 import { TerminalChartWidget } from '../src/components/terminal/TerminalChartWidget';
 import { TerminalPage } from '../src/components/TerminalPage';
 import { FullscreenChartModal } from '../src/components/FullscreenChartModal';
@@ -19,7 +16,6 @@ import type { ExchangeId, MarketType, TerminalChartBlock } from '../src/types';
 Object.defineProperty(globalThis, 'localStorage', {
   value: { getItem: () => null, setItem: () => {}, removeItem: () => {} }, configurable: true,
 });
-test.after(() => terminate(db));
 const noop = () => {};
 const json = (data: unknown) => new Response(JSON.stringify(data), {
   headers: { 'content-type': 'application/json' },
@@ -94,7 +90,7 @@ test('terminal charts respect provider selection while fullscreen always uses Ho
       ? JSON.stringify(savedBlocks) : null);
   for (const provider of ['tradingview', 'hookchart', undefined] as const) {
     const auth: NonNullable<React.ContextType<typeof AuthContext>> = {
-      user: { uid } as User, profile: { uid, defaultChartProvider: provider }, loading: false,
+      user: { uid } as H00kUser, profile: { uid, defaultChartProvider: provider }, loading: false,
       signInWithGoogle: async () => {}, signInWithEmail: async () => {}, registerWithEmail: async () => {},
       updateProfileData: async () => {}, logout: async () => {},
       resendVerification: async () => {}, requestPasswordReset: async () => {}, resetPassword: async () => {},
