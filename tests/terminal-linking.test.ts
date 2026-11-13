@@ -85,7 +85,12 @@ test('Tiger acknowledges a correctly formatted setLinkSymbol command', async (t)
     }
     close() {}
   }
-  t.mock.method(globalThis as any, 'WebSocket', FakeWebSocket as any); // Node environment may not define WebSocket.
+  const previous = Object.getOwnPropertyDescriptor(globalThis, 'WebSocket');
+  Object.defineProperty(globalThis, 'WebSocket', { value: FakeWebSocket, configurable: true, writable: true });
+  t.after(() => {
+    if (previous) Object.defineProperty(globalThis, 'WebSocket', previous);
+    else Reflect.deleteProperty(globalThis, 'WebSocket');
+  });
   const settings = normalizeTerminalLinkSettings({ provider: 'tiger', tigerPort: 7819, tigerGroup: 'A', tigerGroups: { formations: 'B' } });
   const result = await sendToSelectedTerminal('btcusdt', 'binance', 'futures', 'formations', settings, DEFAULT_METASCALP_SETTINGS, 90);
   assert.equal(result.success, true);
