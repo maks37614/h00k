@@ -6,7 +6,7 @@ export type AutoLevel={
   zoneLow:number;zoneHigh:number;broken:boolean;brokenAt:number|null;strength:number
 };
 export type LevelSettings={count:number;allowedDiffPct:number;historyDepth:number;breakPct:number;minSeparationBars:number;pivotBars:number;allowWickPenetration:boolean};
-export type MarketPrint={id:string,side:'BUY'|'SELL',t:number,p:number,usd:number,count:number,touches:number,lastTouch:number,score:number};
+export type MarketPrint={id:string,side:'BUY'|'SELL',t:number,p:number,usd:number,count:number,touches:number,lastTouch:number,score:number,segments?:{t:number,usd:number}[]};
 export type OrderBookDensityLevel={p:number;q:number;usd:number;side:'BID'|'ASK'};
 export type RawOrderBookLevel=readonly [number|string,number|string];
 
