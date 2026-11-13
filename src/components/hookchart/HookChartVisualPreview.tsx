@@ -126,7 +126,7 @@ export function HookChartVisualPreview({
     const observer = new ResizeObserver(update);
     observer.observe(root);
     return () => observer.disconnect();
-  }, [useParentCandles, sampleScope, sample.scope]);
+  }, [useParentCandles, sampleScope, sample.scope, candles?.length]);
 
   const activeCandles = useMemo(
     () => (useParentCandles ? candles! : sample.scope === sampleScope ? sample.rows : EMPTY_CANDLES).slice(-900),
