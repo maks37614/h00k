@@ -360,13 +360,11 @@ export const AlertsProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         console.error('Failed to delete alert from server:', err);
         return false;
       }
-      setAlerts((prev) => prev.filter((a) => a.id !== id));
-
-      try {
-        localStorage.setItem('signalhook_user_alerts_' + user.uid,
-          JSON.stringify(alertsRef.current.filter(alert => alert.id !== id)));
-      } catch {}
-
+      if (userRef.current?.uid !== user.uid) return false;
+      const remaining = alertsRef.current.filter((a) => a.id !== id);
+      alertsRef.current = remaining;
+      setAlerts(remaining);
+      try { localStorage.setItem('signalhook_user_alerts_' + user.uid, JSON.stringify(remaining)); } catch {}
       return true;
     },
     [user]
@@ -398,24 +396,18 @@ export const AlertsProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const triggered = alerts.filter((a) => a.triggered);
     if (triggered.length === 0) return 0;
 
-    // Optimistically update React state
-    setAlerts((prev) => prev.filter((a) => !a.triggered));
-
-    // Clear on server first
-    try {
-      await apiFetch(`/api/alerts/clear-triggered?userId=${encodeURIComponent(user.uid)}`, {
-        method: 'POST',
-      });
-    } catch (err) {
-      console.error('Failed to clear triggered on server:', err);
-    }
-
-    try {
-      localStorage.setItem('signalhook_user_alerts_' + user.uid,
-        JSON.stringify(alertsRef.current.filter(alert => !alert.triggered)));
-    } catch {}
-
-    return triggered.length;
+    // Confirm durable deletion before removing anything from browser state.
+    const response = await apiFetch(`/api/alerts/clear-triggered?userId=${encodeURIComponent(user.uid)}`, {
+      method: 'POST',
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || !result.success) throw new Error(result.error || 'Не вдалося очистити сповіщення.');
+    if (userRef.current?.uid !== user.uid) return 0;
+    const remaining = alertsRef.current.filter((a) => !a.triggered);
+    alertsRef.current = remaining;
+    setAlerts(remaining);
+    try { localStorage.setItem('signalhook_user_alerts_' + user.uid, JSON.stringify(remaining)); } catch {}
+    return Number.isFinite(result.count) ? result.count : triggered.length;
   }, [user, alerts]);
 
   // Delete single history record
