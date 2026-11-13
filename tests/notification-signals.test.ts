@@ -15,11 +15,11 @@ const settings = normalizeSiteNotificationSettings({
   flowThresholdPct: 4, minBreakoutRvol: 2, minConfirmations: 3,
   minQualityScore: 88, cooldownMinutes: 15,
 });
-const coin = (): ScannedCoin => ({
+const coin = (updatedAt = Date.now()): ScannedCoin => ({ 
   symbol: 'BTCUSDT', baseAsset: 'BTC', quoteAsset: 'USDT',
   exchange: 'binance', marketType: 'futures', timeframe: '15m',
   currentPrice: 100, priceChange24h: 1.3, highPrice24h: 108,
-  lowPrice24h: 90, volume24hUsd: 2_000_000, lastUpdated: 10_000,
+  lowPrice24h: 90, volume24hUsd: 2_000_000, lastUpdated: updatedAt,
   exchangeUrl: '',
   regularIndicators: { atrPct: 1, rsi14: 60, oiChangePct: 4.1, deltaPct: 7, cvd20Pct: 5 },
   formations: [{
@@ -45,16 +45,16 @@ test('no site notification can fire until master switch and explicit user opt-in
 });
 
 test('real scanner evidence creates categorized events with bounded IDs and no fabricated metrics', () => {
-  const events = scanNotificationSignals([coin()], settings, ['binance:futures:BTCUSDT'], 900_000);
+  const events = scanNotificationSignals([coin(890_000)], settings, ['binance:futures:BTCUSDT'], 900_000);
   const kinds = new Set(events.map(e => e.kind));
   for (const kind of ['formation','levels','breakouts','round','density','openInterest',
     'flow','volume','early','quality','composite','favorites']) assert.ok(kinds.has(kind as any), kind);
   assert.ok(events.find(e => e.kind === 'composite')?.description.includes('факторів'));
   assert.ok(events.find(e => e.kind === 'density')?.description.includes('250,000'));
   assert.ok(events.every(e => e.symbol === 'BTCUSDT' && e.exchange === 'binance'));
-  const repeated = scanNotificationSignals([coin()], settings, ['binance:futures:BTCUSDT'], 900_000);
+  const repeated = scanNotificationSignals([coin(890_000)], settings, ['binance:futures:BTCUSDT'], 900_000);
   assert.deepEqual(events, repeated, 'stable event identifiers allow center deduplication');
-  const withoutRealData = coin();
+  const withoutRealData = coin(890_000);
   withoutRealData.regularIndicators = { atrPct: null, rsi14: null };
   withoutRealData.formations[0].roundNumberContext!.densityConfirmed = false;
   delete withoutRealData.formations[0].roundNumberContext!.densityUsd;
@@ -74,6 +74,27 @@ test('global exchange, market, timeframe, symbol and favorites scope filters eve
   const favoriteSetting = normalizeSiteNotificationSettings({ ...settings, onlyFavorites: true });
   assert.ok(scanNotificationSignals([coin()], favoriteSetting, ['binance:futures:BTCUSDT']).length > 0);
   assert.equal(matchesNotificationScope(favoriteSetting, coin(), ['bybit:spot:BTCUSDT']), false);
+});
+
+test('strict scope rejects missing metadata and symbol substring collisions', () => {
+  const strict = normalizeSiteNotificationSettings({ ...settings,
+    onlyFavorites: true, scopeExchange: 'binance', scopeMarket: 'futures', scopeTimeframe: '15m' });
+  assert.equal(matchesNotificationScope(strict, { symbol: 'BTCUSDT', marketType: 'futures', timeframe: '15m' },
+    ['binance:futures:BTCUSDT']), false);
+  assert.equal(matchesNotificationScope(strict, { symbol: 'BTCUSDT', exchange: 'binance', timeframe: '15m' },
+    ['binance:futures:BTCUSDT']), false);
+  assert.equal(matchesNotificationScope(strict, { symbol: 'BTCUSDT', exchange: 'binance', marketType: 'futures' },
+    ['binance:futures:BTCUSDT']), false);
+  assert.equal(matchesNotificationScope(strict, coin(), ['binance:futures:XBTCUSDT']), false);
+  assert.equal(matchesNotificationScope(strict, coin(), ['bybit:futures:BTCUSDT']), false);
+  assert.equal(matchesNotificationScope(strict, coin(), ['binance:spot:BTCUSDT']), false);
+  assert.equal(matchesNotificationScope(strict, coin(), ['binance:futures:BTCUSDT']), true);
+});
+
+test('known stale market snapshots never produce actionable trading notifications', () => {
+  const stale = coin(1_000);
+  const signal = scanNotificationSignals([stale], settings, [], Date.now());
+  assert.deepEqual(signal.map(v => v.kind), ['system']);
 });
 
 test('surveillance event classification is grounded in server notificationType', () => {
