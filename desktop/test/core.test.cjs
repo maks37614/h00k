@@ -54,7 +54,7 @@ test('negative coordinates and floating bounds are valid for secondary monitors'
 });
 
 test('all four docking directions touch the visible target boundary without overlap', () => {
-  const target = { x: -1240, y: 115, width: 700, height: 650 };
+  const target = { x: -1240, y: 220, width: 700, height: 650 };
   const work = { x: -1920, y: 0, width: 1920, height: 1080 };
   const right = dockRects(target, work, 'right', 260, 220, 1)[0];
   const left = dockRects(target, work, 'left', 260, 220, 1)[0];
