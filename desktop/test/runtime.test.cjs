@@ -128,3 +128,15 @@ test('dragged floating pane is saved and restored after it is recreated',async()
   engine.patchQuickProfile('metascalp',{side:'left'});
   assert.notEqual(restored.getBounds().x,310,'explicit side change overrides old position');
 });
+
+test('always-on-top can be toggled for an independent floating pane without a running terminal',()=>{
+  const {engine}=simulateDesktop();
+  engine.setSettings({profiles:{metascalp:{
+    enabled:true,mode:'floating',follow:false,widgets:['screener'],
+  }}});
+  engine.acceptWindows([]);
+  const win=engine.getWindows().get('metascalp').get('screener');
+  assert.equal(win.isAlwaysOnTop(),false);
+  engine.patchQuickProfile('metascalp',{alwaysOnTop:true});
+  assert.equal(win.isAlwaysOnTop(),true);
+});
