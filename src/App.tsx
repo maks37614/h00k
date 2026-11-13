@@ -801,7 +801,10 @@ export default function App() {
       timeframe: selectedCoin.timeframe,
       kind: 'coin',
     }, { coin: selectedCoin });
-  }, [user, handleOpenAuthModal, preferences.defaultTimeframe, openChartPage]);
+    if (terminalLinkSettings.enabled && terminalLinkSettings.switchOnChartOpen && terminalLinkSettings.sources.favorites) {
+      void handleSendToMetaScalp(selectedCoin, 'favorites');
+    }
+  }, [user, handleOpenAuthModal, preferences.defaultTimeframe, openChartPage, terminalLinkSettings, handleSendToMetaScalp]);
 
   // A's chart and projected trade levels must never remain open for user B
   // after switching accounts on the same browser.
@@ -842,7 +845,10 @@ export default function App() {
       symbol: raw.coin.symbol.toUpperCase(), timeframe: raw.coin.timeframe,
       kind: 'early', formationId: raw.candidate.id,
     }, { coin: raw.coin, earlyCandidate: raw.candidate });
-  }, [user, handleOpenAuthModal, fullEarlyScan?.data, openChartPage]);
+    if (terminalLinkSettings.enabled && terminalLinkSettings.switchOnChartOpen && terminalLinkSettings.sources.early) {
+      void handleSendToMetaScalp(raw.coin, 'early');
+    }
+  }, [user, handleOpenAuthModal, fullEarlyScan?.data, openChartPage, terminalLinkSettings, handleSendToMetaScalp]);
 
   // Handler when selecting archived formation to restore
   const handleSelectArchivedFormation = useCallback(
@@ -1399,7 +1405,7 @@ export default function App() {
               watchlist={watchlist}
               onToggleWatchlist={handleToggleWatchlist}
               onOpenTelegramModal={handleOpenTelegramAlerts}
-              onSendMetaScalp={(coin) => handleSendToMetaScalp(coin, 'chart')}
+              onSendMetaScalp={(coin) => handleSendToMetaScalp(coin, 'early')}
               metaScalpBinding={activeTerminalGroup}
               onClose={closeChartPage}
               onPageCoinChange={selectFavoriteOnChartPage}
