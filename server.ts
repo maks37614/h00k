@@ -67,7 +67,11 @@ async function startServer() {
 
   app.set('trust proxy', process.env.AUTH_TRUST_PROXY === '1' ? 1 : 'loopback');
   app.use(express.json({ limit: '384kb' }));
-  await initializeIdentity();
+  // The public screener and market WebSockets must remain available if PostgreSQL is down.
+  // Account routes retry initialization independently; never block Node startup here.
+  void initializeIdentity().catch(error => {
+    console.error('[Account DB] Initialization unavailable (market routes remain online):', error instanceof Error ? error.message : String(error));
+  });
   installPostgresIdentityRoutes(app);
 
   // Read-only operator endpoint is disabled unless H00K_OPS_TOKEN is configured.
