@@ -6,6 +6,7 @@ import { useAppPreferences } from '../utils/userPreferences';
 import {
   DEFAULT_SITE_NOTIFICATIONS, ImpulseTracker, normalizeSiteNotificationSettings,
   notificationEnabled, readNotificationItems, siteNotificationSettingsKey, siteNotificationStorageKey,
+  siteNotificationClearedAtKey,
   type SiteNotificationItem, type SiteNotificationKind, type SiteNotificationSettings, type SiteNotificationSound,
 } from '../utils/siteNotifications';
 import { playSiteNotificationSound } from '../utils/domSound';
@@ -150,9 +151,11 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
   useEffect(() => {
     if (uid === 'guest' || !settings.enabled) return;
     const existing = new Set(itemsRef.current.map(item => item.id));
+    let clearedAt = 0;
+    try { clearedAt = Number(localStorage.getItem(siteNotificationClearedAtKey(uid))) || 0; } catch {}
     const collected: SiteNotificationItem[] = [];
     if (settings.price) for (const h of history.slice(0, 80)) {
-      if (h.userId !== uid || !Number.isFinite(h.triggeredAt)) continue;
+      if (h.userId !== uid || !Number.isFinite(h.triggeredAt) || h.triggeredAt <= clearedAt) continue;
       const id = 'price-history:' + h.id;
       if (existing.has(id)) continue;
       existing.add(id);
@@ -165,7 +168,7 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
     const ownedSurveillanceIds = new Set(surveillanceCoins.filter(coin => coin.userId === uid).map(coin => coin.id));
     if (settings.surveillance) for (const event of allEvents.slice(0, 80)) {
       if (!ownedSurveillanceIds.has(event.coinId)) continue;
-      if (!Number.isFinite(event.timestamp)) continue;
+      if (!Number.isFinite(event.timestamp) || event.timestamp <= clearedAt) continue;
       const id = 'surveillance:' + event.coinId + ':' + event.id;
       if (existing.has(id)) continue;
       existing.add(id);
@@ -190,9 +193,14 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
     let stopped = false;
     let socket: WebSocket | null = null;
     let reconnect: ReturnType<typeof setTimeout> | undefined;
+    let heartbeat: ReturnType<typeof setInterval> | undefined;
     let retries = 0;
+    let lastProcessedAt = 0;
     const onPrice = (price: number) => {
-      const outcome = tracker.push(price, Date.now(), config.impulseThresholdPct);
+      const now = Date.now();
+      if (now - lastProcessedAt < 400) return;
+      lastProcessedAt = now;
+      const outcome = tracker.push(price, now, config.impulseThresholdPct);
       if (!outcome) return;
       const sign = outcome.changePct >= 0 ? '+' : '';
       emit({
@@ -215,7 +223,12 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
         socket = new WebSocket(url);
         socket.onopen = () => {
           retries = 0;
-          if (!isBinance) socket?.send(JSON.stringify({ op: 'subscribe', args: ['publicTrade.' + symbol] }));
+          if (!isBinance) {
+            socket?.send(JSON.stringify({ op: 'subscribe', args: ['publicTrade.' + symbol] }));
+            heartbeat = setInterval(() => {
+              if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ op: 'ping' }));
+            }, 20_000);
+          }
         };
         socket.onmessage = (message) => {
           try {
@@ -229,6 +242,8 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
           } catch { /* Ignore control frames and malformed updates. */ }
         };
         socket.onclose = () => {
+          if (heartbeat) clearInterval(heartbeat);
+          heartbeat = undefined;
           if (!stopped) reconnect = setTimeout(connect, Math.min(30_000, 1000 * 2 ** Math.min(retries++, 5)));
         };
         socket.onerror = () => socket?.close();
@@ -240,6 +255,7 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
     return () => {
       stopped = true;
       if (reconnect) clearTimeout(reconnect);
+      if (heartbeat) clearInterval(heartbeat);
       if (socket) {
         socket.onclose = null;
         socket.onmessage = null;
@@ -251,7 +267,10 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
     settings.impulseThresholdPct, emit]);
 
   const markAllRead = useCallback(() => replaceItems(itemsRef.current.map(item => ({ ...item, read: true }))), [replaceItems]);
-  const clear = useCallback(() => replaceItems([]), [replaceItems]);
+  const clear = useCallback(() => {
+    try { localStorage.setItem(siteNotificationClearedAtKey(uidRef.current), String(Date.now())); } catch {}
+    replaceItems([]);
+  }, [replaceItems]);
   const unreadCount = items.filter(item => !item.read).length;
 
   return <Context.Provider value={{
