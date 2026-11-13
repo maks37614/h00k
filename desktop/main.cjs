@@ -165,7 +165,7 @@ function syncWindows() {
     const rect = externalRect(target);
     const work = screen.getDisplayMatching(rect).workArea;
     const boxes = profile.mode === 'floating'
-      ? floatingRects(rect, work, profile.width, profile.height, ids.length)
+      ? floatingRects(rect, work, profile.width, profile.height, ids.length, profile.side)
       : dockRects(rect, work, profile.side, profile.width, profile.height, ids.length);
     if (boxes.length !== ids.length) {
       // Never cover the terminal's order-entry controls just to make room.
