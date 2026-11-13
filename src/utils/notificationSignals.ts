@@ -100,6 +100,20 @@ export interface MarketNotificationSignal {
 const finite = (x: unknown): x is number => typeof x === 'number' && Number.isFinite(x);
 const pct = (n: number) => (n >= 0 ? '+' : '') + n.toFixed(2) + '%';
 const formatPrice = (n: number) => '$' + n.toLocaleString('en-US', { maximumFractionDigits: 8 });
+const OI_PERIOD_MS: Readonly<Record<string, number>> = {
+  '5m': 300_000, '15m': 900_000, '1h': 3_600_000,
+  '4h': 14_400_000, '1d': 86_400_000,
+};
+function hasFreshVerifiedOI(coin: ScannedCoin, now: number): boolean {
+  const oi = coin.regularIndicators;
+  const interval = OI_PERIOD_MS[coin.timeframe];
+  if (coin.marketType !== 'futures' || !interval
+    || oi?.oiAvailability !== 'available' || !finite(oi.oiChangePct)
+    || !finite(oi.oiUpdatedAt)) return false;
+  const age = now - oi.oiUpdatedAt;
+  return age >= -60_000 && age <= interval * 2 + 90_000;
+}
+
 const distance = (price: number, level: number) =>
   level > 0 && Number.isFinite(price) && price > 0 ? Math.abs(price / level - 1) * 100 : Infinity;
 
@@ -268,14 +282,17 @@ export function scanNotificationSignals(
         const reasons: string[] = [];
         if (v.breakoutConfirmed) reasons.push('підтверджена структура');
         if (finite(v.volumeRatio) && v.volumeRatio >= settings.minBreakoutRvol) reasons.push('RVOL');
-        if (coin.marketType === 'futures' && i?.oiAvailability === 'available'
-          && finite(i?.oiChangePct) && i.oiChangePct >= settings.oiThresholdPct) reasons.push('OI');
+        if (hasFreshVerifiedOI(coin, now)
+          && i!.oiChangePct! >= settings.oiThresholdPct) reasons.push('OI');
         if (coin.exchange === 'binance'
           && (finite(i?.deltaPct) && i.deltaPct * directional >= settings.flowThresholdPct
             || finite(i?.cvd20Pct) && i.cvd20Pct * directional >= settings.flowThresholdPct))
           reasons.push('Delta або CVD20');
-        if (ctx?.detected && roundDistance <= settings.roundDistancePct) reasons.push('ROUND');
-        if (ctx?.densityConfirmed && finite(ctx.densityUsd) && ctx.densityUsd > 0) reasons.push('стакан BID/ASK');
+        // ROUND and liquidity at that same level share one context.
+        if (ctx?.densityConfirmed && finite(ctx.densityUsd) && ctx.densityUsd > 0)
+          reasons.push('стакан BID/ASK');
+        else if (ctx?.detected && roundDistance <= settings.roundDistancePct)
+          reasons.push('ROUND');
         if (reasons.length >= settings.minConfirmations) {
           emit(coin, 'composite', formId, 'Комплексне Quant-підтвердження · ' + coin.symbol,
             score + '/100 · ' + reasons.length + ' факторів: ' + reasons.join(', '), true);
@@ -292,9 +309,8 @@ export function scanNotificationSignals(
         'Причина: ' + oiFault + ' · перевірка потоку даних потрібна');
     }
     // These are exchange-data anomalies, not inferred position directions.
-    if (coin.marketType === 'futures' && i?.oiAvailability === 'available'
-        && finite(i?.oiChangePct)
-        && Math.abs(i.oiChangePct) >= settings.oiThresholdPct) {
+    if (hasFreshVerifiedOI(coin, now)
+        && Math.abs(i!.oiChangePct!) >= settings.oiThresholdPct) {
       emit(coin, 'openInterest', 'oi', 'Аномалія OI · ' + coin.symbol,
         'Open Interest ' + pct(i.oiChangePct) + ' за ' + coin.timeframe);
     }
