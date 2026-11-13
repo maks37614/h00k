@@ -1939,3 +1939,34 @@
 @media (max-width:600px) {
   .hookchart-root .hookchart-visual-preview-chart { flex-basis:300px; height:300px; }
 }
+
+/* Minimal chart-settings preview: no canvas, gestures, or market feed. */
+.hookchart-root .hookchart-mini-preview {
+  box-sizing:border-box;
+  max-width:440px;
+  border:1px solid #29415a;
+  border-radius:10px;
+  padding:8px;
+  background:#0c1726;
+  pointer-events:none;
+  user-select:none;
+}
+.hookchart-root .hookchart-mini-title {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  flex-wrap:wrap;
+  gap:6px;
+  color:#9cc5dd;
+  font:600 10px/1.4 system-ui;
+  padding-bottom:6px;
+}
+.hookchart-root .hookchart-mini-title span:first-child { color:#c8e9ff; font-weight:800; }
+.hookchart-root .hookchart-mini-note {
+  margin:6px 0 0;
+  font:400 10px/1.45 system-ui;
+  color:#849fb5;
+}
+@media (max-width:600px) {
+  .hookchart-root .hookchart-mini-preview { padding:6px; max-width:100%; }
+}
