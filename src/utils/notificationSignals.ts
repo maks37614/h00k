@@ -2,6 +2,89 @@ import type { ScannedCoin, SurveillanceEvent, DetectedFormation } from '../types
 import type { SiteNotificationKind, SiteNotificationSettings } from './siteNotifications';
 import { DEFAULT_SITE_NOTIFICATIONS, matchesNotificationScope, notificationEnabled } from './siteNotifications';
 
+type ProximitySample = { near: boolean; lastFiredAt: number };
+/** Notify on an actual entry into the proximity zone; rearm only after leaving. */
+export class ProximityAlertTracker {
+  private readonly states = new Map<string, ProximitySample>();
+  constructor(snapshot: unknown = {}) {
+    if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot)) return;
+    for (const [key, value] of Object.entries(snapshot).slice(-2500)) {
+      if (value && typeof value === 'object') {
+        const data = value as Record<string, unknown>;
+        if (typeof data.near === 'boolean' && Number.isFinite(data.lastFiredAt)) {
+          this.states.set(key, { near: data.near, lastFiredAt: Number(data.lastFiredAt) });
+        }
+      }
+    }
+  }
+  enter(key: string, near: boolean, now: number, cooldownMinutes: number): boolean {
+    if (!key || !Number.isFinite(now)) return false;
+    const state = this.states.get(key);
+    if (!state) {
+      this.states.set(key, { near, lastFiredAt: near ? now : 0 });
+      return near;
+    }
+    if (!near) { state.near = false; return false; }
+    if (state.near) return false;
+    state.near = true;
+    if (state.lastFiredAt && now - state.lastFiredAt < cooldownMinutes * 60_000) return false;
+    state.lastFiredAt = now;
+    return true;
+  }
+  snapshot(): Record<string, ProximitySample> {
+    return Object.fromEntries([...this.states].slice(-2500));
+  }
+}
+
+export interface QualityTransition {
+  kind: 'reached' | 'crossed' | 'improved';
+  current: number;
+  previous: number | null;
+}
+type QualitySample = { latest: number; reference: number };
+/** Tracks the last observed/announced score so "improved" means a real increase. */
+export class QualityScoreTracker {
+  private readonly scores = new Map<string, QualitySample>();
+  constructor(snapshot: unknown = {}) {
+    if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot)) return;
+    for (const [id, value] of Object.entries(snapshot).slice(-2500)) {
+      if (!value || typeof value !== 'object') continue;
+      const item = value as Record<string, unknown>;
+      if (typeof item.latest === 'number' && Number.isFinite(item.latest)
+        && typeof item.reference === 'number' && Number.isFinite(item.reference)) {
+        this.scores.set(id, { latest: item.latest, reference: item.reference });
+      }
+    }
+  }
+  observe(id: string, score: number, threshold: number, improvement: number): QualityTransition | null {
+    if (!id || !Number.isFinite(score)) return null;
+    const prior = this.scores.get(id);
+    if (!prior) {
+      this.scores.set(id, { latest: score, reference: score });
+      return score >= threshold ? { kind: 'reached', current: score, previous: null } : null;
+    }
+    const previous = prior.latest;
+    prior.latest = score;
+    if (previous < threshold && score >= threshold) {
+      prior.reference = score;
+      return { kind: 'crossed', current: score, previous };
+    }
+    if (score < threshold) {
+      prior.reference = score;
+      return null;
+    }
+    if (score > previous && score - prior.reference >= improvement) {
+      const reference = prior.reference;
+      prior.reference = score;
+      return { kind: 'improved', current: score, previous: reference };
+    }
+    return null;
+  }
+  snapshot(): Record<string, QualitySample> {
+    return Object.fromEntries([...this.scores].slice(-2500));
+  }
+}
+
 export interface MarketNotificationSignal {
   id: string;
   kind: SiteNotificationKind;
@@ -17,6 +100,22 @@ export interface MarketNotificationSignal {
 const finite = (x: unknown): x is number => typeof x === 'number' && Number.isFinite(x);
 const pct = (n: number) => (n >= 0 ? '+' : '') + n.toFixed(2) + '%';
 const formatPrice = (n: number) => '$' + n.toLocaleString('en-US', { maximumFractionDigits: 8 });
+const OI_PERIOD_MS: Readonly<Record<string, number>> = {
+  '5m': 300_000, '15m': 900_000, '1h': 3_600_000,
+  '4h': 14_400_000, '1d': 86_400_000,
+};
+function hasFreshVerifiedOI(coin: ScannedCoin, now: number): boolean {
+  const oi = coin.regularIndicators;
+  const interval = OI_PERIOD_MS[coin.timeframe];
+  if (coin.marketType !== 'futures' || !interval
+    || oi?.oiAvailability !== 'available' || !finite(oi.oiChangePct)
+    || !finite(oi.oiUpdatedAt)) return false;
+  const age = now - oi.oiUpdatedAt;
+  // OI is sampled approximately every minute, independently of the chart timeframe.
+  // A 15m/1h chart must never make a 10-minute-old OI reading actionable.
+  return age >= -60_000 && age <= Math.min(interval * 2 + 90_000, 180_000);
+}
+
 const distance = (price: number, level: number) =>
   level > 0 && Number.isFinite(price) && price > 0 ? Math.abs(price / level - 1) * 100 : Infinity;
 
@@ -66,6 +165,9 @@ export function scanNotificationSignals(
   settings: SiteNotificationSettings,
   favorites: readonly string[] = [],
   now = Date.now(),
+  qualityTracker?: QualityScoreTracker,
+  proximityTracker?: ProximityAlertTracker,
+  alreadyDelivered?: (id: string) => boolean,
 ): MarketNotificationSignal[] {
   if (!settings.optedIn || !settings.enabled || !Array.isArray(coins)) return [];
   const result: MarketNotificationSignal[] = [];
@@ -75,10 +177,12 @@ export function scanNotificationSignals(
   const emit = (source: ScannedCoin, kind: SiteNotificationKind, anchor: string,
     title: string, description: string, once = false) => {
     if (!notificationEnabled(settings, kind)) return;
-    if ((count.get(kind) || 0) >= 3 || result.length >= 25) return;
     const id = [kind, source.exchange, source.marketType, source.timeframe, source.symbol, anchor,
       ...(once ? [] : [Math.floor(now / coolMs)])].join(':');
-    if (seen.has(id)) return;
+    // Quota must exclude historical notifications already stored in the center.
+    // Otherwise the first three old signals starve every new coin forever.
+    if (seen.has(id) || alreadyDelivered?.(id)) return;
+    if ((count.get(kind) || 0) >= 3 || result.length >= 25) return;
     seen.add(id);
     count.set(kind, (count.get(kind) || 0) + 1);
     result.push({
@@ -110,37 +214,72 @@ export function scanNotificationSignals(
         ['Опір', formation.levels?.resistancePrice],
         ['Neckline', formation.levels?.necklinePrice],
       ];
-      if (notificationEnabled(settings, 'levels')) {
+      if (notificationEnabled(settings, 'levels') && (count.get('levels') || 0) < 3 && result.length < 25) {
         for (const [label, level] of levelFields) {
-          if (!finite(level) || distance(coin.currentPrice, level) > settings.levelDistancePct) continue;
-          emit(coin, 'levels', formId + ':' + label, 'Наближення до ' + label + ' · ' + coin.symbol,
+          if (!finite(level)) continue;
+          const levelDistance = distance(coin.currentPrice, level);
+          const near = levelDistance <= settings.levelDistancePct;
+          const levelKey = [coin.exchange, coin.marketType, coin.timeframe, coin.symbol,
+            formId, 'level', label, level].join(':');
+          if (!proximityTracker ? !near
+            : !proximityTracker.enter(levelKey, near, now, settings.cooldownMinutes)) continue;
+          emit(coin, 'levels', formId + ':' + label + ':' + level,
+            'Наближення до ' + label + ' · ' + coin.symbol,
             formatPrice(coin.currentPrice) + ' · ' + label + ' ' + formatPrice(level)
-            + ' · відстань ' + distance(coin.currentPrice, level).toFixed(2) + '%', true);
+            + ' · відстань ' + levelDistance.toFixed(2) + '%', !proximityTracker);
         }
       }
       if (v?.closedCandleOnly && v.breakoutConfirmed) {
-        emit(coin, 'breakouts', formId, 'Підтверджений пробій · ' + coin.symbol,
+        emit(coin, 'breakouts', formId + ':breakout', 'Підтверджений пробій · ' + coin.symbol,
           formation.name + ' · закрита свічка · ' + score + '/100', true);
+        if (formation.status === 'retest' && v.entryMode === 'RETEST') {
+          emit(coin, 'breakouts', formId + ':retest', 'Підтверджений ретест · ' + coin.symbol,
+            formation.name + ' · закрита свічка · ' + score + '/100', true);
+        }
         if (finite(v.volumeRatio) && v.volumeRatio >= settings.minBreakoutRvol) {
           emit(coin, 'volume', formId, 'Підвищений обсяг · ' + coin.symbol,
             'Обсяг свічки пробою: RVOL ' + v.volumeRatio.toFixed(2) + '×', true);
         }
       }
-      if (ctx?.detected === true && finite(ctx.distancePct) && ctx.distancePct <= settings.roundDistancePct) {
-        emit(coin, 'round', formId, 'ROUND · ' + coin.symbol,
-          'Біля круглого рівня ' + (finite(ctx.level) ? formatPrice(ctx.level) : '')
-          + ' · відстань ' + ctx.distancePct.toFixed(2) + '%', true);
+      // A stored ROUND badge can outlive a move away from its level. Check
+      // the actual scan price, not the original badge distance.
+      const roundDistance = finite(ctx?.level) ? distance(coin.currentPrice, ctx.level) : Infinity;
+      if (ctx?.detected === true && finite(ctx.level) && (count.get('round') || 0) < 3 && result.length < 25) {
+        const near = roundDistance <= settings.roundDistancePct;
+        const roundKey = [coin.exchange, coin.marketType, coin.timeframe, coin.symbol,
+          formId, 'round', ctx.level].join(':');
+        if (!proximityTracker ? near
+          : proximityTracker.enter(roundKey, near, now, settings.cooldownMinutes)) {
+          emit(coin, 'round', formId + ':' + ctx.level, 'ROUND · ' + coin.symbol,
+            'Біля круглого рівня ' + formatPrice(ctx.level) +
+            ' · відстань ' + roundDistance.toFixed(2) + '%', !proximityTracker);
+        }
       }
       if (ctx?.densityConfirmed === true && finite(ctx.densityUsd) && ctx.densityUsd > 0) {
         emit(coin, 'density', formId, 'Підтверджена щільність · ' + coin.symbol,
           (ctx.side || 'BID/ASK') + ' · ' + formatPrice(ctx.densityUsd) + ' · ' + formation.name, true);
       }
+      const qualityKey = [coin.exchange, coin.marketType, coin.timeframe, coin.symbol, formId].join(':');
+      const qualityHasRoom = notificationEnabled(settings, 'quality')
+        && (count.get('quality') || 0) < 3 && result.length < 25;
+      const transition = qualityHasRoom
+        ? qualityTracker?.observe(qualityKey, score,
+          settings.minQualityScore, settings.qualityImprovement)
+        : null;
       if (score >= settings.minQualityScore) {
         emit(coin, 'formation', formId, 'Сильна формація · ' + coin.symbol,
           formation.name + ' · ' + score + '/100', true);
-        const scoreBand = Math.floor(score / Math.max(1, settings.qualityImprovement));
-        emit(coin, 'quality', formId + ':band' + scoreBand, 'Якість сигналу · ' + coin.symbol,
-          formation.name + ' · оцінка ' + score + '/100', true);
+        // Without prior samples, report reaching the threshold. In subsequent
+        // scans report only a real upward transition, never a downgrade.
+        if (qualityHasRoom && (!qualityTracker || transition)) {
+          const newScore = transition?.current ?? score;
+          const improved = transition?.kind === 'improved';
+          emit(coin, 'quality', formId + ':score:' + newScore,
+            (improved ? 'Покращилася якість · ' : 'Досягнуто якості · ') + coin.symbol,
+            formation.name + ' · ' +
+              (improved && transition?.previous != null ? transition.previous + ' → ' : '') +
+              newScore + '/100', true);
+        }
         if (favorite) {
           emit(coin, 'favorites', formId, 'Формація з обраного · ' + coin.symbol,
             formation.name + ' · ' + score + '/100', true);
@@ -152,12 +291,17 @@ export function scanNotificationSignals(
         const reasons: string[] = [];
         if (v.breakoutConfirmed) reasons.push('підтверджена структура');
         if (finite(v.volumeRatio) && v.volumeRatio >= settings.minBreakoutRvol) reasons.push('RVOL');
-        if (coin.marketType === 'futures' && finite(i?.oiChangePct)
-          && i.oiChangePct >= settings.oiThresholdPct) reasons.push('OI');
-        if (coin.exchange === 'binance' && finite(i?.deltaPct)
-          && i.deltaPct * directional >= settings.flowThresholdPct) reasons.push('Delta/CVD');
-        if (ctx?.detected && ctx.distancePct <= settings.roundDistancePct) reasons.push('ROUND');
-        if (ctx?.densityConfirmed && finite(ctx.densityUsd) && ctx.densityUsd > 0) reasons.push('стакан BID/ASK');
+        if (hasFreshVerifiedOI(coin, now)
+          && i!.oiChangePct! >= settings.oiThresholdPct) reasons.push('OI');
+        if (coin.exchange === 'binance'
+          && (finite(i?.deltaPct) && i.deltaPct * directional >= settings.flowThresholdPct
+            || finite(i?.cvd20Pct) && i.cvd20Pct * directional >= settings.flowThresholdPct))
+          reasons.push('Delta або CVD20');
+        // ROUND and liquidity at that same level share one context.
+        if (ctx?.densityConfirmed && finite(ctx.densityUsd) && ctx.densityUsd > 0)
+          reasons.push('стакан BID/ASK');
+        else if (ctx?.detected && roundDistance <= settings.roundDistancePct)
+          reasons.push('ROUND');
         if (reasons.length >= settings.minConfirmations) {
           emit(coin, 'composite', formId, 'Комплексне Quant-підтвердження · ' + coin.symbol,
             score + '/100 · ' + reasons.length + ' факторів: ' + reasons.join(', '), true);
@@ -174,8 +318,8 @@ export function scanNotificationSignals(
         'Причина: ' + oiFault + ' · перевірка потоку даних потрібна');
     }
     // These are exchange-data anomalies, not inferred position directions.
-    if (coin.marketType === 'futures' && finite(i?.oiChangePct)
-        && Math.abs(i.oiChangePct) >= settings.oiThresholdPct) {
+    if (hasFreshVerifiedOI(coin, now)
+        && Math.abs(i!.oiChangePct!) >= settings.oiThresholdPct) {
       emit(coin, 'openInterest', 'oi', 'Аномалія OI · ' + coin.symbol,
         'Open Interest ' + pct(i.oiChangePct) + ' за ' + coin.timeframe);
     }
