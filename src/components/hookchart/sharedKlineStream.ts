@@ -2,8 +2,9 @@ import type { ExchangeId, Kline, MarketType } from '../../types';
 import { normalizeExchangeSymbol } from '../../utils/marketSymbols';
 import { validCandle } from '../../utils/hookchartData';
 
+export type LiveKline = Kline & { eventTime?: number };
 type Scope = { exchange: ExchangeId; marketType: MarketType; symbol: string; timeframe: string };
-type Listener = { onCandle: (candle: Kline) => void; onStatus?: (connected: boolean) => void };
+type Listener = { onCandle: (candle: LiveKline) => void; onStatus?: (connected: boolean) => void };
 type SocketFactory = (url: string) => WebSocket;
 
 const BINANCE_WS: Record<MarketType, string> = {
@@ -21,7 +22,7 @@ const BYBIT_INTERVAL: Record<string, string> = {
   '1m': '1', '5m': '5', '15m': '15', '1h': '60', '4h': '240', '1d': 'D',
 };
 
-export function parseSharedKlineMessage(exchange: ExchangeId, payload: any, symbol: string, timeframe: string): Kline | null {
+export function parseSharedKlineMessage(exchange: ExchangeId, payload: any, symbol: string, timeframe: string): LiveKline | null {
   let source: any = null;
   if (exchange === 'binance') {
     const envelope = payload?.data ?? payload;
@@ -34,6 +35,7 @@ export function parseSharedKlineMessage(exchange: ExchangeId, payload: any, symb
       low: Number(row.l), close: Number(row.c), volume: Number(row.v),
       tradeCount: Number(row.n),
       buyVolume: Number(row.V),
+      eventTime: Number(envelope.E) || Date.now(),
     };
   } else {
     if (payload?.topic !== 'kline.' + BYBIT_INTERVAL[timeframe] + '.' + symbol) return null;
@@ -43,6 +45,7 @@ export function parseSharedKlineMessage(exchange: ExchangeId, payload: any, symb
       time: Number(row.start) / 1000, open: Number(row.open),
       high: Number(row.high), low: Number(row.low),
       close: Number(row.close), volume: Number(row.volume),
+      eventTime: Number(payload.ts) || Date.now(),
     };
   }
   if (!Number.isSafeInteger(source.time) || !validCandle(source)) return null;
@@ -54,7 +57,7 @@ export function createSharedKlineSubscriptions(socketFactory: SocketFactory = ur
   type Entry = {
     listeners: Set<Listener>; socket: WebSocket | null; closed: boolean;
     ping: ReturnType<typeof setInterval> | null; retry: ReturnType<typeof setTimeout> | null;
-    failures: number; connected: boolean; last: Kline | null; stop: () => void;
+    failures: number; connected: boolean; last: LiveKline | null; stop: () => void;
   };
   const entries = new Map<string, Entry>();
   const subscribe = (scope: Scope, listener: Listener): (() => void) => {
