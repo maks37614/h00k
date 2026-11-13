@@ -18,6 +18,7 @@ import {
 import { FormationArchiveIcon } from './FormationArchiveIcon';
 import { SiteNotificationBell } from './SiteNotificationBell';
 import { MetaScalpSettings } from '../utils/metaScalpService';
+import type { TerminalLinkSettings } from '../utils/terminalLinkService';
 import { useAuth } from '../context/AuthContext';
 import { ActivePageType } from '../types';
 import { useLanguage, SupportedLanguage } from '../context/LanguageContext';
@@ -40,6 +41,7 @@ interface HeaderProps {
   onOpenGuide: () => void;
   onOpenMetaScalp: () => void;
   metaScalpSettings?: MetaScalpSettings;
+  terminalLinkSettings?: TerminalLinkSettings;
   lastUpdated: number | null;
   telegramAlertsCount?: number;
   surveillanceCount?: number;
@@ -65,6 +67,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenGuide,
   onOpenMetaScalp,
   metaScalpSettings,
+  terminalLinkSettings,
   lastUpdated,
   telegramAlertsCount = 0,
   surveillanceCount = 0,
@@ -92,8 +95,17 @@ export const Header: React.FC<HeaderProps> = ({
     toggleFullscreenSafe();
   };
 
-  const isLinkingEnabled = metaScalpSettings?.enabled ?? true;
-  const linkingBadge = metaScalpSettings?.binding ? `MS:${metaScalpSettings.binding}` : 'MS:001';
+  const selectedTerminal = terminalLinkSettings?.provider || 'metascalp';
+  const isLinkingEnabled = Boolean(user && (terminalLinkSettings?.enabled ?? true)
+    && selectedTerminal !== 'none' && selectedTerminal !== 'vataga'
+    && (selectedTerminal !== 'metascalp' || (metaScalpSettings?.enabled ?? true)));
+  const linkingBadge = selectedTerminal === 'tiger'
+    ? `TG:${terminalLinkSettings?.tigerGroup || 'A'}`
+    : selectedTerminal === 'vataga' ? 'VT:—'
+    : selectedTerminal === 'none' ? 'OFF'
+    : `MS:${metaScalpSettings?.binding || '001'}`;
+  const terminalName = selectedTerminal === 'tiger' ? 'Tiger' : selectedTerminal === 'vataga' ? 'Vataga'
+    : selectedTerminal === 'none' ? 'вимкнена' : 'MetaScalp';
   return (
     <header className="app-header min-w-0 border-b border-slate-800/80 bg-slate-950/80 backdrop-blur-md sticky top-0 z-30" data-page={activePage}>
       <div className="max-w-[1720px] mx-auto px-2.5 sm:px-4 lg:px-6 py-1.5 sm:py-2">
@@ -307,7 +319,7 @@ export const Header: React.FC<HeaderProps> = ({
                   ? 'bg-amber-500/15 hover:bg-amber-500/25 border-amber-500/40 text-amber-300 shadow-sm'
                   : 'bg-slate-900/60 hover:bg-slate-800 border-slate-800 text-slate-400'
               }`}
-              title={!user ? 'Лінковка MetaScalp — доступна після реєстрації' : `Лінковка MetaScalp (Група ${metaScalpSettings?.binding || '001'})`}
+              title={!user ? 'Лінковка — доступна після реєстрації' : `Лінковка: ${terminalName}. Відкрити налаштування профілю`}
             >
               <Zap className={`w-3.5 h-3.5 ${isLinkingEnabled ? 'text-amber-400 fill-amber-400/20' : 'text-slate-500'}`} />
               {!user ? (
