@@ -8,6 +8,24 @@ export type SiteNotificationSound = 'alert35' | 'chime' | 'soft' | 'pulse' | 'cu
 export type ImpulseExchange = 'binance' | 'bybit';
 export type ImpulseMarket = 'futures' | 'spot';
 export type NotificationCategoryKey = Exclude<SiteNotificationKind, 'volatility'>;
+/** Identical routing for browser surveillance events and server Telegram delivery.
+ * Only explicit event codes are interpreted; generic labels are not evidence. */
+export function classifySurveillanceEventType(value: unknown): SiteNotificationKind {
+  const type = typeof value === 'string' ? value.trim().toUpperCase() : '';
+  if (type.startsWith('DENSITY_') || type.includes('ORDERBOOK')) return 'density';
+  if (type.startsWith('OI_')) return 'openInterest';
+  if (type.startsWith('VOLUME_') || type.startsWith('RVOL_')) return 'volume';
+  if (type.startsWith('FIBONACCI') || type.startsWith('THIRD_TOUCH')
+    || type === 'LEVEL_DETECTED') return 'levels';
+  if (type.includes('BREAKOUT') || type.startsWith('CHANNEL_BREAK')
+    || type.startsWith('LEVEL_CROSS') || type.includes('RETEST')
+    || type === 'STRUCTURE_SHIFT' || type === 'BOS' || type === 'CHOCH'
+    || type === 'SUPPORT_RESISTANCE_FLIP') return 'breakouts';
+  if (type === 'MOMENTUM' || type === 'IMPULSE') return 'impulse';
+  if (type.startsWith('FORMATION_') || type.includes('SETUP')) return 'formation';
+  return 'surveillance';
+}
+
 
 export const NOTIFICATION_CATEGORIES: ReadonlyArray<{
   key: NotificationCategoryKey; group: string; label: string; explanation: string; source: string;

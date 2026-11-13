@@ -1,6 +1,6 @@
 import type { ScannedCoin, SurveillanceEvent, DetectedFormation } from '../types';
 import type { SiteNotificationKind, SiteNotificationSettings } from './siteNotifications';
-import { DEFAULT_SITE_NOTIFICATIONS, matchesNotificationScope, notificationEnabled } from './siteNotifications';
+import { DEFAULT_SITE_NOTIFICATIONS, classifySurveillanceEventType, matchesNotificationScope, notificationEnabled } from './siteNotifications';
 
 type ProximitySample = { near: boolean; lastFiredAt: number };
 /** Notify on an actual entry into the proximity zone; rearm only after leaving. */
@@ -128,15 +128,9 @@ const DUMMY_FAVORITES_SCOPE: SiteNotificationSettings = {
 };
 
 export function surveillanceNotificationKind(event: SurveillanceEvent): SiteNotificationKind {
-  const id = String(event.details?.notificationType || '').toUpperCase();
-  if (id.startsWith('DENSITY') || id.includes('ORDERBOOK')) return 'density';
-  if (id.startsWith('OI_')) return 'openInterest';
-  if (id.startsWith('LEVEL') || id.includes('BREAKOUT') || id === 'STRUCTURE_SHIFT'
-    || id === 'BOS' || id === 'CHOCH' || id.includes('RETEST')) return 'breakouts';
-  if (id.startsWith('FIBONACCI') || id.startsWith('THIRD_TOUCH')) return 'levels';
-  if (id === 'MOMENTUM' || id === 'IMPULSE') return 'impulse';
-  if (id.startsWith('FORMATION') || id.includes('SETUP')) return 'formation';
-  return 'surveillance';
+  // Older worker snapshots contain details.type; newly adapted snapshots use
+  // details.notificationType. Both are exchange event codes, not UI labels.
+  return classifySurveillanceEventType(event.details?.notificationType ?? event.details?.type);
 }
 
 export function marketSurveillanceSignal(

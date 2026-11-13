@@ -170,6 +170,9 @@ export function loadSurveillanceList(userId?: string): SurveillanceCoin[] {
           : 'info',
         details: {
           timeframe: e.timeframe,
+          // Required for precise per-category browser delivery; event.type
+          // has already been collapsed into the legacy level/structure label.
+          notificationType: e.type,
           confluenceScore: e.confluenceScore,
           type: e.type,
           evidence: e.evidence,

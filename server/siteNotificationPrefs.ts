@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {
   DEFAULT_SITE_NOTIFICATIONS, normalizeSiteNotificationSettings, notificationEnabled,
-  matchesNotificationScope, type SiteNotificationSettings, type SiteNotificationKind,
+  matchesNotificationScope, classifySurveillanceEventType, type SiteNotificationSettings, type SiteNotificationKind,
 } from '../src/utils/siteNotifications';
 
 /** Separate from Firebase UI profile: server cron must enforce explicit opt-in too. */
@@ -47,15 +47,7 @@ export function saveUserSiteNotificationSettings(uid: string, input: unknown): S
 export function categoryForServerEvent(eventType: string, source: string): SiteNotificationKind {
   if (source === 'PRICE_ALERT') return 'price';
   if (source === 'SCREENER') return 'formation';
-  const event = String(eventType).toUpperCase();
-  if (event.startsWith('DENSITY') || event.includes('ORDERBOOK')) return 'density';
-  if (event.startsWith('OI_')) return 'openInterest';
-  if (event.includes('BREAKOUT') || event.startsWith('LEVEL_CROSS') || event === 'STRUCTURE_SHIFT'
-    || event === 'BOS' || event === 'CHOCH' || event.includes('RETEST')) return 'breakouts';
-  if (event.startsWith('FIBONACCI') || event.startsWith('THIRD_TOUCH')) return 'levels';
-  if (event === 'IMPULSE' || event === 'MOMENTUM') return 'impulse';
-  if (event.startsWith('FORMATION') || event.includes('SETUP')) return 'formation';
-  return 'surveillance';
+  return classifySurveillanceEventType(eventType);
 }
 
 export interface ServerNotificationContext {
