@@ -228,7 +228,11 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
   const emit = useCallback((event: NewSiteNotification) => {
     if (!notificationEnabled(settingsRef.current, event.kind)) return;
     if (!event.id || !event.title) return;
-    if (event.kind !== 'system' && !matchesNotificationScope(settingsRef.current, event, favoritesRef.current)) return;
+    const streamEvent = event.kind === 'price' || event.kind === 'liquidations'
+      || (event.kind === 'impulse' || event.kind === 'volatility')
+        && /^(?:impulse|volatility):/.test(event.id);
+    if (event.kind !== 'system' && !matchesNotificationScope(settingsRef.current,
+        event, favoritesRef.current, { timeframeIndependent: streamEvent })) return;
     const owner = uidRef.current;
     if (deliveredSeen.current.uid !== owner) deliveredSeen.current = { uid: owner, ids: loadSeen(owner) };
     if (deliveredSeen.current.ids.has(event.id) || itemsRef.current.some(item => item.id === event.id)) return;
@@ -293,7 +297,7 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
     for (const h of history.slice(0, 80)) {
       if (h.userId !== uid || !Number.isFinite(h.triggeredAt)
           || h.triggeredAt <= Math.max(clearedAt, settings.enabledAt)) continue;
-      if (!matchesNotificationScope(settings, h, favoritesRef.current)) continue;
+      if (!matchesNotificationScope(settings, h, favoritesRef.current, { timeframeIndependent: true })) continue;
       const id = h.alertId ? 'price:' + h.alertId + ':' + String(h.deliveryEpoch ?? 0) : 'price-history:' + h.id;
       if (existing.has(id)) continue;
       existing.add(id);
