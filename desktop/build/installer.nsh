@@ -14,8 +14,25 @@ Var /GLOBAL h00kShortcutWanted
 !macroend
 
 !macro customInit
-  ; Checked by default; users can decline on the following page.
+  ; First-time default = checked. Respect the previous explicit choice on upgrade,
+  ; including silent upgrades (the old shortcut alone is not an authoritative signal).
   StrCpy $h00kShortcutWanted "1"
+  ReadRegStr $R8 SHELL_CONTEXT "${INSTALL_REGISTRY_KEY}" "H00kDesktopShortcutChoice"
+  ${If} $R8 == "0"
+    StrCpy $h00kShortcutWanted "0"
+  ${EndIf}
+
+  ; Headless /S installs support explicit shortcut choice for deployment and CI.
+  ; These switches override the saved preference, but only for this install.
+  ${GetParameters} $R8
+  ${GetOptions} $R8 "/NO_DESKTOP_SHORTCUT" $R9
+  ${IfNot} ${Errors}
+    StrCpy $h00kShortcutWanted "0"
+  ${EndIf}
+  ${GetOptions} $R8 "/DESKTOP_SHORTCUT" $R9
+  ${IfNot} ${Errors}
+    StrCpy $h00kShortcutWanted "1"
+  ${EndIf}
 !macroend
 
 !ifndef BUILD_UNINSTALLER
@@ -52,10 +69,19 @@ FunctionEnd
 !endif ; BUILD_UNINSTALLER
 
 !macro customInstall
-  ; electron-builder creates it, then we remove it ONLY when unchecked.
-  ; Standard uninstall takes care of shortcut cleanup and Start menu.
+  ; electron-builder creates the normal AppUserModelID-aware shortcut first.
   ${If} $h00kShortcutWanted != "1"
     Delete "$newDesktopLink"
     Delete "$oldDesktopLink"
+  ${Else}
+    ; Electron-builder may preserve existing shortcuts during an upgrade, or
+    ; skip recreating one that the user previously opted out of. Restore it
+    ; only when explicitly requested and the standard builder step omitted it.
+    ${IfNot} ${FileExists} "$newDesktopLink"
+      CreateShortCut "$newDesktopLink" "$appExe" "" "$appExe" 0 "" "" "${APP_DESCRIPTION}"
+      ClearErrors
+      WinShell::SetLnkAUMI "$newDesktopLink" "${APP_ID}"
+    ${EndIf}
   ${EndIf}
+  WriteRegStr SHELL_CONTEXT "${INSTALL_REGISTRY_KEY}" "H00kDesktopShortcutChoice" "$h00kShortcutWanted"
 !macroend
