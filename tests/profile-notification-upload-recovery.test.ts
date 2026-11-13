@@ -30,9 +30,8 @@ test('upload displays progress, recovers from failures and modal provides visibl
   const profile = read('../src/components/profile/ProfileNotificationSettings.tsx');
   const modal = read('../src/components/UserProfileModal.tsx');
   const boundary = read('../src/components/profile/ProfileNotificationsErrorBoundary.tsx');
-  assert.match(profile, /saveCustomNotificationSounds\(soundUid, files, \(done, total\) =>/);
-  assert.match(profile, /setSoundProgress\(null\)/);
-  assert.match(profile, /soundLoading && soundProgress && <p role="status"/);
+  assert.doesNotMatch(profile, /saveCustomNotificationSounds|type="file"|soundProgress|uploadPersonalSound/);
+  assert.match(profile, /soundChosen: true/);
   assert.match(profile, /soundError && <p role="alert"/);
   assert.match(modal, /<ProfileNotificationsErrorBoundary onClose=\{onClose\}>/);
   assert.match(boundary, /getDerivedStateFromError\(\)/);

@@ -50,8 +50,8 @@ test('multi-track library preserves all tracks and selected audio across reads',
 test('profile supports importing multiple sounds without altering mute or Telegram', () => {
   const profile = readFileSync(new URL('../src/components/profile/ProfileNotificationSettings.tsx', import.meta.url), 'utf8');
   const service = readFileSync(new URL('../src/utils/customNotificationSound.ts', import.meta.url), 'utf8');
-  assert.match(profile, /type="file" multiple/);
-  assert.match(profile, /saveCustomNotificationSounds\(soundUid, files,/);
+  assert.doesNotMatch(profile, /type="file"|saveCustomNotificationSounds|uploadPersonalSound/);
+  assert.match(profile, /value="alert35"/);
   assert.match(profile, /selectCustomNotificationSound\(soundUid, id\)/);
   assert.match(profile, /removeCustomNotificationSound\(soundUid, selectedPersonalId\)/);
   assert.match(profile, /aria-label="Вибрати одну зі своїх мелодій"/);

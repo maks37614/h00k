@@ -45,6 +45,23 @@ async function playPersonalSound(uid: string, allowed?: () => boolean): Promise<
   }
 }
 
+/** The bundled MP3 loads only when a permitted notification or preview plays. */
+function playBundledAlert(allowed?: () => boolean): void {
+  if (typeof Audio === 'undefined' || (allowed && !allowed())) return;
+  stopCustomNotificationSound();
+  try {
+    const audio = new Audio('/sounds/alert_35.mp3');
+    activeUserSound = audio;
+    audio.volume = 0.75;
+    const cleanup = () => {
+      if (activeUserSound === audio) stopCustomNotificationSound();
+    };
+    audio.onended = cleanup;
+    audio.onerror = cleanup;
+    void audio.play().catch(cleanup); // Autoplay may be blocked by the browser.
+  } catch { /* Audio can be blocked by the browser. */ }
+}
+
 let audioCtx: AudioContext | null = null;
 
 function getAudioContext(): AudioContext | null {
@@ -110,6 +127,10 @@ export function playSiteNotificationSound(
 ): void {
   if (preset === 'custom') {
     void playPersonalSound(uid, allowed);
+    return;
+  }
+  if (preset === 'alert35') {
+    playBundledAlert(allowed);
     return;
   }
   stopCustomNotificationSound();

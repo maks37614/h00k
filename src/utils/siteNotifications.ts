@@ -4,7 +4,7 @@ export type SiteNotificationKind =
   | 'levels' | 'breakouts' | 'density' | 'round' | 'openInterest'
   | 'flow' | 'liquidations' | 'volume' | 'early' | 'quality'
   | 'favorites' | 'system' | 'composite';
-export type SiteNotificationSound = 'chime' | 'soft' | 'pulse' | 'custom';
+export type SiteNotificationSound = 'alert35' | 'chime' | 'soft' | 'pulse' | 'custom';
 export type ImpulseExchange = 'binance' | 'bybit';
 export type ImpulseMarket = 'futures' | 'spot';
 export type NotificationCategoryKey = Exclude<SiteNotificationKind, 'volatility'>;
@@ -55,6 +55,8 @@ export interface SiteNotificationSettings {
   system: boolean;
   composite: boolean;
   sound: SiteNotificationSound;
+  /** Set only after a user explicitly changes the selected melody. */
+  soundChosen: boolean;
   browserPush: boolean;
   telegramEnabled: boolean;
   impulseSymbol: string;
@@ -101,7 +103,7 @@ export const DEFAULT_SITE_NOTIFICATIONS: SiteNotificationSettings = {
   levels: false, breakouts: false, density: false, round: false, openInterest: false,
   flow: false, liquidations: false, volume: false, early: false, quality: false,
   favorites: false, system: false, composite: false,
-  sound: 'chime', browserPush: false, telegramEnabled: false,
+  sound: 'alert35', soundChosen: false, browserPush: false, telegramEnabled: false,
   impulseSymbol: '', impulseThresholdPct: 2, impulseWindowMinutes: 5,
   impulseExchange: 'binance', impulseMarket: 'futures',
   scopeExchange: 'all', scopeMarket: 'all', scopeTimeframe: 'all',
@@ -135,7 +137,13 @@ export function normalizeSiteNotificationSettings(input: unknown): SiteNotificat
     enabled: consent && d.enabled === true,
     enabledAt: typeof d.enabledAt === 'number' && Number.isFinite(d.enabledAt) && d.enabledAt > 0
       ? Math.floor(d.enabledAt) : 0,
-    sound: d.sound === 'soft' || d.sound === 'pulse' || d.sound === 'custom' ? d.sound : 'chime',
+    // Older stored default was 'chime'. With no explicit-selection marker it
+    // migrates to the new default; explicitly selected sounds remain unchanged.
+    sound: d.sound === 'soft' || d.sound === 'pulse' || d.sound === 'custom'
+      || d.sound === 'alert35' || (d.sound === 'chime' && d.soundChosen === true)
+      ? d.sound : 'alert35',
+    soundChosen: d.soundChosen === true
+      || d.sound === 'soft' || d.sound === 'pulse' || d.sound === 'custom',
     // The master switch also revokes delivery channels; merely keeping a browser
     // permission granted is never consent to receive notifications.
     browserPush: consent && d.enabled === true && d.browserPush === true,
