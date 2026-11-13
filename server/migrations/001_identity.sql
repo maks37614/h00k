@@ -1,5 +1,5 @@
 -- h00k authentication & profile store. Run in a dedicated h00k database.
--- IDs are TEXT deliberately, so imported Firebase UIDs can be preserved.
+-- Text IDs retain flexibility for future centralized h00k Community identity sharing.
 CREATE TABLE IF NOT EXISTS auth_users (
   id TEXT PRIMARY KEY,
   email TEXT NOT NULL UNIQUE CHECK (email = lower(email)),
