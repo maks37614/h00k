@@ -1905,58 +1905,10 @@
   }
 }
 
-/* Account HookChart is a real, full-width canvas, not a 354/550/760px mock. */
+/* Offline settings-only HookChart, full-width for accurate viewport geometry. */
 .hookchart-root .hookchart-visual-preview .hookchart-visual-preview-frame {
   max-width:none;
   width:100%;
-}
-.hookchart-root .hookchart-live-market-selector {
-  display:flex;
-  align-items:flex-end;
-  flex-wrap:wrap;
-  gap:8px;
-  padding:10px;
-  border:1px solid #2c465a;
-  border-radius:8px;
-  background:#0d1a26;
-}
-.hookchart-root .hookchart-live-market-selector label {
-  display:flex;
-  flex:1 1 110px;
-  min-width:95px;
-  flex-direction:column;
-  gap:4px;
-  color:#9fc3dc;
-  font:600 11px/1.25 system-ui;
-}
-.hookchart-root .hookchart-live-market-selector input,
-.hookchart-root .hookchart-live-market-selector select {
-  box-sizing:border-box;
-  width:100%;
-  height:36px;
-  border:1px solid #37536b;
-  border-radius:6px;
-  background:#101c2b;
-  color:#e1f1fc;
-  padding:0 9px;
-  font:600 13px system-ui;
-  outline:none;
-}
-.hookchart-root .hookchart-live-market-selector input:focus-visible,
-.hookchart-root .hookchart-live-market-selector select:focus-visible {
-  border-color:#40b4f5;
-  box-shadow:0 0 0 2px #145982;
-}
-.hookchart-root .hookchart-live-market-selector .hookchart-live-refresh {
-  flex:0 0 auto;
-  min-height:36px;
-  padding:0 10px;
-  border:1px solid #2a84b6;
-  border-radius:6px;
-  background:#103653;
-  color:#91dcfb;
-  font:700 11px system-ui;
-  cursor:pointer;
 }
 .hookchart-root .hookchart-live-metrics {
   display:flex;
@@ -1985,8 +1937,5 @@
   font:500 11px/1.45 system-ui;
 }
 @media (max-width:600px) {
-  .hookchart-root .hookchart-live-market-selector { gap:8px; padding:8px; }
-  .hookchart-root .hookchart-live-market-selector label { flex-basis:calc(50% - 6px); }
-  .hookchart-root .hookchart-live-market-selector .hookchart-live-refresh { width:100%; }
   .hookchart-root .hookchart-visual-preview-chart { flex-basis:300px; height:300px; }
 }
