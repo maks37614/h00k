@@ -35,6 +35,8 @@ export interface SiteNotificationSettings {
   /** Explicit user opt-in marker. v1 values cannot enable notifications. */
   optedIn: boolean;
   enabled: boolean;
+  /** Timestamp of last explicit enable, used to avoid backfilling earlier alerts. */
+  enabledAt: number;
   price: boolean;
   formations: boolean;
   impulses: boolean;
@@ -94,7 +96,7 @@ export interface SiteNotificationItem {
 }
 
 export const DEFAULT_SITE_NOTIFICATIONS: SiteNotificationSettings = {
-  optedIn: false, enabled: false,
+  optedIn: false, enabled: false, enabledAt: 0,
   price: false, formations: false, impulses: false, surveillance: false,
   levels: false, breakouts: false, density: false, round: false, openInterest: false,
   flow: false, liquidations: false, volume: false, early: false, quality: false,
@@ -131,6 +133,8 @@ export function normalizeSiteNotificationSettings(input: unknown): SiteNotificat
   const result: SiteNotificationSettings = {
     ...DEFAULT_SITE_NOTIFICATIONS, optedIn: consent,
     enabled: consent && d.enabled === true,
+    enabledAt: typeof d.enabledAt === 'number' && Number.isFinite(d.enabledAt) && d.enabledAt > 0
+      ? Math.floor(d.enabledAt) : 0,
     sound: d.sound === 'soft' || d.sound === 'pulse' ? d.sound : 'chime',
     browserPush: consent && d.browserPush === true,
     telegramEnabled: consent && d.telegramEnabled === true,
