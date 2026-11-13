@@ -1,11 +1,17 @@
 import { randomBytes, randomUUID, createHash, scrypt as scryptCallback, timingSafeEqual } from 'node:crypto';
-import { promisify } from 'node:util';
 import { readFileSync } from 'node:fs';
 import { Pool, type PoolClient } from 'pg';
 import nodemailer from 'nodemailer';
 import type { Request } from 'express';
 
-const scrypt = promisify(scryptCallback);
+function deriveScrypt(password: string, salt: Buffer, length: number): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    scryptCallback(password, salt, length, SCRYPT_OPTIONS, (error, derived) => {
+      if (error) reject(error);
+      else resolve(derived);
+    });
+  });
+}
 const SESSION_DAYS = 30;
 const HASH_LENGTH = 64;
 const SCRYPT_COST = 32768;
@@ -77,7 +83,7 @@ export function validatePassword(value: unknown) {
 
 export async function hashPassword(password: string): Promise<string> {
   const salt = randomBytes(16);
-  const output = await scrypt(password, salt, HASH_LENGTH, SCRYPT_OPTIONS) as Buffer;
+  const output = await deriveScrypt(password, salt, HASH_LENGTH);
   return ['scrypt', SCRYPT_COST, salt.toString('base64url'), output.toString('base64url')].join('$');
 }
 export async function checkPassword(password: string, encoded: string): Promise<boolean> {
@@ -87,7 +93,7 @@ export async function checkPassword(password: string, encoded: string): Promise<
     const salt = Buffer.from(parts[2], 'base64url');
     const digest = Buffer.from(parts[3], 'base64url');
     if (salt.length !== 16 || digest.length !== HASH_LENGTH) return false;
-    const candidate = await scrypt(password, salt, digest.length, SCRYPT_OPTIONS) as Buffer;
+    const candidate = await deriveScrypt(password, salt, digest.length);
     return timingSafeEqual(candidate, digest);
   } catch { return false; }
 }
