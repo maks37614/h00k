@@ -63,10 +63,12 @@ test('all requested bar-close intervals must be up to date',()=>{
  const planner=new CandleCloseCheckPlanner();
  const modes=config(['bar_close','bar_close_1h','bar_close_15m','realtime']);
  const now=15_000_000;
+ // At this timestamp the last CLOSED 15m candle started at 13.5m,
+ // not 14.4m (the latter is still the open candle).
  assert.equal(planner.hasLatestClosedBars(modes,{
-  '4h':14_400_000,'1h':14_400_000,'15m':13_500_000},now),false);
+  '4h':0,'1h':10_800_000,'15m':12_600_000},now),false);
  const processed={
-  '4h':14_400_000,'1h':14_400_000,'15m':14_400_000};
+  '4h':0,'1h':10_800_000,'15m':13_500_000};
  assert.equal(planner.hasLatestClosedBars(modes,processed,now),true);
  assert.equal(planner.hasLatestClosedBars(config(['realtime']),undefined,now),true);
 });
