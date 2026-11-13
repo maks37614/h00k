@@ -44,6 +44,18 @@ export const ProfileTerminalLinkingSettings: React.FC = () => {
       setMessage({ ok: false, text: 'Група MetaScalp має містити число від 001 до 500.' });
       return;
     }
+    if (draft.provider === 'metascalp' && (!Number.isInteger(meta.port) || meta.port < 1 || meta.port > 65535)) {
+      setMessage({ ok: false, text: 'Порт MetaScalp має бути цілим числом від 1 до 65535.' });
+      return;
+    }
+    if (draft.provider === 'tiger' && !normalizeTigerGroup(draft.tigerGroup)) {
+      setMessage({ ok: false, text: 'Група Tiger: вкажіть A–Z або 0–11.' });
+      return;
+    }
+    if (draft.provider === 'tiger' && (!Number.isInteger(draft.tigerPort) || draft.tigerPort < 1 || draft.tigerPort > 65535)) {
+      setMessage({ ok: false, text: 'Порт Tiger має бути цілим числом від 1 до 65535.' });
+      return;
+    }
     for (const id of GROUP_SOURCES) {
       const entry = draft.provider === 'tiger' ? draft.tigerGroups[id] : draft.metaScalpGroups[id];
       if (!entry) continue;
@@ -57,7 +69,11 @@ export const ProfileTerminalLinkingSettings: React.FC = () => {
     try {
       await updateProfileData({
         terminalLinkSettings: next,
-        metaScalpSettings: { ...meta, autoSwitchOnClick: next.switchOnChartOpen, binding: normalizeMetaScalpGroup(meta.binding) || '001' },
+        metaScalpSettings: { ...meta,
+          enabled: next.provider === 'metascalp' ? next.enabled : meta.enabled,
+          autoSwitchOnClick: next.switchOnChartOpen,
+          binding: normalizeMetaScalpGroup(meta.binding) || '001',
+        },
       });
       setDraft(next);
       setMessage({ ok: true, text: 'Налаштування лінковки збережено в профілі.' });
@@ -92,7 +108,8 @@ export const ProfileTerminalLinkingSettings: React.FC = () => {
     try {
       const result = await sendToSelectedTerminal(
         'BTCUSDT', 'binance', 'futures', 'screener',
-        normalizeTerminalLinkSettings(draft), meta
+        normalizeTerminalLinkSettings(draft),
+        { ...meta, enabled: draft.provider === 'metascalp' ? draft.enabled : meta.enabled }
       );
       setMessage({ ok: result.success, text: result.message + (result.copiedToClipboard ? ' · Скопійовано до буфера.' : '') });
     } catch (error) {
@@ -235,12 +252,14 @@ export const ProfileTerminalLinkingSettings: React.FC = () => {
               </span>
             </label>
             <label className="flex cursor-pointer items-start gap-2 text-xs text-slate-200">
-              <input type="checkbox" checked={draft.autoSignals} className="mt-0.5 accent-cyan-500"
+              <input type="checkbox" checked={draft.autoSignals && selected !== 'vataga'}
+                disabled={selected === 'vataga'} className="mt-0.5 accent-cyan-500"
                 onChange={e => change({ autoSignals: e.target.checked })}/>
               <span>Автоматично перемикати за новими сповіщеннями
                 <span className="mt-0.5 block text-[11px] text-slate-400">
                   Вимкнено за замовчуванням. Лише нові події з увімкненого Центру сповіщень, які мають тикер, біржу та ринок.
                   Може перемкнути стакан під час вашої роботи — використовуйте обережно.
+                  {selected === 'vataga' && ' Автоматизація Vataga недоступна до реалізації прямого API.'}
                 </span>
               </span>
             </label>
