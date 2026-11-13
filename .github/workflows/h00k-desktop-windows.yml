@@ -26,8 +26,24 @@ jobs:
         run: powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -File win-agent.ps1 -Once
       - name: Build Windows installer
         run: npm run dist
+      - name: Smoke-test NSIS installer and shortcut on real Windows
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem dist -Filter '*.exe' | Select-Object -First 1
+          if (-not $installer) { throw 'Windows installer not found' }
+          & ./scripts/smoke-installer.ps1 -Installer $installer.FullName
+      - name: Generate SHA-256 checksum
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem dist -Filter '*.exe' | Select-Object -First 1
+          if (-not $installer) { throw 'Installer not found' }
+          $hash = (Get-FileHash -LiteralPath $installer.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  $($installer.Name)" | Set-Content -LiteralPath 'dist/SHA256SUMS.txt' -Encoding ascii
+          Write-Host "SHA256 $($installer.Name): $hash"
       - uses: actions/upload-artifact@v4
         with:
           name: h00k-desktop-windows
-          path: desktop/dist/*.exe
+          path: |
+            desktop/dist/*.exe
+            desktop/dist/SHA256SUMS.txt
           if-no-files-found: error
