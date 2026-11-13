@@ -3,6 +3,7 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { getUserTelegram } from './userTelegram';
 import { sendTelegramMessage, editTelegramMessage } from './telegramService';
+import { telegramDispatchQueue } from './telegramQueue';
 import { formatTelegramMessages } from './telegramFormat';
 
 export interface TelegramDelivery {
@@ -96,7 +97,10 @@ async function deliver(record: TelegramDelivery): Promise<DeliveryResult> {
       record.error = 'Telegram відключено або одержувач змінився. Старе повідомлення не перенаправлено.';
     } else {
       record.attempts++;
-      const result = await sendTelegramMessage(record.text, { botToken: target.botToken, chatId: target.chatId, startPart: record.messageIds.length });
+      const result = await telegramDispatchQueue.schedule(record.botId, record.chatId,
+        () => sendTelegramMessage(record.text, {
+          botToken: target.botToken, chatId: target.chatId, startPart: record.messageIds.length,
+        }));
       record.messageIds.push(...result.messageIds);
       if (result.success) {
         record.status = 'sent';
