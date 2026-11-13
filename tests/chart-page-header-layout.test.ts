@@ -31,7 +31,7 @@ test('chart headers put price directly after coin name and remove the redundant 
     assert.ok(exchange > price && pattern > exchange, 'exchange stays in the top row and pattern follows');
     assert.doesNotMatch(header, /USDT-M/);
     assert.match(header, /grid-cols-\[minmax\(0,1fr\)_auto\]/);
-    assert.match(header, /col-span-2 flex min-w-0 flex-wrap items-center/);
+    assert.match(header, /col-start-1 row-start-1 flex min-w-0 flex-wrap items-center/);
     assert.match(header, /col-start-1 row-start-2 min-w-0 max-w-full/);
     assert.match(header, /col-start-2 row-start-2 flex shrink-0/);
     assert.match(header, /sm:flex sm:justify-between/);
@@ -45,7 +45,10 @@ test('existing chart actions remain right-aligned and retain their handlers', ()
     assert.match(header, /onOpenTelegramModal/);
     assert.match(header, /onSendMetaScalp\(coin\)/);
     assert.match(header, /onClick=\{onClose\}/);
-    assert.match(header, /className="sm:hidden">Назад<\/span>/);
+    assert.match(header, /className="hidden sm:inline">Назад<\/span>/);
+    assert.match(header, /col-start-2 row-start-1 inline-flex shrink-0/);
+    assert.match(header, /onClick=\{\(\) => void handleCopySymbol\(\)\}/);
+    assert.match(header, /aria-label=\{\`Скопіювати \$\{coin.baseAsset\}\/\$\{coin.quoteAsset\}\`\}/);
     assert.match(header, /justify-self-end/);
   }
   assert.match(standard, /onFormationChange\(next\)/);

@@ -1,4 +1,5 @@
 import { normalizeExchangeSymbol } from '../utils/marketSymbols';
+import { copyTextToClipboard } from '../utils/copyTextToClipboard';
 import { useTelegram } from '../context/TelegramContext';
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
@@ -23,6 +24,8 @@ import {
   LogIn,
   ChevronDown,
   ChevronUp,
+  Copy,
+  Check,
 } from 'lucide-react';
 import { ScannedCoin, DetectedFormation, Kline, FormationAIAnalysis, Timeframe, ArchivedFormation } from '../types';
 import { TradingViewChart } from './TradingViewChart';
@@ -106,6 +109,18 @@ export const FormationDetailsModal: React.FC<FormationDetailsModalProps> = ({
   const [archiveToastMsg, setArchiveToastMsg] = useState<string | null>(null);
 
   const chartSectionRef = useRef<HTMLDivElement>(null);
+  const [copyStatus, setCopyStatus] = useState<'idle' | 'copied' | 'failed'>('idle');
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+  }, []);
+  const handleCopySymbol = async () => {
+    const success = await copyTextToClipboard(`${coin.baseAsset}/${coin.quoteAsset}`);
+    if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+    setCopyStatus(success ? 'copied' : 'failed');
+    copyTimerRef.current = setTimeout(() => setCopyStatus('idle'), 2000);
+  };
+
 
   // The standalone chart uses normal document scrolling and browser history.
   // Preserve the original scroll lock only for legacy modal callers.
@@ -939,7 +954,7 @@ export const FormationDetailsModal: React.FC<FormationDetailsModalProps> = ({
         {/* Compact chart header: title/price/exchange above, pattern and original actions beneath on phones. */}
         <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-1.5 border-b border-slate-800 bg-slate-950/80 px-3 py-2.5 sticky top-0 z-20 sm:flex sm:justify-between sm:gap-3 sm:px-6 sm:py-4">
           <div className="contents sm:flex sm:min-w-0 sm:flex-1 sm:flex-wrap sm:items-center sm:gap-2">
-            <div className="col-span-2 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 sm:gap-2">
+            <div className="col-start-1 row-start-1 flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 sm:gap-2">
               {/* Keep the live-quote status visible without using a separate header row. */}
               <div
                 role="status"
@@ -962,7 +977,14 @@ export const FormationDetailsModal: React.FC<FormationDetailsModalProps> = ({
                 {liveStatus.mode === 'ws' && <span aria-hidden="true" className="text-[10px] leading-none">⚡</span>}
               </div>
               <h2 className="shrink-0 whitespace-nowrap text-base font-extrabold tracking-wide text-white font-mono sm:text-xl">
-                {coin.baseAsset}/{coin.quoteAsset}
+                <button type="button" onClick={() => void handleCopySymbol()}
+                  aria-label={`Скопіювати ${coin.baseAsset}/${coin.quoteAsset}`}
+                  title={copyStatus === 'copied' ? 'Скопійовано' : 'Копіювати назву монети'}
+                  className="inline-flex items-center gap-1 rounded cursor-copy transition-colors hover:text-cyan-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400">
+                  {coin.baseAsset}/{coin.quoteAsset}
+                  {copyStatus === 'copied' ? <Check aria-hidden="true" className="h-3 w-3 text-emerald-400" /> : <Copy aria-hidden="true" className="h-3 w-3 text-slate-500" />}
+                </button>
+                <span className="sr-only" role="status" aria-live="polite">{copyStatus === 'copied' ? 'Назву монети скопійовано' : copyStatus === 'failed' ? 'Не вдалося скопіювати назву монети' : ''}</span>
               </h2>
               <div className="inline-flex shrink-0 items-baseline gap-1 whitespace-nowrap" aria-label="Поточна ціна та зміна за 24 години">
                 <span className="font-mono text-[11px] font-bold text-white sm:text-sm">${formatPrice(livePrice)}</span>
@@ -1062,16 +1084,12 @@ export const FormationDetailsModal: React.FC<FormationDetailsModalProps> = ({
               </button>
             )}
 
-            {/* Return to Main Menu button */}
-            <button
-              onClick={onClose}
-              className="flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-4 py-1.5 sm:py-2 rounded-xl bg-cyan-600/20 hover:bg-cyan-600/30 text-cyan-300 hover:text-cyan-100 border border-cyan-500/40 text-xs sm:text-sm font-semibold transition-all active:scale-95 shadow-sm whitespace-nowrap cursor-pointer"
-              title="Повернутися в головне меню"
-            >
-              <ArrowLeft className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-              <span className="sm:hidden">Назад</span>
-            </button>
           </div>
+          <button type="button" onClick={onClose} aria-label="Назад до головного меню" title="Повернутися в головне меню"
+            className="col-start-2 row-start-1 inline-flex shrink-0 items-center justify-center justify-self-end gap-1.5 rounded-xl border border-cyan-500/40 bg-cyan-600/20 px-2.5 py-2 text-xs font-semibold text-cyan-300 shadow-sm transition-all hover:bg-cyan-600/30 active:scale-95 sm:px-4">
+            <ArrowLeft className="h-4 w-4" />
+            <span className="hidden sm:inline">Назад</span>
+          </button>
         </div>
 
         {/* Modal Body */}
