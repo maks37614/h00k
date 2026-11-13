@@ -161,7 +161,10 @@ export function installPostgresIdentityRoutes(app: Express) {
     res.json({ success: true, revokedCurrent });
   }));
   app.patch('/api/account/profile', requirePostgresSession, wrap(async (req, res) => {
-    const account = await updateAccountProfile(res.locals.userId, req.body);
+    // The ownership middleware injects userId for legacy endpoints; it must not
+    // become an editable profile field. Only authenticated session UID is trusted.
+    const { userId: _authenticatedOwner, ...updates } = req.body || {};
+    const account = await updateAccountProfile(res.locals.userId, updates);
     res.json({ success: true, ...account });
   }));
   app.get('/api/account/archive', requirePostgresSession, wrap(async (_req, res) => {
