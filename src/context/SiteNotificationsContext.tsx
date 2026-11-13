@@ -67,6 +67,9 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
   const soundEnabledRef = useRef(preferences.soundAlertsEnabled);
   soundEnabledRef.current = preferences.soundAlertsEnabled;
   const [error, setError] = useState<string | null>(null);
+  // Profile snapshots can arrive out of order while toggles are being saved.
+  const pendingSettingsWrites = useRef(0);
+  const pendingSoundWrites = useRef(0);
 
   useEffect(() => {
     setSettingsState({ uid, settings: loadSettings(uid, profile?.uid === uid ? profile.siteNotificationSettings : undefined) });
@@ -75,12 +78,12 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
   }, [uid]);
 
   useEffect(() => {
-    if (profile?.uid !== uid || typeof profile.soundAlertsEnabled !== 'boolean') return;
+    if (profile?.uid !== uid || pendingSoundWrites.current > 0 || typeof profile.soundAlertsEnabled !== 'boolean') return;
     updatePreferences({ soundAlertsEnabled: profile.soundAlertsEnabled });
   }, [uid, profile?.soundAlertsEnabled, updatePreferences]);
 
   useEffect(() => {
-    if (profile?.uid !== uid || !profile.siteNotificationSettings) return;
+    if (profile?.uid !== uid || pendingSettingsWrites.current > 0 || !profile.siteNotificationSettings) return;
     const remote = normalizeSiteNotificationSettings(profile.siteNotificationSettings);
     settingsRef.current = remote;
     setSettingsState({ uid, settings: remote });
@@ -103,17 +106,22 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
     try { localStorage.setItem(siteNotificationSettingsKey(currentUid), JSON.stringify(next)); } catch {}
     setError(null);
     if (user?.uid === currentUid) {
+      pendingSettingsWrites.current += 1;
       try { await updateProfileData({ siteNotificationSettings: next }); }
-      catch { setError('Не вдалося синхронізувати налаштування з профілем. Вони збережені на цьому пристрої.'); }
+      catch { if (uidRef.current === currentUid) setError('Не вдалося синхронізувати налаштування з профілем. Вони збережені на цьому пристрої.'); }
+      finally { pendingSettingsWrites.current -= 1; }
     }
   }, [user?.uid, updateProfileData]);
 
   const setSoundEnabled = useCallback(async (enabled: boolean) => {
     updatePreferences({ soundAlertsEnabled: enabled });
     setError(null);
-    if (user?.uid === uidRef.current) {
+    const currentUid = uidRef.current;
+    if (user?.uid === currentUid) {
+      pendingSoundWrites.current += 1;
       try { await updateProfileData({ soundAlertsEnabled: enabled }); }
-      catch { setError('Не вдалося зберегти налаштування звуку в профілі.'); }
+      catch { if (uidRef.current === currentUid) setError('Не вдалося зберегти налаштування звуку в профілі.'); }
+      finally { pendingSoundWrites.current -= 1; }
     }
   }, [user?.uid, updatePreferences, updateProfileData]);
 
