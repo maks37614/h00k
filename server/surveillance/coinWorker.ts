@@ -1,5 +1,5 @@
 import { ExchangeId, MarketType, SurveillanceCoin, Timeframe } from '../../src/types';
-import { fetchSingleExchangeOI } from '../marketService';
+import { sharedOiPoller } from './sharedOiPoller';
 import { notificationRouter } from '../notificationRouter';
 import { createSetupAlertsGroup, getUserLanguage } from '../alertService';
 import type { RawDepthDelta, RawTradeEvent } from './exchangeStream';
@@ -68,8 +68,7 @@ export class CoinWorker {
 
   private isDestroyed = false;
   private slowAnalysisInterval: NodeJS.Timeout | null = null;
-  private oiFetchInterval: NodeJS.Timeout | null = null;
-  private oiInitialTimer: NodeJS.Timeout | null = null;
+  private releaseOiSubscription: (() => void) | null = null;
   private lastWsOiAt = 0;
 
   public currentPrice = 0;
@@ -202,43 +201,24 @@ export class CoinWorker {
       void this.runDeepAnalysis().catch((err) => console.error(`[CoinWorker ${this.coin.symbol}] Analysis failed:`, err));
     }, 6000);
 
-    // 2. One live REST OI sample per instrument per minute across all users.
-    // Bybit continues receiving its fresh OI from the ticker WebSocket every
-    // 15 seconds; this polling loop is only its fallback when WS is stale.
-    // Spread different symbols across 10s on restart to avoid a REST burst,
-    // but give users watching the same symbol a deterministic shared phase.
-    const key = `${this.coin.exchange}:${this.coin.symbol}`;
-    const phase = [...key].reduce((sum, ch) => (sum * 31 + ch.charCodeAt(0)) % 10_000, 0);
-    this.oiInitialTimer = setTimeout(() => {
-      this.oiInitialTimer = null;
-      if (this.isDestroyed) return;
-      void this.fetchOpenInterest();
-      this.oiFetchInterval = setInterval(() => {
-        if (!this.isDestroyed) void this.fetchOpenInterest();
-      }, 60_000);
-    }, phase);
-  }
-
-  private async fetchOpenInterest() {
-    // If a recent verified Bybit ticker contains OI, there is no reason
-    // to request historical OI from either exchange in this 15s cycle.
-    if (process.env.H00K_BYBIT_OI_WS !== '0' &&
-        this.coin.exchange === 'bybit' && this.coin.marketType === 'futures' &&
-        Date.now() - this.lastWsOiAt < 30_000) return;
-    try {
-      const started = Date.now();
-      const oi = await fetchSingleExchangeOI(
-        this.coin.exchange, this.coin.symbol, this.coin.baseAsset, this.currentPrice || 1);
-      if (this.isDestroyed) return;
-      // A REST request started during an outage must not overwrite a newer,
-      // already accepted Bybit WS sample when the connection recovers.
-      if (process.env.H00K_BYBIT_OI_WS !== '0' &&
-          this.coin.exchange === 'bybit' && this.coin.marketType === 'futures' &&
-          this.lastWsOiAt >= started) return;
-      if (oi && oi.valueUsd > 0) {
+    // 2. All owners of one instrument now share a single 60s REST fallback
+    // schedule. Exchange OI observations and personal baselines remain separate.
+    this.releaseOiSubscription = sharedOiPoller.subscribe({
+      exchange: this.coin.exchange, marketType: this.coin.marketType,
+      symbol: this.coin.symbol, baseAsset: this.coin.baseAsset,
+    }, {
+      needsRest: () => !this.isDestroyed && this.coin.isActive &&
+        !(process.env.H00K_BYBIT_OI_WS !== '0' && this.coin.exchange === 'bybit'
+          && Date.now() - this.lastWsOiAt < 30_000),
+      currentPrice: () => this.currentPrice,
+      onSample: (oi, startedAt) => {
+        if (this.isDestroyed || !this.coin.isActive) return;
+        // Do not overwrite fresh Bybit WS OI with a request begun before it.
+        if (this.coin.exchange === 'bybit' && process.env.H00K_BYBIT_OI_WS !== '0'
+            && this.lastWsOiAt >= startedAt) return;
         this.volumeOIEngine.recordOI(oi.valueUsd, oi.amountCoins, this.currentPrice);
-      }
-    } catch (e) {}
+      },
+    });
   }
 
   public async runDeepAnalysis() {
@@ -622,14 +602,8 @@ export class CoinWorker {
       clearInterval(this.slowAnalysisInterval);
       this.slowAnalysisInterval = null;
     }
-    if (this.oiInitialTimer) {
-      clearTimeout(this.oiInitialTimer);
-      this.oiInitialTimer = null;
-    }
-    if (this.oiFetchInterval) {
-      clearInterval(this.oiFetchInterval);
-      this.oiFetchInterval = null;
-    }
+    this.releaseOiSubscription?.();
+    this.releaseOiSubscription = null;
     this.streamClient.destroy();
     this.candleFeed.destroy();
     this.orderBookEngine.clear();
