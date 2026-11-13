@@ -62,7 +62,7 @@ export function isUserNotificationCategoryAllowed(uid: string, params: ServerNot
   const cfg = getUserSiteNotificationSettings(uid);
   const kind = categoryForServerEvent(params.eventType, params.source);
   return notificationEnabled(cfg, kind)
-    && matchesNotificationScope(cfg, params, [],
+    && matchesNotificationScope(cfg, params, cfg.favoriteIds,
       { timeframeIndependent: kind === 'price' });
 }
 export function isUserTelegramCategoryAllowed(uid: string, params: ServerNotificationContext): boolean {

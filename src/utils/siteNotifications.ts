@@ -88,6 +88,8 @@ export interface SiteNotificationSettings {
   scopeTimeframe: 'all' | '1m' | '5m' | '15m' | '1h' | '4h' | '1d';
   scopeSymbols: string;
   onlyFavorites: boolean;
+  /** Canonical exchange:market:symbol keys also enforced by the server. */
+  favoriteIds: string[];
   levelDistancePct: number;
   roundDistancePct: number;
   oiThresholdPct: number;
@@ -125,7 +127,7 @@ export const DEFAULT_SITE_NOTIFICATIONS: SiteNotificationSettings = {
   impulseSymbol: '', impulseThresholdPct: 2, impulseWindowMinutes: 5,
   impulseExchange: 'binance', impulseMarket: 'futures',
   scopeExchange: 'all', scopeMarket: 'all', scopeTimeframe: 'all',
-  scopeSymbols: '', onlyFavorites: false,
+  scopeSymbols: '', onlyFavorites: false, favoriteIds: [],
   levelDistancePct: .3, roundDistancePct: .5,
   oiThresholdPct: 3, flowThresholdPct: 5, minBreakoutRvol: 2,
   liquidationMinUsd: 100_000, minQualityScore: 88,
@@ -142,6 +144,24 @@ export function normalizeSymbolList(input: unknown): string {
   return String(input ?? '').split(/[,\s;]+/).map(normalizeImpulseSymbol)
     .filter(Boolean).filter((v, i, a) => a.indexOf(v) === i).slice(0, 40).join(', ');
 }
+/** Never trust arbitrary browser payloads when persisting server-side favorite scopes. */
+export function normalizeNotificationFavoriteIds(input: unknown): string[] {
+  if (!Array.isArray(input)) return [];
+  const keys: string[] = [];
+  for (const item of input.slice(0, 300)) {
+    if (typeof item !== 'string') continue;
+    const key = item.trim().toLowerCase();
+    const match = /^(binance|bybit):(futures|spot):([a-z0-9]{2,40})$/.exec(key);
+    if (match) keys.push(match[1] + ':' + match[2] + ':' + match[3].toUpperCase());
+    else if (/^[a-z0-9]{2,40}$/.test(key)) keys.push('binance:futures:' + key.toUpperCase());
+    else {
+      const legacy = /^(binance|bybit):([a-z0-9]{2,40})$/.exec(key);
+      if (legacy) keys.push(legacy[1] + ':futures:' + legacy[2].toUpperCase());
+    }
+  }
+  return [...new Set(keys)].slice(0, 150);
+}
+
 function bounded(value: unknown, fallback: number, min: number, max: number): number {
   if (value === null || value === undefined || value === '') return fallback;
   const n = Number(value);
@@ -176,6 +196,7 @@ export function normalizeSiteNotificationSettings(input: unknown): SiteNotificat
     scopeTimeframe: ['1m','5m','15m','1h','4h','1d'].includes(String(d.scopeTimeframe)) ? d.scopeTimeframe as SiteNotificationSettings['scopeTimeframe'] : 'all',
     scopeSymbols: normalizeSymbolList(d.scopeSymbols),
     onlyFavorites: d.onlyFavorites === true,
+    favoriteIds: normalizeNotificationFavoriteIds(d.favoriteIds),
     levelDistancePct: bounded(d.levelDistancePct, .3, .01, 5),
     roundDistancePct: bounded(d.roundDistancePct, .5, .01, 5),
     oiThresholdPct: bounded(d.oiThresholdPct, 3, .1, 50),

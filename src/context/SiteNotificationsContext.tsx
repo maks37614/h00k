@@ -8,7 +8,7 @@ import {
   DEFAULT_SITE_NOTIFICATIONS, ImpulseTracker, normalizeSiteNotificationSettings,
   notificationEnabled, readNotificationItems, siteNotificationSettingsKey, siteNotificationStorageKey,
   siteNotificationClearedAtKey, siteNotificationSeenKey, siteNotificationMuteKey,
-  applyLocalNotificationMute,
+  applyLocalNotificationMute, normalizeNotificationFavoriteIds,
   type SiteNotificationItem, type SiteNotificationKind, type SiteNotificationSettings, type SiteNotificationSound,
 } from '../utils/siteNotifications';
 import { playSiteNotificationSound, stopCustomNotificationSound } from '../utils/domSound';
@@ -219,6 +219,9 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
     const disabling = patch.enabled === false;
     const enabling = patch.enabled === true;
     const next = normalizeSiteNotificationSettings({ ...settingsRef.current, ...patch,
+      // Enabling Favorites must snapshot the real per-user watchlist immediately.
+      ...(patch.onlyFavorites === true && patch.favoriteIds === undefined
+        ? { favoriteIds: normalizeNotificationFavoriteIds(favoritesRef.current) } : {}),
       optedIn: settingsRef.current.optedIn || enabling,
       enabledAt: enabling && !settingsRef.current.enabled
         ? Date.now() : settingsRef.current.enabledAt });
@@ -343,8 +346,15 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
   }, [replaceItems]);
 
   const setFavoriteIds = useCallback((favorites: readonly string[]) => {
-    favoritesRef.current = [...favorites];
-  }, []);
+    const normalized = normalizeNotificationFavoriteIds(favorites);
+    favoritesRef.current = normalized;
+    // Sync only when the user asked the server to restrict alerts to favorites.
+    // A changed list is persisted with their own notification preferences, never
+    // broadcast or shared with other accounts. No new market subscriptions.
+    if (uidRef.current === 'guest' || !settingsRef.current.onlyFavorites) return;
+    if (JSON.stringify(settingsRef.current.favoriteIds) === JSON.stringify(normalized)) return;
+    void updateSettings({ favoriteIds: normalized });
+  }, [updateSettings]);
 
   const processScan = useCallback((coins: readonly ScannedCoin[], favorites: readonly string[] = []) => {
     const mutedAt = locallyMutedAt(uidRef.current);
