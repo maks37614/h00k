@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { FormationArchiveIcon } from './FormationArchiveIcon';
 import { SiteNotificationBell } from './SiteNotificationBell';
+import type { SiteNotificationItem } from '../utils/siteNotifications';
 import { MetaScalpSettings } from '../utils/metaScalpService';
 import type { TerminalLinkSettings } from '../utils/terminalLinkService';
 import { useAuth } from '../context/AuthContext';
@@ -49,6 +50,8 @@ interface HeaderProps {
   onOpenAuth?: () => void;
   onOpenProfile?: () => void;
   onOpenNotificationSettings?: () => void;
+  onLinkNotification?: (item: SiteNotificationItem) => void;
+  canLinkNotification?: (item: SiteNotificationItem) => boolean;
   activePage: ActivePageType;
   onPageChange: (page: ActivePageType) => void;
 }
@@ -75,6 +78,8 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenAuth,
   onOpenProfile,
   onOpenNotificationSettings,
+  onLinkNotification,
+  canLinkNotification,
   activePage,
   onPageChange,
 }) => {
@@ -270,7 +275,7 @@ export const Header: React.FC<HeaderProps> = ({
              
             </button>
 
-            <SiteNotificationBell onOpenSettings={onOpenNotificationSettings} />
+            <SiteNotificationBell onOpenSettings={onOpenNotificationSettings} onLinkNotification={onLinkNotification} canLinkNotification={canLinkNotification} />
 
             <button
               id="open-telegram-btn"
