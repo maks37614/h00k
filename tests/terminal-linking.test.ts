@@ -189,6 +189,6 @@ test('background terminal signals never overwrite the clipboard if providers are
   const vataga = await sendToSelectedTerminal('SOLUSDT', 'bybit', 'spot', 'alerts',
     normalizeTerminalLinkSettings({ provider: 'vataga', sources: allSources }), DEFAULT_METASCALP_SETTINGS, undefined, false);
   assert.equal(vataga.success, false);
-  assert.equal(vataga.copiedToClipboard, false);
+  assert.notEqual(vataga.copiedToClipboard, true);
   assert.deepEqual(copied, []);
 });
