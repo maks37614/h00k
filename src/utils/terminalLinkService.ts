@@ -113,6 +113,13 @@ export function notificationTerminalSource(kind: string): TerminalLinkSource | n
   return 'alerts';
 }
 
+/** Reject historical, delayed and future-dated notifications on automatic linking. */
+export function isFreshTerminalNotification(timestamp: number, sessionStart: number, now: number): boolean {
+  return Number.isFinite(timestamp) && Number.isFinite(sessionStart) && Number.isFinite(now)
+    && timestamp >= sessionStart && timestamp <= now + 1000
+    && now - timestamp <= 12000;
+}
+
 export function terminalLabel(provider: TerminalProvider): string {
   return { metascalp: 'MetaScalp', tiger: 'Tiger', vataga: 'Vataga', none: 'Вимкнено' }[provider];
 }
