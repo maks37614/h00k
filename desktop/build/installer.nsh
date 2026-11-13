@@ -16,6 +16,8 @@ Var /GLOBAL h00kShortcutWanted
   StrCpy $h00kShortcutWanted "1"
 !macroend
 
+!ifndef BUILD_UNINSTALLER
+
 !macro customPageAfterChangeDir
   Page custom h00kShortcutPageCreate h00kShortcutPageLeave
 !macroend
@@ -44,6 +46,8 @@ FunctionEnd
 Function h00kShortcutPageLeave
   ${NSD_GetState} $h00kShortcutCheck $h00kShortcutWanted
 FunctionEnd
+
+!endif ; BUILD_UNINSTALLER
 
 !macro customInstall
   ; electron-builder creates it, then we remove it ONLY when unchecked.
