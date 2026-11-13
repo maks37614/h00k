@@ -1,6 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
+import type { AddressInfo } from 'node:net';
+import express from 'express';
+import { installPostgresIdentityRoutes } from '../server/pgIdentityRoutes';
 import {
   initializeIdentity, identityPool, hashPassword, checkCredentials, createSession,
   currentSession, readAccount, updateAccountProfile, saveArchive, loadArchive, deleteArchive,
@@ -45,6 +48,55 @@ test('real PostgreSQL: verify email, login, isolate data, revoke session and res
       assert.equal(typeof current?.csrf, 'string');
       await updateAccountProfile(uidA, { displayName: 'Alpha Scalper', defaultExchange: 'binance' });
       assert.equal((await readAccount(uidA))?.profile?.defaultExchange, 'binance');
+
+      // Full HTTP route: regression for requirePostgresSession injecting userId
+      // into the PATCH body, which previously made every profile save fail.
+      const webApp = express();
+      webApp.use(express.json());
+      installPostgresIdentityRoutes(webApp);
+      const listener = await new Promise<ReturnType<typeof webApp.listen>>((resolve, reject) => {
+        const server = webApp.listen(0, '127.0.0.1', () => resolve(server));
+        server.once('error', reject);
+      });
+      try {
+        const origin = 'http://127.0.0.1:' + (listener.address() as AddressInfo).port;
+        const headers = {
+          Origin: origin,
+          Cookie: COOKIE_NAME + '=' + session.token,
+          'Content-Type': 'application/json',
+          'X-CSRF-Token': current!.csrf,
+        };
+        const saved = await fetch(origin + '/api/account/profile', {
+          method: 'PATCH', headers,
+          body: JSON.stringify({ displayName: 'Profile Saved', defaultTimeframe: '15m' }),
+        });
+        assert.equal(saved.status, 200, await saved.text());
+        const result = await readAccount(uidA);
+        assert.equal(result?.user.displayName, 'Profile Saved');
+        assert.equal(result?.profile.defaultTimeframe, '15m');
+
+        const csrfRejected = await fetch(origin + '/api/account/profile', {
+          method: 'PATCH', headers: { ...headers, 'X-CSRF-Token': 'invalid' },
+          body: JSON.stringify({ defaultExchange: 'bybit' }),
+        });
+        assert.equal(csrfRejected.status, 403);
+
+        const ownerRejected = await fetch(origin + '/api/account/profile', {
+          method: 'PATCH', headers,
+          body: JSON.stringify({ userId: uidB, defaultExchange: 'bybit' }),
+        });
+        assert.equal(ownerRejected.status, 403);
+
+        const archiveOwned = await fetch(origin + '/api/account/archive/arch_route', {
+          method: 'PUT', headers,
+          body: JSON.stringify({ id: 'arch_route', userId: uidA, savedAtTimestamp: 1720000001 }),
+        });
+        assert.equal(archiveOwned.status, 200, await archiveOwned.text());
+        assert.equal((await loadArchive(uidB)).length, 0);
+        await deleteArchive(uidA, 'arch_route');
+      } finally {
+        await new Promise<void>((resolve, reject) => listener.close(error => error ? reject(error) : resolve()));
+      }
       await saveArchive(uidA, 'arch_one', { id: 'arch_one', savedAtTimestamp: 1720000000 });
       assert.equal((await loadArchive(uidA)).length, 1);
       assert.equal((await loadArchive(uidB)).length, 0);
