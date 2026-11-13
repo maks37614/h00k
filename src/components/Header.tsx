@@ -3,8 +3,6 @@ import { MonitoringMenuIcon } from './MonitoringIcon';
 import { ScreenerIcon, FormationsIcon, TerminalIcon } from './PageIcons';
 import {
   RefreshCw,
-  Bell,
-  BellOff,
   Bookmark,
   BookOpen,
   Zap,
@@ -18,6 +16,7 @@ import {
   Maximize2,
 } from 'lucide-react';
 import { FormationArchiveIcon } from './FormationArchiveIcon';
+import { SiteNotificationBell } from './SiteNotificationBell';
 import { MetaScalpSettings } from '../utils/metaScalpService';
 import { useAuth } from '../context/AuthContext';
 import { ActivePageType } from '../types';
@@ -32,8 +31,6 @@ interface HeaderProps {
   bearishCount: number;
   watchlistCount: number;
   archiveCount?: number;
-  soundEnabled: boolean;
-  onToggleSound: () => void;
   onRefresh: () => void;
   onOpenWatchlist: () => void;
   onOpenArchive?: () => void;
@@ -46,6 +43,7 @@ interface HeaderProps {
   onOpenTelegramAlerts: () => void;
   onOpenAuth?: () => void;
   onOpenProfile?: () => void;
+  onOpenNotificationSettings?: () => void;
   activePage: ActivePageType;
   onPageChange: (page: ActivePageType) => void;
 }
@@ -58,8 +56,6 @@ export const Header: React.FC<HeaderProps> = ({
   bearishCount,
   watchlistCount,
   archiveCount = 0,
-  soundEnabled,
-  onToggleSound,
   onRefresh,
   onOpenWatchlist,
   onOpenArchive,
@@ -72,6 +68,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenTelegramAlerts,
   onOpenAuth,
   onOpenProfile,
+  onOpenNotificationSettings,
   activePage,
   onPageChange,
 }) => {
@@ -258,18 +255,7 @@ export const Header: React.FC<HeaderProps> = ({
              
             </button>
 
-            <button
-              id="toggle-sound-btn"
-              onClick={onToggleSound}
-              title={soundEnabled ? 'Звук сповіщень увімкнено' : 'Звук сповіщень вимкнено'}
-              className={`p-1.5 sm:p-2 rounded-lg text-xs border transition-colors ${
-                soundEnabled
-                  ? 'bg-slate-900 border-slate-700 text-cyan-400 hover:bg-slate-800'
-                  : 'bg-slate-900/50 border-slate-800 text-slate-500 hover:text-slate-400'
-              }`}
-            >
-              {soundEnabled ? <Bell className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> : <BellOff className="w-3.5 h-3.5 sm:w-4 sm:h-4" />}
-            </button>
+            <SiteNotificationBell onOpenSettings={onOpenNotificationSettings} />
 
             <button
               id="open-telegram-btn"
