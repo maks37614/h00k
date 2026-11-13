@@ -16,6 +16,8 @@ test('REST fallback never rolls back a newer WebSocket candle or its volume', ()
     'new stream message after REST request started always wins');
   assert.equal(shouldApplyLiveFallbackKline(bar(now, 10), bar(now, 40), 1000, 0, false), false,
     'historical HTTP replay must not reduce the cumulative candle volume');
+  assert.equal(shouldApplyLiveFallbackKline(bar(now, 40, 99), bar(now, 40, 100), 1000, 0, false), false,
+    'equal cumulative volume cannot undo a newer trade price');
   assert.equal(shouldApplyLiveFallbackKline(bar(now, 41), bar(now, 40), 1000, 1200, false), true,
     'HTTP remains usable as backup while WS is disconnected');
   assert.equal(shouldApplyLiveFallbackKline(bar(now+60, 2), bar(now, 40), 1000, 1200, true), true,
