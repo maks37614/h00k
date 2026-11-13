@@ -97,9 +97,56 @@ export const SurveillanceProvider: React.FC<{ children: React.ReactNode }> = ({ 
     fetchCoins();
     const interval = setInterval(() => {
       fetchCoins();
-    }, 6000);
+    }, 60000);
     return () => clearInterval(interval);
   }, [fetchCoins]);
+
+  // Authenticated fetch-stream SSE because EventSource cannot attach Firebase
+  // Authorization headers. Polling every 60s remains the offline fallback.
+  useEffect(() => {
+    if (!user || (user as { isLocalUser?: boolean }).isLocalUser) return;
+    let stopped = false;
+    let controller: AbortController | undefined;
+    let retry: ReturnType<typeof setTimeout> | undefined;
+    let attempt = 0;
+    let lastFetch = 0;
+    const connect = async () => {
+      if (stopped) return;
+      controller = new AbortController();
+      try {
+        const response = await apiFetch('/api/surveillance/stream', {
+          signal: controller.signal, headers: { Accept: 'text/event-stream' },
+        });
+        if (!response.ok || !response.body) throw new Error('Live stream unavailable');
+        attempt = 0;
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        while (!stopped) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true }).replace(/\r/g, '');
+          if (buffer.length > 8192) { buffer = ''; continue; }
+          let boundary = buffer.indexOf('\n\n');
+          while (boundary >= 0) {
+            const frame = buffer.slice(0, boundary);
+            buffer = buffer.slice(boundary + 2);
+            if (frame.startsWith('event: changed\n')) {
+              if (Date.now() - lastFetch >= 12000) {
+                lastFetch = Date.now();
+                void fetchCoins();
+              }
+            }
+            boundary = buffer.indexOf('\n\n');
+          }
+        }
+      } catch { /* Polling fallback remains active. */ }
+      finally { controller?.abort(); }
+      if (!stopped) retry = setTimeout(connect, Math.min(60000, 3000 * 2 ** Math.min(attempt++, 5)));
+    };
+    void connect();
+    return () => { stopped = true; controller?.abort(); if (retry) clearTimeout(retry); };
+  }, [user?.uid, fetchCoins]);
 
   const mutate = async (userId: string, url: string, options: RequestInit) => {
     const finish = requestGuard.current.beginWrite(userId);

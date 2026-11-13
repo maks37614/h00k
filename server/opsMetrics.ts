@@ -12,6 +12,7 @@ import { RuntimeMetrics } from './runtimeMetrics';
 import { publicQuoteResponseCache } from './marketQuoteResponse';
 import { cronManager } from './cronService';
 import { surveillanceManager } from './surveillance/surveillanceManager';
+import { surveillanceStreamStats } from './surveillanceEvents';
 
 function authorized(req: Request): boolean {
   const secret = process.env.H00K_OPS_TOKEN;
@@ -50,6 +51,7 @@ export function installOpsMetrics(app: Express,
       processPerformance: processSample,
       cronJobs: cronManager.getOperatorJobStats(),
       activeSurveillanceWorkers: surveillanceManager.getActiveWorkerCount(),
+      surveillanceStream: surveillanceStreamStats(),
       historicalOiCache: exchangeHistoryCache.stats(),
       liveOiCache: getLiveOiCacheStats(),
       marketTickerFeed: marketTickerFeed.diagnostics(),

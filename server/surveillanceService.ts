@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { randomUUID } from 'node:crypto';
+import { publishSurveillance } from './surveillanceEvents';
 import {
   SurveillanceCoin,
   SurveillanceConfig,
@@ -229,7 +230,9 @@ export function saveSurveillanceList(userId: string, list: SurveillanceCoin[]): 
     if (!list.some(item => item.id === coin.id)) surveillanceManager.stopWorkerForCoin(coin.id, uid);
   }
   store[uid] = list;
-  return saveSurveillanceStore(store);
+  const saved = saveSurveillanceStore(store);
+  if (saved) publishSurveillance(uid, true);
+  return saved;
 }
 
 // An async check must never restore a deleted coin or overwrite a user's edits.
@@ -290,7 +293,7 @@ export function setAllSurveillanceCoinsActive(userId: string, isActive: boolean)
     return updated;
   });
   store[uid] = updatedList;
-  saveSurveillanceStore(store);
+  if (saveSurveillanceStore(store)) publishSurveillance(uid, true);
   return updatedList;
 }
 

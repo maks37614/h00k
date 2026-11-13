@@ -54,6 +54,7 @@ import { formationDensityFeed } from './server/formationDensityFeed';
 import { installHookChartDepthStream } from './server/hookChartDepth';
 import { installLiquidationStream } from './server/liquidationFeed';
 import { installOpsMetrics } from './server/opsMetrics';
+import { subscribeSurveillance } from './server/surveillanceEvents';
 import { binanceTickerStream } from './server/binanceTickerStream';
 
 async function startServer() {
@@ -599,6 +600,28 @@ async function startServer() {
     } catch (err: any) {
       res.status(500).json({ success: false, error: err.message });
     }
+  });
+
+  // Authenticated SSE via fetch() Authorization header (never a token in the URL).
+  // The payload is an invalidation number, never another user's coin list.
+  app.get('/api/surveillance/stream', (_req, res) => {
+    const userId = String(res.locals.userId || '');
+    if (!userId || userId === 'guest') { res.status(401).end(); return; }
+    res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-store, no-transform');
+    res.setHeader('X-Accel-Buffering', 'no');
+    const unsubscribe = subscribeSurveillance(userId, version => {
+      if (!res.writableEnded && !res.write(`event: changed\ndata: ${version}\n\n`)) {
+        res.end(); // disconnect slow clients rather than buffer indefinitely
+      }
+    });
+    if (!unsubscribe) { res.status(503).setHeader('Retry-After', '10').end(); return; }
+    res.flushHeaders();
+    res.write('retry: 10000\n\n');
+    const keepalive = setInterval(() => {
+      if (!res.writableEnded && !res.write(': keepalive\n\n')) res.end();
+    }, 25000);
+    res.on('close', () => { clearInterval(keepalive); unsubscribe(); });
   });
 
   // Surveillance endpoints

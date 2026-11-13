@@ -4,6 +4,7 @@ import { notificationRouter } from '../notificationRouter';
 import { createSetupAlertsGroup, getUserLanguage } from '../alertService';
 import type { RawDepthDelta, RawTradeEvent } from './exchangeStream';
 import { acquireExchangeStream, type SharedExchangeStreamHandle } from './sharedExchangeStream';
+import { publishSurveillance } from '../surveillanceEvents';
 import { LevelsAndFormationsEngine } from './levelsAndFormationsEngine';
 import { MacroAndNewsEngine } from './macroAndNewsEngine';
 import { MultiTimeframeEngine } from './multiTimeframeEngine';
@@ -574,6 +575,7 @@ export class CoinWorker {
     }
     } finally {
       this.analysisInFlight = false;
+      if (!this.isDestroyed) publishSurveillance(this.coin.userId);
     }
   }
 
