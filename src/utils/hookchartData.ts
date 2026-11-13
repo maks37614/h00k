@@ -26,12 +26,28 @@ export function validCandle(candle: Kline): boolean {
 
 /** Canonical site candles use seconds; hookchart uses milliseconds. Last duplicate wins. */
 export function toHookCandles(klines: Kline[]) {
-  const byTime = new Map<number, Kline>();
-  for (const candle of klines) if (validCandle(candle)) byTime.set(candle.time, candle);
-  return [...byTime.values()].sort((a, b) => a.time - b.time).map(k => ({
+  // Live kline updates only replace the last bar, and historical pages are
+  // normally sorted. Avoid building a Map and sorting thousands of candles
+  // on every 80ms price update. Preserve last-duplicate-wins semantics.
+  const ordered: Kline[] = [];
+  let lastTime = -Infinity;
+  let needsSorting = false;
+  for (const candle of klines) {
+    if (!validCandle(candle)) continue;
+    if (candle.time < lastTime) { needsSorting = true; break; }
+    if (candle.time === lastTime) ordered[ordered.length - 1] = candle;
+    else { ordered.push(candle); lastTime = candle.time; }
+  }
+  const rows = needsSorting ? (() => {
+    const byTime = new Map<number, Kline>();
+    for (const candle of klines) if (validCandle(candle)) byTime.set(candle.time, candle);
+    return [...byTime.values()].sort((a, b) => a.time - b.time);
+  })() : ordered;
+  return rows.map(k => ({
     t: k.time * 1000, o: k.open, h: k.high, l: k.low, c: k.close, v: k.volume, n: k.tradeCount || 0,
     ...(Number.isFinite(k.buyVolume) ? { tb: Math.min(k.volume, Math.max(0, k.buyVolume!)) } : {}),
   }));
+
 }
 
 /** Ignore stale stream ticks rather than moving the current candle backwards. */
