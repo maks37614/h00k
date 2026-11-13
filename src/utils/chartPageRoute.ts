@@ -75,7 +75,7 @@ export function chartPageVisualOrigin(route: ChartPageRoute | null): ChartPageOr
 }
 
 /** Page origin, not formation existence, controls the visible and full-screen scales. */
-export function chartPageVisualContext(route: ChartPageRoute | null, expanded: boolean) {
+export function chartPageVisualContext(route: ChartPageRoute | null, expanded: boolean): 'screenerQuick' | 'screenerFull' | 'formationsQuick' | 'formationsFull' {
   const origin = chartPageVisualOrigin(route);
   if (origin === 'screener') return expanded ? 'screenerFull' : 'screenerQuick';
   return expanded ? 'formationsFull' : 'formationsQuick';
