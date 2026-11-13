@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { useAuth } from './AuthContext';
+import { apiFetch } from '../utils/apiFetch';
 import { useAlerts } from './AlertsContext';
 import { useSurveillance } from './SurveillanceContext';
 import { useAppPreferences } from '../utils/userPreferences';
@@ -146,9 +147,18 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
     setError(null);
     if (user?.uid === currentUid) {
       changePendingCount(pendingSettingsWrites.current, currentUid, 1);
-      try { await updateProfileData({ siteNotificationSettings: next }); }
-      catch { if (uidRef.current === currentUid) setError('Не вдалося синхронізувати налаштування з профілем. Вони збережені на цьому пристрої.'); }
-      finally { changePendingCount(pendingSettingsWrites.current, currentUid, -1); }
+      try {
+        await updateProfileData({ siteNotificationSettings: next });
+        if (!(user as any)?.isLocalUser) {
+          const res = await apiFetch('/api/notification-preferences', {
+            method: 'PUT', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ settings: next }),
+          });
+          if (!res.ok) throw new Error('Сервер відхилив налаштування доставки');
+        }
+      } catch {
+        if (uidRef.current === currentUid) setError('Не вдалося синхронізувати серверні сповіщення. Локальні налаштування збережено, але Telegram може не запрацювати.');
+      } finally { changePendingCount(pendingSettingsWrites.current, currentUid, -1); }
     }
   }, [user?.uid, updateProfileData]);
 
