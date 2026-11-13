@@ -62,9 +62,9 @@ docker compose exec -T app node --import tsx server/pgStateMigrator.ts --apply
 The synthetic planner benchmark sends no network requests:
 
 ```bash
-node --import tsx scripts/benchmark-surveillance.mjs --watchers 100 --markets 20
-node --import tsx scripts/benchmark-surveillance.mjs --watchers 500 --markets 50
-node --import tsx scripts/benchmark-surveillance.mjs --watchers 1000 --markets 100
+docker compose exec -T app node --import tsx scripts/benchmark-surveillance.mjs --watchers 100 --markets 20
+docker compose exec -T app node --import tsx scripts/benchmark-surveillance.mjs --watchers 500 --markets 50
+docker compose exec -T app node --import tsx scripts/benchmark-surveillance.mjs --watchers 1000 --markets 100
 ```
 
 For actual response times, cautiously use the existing localhost-only
