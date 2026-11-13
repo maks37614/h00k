@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {
   DEFAULT_TERMINAL_LINK_SETTINGS,
   getUserTerminalLinkSettings, normalizeMetaScalpGroup, normalizeTigerGroup,
-  normalizeTerminalLinkSettings, sendToSelectedTerminal, testTigerConnection,
+  normalizeTerminalLinkSettings, sendToSelectedTerminal, testTigerConnection, matchesTigerAcknowledgement,
 } from '../src/utils/terminalLinkService';
 import { DEFAULT_METASCALP_SETTINGS } from '../src/utils/metaScalpService';
 
@@ -80,8 +80,13 @@ test('Tiger acknowledges a correctly formatted setLinkSymbol command', async (t)
     constructor(readonly url: string) { queueMicrotask(() => this.onopen?.()); }
     send(raw: string) {
       if (raw === 'ping') { queueMicrotask(() => this.onmessage?.({ data: 'pong' })); return; }
-      commands.push(JSON.parse(raw));
-      queueMicrotask(() => this.onmessage?.({ data: JSON.stringify({ response: { type: 'successfully' }, message: 'Symbol linked successfully.' }) }));
+      const request = JSON.parse(raw);
+      commands.push(request);
+      queueMicrotask(() => this.onmessage?.({ data: JSON.stringify({
+        response: { type: 'successfully' },
+        request: { ...request, type: 'SetLinkSymbol', m: request.m === 'FUTURES' ? 'Futures' : 'Spot' },
+        message: 'Symbol linked successfully.',
+      }) }));
     }
     close() {}
   }
@@ -105,4 +110,43 @@ test('Vataga does not claim an unsupported API integration succeeded', async () 
   assert.equal(result.success, false);
   assert.equal(result.terminal, 'vataga');
   assert.match(result.message, /протокол/);
+});
+
+test('Tiger accepts only acknowledgement of the exact requested symbol and group', () => {
+  const request = JSON.stringify({ type: 'setLinkSymbol', e: 'BINANCE', m: 'FUTURES', symbol: 'BTCUSDT', linkGroup: 'B' });
+  const ack = { response: { type: 'successfully' },
+    request: { type: 'SetLinkSymbol', e: 'BINANCE', m: 'Futures', symbol: 'BTCUSDT', linkGroup: 'B' } };
+  assert.equal(matchesTigerAcknowledgement(request, ack), true);
+  assert.equal(matchesTigerAcknowledgement(request, { response: { type: 'successfully' } }), false);
+  assert.equal(matchesTigerAcknowledgement(request, {
+    ...ack, request: { ...ack.request, symbol: 'ETHUSDT' },
+  }), false);
+  assert.equal(matchesTigerAcknowledgement(request, {
+    ...ack, request: { ...ack.request, linkGroup: 'A' },
+  }), false);
+  assert.equal(matchesTigerAcknowledgement(request, { response: { type: 'error' }, request: ack.request }), false);
+  assert.equal(matchesTigerAcknowledgement('ping', ack), false);
+});
+
+test('Tiger ping must be a real pong, not an unrelated success response', async (t) => {
+  class FakeWebSocket {
+    onopen: (() => void) | null = null;
+    onmessage: ((event: { data: string }) => void) | null = null;
+    onerror: (() => void) | null = null;
+    onclose: (() => void) | null = null;
+    constructor() { queueMicrotask(() => this.onopen?.()); }
+    send(_payload: string) {
+      queueMicrotask(() => this.onmessage?.({ data: JSON.stringify({
+        response: { type: 'successfully' }, message: 'Not a Pong',
+      }) }));
+      queueMicrotask(() => this.onmessage?.({ data: 'pong' }));
+    }
+    close() {}
+  }
+  const previous = Object.getOwnPropertyDescriptor(globalThis, 'WebSocket');
+  Object.defineProperty(globalThis, 'WebSocket', { value: FakeWebSocket, configurable: true, writable: true });
+  t.after(() => previous
+    ? Object.defineProperty(globalThis, 'WebSocket', previous)
+    : Reflect.deleteProperty(globalThis, 'WebSocket'));
+  assert.equal((await testTigerConnection(7819)).ok, true);
 });
