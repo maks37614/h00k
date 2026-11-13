@@ -31,11 +31,8 @@ import { useArchive } from './context/ArchiveContext';
 import { useSurveillance } from './context/SurveillanceContext';
 import { useLanguage } from './context/LanguageContext';
 import {
-  MetaScalpSettings,
   playMetaScalpClickSound,
   getUserMetaScalpSettings,
-  saveStoredMetaScalpSettings,
-  sendTickerToMetaScalp,
 } from './utils/metaScalpService';
 import { getUserTerminalLinkSettings, sendToSelectedTerminal, terminalLabel, type TerminalLinkSource } from './utils/terminalLinkService';
 import { ScannedCoin, DetectedFormation, ScreenerFilterState, PriceAlert, ArchivedFormation, ActivePageType, type FullEarlyScanSnapshot } from './types';
@@ -534,7 +531,6 @@ export default function App() {
     ? metaScalpSettingsState.settings
     : getUserMetaScalpSettings(user?.uid, profile);
   const terminalLinkSettings = getUserTerminalLinkSettings(user?.uid, profile);
-  const activeTerminalName = terminalLabel(terminalLinkSettings.provider);
   const activeTerminalGroup = terminalLinkSettings.provider === 'tiger'
     ? terminalLinkSettings.tigerGroup
     : terminalLinkSettings.provider === 'metascalp' ? metaScalpSettings.binding : '—';
