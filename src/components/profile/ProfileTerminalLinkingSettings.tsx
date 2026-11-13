@@ -4,7 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import { findActiveMetaScalpPort, getUserMetaScalpSettings, type MetaScalpSettings } from '../../utils/metaScalpService';
 import {
   getUserTerminalLinkSettings, LINK_SOURCES,
-  normalizeMetaScalpGroup, normalizeTigerGroup, normalizeTerminalLinkSettings, testTigerConnection,
+  normalizeMetaScalpGroup, normalizeTigerGroup, normalizeTerminalLinkSettings, testTigerConnection, sendToSelectedTerminal,
   type TerminalLinkSettings, type TerminalProvider, type TerminalLinkSource,
 } from '../../utils/terminalLinkService';
 
@@ -85,6 +85,21 @@ export const ProfileTerminalLinkingSettings: React.FC = () => {
     } finally { setTesting(false); }
   };
 
+  const testTicker = async () => {
+    if (testing) return;
+    setTesting(true);
+    setMessage(null);
+    try {
+      const result = await sendToSelectedTerminal(
+        'BTCUSDT', 'binance', 'futures', 'screener',
+        normalizeTerminalLinkSettings(draft), meta
+      );
+      setMessage({ ok: result.success, text: result.message + (result.copiedToClipboard ? ' · Скопійовано до буфера.' : '') });
+    } catch (error) {
+      setMessage({ ok: false, text: error instanceof Error ? error.message : 'Помилка тестової передачі монети.' });
+    } finally { setTesting(false); }
+  };
+
   const selected = draft.provider;
   const ready = selected === 'metascalp' || selected === 'tiger';
   return (
@@ -158,11 +173,18 @@ export const ProfileTerminalLinkingSettings: React.FC = () => {
               </div>
             )}
             {ready && (
-              <button type="button" disabled={testing} onClick={test}
-                className="inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-700 disabled:opacity-50">
-                <RefreshCw size={14} className={testing ? 'animate-spin' : ''}/>
-                {testing ? 'Перевіряємо...' : 'Перевірити з’єднання'}
-              </button>
+              <div className="flex flex-wrap gap-2">
+                <button type="button" disabled={testing} onClick={test}
+                  className="inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-xs font-semibold text-white hover:bg-slate-700 disabled:opacity-50">
+                  <RefreshCw size={14} className={testing ? 'animate-spin' : ''}/>
+                  {testing ? 'Перевіряємо...' : 'Перевірити з’єднання'}
+                </button>
+                <button type="button" disabled={testing || !draft.enabled || !draft.sources.screener} onClick={testTicker}
+                  title={!draft.sources.screener ? 'Увімкніть джерело Скрінер для тестової передачі' : 'Надіслати BTCUSDT Binance Futures у вибраний термінал'}
+                  className="inline-flex items-center gap-2 rounded-lg border border-cyan-600/50 bg-cyan-950/50 px-3 py-2 text-xs font-semibold text-cyan-200 hover:bg-cyan-900/60 disabled:opacity-40">
+                  <PlugZap size={14}/> Тест BTCUSDT
+                </button>
+              </div>
             )}
           </section>
 
