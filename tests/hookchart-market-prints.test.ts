@@ -160,7 +160,7 @@ test('live candle subscribers ignore REST seed and receive only new deduplicated
   try {
     globalThis.fetch = (async () => ({ ok: true, json: async () => [
       { a: 1, T: at - 1000, p: '10', q: '20', m: false },
-    ] })) as typeof fetch;
+    ] } as Response)) as typeof fetch;
     globalThis.WebSocket = FakeSocket as unknown as typeof WebSocket;
     const scope = { exchange: 'binance' as const, marketType: 'spot' as const,
       symbol: 'LIVESEEDTESTUSDT' };
