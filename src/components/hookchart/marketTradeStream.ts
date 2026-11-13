@@ -66,16 +66,17 @@ export class LargeMarketTradeTracker {
         (trade.side !== 'BUY' && trade.side !== 'SELL')) return null;
     // The exchange trade ID is unique within a symbol; never count its REST/WS replay twice.
     if (this.seen.has(trade.id)) return null;
-    this.seen.set(trade.id, trade.t);
-    if (this.seen.size > MAX_SEEN || trade.t - this.seenPruneAt > 15_000) {
-      const oldest = trade.t - 300_000;
-      for (const [id, t] of this.seen) {
-        if (t < oldest || this.seen.size > MAX_SEEN) this.seen.delete(id);
-      }
-      this.seenPruneAt = trade.t;
-    }
     const usd = trade.p * trade.q;
     if (!Number.isFinite(usd) || usd <= 0) return null;
+    this.seen.set(trade.id, trade.t);
+    if (trade.t - this.seenPruneAt > 15_000) {
+      const oldest = trade.t - 300_000;
+      for (const [id, t] of this.seen) if (t < oldest) this.seen.delete(id);
+      this.seenPruneAt = trade.t;
+    }
+    // Trim only the excess IDs: scanning all 30k IDs on every BTC trade
+    // would be more expensive than the shared socket was meant to save.
+    while (this.seen.size > MAX_SEEN) this.seen.delete(this.seen.keys().next().value!);
     this.sample.push({ t: trade.t, usd });
     const windowStart = trade.t - 120_000;
     if (this.sample.length > MAX_SAMPLE || (this.sample[0] && this.sample[0].t < windowStart)) {
