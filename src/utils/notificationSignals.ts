@@ -165,6 +165,7 @@ export function scanNotificationSignals(
   now = Date.now(),
   qualityTracker?: QualityScoreTracker,
   proximityTracker?: ProximityAlertTracker,
+  alreadyDelivered?: (id: string) => boolean,
 ): MarketNotificationSignal[] {
   if (!settings.optedIn || !settings.enabled || !Array.isArray(coins)) return [];
   const result: MarketNotificationSignal[] = [];
@@ -174,10 +175,12 @@ export function scanNotificationSignals(
   const emit = (source: ScannedCoin, kind: SiteNotificationKind, anchor: string,
     title: string, description: string, once = false) => {
     if (!notificationEnabled(settings, kind)) return;
-    if ((count.get(kind) || 0) >= 3 || result.length >= 25) return;
     const id = [kind, source.exchange, source.marketType, source.timeframe, source.symbol, anchor,
       ...(once ? [] : [Math.floor(now / coolMs)])].join(':');
-    if (seen.has(id)) return;
+    // Quota must exclude historical notifications already stored in the center.
+    // Otherwise the first three old signals starve every new coin forever.
+    if (seen.has(id) || alreadyDelivered?.(id)) return;
+    if ((count.get(kind) || 0) >= 3 || result.length >= 25) return;
     seen.add(id);
     count.set(kind, (count.get(kind) || 0) + 1);
     result.push({
