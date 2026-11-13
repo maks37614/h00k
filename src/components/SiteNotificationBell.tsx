@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Bell, CheckCheck, Trash2, X, Settings2, TrendingUp, TrendingDown, ShieldAlert, Target, Activity } from 'lucide-react';
-import { useSiteNotifications } from '../context/SiteNotificationsContext';
+import { useOptionalSiteNotifications } from '../context/SiteNotificationsContext';
 import type { SiteNotificationItem } from '../utils/siteNotifications';
 
 const iconFor = (item: SiteNotificationItem) => item.kind === 'impulse'
@@ -11,7 +11,12 @@ const iconFor = (item: SiteNotificationItem) => item.kind === 'impulse'
   : <Activity className="h-4 w-4 text-amber-300" />;
 
 export const SiteNotificationBell: React.FC<{ onOpenSettings?: () => void }> = ({ onOpenSettings }) => {
-  const { items, unreadCount, markAllRead, clear, settings } = useSiteNotifications();
+  const context = useOptionalSiteNotifications();
+  const items = context?.items ?? [];
+  const unreadCount = context?.unreadCount ?? 0;
+  const settings = context?.settings ?? { enabled: true };
+  const markAllRead = () => context?.markAllRead();
+  const clear = () => context?.clear();
   const [open, setOpen] = useState(false);
   useEffect(() => {
     if (!open) return;
