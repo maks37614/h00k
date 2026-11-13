@@ -253,6 +253,10 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
   }}>{children}</Context.Provider>;
 };
 
+export function useOptionalSiteNotifications(): SiteNotificationsValue | null {
+  return useContext(Context);
+}
+
 export function useSiteNotifications(): SiteNotificationsValue {
   const value = useContext(Context);
   if (!value) throw new Error('useSiteNotifications requires SiteNotificationsProvider');
