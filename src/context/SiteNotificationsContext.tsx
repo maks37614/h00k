@@ -7,7 +7,8 @@ import { useAppPreferences } from '../utils/userPreferences';
 import {
   DEFAULT_SITE_NOTIFICATIONS, ImpulseTracker, normalizeSiteNotificationSettings,
   notificationEnabled, readNotificationItems, siteNotificationSettingsKey, siteNotificationStorageKey,
-  siteNotificationClearedAtKey, siteNotificationSeenKey,
+  siteNotificationClearedAtKey, siteNotificationSeenKey, siteNotificationMuteKey,
+  applyLocalNotificationMute,
   type SiteNotificationItem, type SiteNotificationKind, type SiteNotificationSettings, type SiteNotificationSound,
 } from '../utils/siteNotifications';
 import { playSiteNotificationSound } from '../utils/domSound';
@@ -56,6 +57,10 @@ function loadSeen(uid: string): Set<string> {
     return new Set(Array.isArray(parsed) ? parsed.filter((v): v is string => typeof v === 'string').slice(-5000) : []);
   } catch { return new Set(); }
 }
+function locallyMutedAt(uid: string): number {
+  try { return Math.max(0, Number(localStorage.getItem(siteNotificationMuteKey(uid))) || 0); }
+  catch { return 0; }
+}
 function soundStorageKey(uid: string): string { return 'h00k_site_notification_sound_v1:' + uid; }
 function readStoredSound(uid: string): boolean {
   try { return localStorage.getItem(soundStorageKey(uid)) === 'true'; } catch { return false; }
@@ -74,9 +79,12 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
   const uid = user?.uid || 'guest';
 
   const loadSettings = (id: string, currentProfile: unknown): SiteNotificationSettings => {
-    if (currentProfile) return normalizeSiteNotificationSettings(currentProfile);
-    try { return normalizeSiteNotificationSettings(JSON.parse(localStorage.getItem(siteNotificationSettingsKey(id)) || 'null')); }
-    catch { return { ...DEFAULT_SITE_NOTIFICATIONS }; }
+    let source = currentProfile;
+    if (!source) {
+      try { source = JSON.parse(localStorage.getItem(siteNotificationSettingsKey(id)) || 'null'); }
+      catch { source = null; }
+    }
+    return applyLocalNotificationMute(normalizeSiteNotificationSettings(source), locallyMutedAt(id));
   };
   const [settingsState, setSettingsState] = useState<{ uid: string; settings: SiteNotificationSettings }>(
     () => ({ uid, settings: loadSettings(uid, profile?.uid === uid ? profile.siteNotificationSettings : undefined) })
@@ -135,7 +143,7 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
 
   useEffect(() => {
     if (profile?.uid !== uid || pendingSettingsWrites.current.has(uid) || !profile.siteNotificationSettings) return;
-    const remote = normalizeSiteNotificationSettings(profile.siteNotificationSettings);
+    const remote = loadSettings(uid, profile.siteNotificationSettings);
     settingsRef.current = remote;
     setSettingsState({ uid, settings: remote });
     try { localStorage.setItem(siteNotificationSettingsKey(uid), JSON.stringify(remote)); } catch {}
@@ -146,7 +154,7 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
   useEffect(() => {
     if (!user || (user as any).isLocalUser || profile?.uid !== uid || !profile.siteNotificationSettings
         || pendingSettingsWrites.current.has(uid)) return;
-    const remote = normalizeSiteNotificationSettings(profile.siteNotificationSettings);
+    const remote = loadSettings(uid, profile.siteNotificationSettings);
     const signature = JSON.stringify(remote);
     if (lastServerHydration.current.get(uid) === signature) return;
     lastServerHydration.current.set(uid, signature);
