@@ -34,6 +34,12 @@ interface SiteNotificationsValue {
 }
 const Context = createContext<SiteNotificationsValue | null>(null);
 
+/** Safari privacy modes may disable storage; the notification center must still render. */
+function loadStoredItems(uid: string): SiteNotificationItem[] {
+  try { return readNotificationItems(localStorage.getItem(siteNotificationStorageKey(uid))); }
+  catch { return []; }
+}
+
 export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, profile, updateProfileData } = useAuth();
   const { history } = useAlerts();
@@ -55,10 +61,10 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
   settingsRef.current = settings;
 
   const [itemState, setItemState] = useState<{ uid: string; items: SiteNotificationItem[] }>(() => ({
-    uid, items: readNotificationItems(localStorage.getItem(siteNotificationStorageKey(uid))),
+    uid, items: loadStoredItems(uid),
   }));
   const items = itemState.uid === uid ? itemState.items
-    : readNotificationItems(localStorage.getItem(siteNotificationStorageKey(uid)));
+    : loadStoredItems(uid);
   const itemsRef = useRef(items);
   itemsRef.current = items;
   const surveillanceSeen = useRef<{ uid: string; initialized: boolean; ids: Set<string> }>({ uid, initialized: false, ids: new Set() });
@@ -73,7 +79,7 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
 
   useEffect(() => {
     setSettingsState({ uid, settings: loadSettings(uid, profile?.uid === uid ? profile.siteNotificationSettings : undefined) });
-    setItemState({ uid, items: readNotificationItems(localStorage.getItem(siteNotificationStorageKey(uid))) });
+    setItemState({ uid, items: loadStoredItems(uid) });
     setError(null);
   }, [uid]);
 
