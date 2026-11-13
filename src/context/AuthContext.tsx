@@ -116,8 +116,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     mounted.current = true;
-    // Preserve legacy browser-local accounts and sessions for an explicit,
-    // backed-up migration. Never destructively clean user data on page load.
+    // Do not destroy browser-local user settings during auth bootstrap.
     const params = new URLSearchParams(window.location.search);
     const verifyToken = params.get('verifyEmail');
     if (verifyToken || params.has('resetPassword')) {
