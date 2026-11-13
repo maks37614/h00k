@@ -25,8 +25,8 @@ import { UserProfileModal } from './components/UserProfileModal';
 import { ArchiveModal } from './components/ArchiveModal';
 import { AlertToast, AlertToastState } from './components/AlertToast';
 import { useAlerts } from './context/AlertsContext';
-import { useSiteNotifications } from './context/SiteNotificationsContext';
-import { notificationEnabled } from './utils/siteNotifications';
+import { useOptionalSiteNotifications } from './context/SiteNotificationsContext';
+import { DEFAULT_SITE_NOTIFICATIONS, notificationEnabled } from './utils/siteNotifications';
 import { useAuth } from './context/AuthContext';
 import { useArchive } from './context/ArchiveContext';
 import { useSurveillance } from './context/SurveillanceContext';
@@ -89,6 +89,8 @@ const DEFAULT_FILTERS: ScreenerFilterState = {
   sortBy: 'confidence',
   sortOrder: 'desc',
 };
+
+const ignoreSiteNotification = (..._args: unknown[]): void => {};
 
 export default function App() {
   // Routed charts are real SPA pages: the Screener is unmounted, not covered.
@@ -562,7 +564,11 @@ export default function App() {
 
   // Telegram price alerts state
   const { activeAlertsCount } = useAlerts();
-  const { emit: emitSiteNotification, processScan, setFavoriteIds, settings: notificationSettings } = useSiteNotifications();
+  const notificationCenter = useOptionalSiteNotifications();
+  const emitSiteNotification = notificationCenter?.emit ?? ignoreSiteNotification;
+  const processScan = notificationCenter?.processScan ?? ignoreSiteNotification;
+  const setFavoriteIds = notificationCenter?.setFavoriteIds ?? ignoreSiteNotification;
+  const notificationSettings = notificationCenter?.settings ?? DEFAULT_SITE_NOTIFICATIONS;
   useEffect(() => { setFavoriteIds(watchlist); }, [watchlist, setFavoriteIds]);
   const [isTelegramModalOpen, setIsTelegramModalOpen] = useState<boolean>(false);
   const [telegramPrefill, setTelegramPrefill] = useState<any>(null);
