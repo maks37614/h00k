@@ -11,10 +11,10 @@ export const LINK_SOURCES: Array<{ id: TerminalLinkSource; label: string; descri
   { id: 'favorites', label: 'Обрані монети', description: 'Швидке відкриття зі списку обраних' },
   { id: 'chart', label: 'Повноекранний графік', description: 'Кнопка на графіку та відкриття монети' },
   { id: 'terminal', label: 'Термінал h00k', description: 'Кнопка зовнішнього термінала у власному терміналі' },
-  { id: 'alerts', label: 'Цінові сповіщення', description: 'Підготовка до лінковки зі сповіщень' },
-  { id: 'impulses', label: 'Імпульси й волатильність', description: 'Підготовка до передачі сигналів руху' },
-  { id: 'densities', label: 'Щільності BID/ASK', description: 'Підготовка до передачі сигналів стакана' },
-  { id: 'surveillance', label: 'Спостереження', description: 'Підготовка до передачі сигналів моніторингу' },
+  { id: 'alerts', label: 'Цінові сповіщення', description: 'Відкрити монету із центру сповіщень' },
+  { id: 'impulses', label: 'Імпульси й волатильність', description: 'Відкривати інструменти зі сповіщень про імпульси' },
+  { id: 'densities', label: 'Щільності BID/ASK', description: 'Відкривати інструменти зі сповіщень про щільності' },
+  { id: 'surveillance', label: 'Спостереження', description: 'Відкривати інструменти зі сповіщень спостереження' },
 ];
 
 export interface TerminalLinkSettings {
@@ -23,7 +23,7 @@ export interface TerminalLinkSettings {
   sources: Record<TerminalLinkSource, boolean>;
   /** Deliberate user clicks / existing chart-selection behavior, not unsolicited alerts. */
   switchOnChartOpen: boolean;
-  /** Reserved until individual real-time event sources are connected and tested. */
+  /** Opt-in: switch on fresh notifications that identify their symbol, exchange and market. */
   autoSignals: boolean;
   /** Only meaningful when an actual 0-100 quality score is available. */
   minQuality: number;
@@ -59,7 +59,7 @@ export function normalizeTerminalLinkSettings(saved?: Partial<TerminalLinkSettin
     ...DEFAULT_TERMINAL_LINK_SETTINGS, ...saved, provider, sources: boolSources,
     enabled: saved?.enabled !== false,
     switchOnChartOpen: saved?.switchOnChartOpen !== false,
-    autoSignals: false, // Never silently enable background signal delivery.
+    autoSignals: saved?.autoSignals === true, // Explicit opt-in only.
     minQuality: Number.isFinite(quality) ? Math.min(100, Math.max(0, Math.round(quality))) : 0,
     cooldownMs: Number.isFinite(cooldown) ? Math.max(0, Math.min(60000, Math.round(cooldown))) : 1200,
     tigerPort: Number.isInteger(port) && port > 0 && port < 65536 ? port : 7819,
@@ -101,6 +101,16 @@ export function getUserTerminalLinkSettings(
     });
   }
   return normalizeTerminalLinkSettings(profile.terminalLinkSettings);
+}
+
+export function notificationTerminalSource(kind: string): TerminalLinkSource | null {
+  if (kind === 'system') return null;
+  if (kind === 'formation' || kind === 'quality' || kind === 'composite') return 'formations';
+  if (kind === 'early') return 'early';
+  if (kind === 'impulse' || kind === 'volatility') return 'impulses';
+  if (kind === 'density') return 'densities';
+  if (kind === 'surveillance') return 'surveillance';
+  return 'alerts';
 }
 
 export function terminalLabel(provider: TerminalProvider): string {
