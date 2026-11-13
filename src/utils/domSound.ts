@@ -18,6 +18,7 @@ export function stopCustomNotificationSound(): void {
   }
 }
 async function playPersonalSound(uid: string, allowed?: () => boolean): Promise<void> {
+  let startedAudio: HTMLAudioElement | null = null;
   try {
     const saved = await getCustomNotificationSound(uid);
     if (allowed && !allowed()) return;
@@ -30,6 +31,7 @@ async function playPersonalSound(uid: string, allowed?: () => boolean): Promise<
     stopCustomNotificationSound();
     const url = URL.createObjectURL(saved.blob);
     const audio = new Audio(url);
+    startedAudio = audio;
     activeUserSound = audio;
     activeUserSoundUrl = url;
     audio.volume = 0.75;
@@ -38,8 +40,8 @@ async function playPersonalSound(uid: string, allowed?: () => boolean): Promise<
     audio.onerror = cleanup;
     await audio.play();
   } catch {
-    // Browsers (especially mobile Safari) may block unattended audio.
-    stopCustomNotificationSound();
+    // A superseded async preview must never stop a newer sound.
+    if (startedAudio && activeUserSound === startedAudio) stopCustomNotificationSound();
   }
 }
 
@@ -110,6 +112,7 @@ export function playSiteNotificationSound(
     void playPersonalSound(uid, allowed);
     return;
   }
+  stopCustomNotificationSound();
   if (preset === 'chime') {
     playAlertChime();
     return;
