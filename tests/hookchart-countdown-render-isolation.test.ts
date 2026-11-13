@@ -34,3 +34,12 @@ test('the one-second clock is subscribed by only the countdown child, not the Ca
   assert.match(label, /useSharedChartClock\(true\)/);
   assert.match(replay, /hideBarCountdown=\{replay\}/, 'historical Replay has no wall-clock countdown');
 });
+
+test('Terminal price stream updates its visible owner without rerendering a hidden chart badge', () => {
+  const chart = readFileSync(new URL('../src/components/TradingViewChart.tsx', import.meta.url), 'utf8');
+  const guards = chart.match(/if \(showNavigationControls && !hideSymbolAndPrice\) \{/g) || [];
+  assert.equal(guards.length, 2, 'both immediate and animation-frame UI updates are guarded');
+  assert.match(chart, /onLivePriceUpdate\?\.\(update\.price\)/,
+    'Terminal must keep receiving live price even without a chart badge');
+  assert.match(chart, /\[onLivePriceUpdate, chartProvider, showNavigationControls, hideSymbolAndPrice\]/);
+});
