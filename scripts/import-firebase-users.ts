@@ -6,7 +6,7 @@
  * Apply: node --import tsx scripts/import-firebase-users.ts --file /secure/export.json --apply
  * Never commit or upload personal export files to GitHub.
  */
-import { readFileSync } from 'node:fs';
+import { readFileSync, statSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';
 import { initializeIdentity, identityPool, hashPassword, validateEmail } from '../server/pgIdentity';
 
@@ -16,8 +16,9 @@ const file = fileIndex < 0 ? null : args[fileIndex + 1];
 const apply = args.includes('--apply');
 if (!file || file.startsWith('--')) throw new Error('Use --file /secure/firebase-normalized.json');
 if (process.env.H00K_AUTH_BACKEND !== 'postgres') throw new Error('Set H00K_AUTH_BACKEND=postgres');
+if (statSync(file).size > 24 * 1024 * 1024) throw new Error('Export exceeds 24MB; split into small batches before importing');
 const json = JSON.parse(readFileSync(file, 'utf8')) as { users?: Array<Record<string, unknown>> };
-if (!Array.isArray(json.users) || json.users.length > 100000) throw new Error('Expected { "users": [...] } with at most 100000 users per batch');
+if (!Array.isArray(json.users) || json.users.length > 1000) throw new Error('Expected { "users": [...] } with at most 1000 users per batch');
 
 type Entry = { uid: string; email: string; name: string; emailVerified: boolean; profile: Record<string, unknown>; archive: Array<Record<string, unknown>> };
 const entries: Entry[] = [];
