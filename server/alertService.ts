@@ -4,6 +4,7 @@ import fs from 'fs';
 import path from 'path';
 import type { PriceAlert, AlertHistoryItem, ExchangeId, MarketType } from '../src/types';
 import { sendUserTelegramMessage, getTelegramDelivery } from './telegramDelivery';
+import { isUserTelegramCategoryAllowed } from './siteNotificationPrefs';
 import { getUserTelegram, saveUserTelegram, loadUserTelegram } from './userTelegram';
 export { getUserTelegram, saveUserTelegram, loadUserTelegram } from './userTelegram';
 import type { SetupInstance } from './surveillance/types';
@@ -734,7 +735,14 @@ async function checkAlertsInternal(userId?: string) {
       let telegramMessageIds: number[] | undefined;
       let telegramPending = false;
 
+      const userAllowedTelegram = isUserTelegramCategoryAllowed(alert.userId || '', {
+        source: 'PRICE_ALERT', eventType: 'PRICE_ALERT',
+        symbol: alert.symbol, exchange: alert.exchange, marketType: alert.marketType,
+      });
       try {
+        if (!userAllowedTelegram) {
+          telegramError = 'Telegram-відправлення вимкнено в профілі користувача';
+        } else {
         const sendRes = await sendUserTelegramMessage(alert.userId || '', message, `price:${alert.id}:epoch:${alert.deliveryEpoch ?? 0}`);
         telegramDeliveryId = sendRes.deliveryId;
         telegramMessageIds = sendRes.messageIds;
@@ -745,6 +753,7 @@ async function checkAlertsInternal(userId?: string) {
         } else {
           telegramError = sendRes.error;
           console.warn(`[ALERT DISPATCH WARNING] Telegram notification for ${alert.symbol} was not delivered:`, sendRes.error);
+        }
         }
       } catch (dispatchErr: any) {
         telegramError = dispatchErr?.message || telegramText(language, 'sendError');
