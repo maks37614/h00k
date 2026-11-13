@@ -430,6 +430,8 @@ export default function App() {
 
   // Watchlist stored per user (isolated)
   const [watchlist, setWatchlist] = useState<string[]>([]);
+  const watchlistRef = useRef<readonly string[]>([]);
+  watchlistRef.current = watchlist;
   const [watchlistFolders, setWatchlistFolders] = useState<Record<string, string[]>>({});
   const watchlistCount = useMemo(() => resolveWatchlistEntries(watchlist, coins).length, [watchlist, coins]);
 
@@ -557,9 +559,8 @@ export default function App() {
 
   // Telegram price alerts state
   const { activeAlertsCount } = useAlerts();
-  const { emit: emitSiteNotification } = useSiteNotifications();
-  const seenStrongFormations = useRef(new Set<string>());
-  const strongFormationsOwner = useRef('');
+  const { emit: emitSiteNotification, processScan, setFavoriteIds } = useSiteNotifications();
+  useEffect(() => { setFavoriteIds(watchlist); }, [watchlist, setFavoriteIds]);
   const [isTelegramModalOpen, setIsTelegramModalOpen] = useState<boolean>(false);
   const [telegramPrefill, setTelegramPrefill] = useState<any>(null);
   const [alertToast, setAlertToast] = useState<AlertToastState | null>(null);
@@ -992,45 +993,27 @@ export default function App() {
     }, { coin }, true);
   }, [chartRoute, selectedPair, openChartPage]);
 
-  // Strong formations enter the on-site notification center once per unique setup.
-  // The id is stable across repeated scans and browser reloads (persisted by the center).
+  // Reuse existing scan results. Individual notification rules enforce consent,
+  // verified market evidence, per-category thresholds and deduplication.
   const reportStrongFormations = useCallback((scanned: ScannedCoin[]) => {
-    const owner = user?.uid || 'guest';
-    const storageKey = 'h00k_seen_strong_formations_v1:' + owner;
-    if (strongFormationsOwner.current !== owner) {
-      strongFormationsOwner.current = owner;
-      try {
-        const saved: unknown = JSON.parse(localStorage.getItem(storageKey) || '[]');
-        seenStrongFormations.current = new Set(
-          Array.isArray(saved) ? saved.filter((item): item is string => typeof item === 'string').slice(-2000) : []
-        );
-      } catch {
-        seenStrongFormations.current = new Set();
-      }
+    processScan(scanned, watchlistRef.current);
+  }, [processScan]);
+
+  // The independent early W/M scan never changes ordinary formation logic.
+  useEffect(() => {
+    if (earlyMode && Array.isArray(fullEarlyScan?.data) && fullEarlyScan.data.length) {
+      processScan(fullEarlyScan.data, watchlistRef.current);
     }
-    let reported = 0;
-    let changed = false;
-    for (const coin of scanned) {
-      for (const formation of coin.formations) {
-        if (formation.confidence < 88) continue;
-        const id = ['formation', coin.exchange, coin.marketType, coin.timeframe, coin.symbol, formation.id].join(':');
-        if (seenStrongFormations.current.has(id)) continue;
-        seenStrongFormations.current.add(id);
-        changed = true;
-        if (reported++ >= 3) continue; // Never flood the user on a bulk scan.
-        emitSiteNotification({
-          id, kind: 'formation', symbol: coin.symbol,
-          title: 'Сильна формація · ' + coin.symbol,
-          description: formation.name + ' · оцінка ' + formation.confidence + '/100 · ' + coin.exchange.toUpperCase(),
-        });
-      }
-    }
-    if (changed) {
-      const bounded = Array.from(seenStrongFormations.current).slice(-2000);
-      seenStrongFormations.current = new Set(bounded);
-      try { localStorage.setItem(storageKey, JSON.stringify(bounded)); } catch {}
-    }
-  }, [emitSiteNotification, user?.uid]);
+  }, [earlyMode, fullEarlyScan?.id, fullEarlyScan?.data, processScan]);
+
+  // A technical failure is an opt-in event, not a market signal.
+  useEffect(() => {
+    if (!error) return;
+    emitSiteNotification({
+      id: 'system:scan:' + error.slice(0, 70) + ':' + Math.floor(Date.now() / 300000),
+      kind: 'system', title: 'Проблема сканування', description: error,
+    });
+  }, [error, emitSiteNotification]);
 
   // Fetch screener data from API
   const fetchScreenerData = useCallback(async (currentTf = filters.timeframe, currentExchange = filters.exchange, currentMarket = filters.marketType) => {
