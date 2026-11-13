@@ -13,7 +13,7 @@ import {
 } from '../utils/siteNotifications';
 import { playSiteNotificationSound, stopCustomNotificationSound } from '../utils/domSound';
 import type { ScannedCoin } from '../types';
-import { scanNotificationSignals, marketSurveillanceSignal, liquidationNotificationSignal, LiquidationCascadeTracker, QualityScoreTracker, ProximityAlertTracker } from '../utils/notificationSignals';
+import { scanNotificationSignals, marketSurveillanceSignal, liquidationNotificationSignal, LiquidationCascadeTracker, QualityScoreTracker, ProximityAlertTracker, NotificationCooldownTracker } from '../utils/notificationSignals';
 import { matchesNotificationScope } from '../utils/siteNotifications';
 
 interface NewSiteNotification {
@@ -110,6 +110,9 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
   });
   const proximityRef = useRef<{ uid: string; tracker: ProximityAlertTracker }>({
     uid, tracker: new ProximityAlertTracker(),
+  });
+  const cooldownRef = useRef<{ uid: string; tracker: NotificationCooldownTracker }>({
+    uid, tracker: new NotificationCooldownTracker(),
   });
   uidRef.current = uid;
   const soundEnabledRef = useRef(preferences.soundAlertsEnabled);
@@ -359,16 +362,23 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
       try { saved = JSON.parse(localStorage.getItem('h00k_proximity_history_v1:' + currentUid) || '{}'); } catch {}
       proximityRef.current = { uid: currentUid, tracker: new ProximityAlertTracker(saved) };
     }
+    if (cooldownRef.current.uid !== currentUid) {
+      let saved: unknown = {};
+      try { saved = JSON.parse(localStorage.getItem('h00k_notification_cooldown_v1:' + currentUid) || '{}'); } catch {}
+      cooldownRef.current = { uid: currentUid, tracker: new NotificationCooldownTracker(saved) };
+    }
     const tracker = qualityRef.current.tracker;
     const proximity = proximityRef.current.tracker;
+    const cooldown = cooldownRef.current.tracker;
     if (deliveredSeen.current.uid !== currentUid)
       deliveredSeen.current = { uid: currentUid, ids: loadSeen(currentUid) };
     const wasDelivered = (id: string) => deliveredSeen.current.ids.has(id);
     for (const event of scanNotificationSignals(coins, settingsRef.current, favorites,
-      Date.now(), tracker, proximity, wasDelivered)) emit(event);
+      Date.now(), tracker, proximity, wasDelivered, cooldown)) emit(event);
     try {
       localStorage.setItem('h00k_quality_history_v1:' + currentUid, JSON.stringify(tracker.snapshot()));
       localStorage.setItem('h00k_proximity_history_v1:' + currentUid, JSON.stringify(proximity.snapshot()));
+      localStorage.setItem('h00k_notification_cooldown_v1:' + currentUid, JSON.stringify(cooldown.snapshot()));
     } catch { /* Read-only browser mode. */ }
   }, [emit]);
 

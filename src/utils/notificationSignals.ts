@@ -42,6 +42,31 @@ export interface QualityTransition {
   previous: number | null;
 }
 type QualitySample = { latest: number; reference: number };
+/** Exact sliding cooldown for periodically refreshed OI / Delta / CVD signals.
+ * Persisted across page reloads, unlike a wall-clock bucket boundary. */
+export class NotificationCooldownTracker {
+  private readonly last = new Map<string, number>();
+  constructor(snapshot: unknown = {}) {
+    if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot)) return;
+    for (const [key, value] of Object.entries(snapshot).slice(-2500)) {
+      if (key && typeof value === 'number' && Number.isFinite(value) && value >= 0)
+        this.last.set(key, value);
+    }
+  }
+  canNotify(key: string, now: number, minMs: number): boolean {
+    const previous = this.last.get(key);
+    return !!key && Number.isFinite(now) && Number.isFinite(minMs)
+      && (previous === undefined || now - previous >= minMs);
+  }
+  markSent(key: string, now: number): void {
+    if (!key || !Number.isFinite(now)) return;
+    if (this.last.has(key)) this.last.delete(key);
+    this.last.set(key, now);
+    if (this.last.size > 2500) this.last.delete(this.last.keys().next().value!);
+  }
+  snapshot(): Record<string, number> { return Object.fromEntries(this.last); }
+}
+
 /** Tracks the last observed/announced score so "improved" means a real increase. */
 export class QualityScoreTracker {
   private readonly scores = new Map<string, QualitySample>();
@@ -162,6 +187,7 @@ export function scanNotificationSignals(
   qualityTracker?: QualityScoreTracker,
   proximityTracker?: ProximityAlertTracker,
   alreadyDelivered?: (id: string) => boolean,
+  cooldownTracker?: NotificationCooldownTracker,
 ): MarketNotificationSignal[] {
   if (!settings.optedIn || !settings.enabled || !Array.isArray(coins)) return [];
   const result: MarketNotificationSignal[] = [];
@@ -171,13 +197,15 @@ export function scanNotificationSignals(
   const emit = (source: ScannedCoin, kind: SiteNotificationKind, anchor: string,
     title: string, description: string, once = false) => {
     if (!notificationEnabled(settings, kind)) return;
-    const id = [kind, source.exchange, source.marketType, source.timeframe, source.symbol, anchor,
-      ...(once ? [] : [Math.floor(now / coolMs)])].join(':');
+    const key = [kind, source.exchange, source.marketType, source.timeframe, source.symbol, anchor].join(':');
+    if (!once && cooldownTracker && !cooldownTracker.canNotify(key, now, coolMs)) return;
+    const id = [key, ...(once ? [] : [Math.floor(now / coolMs)])].join(':');
     // Quota must exclude historical notifications already stored in the center.
     // Otherwise the first three old signals starve every new coin forever.
     if (seen.has(id) || alreadyDelivered?.(id)) return;
     if ((count.get(kind) || 0) >= 3 || result.length >= 25) return;
     seen.add(id);
+    if (!once) cooldownTracker?.markSent(key, now);
     count.set(kind, (count.get(kind) || 0) + 1);
     result.push({
       id, kind, title, description, symbol: source.symbol,
