@@ -127,6 +127,6 @@ test('stable buffer references do not freeze the time-sensitive cascade indicato
   assert.match(source, /rows !== lastAdaptiveRows \|\| now > adaptiveExpiresAt/);
   assert.match(source, /nextLiquidationAdaptiveCutExpiry\(rows, now\)/);
   assert.match(source, /setCascadeClock\(now\)/);
-  assert.match(source, /calcCascadeRisk\(liquidations, liquidationCut, candles\.at\(-1\)\?\.c \|\| 0, cascadeClock\)/);
+  assert.match(source, /calcCascadeRisk\(liquidations, liquidationCut, candles\.at\(-1\)\?\.c \|\| 0\)/);
   assert.match(source, /\[liquidations, liquidationCut, candles\.at\(-1\)\?\.c, cascadeClock\]/);
 });
