@@ -93,6 +93,13 @@ export function installPostgresIdentityRoutes(app: Express) {
   app.get('/api/auth/config', (_req, res) => res.setHeader('Cache-Control', 'no-store').json({
     backend: 'postgres', captcha: captchaConfig(),
   }));
+  // No auth token, challenge response or account status may be cached even
+  // when CAPTCHA rejects the request before reaching the handlers.
+  app.use(['/api/auth', '/api/account'], (_req, res, next) => {
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('Referrer-Policy', 'no-referrer');
+    next();
+  });
 
   // Register preflight middleware using the EXACT SAME Express route matching
   // rules as the handlers below. A mounted req.path string comparison misses
@@ -118,10 +125,7 @@ export function installPostgresIdentityRoutes(app: Express) {
   app.post('/api/auth/login', guardAuthAction('login', 10, 15 * 60 * 1000));
   app.post('/api/auth/forgot-password', guardAuthAction('forgot', 4, 60 * 60 * 1000));
   app.post('/api/auth/resend-verification', guardAuthAction('verify', 3, 60 * 60 * 1000));
-  app.use(['/api/auth', '/api/account'], (_req, res, next) => {
-    res.setHeader('Cache-Control', 'no-store');
-    next();
-  });
+
   // Lazy and retryable schema readiness: auth errors never stop public market routes.
   app.use(['/api/auth', '/api/account'], (req, res, next) => {
     // Guest visitors have no account cookie: /session must not depend on the DB.
@@ -134,11 +138,23 @@ export function installPostgresIdentityRoutes(app: Express) {
   });
 
   app.post('/api/auth/register', protectOrigin, wrap(async (req, res) => {
-    await registerAccount(req.body?.email, req.body?.password, req.body?.displayName);
-    res.status(202).json({ success: true, message: 'Перевірте пошту та підтвердіть адресу.' });
+    try {
+      await registerAccount(req.body?.email, req.body?.password, req.body?.displayName);
+    } catch (error) {
+      // A public 409 EMAIL_EXISTS response enumerates registered accounts.
+      // Show the same outcome as a fresh registration after valid CAPTCHA.
+      if (!(error instanceof AuthFailure && error.code === 'EMAIL_EXISTS')) throw error;
+    }
+    res.status(202).json({ success: true, message: 'Якщо адресу можна зареєструвати, перевірте пошту для підтвердження.' });
   }));
   app.post('/api/auth/resend-verification', protectOrigin, wrap(async (req, res) => {
-    await resendVerification(req.body?.email);
+    try { await resendVerification(req.body?.email); }
+    catch (error) {
+      // Do not reveal if this email belongs to an unverified account by
+      // returning SMTP errors only for registered users.
+      if (!(error instanceof AuthFailure && ['MAIL_NOT_CONFIGURED', 'MAIL_DELIVERY_FAILED'].includes(error.code))) throw error;
+      console.warn('[Auth email] Verification resend unavailable');
+    }
     res.json({ success: true });
   }));
   app.post('/api/auth/login', protectOrigin, wrap(async (req, res) => {
@@ -158,7 +174,14 @@ export function installPostgresIdentityRoutes(app: Express) {
     res.json({ success: true, ...account, csrf: (await currentSessionFromToken(req, session.token)).csrf });
   }));
   app.post('/api/auth/forgot-password', protectOrigin, wrap(async (req, res) => {
-    await sendReset(req.body?.email);
+    try { await sendReset(req.body?.email); }
+    catch (error) {
+      // Return identical public status for unknown and known email addresses,
+      // including when SMTP is unavailable for the latter. Log only the class
+      // of failure, never the address or a reset token.
+      if (!(error instanceof AuthFailure && ['MAIL_NOT_CONFIGURED', 'MAIL_DELIVERY_FAILED'].includes(error.code))) throw error;
+      console.warn('[Auth email] Password recovery delivery unavailable');
+    }
     res.json({ success: true, message: 'Якщо акаунт існує, ми надішлемо лист для відновлення.' });
   }));
   app.post('/api/auth/reset-password', protectOrigin, wrap(async (req, res) => {
