@@ -544,6 +544,8 @@ export interface HookChartPreferences {
   showVolumes?: boolean;
   showMarketStatsBar?: boolean;
   showLiquidations?: boolean;
+  /** Optional historical recurrence heuristic, never confirmed future positions. */
+  showModeledLiquidationZones?: boolean;
   showLiqRiskBlock?: boolean;
   /** Hide only Long/Short marks; never affect the session's collected volume. */
   showLiquidationLong?: boolean;

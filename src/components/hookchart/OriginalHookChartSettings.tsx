@@ -65,6 +65,7 @@ export const ORIGINAL_HOOKCHART_DEFAULTS: HookChartPreferences = {
   showVolumes: true,
   showMarketStatsBar: true,
   showLiquidations: true,
+  showModeledLiquidationZones: false,
   showLiqRiskBlock: true,
   showLiquidationLong: true,
   showLiquidationShort: true,
@@ -155,6 +156,8 @@ export function normalizeOriginalHookChartPreferences(source?: HookChartPreferen
   if (source?.maxChartCandles !== undefined) next.maxChartCandles = clampHookChartHistory(source.maxChartCandles);
   next.densityDiffPct = normalizeDensityDistance(source?.densityDiffPct);
   next.crosshairLineWidth = normalizeCrosshairLineWidth(source?.crosshairLineWidth);
+  // Explicit true only. Existing accounts cannot opt in accidentally.
+  next.showModeledLiquidationZones = source?.showModeledLiquidationZones === true;
   for (const key of ['liquidationLongMinUsd', 'liquidationShortMinUsd'] as const) {
     const value = source?.[key];
     next[key] = typeof value === 'number' && Number.isFinite(value) && value >= 0
@@ -876,6 +879,12 @@ export function OriginalHookChartSettings({
 
           <Section title="Ліквідації">
             <SwitchRow label="Ліквідації на графіку" value={prefs.showLiquidations !== false} onChange={value => set('showLiquidations', value)} />
+            <SwitchRow
+              label="Прогнозні зони Liq · модель за історією"
+              desc="Додаткові горизонтальні теплові смуги на основі повторних історичних ліквідацій за тією самою ціною. Це не відомості про відкриті позиції, не підтверджені майбутні ліквідації і не ймовірність у відсотках. Працює лише коли вручну ввімкнено «Карту Liq» на ф'ючерсному графіку."
+              value={prefs.showModeledLiquidationZones === true}
+              onChange={value => set('showModeledLiquidationZones', value)}
+            />
             <SwitchRow label="Блок Liq + каскад" value={prefs.showLiqRiskBlock !== false} onChange={value => set('showLiqRiskBlock', value)} />
             <div className="settingsHint">Liq: сума всіх унікальних отриманих ліквідацій за поточну сесію, незалежно від порогів і перемикачів.</div>
             <SwitchRow label="Long (L)" help="Long: примусово закриті довгі позиції. Вимкнення приховує їх на графіку, але не змінює загальну суму Liq." value={prefs.showLiquidationLong !== false} onChange={value => set('showLiquidationLong', value)} />

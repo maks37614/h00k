@@ -204,3 +204,36 @@ docker compose logs --tail 120 app
 - To monitor, query the authenticated ops endpoint and inspect
   `liquidationArchive.monthChecked`, `monthlyResets`,
   `lastMonthlyResetAt`, `failures`, and `droppedOnOverflow`.
+
+
+## Optional historical recurrence model (separate from observed Liq)
+
+- In **HookChart → Налаштування графіка → Ліквідації**, the default-off
+  `Прогнозні зони Liq · модель за історією` setting enables a distinct
+  CoinGlass-like horizontal gradient band overlay **only while the chart's
+  Карта Liq button is also ON**. Previously observed heatmap rectangles,
+  Liq markers, cascades, OI and DOM/density overlays do not change.
+- The model groups **previously observed** liquidation events into their
+  original 0.5% logarithmic price buckets. A hypothetical recurrence band
+  needs at least **5 reported events in 3 different archived time buckets**
+  at that price; a single huge liquidation is not sufficient. A recency
+  weight favors more recent events and the model limits candidate prices
+  to within 20% of the last chart candle close. Up to 16 bands are drawn.
+- The bright violet-to-yellow bands are **relative historical recurrence
+  intensity**, *not* probabilities, future trade amounts, exact stops,
+  leverage distribution, or claims that positions remain open. No phantom
+  prices outside previously observed liquidation price buckets are added.
+  Truncated history suppresses the model instead of displaying misleading
+  rank scores. Insufficient history draws **zero** bands.
+- No new endpoint, exchange API, WS subscription, database table, or timer.
+  When the setting is OFF, or when the map button is OFF, computation
+  returns the shared empty array and there is no additional painter call.
+  Computation reuses the already fetched & cached observed 24h/7d bins and
+  is memoized by archive snapshot and the 0.5% chart-price bucket, not
+  recalculated on every tick.
+- The model is **experimental**. Backtesting can later measure whether
+  recurrence hotspots correlate with future observed events. Until
+  measured, do not describe relative intensity scores as 70% or 90%
+  probability of future liquidation. CoinGlass professional heatmaps are
+  proprietary position/leverage estimates; this independent recurrence
+  model is not an equivalent reconstruction.

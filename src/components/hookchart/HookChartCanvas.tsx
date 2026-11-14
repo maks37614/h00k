@@ -25,6 +25,7 @@ import { candlesBeforeHistoryEnd, clampHookChartHistory, extendHookChartHistory,
 import { createChartCrosshairStore } from './crosshairState';
 import { Chart, MemoChartTimeAxis, IndicatorDock, buildStructuralChannel, type Alert, type Candle, type Drawing, type HookChartHandle, type Viewport, type LiquidationHeatmapChartData } from './engine';
 import type { LiquidationHeatmapSnapshot, LiquidationHeatmapPeriod } from './liquidationHeatmap';
+import { estimateHistoricalLiqRecurrence, type HistoricalRecurrenceBand } from './historicalLiqRecurrence';
 import { INDICATOR_META, type IndicatorId, type OIPoint } from './indicatorEngine';
 import { captureVisualProfile, getVisualProfile, makeVisualProfileKey, normalizeVisualProfile, patchVisualProfile, visualContextForTerminalWidth, visualDeviceForWidth, type VisualChartProfile, type VisualContextId, type VisualProfileKey } from './visualProfiles';
 import { hookChartPlotWidth } from './priceScale';
@@ -98,6 +99,7 @@ export interface HookChartCanvasProps {
 const LazyLiquidationHeatmapLoader = React.lazy(() => import('./LiquidationHeatmapLoader'));
 
 const EMPTY_OI = { binance: [] as OIPoint[], bybit: [] as OIPoint[] };
+const EMPTY_MODELED_LIQ_BANDS: readonly HistoricalRecurrenceBand[] = [];
 const DEFAULT_VIEWPORT: Viewport = { barWidth: 9, rightOffset: 0, autoY: true, manualCenter: null, manualRange: null, fitAll: false };
 const TOOLS = [
   ['cursor', 'Курсор', Crosshair], ['level', 'Горизонтальний рівень', Minus], ['trend', 'Лінія тренду', MoveUpRight],
@@ -354,6 +356,21 @@ const HookChartCanvas = forwardRef<HookChartHandle, HookChartCanvasProps>(functi
     liveConversionRef.current = converted;
     return converted.candles;
   }, [klines, extraHistoryRows, replay, maxChartCandles, historyScope]);
+  // Historical recurrence estimation is strictly opt-in. Price updates are
+  // quantized to the same 0.5% buckets as archived Liq, so a fast chart tick
+  // never recomputes 6000 bins unnecessarily.
+  const recurrenceEnabled = liquidationMapOn && liquidationMapSupported &&
+    settings.showModeledLiquidationZones === true && !!mapChartData && !visibleMap?.truncated;
+  const currentReferencePrice = candles.at(-1)?.c ?? 0;
+  const referencePriceBucket = recurrenceEnabled && currentReferencePrice > 0
+    ? Math.floor(Math.log(currentReferencePrice) / Math.log(1.005)) : null;
+  const modeledLiquidationBands = useMemo<readonly HistoricalRecurrenceBand[]>(() => {
+    if (!recurrenceEnabled || !mapChartData || referencePriceBucket === null) return EMPTY_MODELED_LIQ_BANDS;
+    return estimateHistoricalLiqRecurrence(
+      mapChartData.bins, liquidationMapPeriod,
+      1.005 ** (referencePriceBucket + 0.5), Date.now(),
+    );
+  }, [recurrenceEnabled, mapChartData, liquidationMapPeriod, referencePriceBucket]);
   const historyRequestKey = useRef('');
   useEffect(() => {
     // The renderer always shows the most recent candles first; the full
@@ -1380,7 +1397,11 @@ const HookChartCanvas = forwardRef<HookChartHandle, HookChartCanvasProps>(functi
       {liquidationMapOn && liquidationMapSupported && (
         <div className="liqHeatmapAttribution" role="status" aria-live="polite">
           {visibleMapStatus === 'available' && mapChartData
-            ? `Liq ${liquidationMapPeriod}: отримані події, не прогноз${visibleMap?.truncated ? ' · неповний набір' : ''}`
+            ? `Liq ${liquidationMapPeriod}: отримані події${visibleMap?.truncated ? ' · неповний набір' : ''}${settings.showModeledLiquidationZones === true
+              ? modeledLiquidationBands.length
+                ? ' · смуги: історична модель, НЕ підтверджені майбутні ліквідації'
+                : ' · для модельних смуг недостатньо повторів або дані неповні'
+              : ' · без прогнозу'}`
             : visibleMapStatus === 'empty' ? 'За цей період збережених Liq немає'
             : visibleMapStatus === 'disabled' ? 'Архів Liq не увімкнений на сервері'
             : visibleMapStatus === 'error' ? 'Історія Liq тимчасово недоступна'
@@ -1481,6 +1502,7 @@ const HookChartCanvas = forwardRef<HookChartHandle, HookChartCanvasProps>(functi
         marketPrints={replay ? [] : liveFeed.marketPrints}
         liquidations={replay ? [] : liveFeed.liquidations}
         liquidationHeatmap={mapChartData}
+        modeledLiquidationBands={modeledLiquidationBands}
         sessionLiquidationsUsd={liveFeed.sessionLiquidationsUsd}
         showLiquidationLong={settings.showLiquidationLong !== false}
         showLiquidationShort={settings.showLiquidationShort !== false}
