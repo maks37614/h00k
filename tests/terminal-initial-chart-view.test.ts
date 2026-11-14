@@ -259,6 +259,8 @@ test('Terminal always chooses native HookChart, never legacy TradingView even on
   assert.match(wrapper, /forceHookChart=\{forceHookChart\}/);
   assert.doesNotMatch(page, /tradingViewUrl|getTradingViewSymbol|s\.tradingview\.com|<iframe/);
   assert.doesNotMatch(page, /setIframeLoading|handleToggleDrawingToolbar/);
+  assert.doesNotMatch(widget, /<iframe|tradingViewUrl|getTradingViewSymbol|s\.tradingview\.com/);
+  assert.doesNotMatch(widget, /fetchDirectKlines|calculateCorrelationToBtc|setTimeframeMetrics/);
 });
 
 test('Terminal sync conflicts are visible outside hidden menus and can be recovered safely', () => {
