@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import type { HookChartPreferences } from '../src/types';
 import { HookChartDensityBook } from '../src/components/hookchart/densityBook';
+import { equalDepthAutoStats } from '../src/components/hookchart/feedPublishPolicy';
 import {
   createOrderBookLocalShareFloorLookup, orderBookLocalShareFloor,
   type OrderBookDensityLevel,
@@ -62,4 +63,12 @@ test('depth books reuse level snapshots on hold-time ticks but invalidate on del
   const empty = depth.read(base, 1, now + 303);
   assert.equal(empty.depthReady, false);
   assert.deepEqual(empty.book, { b: [], a: [] });
+});
+
+test('unchanged depth auto counters can skip React updates without hiding trade-flow changes', () => {
+  const a = { baseline: 100, bidCut: 200, askCut: 300, buy5m: 400, sell5m: 500 };
+  assert.equal(equalDepthAutoStats(a, { ...a }), true);
+  for (const key of ['baseline', 'bidCut', 'askCut', 'buy5m', 'sell5m'] as const) {
+    assert.equal(equalDepthAutoStats(a, { ...a, [key]: a[key] + 1 }), false);
+  }
 });
