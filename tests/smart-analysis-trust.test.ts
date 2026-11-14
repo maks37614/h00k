@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 
 const source = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf8');
 const service = source('../server/smartAnalysisService.ts');
+const btc = source('../server/verifiedBtcContext.ts');
 const ui = source('../src/components/SmartAnalysisBlock.tsx');
 const details = source('../src/components/FormationDetailsModal.tsx');
 
@@ -33,8 +34,11 @@ test('exchange / market type are respected for live depth and missing depth cann
 
 test('no invented BTC quotes, structural signals, dates or pseudo-24h from arbitrary TF candles', () => {
   assert.doesNotMatch(service, /btcPrice: 85200|btcPrice = .*85000|change24h = .*1\.2/);
-  assert.match(service, /structure: 'unknown', label: 'Немає даних біржі'/);
-  assert.match(service, /upcomingNews: \[\]/);
+  assert.match(btc, /structure: 'unknown', label: 'Немає підтверджених свічок Binance Futures'/);
+  assert.match(btc, /upcomingNews: \[\]/);
+  assert.match(btc, /fetchKlines\('binance', 'futures', BTC, tf, 25,/);
+  assert.match(btc, /\{ chart: true \}/);
+  assert.match(btc, /getVerifiedClosedBtcCandles/);
   assert.match(service, /fetchKlines\(exchange, marketType, symbol, tf, 220,/);
   assert.match(service, /undefined, undefined, \{ chart: true \}/);
   assert.match(service, /klines\.length < MIN_TECHNICAL_BARS/);
@@ -48,6 +52,11 @@ test('no invented BTC quotes, structural signals, dates or pseudo-24h from arbit
   assert.match(ui, /Календар новин не підключено/);
   assert.match(ui, /data\.btcContext\.change24h === null \? 'н\/д'/);
   assert.match(ui, /volumeOrNA\(data\.volumeMetrics\.volume24hUsd\)/);
+  assert.match(service, /calculatePOC\(has24h \? closedHours : \[\]\)/);
+  assert.match(service, /valid24hWindow/);
+  assert.match(ui, /EMA200: \{data\.trend\.ema200 \?\? 'н\/д'\}/);
+  assert.match(ui, /Funding Rate · Binance \/ Bybit/);
+  assert.match(ui, /Частка токенів у топ-10% адрес/);
 });
 
 test('holder wallets, iceberg trades, HFT algorithms and manipulation are not fabricated', () => {
