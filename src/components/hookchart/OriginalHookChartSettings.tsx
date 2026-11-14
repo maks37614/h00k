@@ -333,7 +333,7 @@ function Setting({ label, desc, help, rowClassName, unavailable = false, childre
 function SwitchRow({ label, desc, help, rowClassName, unavailable, value, onChange }: { label: string; desc?: string; help?: string; rowClassName?: string; unavailable?: boolean; value: boolean; onChange: (value: boolean) => void }) {
   return <Setting label={label} desc={desc} help={help} rowClassName={rowClassName} unavailable={unavailable}><label className="settingsSwitch"><input type="checkbox" aria-label={label} checked={value} onChange={event => onChange(event.target.checked)} /><span /></label></Setting>;
 }
-function LiquidationMinimum({ value, disabled, onChange }: { value?: number | null; disabled?: boolean; onChange: (value: number | null) => void }) {
+export function LiquidationMinimum({ value, disabled, onChange }: { value?: number | null; disabled?: boolean; onChange: (value: number | null) => void }) {
   const [draft, setDraft] = useState<string | null>(null);
   const commit = (raw: string) => {
     setDraft(null);
@@ -353,7 +353,7 @@ function LiquidationMinimum({ value, disabled, onChange }: { value?: number | nu
     onKeyDown={event => { if (event.key === 'Enter') event.currentTarget.blur(); }}
   />;
 }
-function Num({ value, set, min, max, disabled = false, ariaLabel }: { value: number; set: (value: number) => void; min?: number; max?: number; step?: number; disabled?: boolean; ariaLabel?: string }) {
+export function Num({ value, set, min, max, disabled = false, ariaLabel }: { value: number; set: (value: number) => void; min?: number; max?: number; step?: number; disabled?: boolean; ariaLabel?: string }) {
   // Keep a temporary string while editing. Number('') is zero, so committing
   // on every keystroke prevents users from deleting a displayed 0 on iOS.
   const [draft, setDraft] = useState<string | null>(null);
