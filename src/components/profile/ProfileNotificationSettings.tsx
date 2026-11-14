@@ -335,16 +335,11 @@ export const ProfileNotificationSettings: React.FC = () => {
 
       <section className="space-y-3 rounded-xl border border-slate-700 bg-slate-950/60 p-3 sm:p-4">
         <h4 className="flex items-center gap-2 text-sm font-bold"><Volume2 className="h-4 w-4 text-cyan-300"/> Як отримувати</h4>
-        <label className="flex items-center justify-between gap-3 text-xs">
-          <span>Звукове сповіщення (за замовчуванням вимкнено)</span>
-          <input type="checkbox" checked={soundEnabled} disabled={!settings.enabled}
-            onChange={e => void setSoundEnabled(e.target.checked)} className="h-4 w-4 accent-cyan-400"/>
-        </label>
         <div className="flex flex-wrap items-end gap-2">
           <label className="min-w-0 flex-1 space-y-1 text-xs">Звук
             <select value={settings.sound} onChange={e => update({ sound: e.target.value as SiteNotificationSettings['sound'], soundChosen: true })}
               className="w-full rounded-lg border border-slate-700 bg-slate-900 p-2 text-sm text-white">
-              <option value="alert35">H00K — новий сигнал (за замовчуванням)</option>
+              <option value="alert35">h00k deffault</option>
               <option value="chime">Дзвін</option><option value="soft">М’який</option><option value="pulse">Подвійний імпульс</option>
               {(personalSoundName || settings.sound === 'custom') && <option value="custom">Моя мелодія</option>}
             </select>
@@ -385,6 +380,11 @@ export const ProfileNotificationSettings: React.FC = () => {
           </p>
         )}
         {soundError && <p role="alert" className="text-xs text-rose-300">{soundError}</p>}
+        <label className="flex items-center justify-between gap-3 text-xs">
+          <span>Звукове сповіщення (за замовчуванням вимкнено)</span>
+          <input type="checkbox" checked={soundEnabled} disabled={!settings.enabled}
+            onChange={e => void setSoundEnabled(e.target.checked)} className="h-4 w-4 accent-cyan-400"/>
+        </label>
         <label className="flex items-center justify-between gap-3 text-xs">
           <span>Сповіщення браузера, якщо вкладка згорнута</span>
           <input type="checkbox" checked={settings.browserPush} disabled={!settings.enabled}
