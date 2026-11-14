@@ -81,11 +81,17 @@ export function ProfileScreenerSearchSettings() {
     }
   };
 
-  const saveDefault = () => void write({
-    ...stored, defaultConfig: normalizeScreenerSearchConfig(draft, fallback), defaultPresetId: null,
-  }, 'Налаштування за замовчуванням збережено для Скрінера.');
+  const hasInvalidPriceRange = draft.minPriceUsd > 0 && draft.maxPriceUsd > 0
+    && draft.minPriceUsd > draft.maxPriceUsd;
+  const saveDefault = () => {
+    if (hasInvalidPriceRange) { setError('Мінімальна ціна не може перевищувати максимальну.'); return; }
+    void write({
+      ...stored, defaultConfig: normalizeScreenerSearchConfig(draft, fallback), defaultPresetId: null,
+    }, 'Налаштування за замовчуванням збережено для Скрінера.');
+  };
 
   const savePreset = () => {
+    if (hasInvalidPriceRange) { setError('Мінімальна ціна не може перевищувати максимальну.'); return; }
     const name = presetName.trim();
     if (!name) { setError('Введіть назву пресета.'); return; }
     const presets = stored.presets || [];
@@ -197,6 +203,107 @@ export function ProfileScreenerSearchSettings() {
               </option>)}
             </select>
           </div>
+        </div>
+        <div className="col-span-full space-y-4 rounded-xl border border-cyan-500/20 bg-slate-900/40 p-3 sm:p-4">
+          <div>
+            <h5 className="text-sm font-semibold text-cyan-200">Розширені фільтри пошуку</h5>
+            <p className="mt-1 text-xs leading-relaxed text-slate-400">
+              Порожні та нульові пороги не обмежують результати. Фільтри використовують лише вже отримані
+              котирування й кеш формацій, не запускаючи окремих запитів або сканування.
+            </p>
+          </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <label className={label}>Мінімальна волатильність 5m, %
+              <input type="number" inputMode="decimal" min={0} max={1000} step={0.1} className={control}
+                placeholder="Необмежено" value={draft.minVolatility5mPct || ''}
+                onChange={event => setField('minVolatility5mPct', Number(event.target.value))}/>
+              <span className="block font-normal leading-relaxed text-slate-400">
+                Активні рухи за 5 хв. Для частини монет значення 5m може бути розрахунковою оцінкою.
+              </span>
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              <label className={label}>Ціна від, $
+                <input type="number" inputMode="decimal" min={0} step="any" className={control}
+                  placeholder="0,01" value={draft.minPriceUsd || ''}
+                  onChange={event => setField('minPriceUsd', Number(event.target.value))}/>
+              </label>
+              <label className={label}>Ціна до, $
+                <input type="number" inputMode="decimal" min={0} step="any" className={control}
+                  placeholder="10" value={draft.maxPriceUsd || ''}
+                  onChange={event => setField('maxPriceUsd', Number(event.target.value))}/>
+              </label>
+              {hasInvalidPriceRange && <p role="alert" className="col-span-2 text-xs text-rose-300">
+                Ціна «від» не може бути більшою за «до».
+              </p>}
+            </div>
+            <label className={label}>До 24h High, відстань %
+              <input type="number" inputMode="decimal" min={0} max={100} step={0.1} className={control}
+                placeholder="Необмежено" value={draft.maxDistanceToHighPct ?? ''}
+                onChange={event => setField('maxDistanceToHighPct', event.target.value === '' ? null : Number(event.target.value))}/>
+              <span className="block font-normal text-slate-400">Наприклад, 2 = не далі ніж 2% від максимуму 24г.</span>
+            </label>
+            <label className={label}>До 24h Low, відстань %
+              <input type="number" inputMode="decimal" min={0} max={100} step={0.1} className={control}
+                placeholder="Необмежено" value={draft.maxDistanceToLowPct ?? ''}
+                onChange={event => setField('maxDistanceToLowPct', event.target.value === '' ? null : Number(event.target.value))}/>
+              <span className="block font-normal text-slate-400">Якщо задані обидва рівні, повинні виконуватися обидві умови.</span>
+            </label>
+            <label className="col-span-full flex items-start gap-2 rounded-lg border border-slate-700/70 p-3 text-sm text-slate-200">
+              <input type="checkbox" className="mt-0.5 h-4 w-4 shrink-0 accent-cyan-500"
+                checked={draft.onlyWithFormations} onChange={event => setField('onlyWithFormations', event.target.checked)}/>
+              <span><strong className="font-semibold">Тільки монети з формаціями</strong>
+                <span className="mt-1 block text-xs leading-relaxed text-slate-400">
+                  Показувати монети зі знайденими формаціями з уже наявного кешу стандартного сканера.
+                  Непроскановані монети не проходять цей фільтр.
+                </span>
+              </span>
+            </label>
+            <label className={label}>Open Interest (OI) від, $
+              <input type="number" inputMode="decimal" min={0} step="any" className={control}
+                placeholder="Необмежено" value={draft.minOpenInterestUsd || ''}
+                onChange={event => setField('minOpenInterestUsd', Number(event.target.value))}/>
+              <span className="block font-normal leading-relaxed text-slate-400">
+                Доступні реальні OI з котирувань (зараз переважно Bybit Futures). Без даних OI монета не проходить активний фільтр.
+              </span>
+            </label>
+            <div className="space-y-2">
+              <label className={label}>Funding Rate
+                <select className={control} value={draft.fundingRateDirection}
+                  onChange={event => setField('fundingRateDirection', event.target.value as ScreenerSearchConfig['fundingRateDirection'])}>
+                  <option value="any">Не фільтрувати</option>
+                  <option value="positive">Позитивний (+)</option>
+                  <option value="negative">Негативний (−)</option>
+                </select>
+              </label>
+              <label className={label}>Мінімальний |Funding|, %
+                <input type="number" inputMode="decimal" min={0} max={100} step={0.001} className={control}
+                  placeholder="Необмежено" value={draft.minFundingRateAbsPct || ''}
+                  onChange={event => setField('minFundingRateAbsPct', Number(event.target.value))}/>
+              </label>
+              <p className="text-xs leading-relaxed text-slate-400">
+                Береться з наявних ф’ючерсних котирувань. Якщо Funding недоступний, увімкнений фільтр його не вигадує.
+              </p>
+            </div>
+            <label className={label}>RVOL підтвердженого пробою, від ×
+              <select className={control} value={draft.minBreakoutRvol}
+                onChange={event => setField('minBreakoutRvol', Number(event.target.value))}>
+                <option value={0}>Не фільтрувати</option>
+                <option value={1}>Від 1×</option>
+                <option value={1.2}>Від 1,2×</option>
+                <option value={1.5}>Від 1,5×</option>
+                <option value={2}>Від 2×</option>
+                <option value={3}>Від 3×</option>
+              </select>
+              <span className="block font-normal leading-relaxed text-slate-400">
+                Обсяг свічки підтвердженого пробою відносно попередніх 20 закритих свічок.
+                Використовується лише перевірений RVOL з кешу формацій, не загальний RVOL кожної монети.
+              </span>
+            </label>
+          </div>
+          <p className="text-xs leading-relaxed text-amber-200/80">
+            Важливо: OI, Funding, RVOL та формації можуть бути доступні не для всіх монет. Увімкнені
+            фільтри не пропускають монети без потрібних даних; нові запити до бірж не додаються.
+          </p>
         </div>
         <div className="hidden sm:block" aria-hidden="true" />
         <label className={label}>Основний показник сортування
