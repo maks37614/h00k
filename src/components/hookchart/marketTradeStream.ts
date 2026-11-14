@@ -1,5 +1,6 @@
 import type { ExchangeId, MarketType } from '../../types';
 import { adaptiveCut, type MarketPrint } from './marketAnalytics';
+import { fetchMarketTradeSeedJson } from './marketTradeSeed';
 
 /** One public-trade transport and one adaptive threshold per exchange/market/symbol per browser tab. */
 export type MarketTrade = { id: string; t: number; p: number; q: number; side: 'BUY' | 'SELL' };
@@ -257,9 +258,7 @@ class SharedMarketTradeStream {
         const hosts = marketType === 'futures' ? [BINANCE_FUTURES_API] : BINANCE_SPOT_APIS;
         for (const host of hosts) {
           try {
-            const response = await fetch(host + path, { signal: this.abort.signal, cache: 'no-store' });
-            if (!response.ok) throw new Error('HTTP ' + response.status);
-            const data = await response.json();
+            const data = await fetchMarketTradeSeedJson(host + path, this.abort.signal);
             history = (Array.isArray(data) ? data : []).map((row: any) => ({
               t: Number(row.T), p: Number(row.p), q: Number(row.q),
               side: row.m ? 'SELL' : 'BUY', id: String(row.a ?? ''),
@@ -273,15 +272,12 @@ class SharedMarketTradeStream {
         const category = marketType === 'futures' ? 'linear' : 'spot';
         const url = BYBIT_API + '/v5/market/recent-trade?category=' + category +
           '&symbol=' + encodeURIComponent(symbol) + '&limit=1000';
-        const response = await fetch(url, { signal: this.abort.signal, cache: 'no-store' });
-        if (response.ok) {
-          const data = await response.json();
-          history = (data?.result?.list || []).map((row: any) => ({
-            t: Number(row.time), p: Number(row.price), q: Number(row.size),
-            side: String(row.side).toLowerCase() === 'sell' ? 'SELL' : 'BUY',
-            id: String(row.execId ?? ''),
-          }));
-        }
+        const data = await fetchMarketTradeSeedJson(url, this.abort.signal);
+        history = (data?.result?.list || []).map((row: any) => ({
+          t: Number(row.time), p: Number(row.price), q: Number(row.size),
+          side: String(row.side).toLowerCase() === 'sell' ? 'SELL' : 'BUY',
+          id: String(row.execId ?? ''),
+        }));
       }
     } catch {
       // A temporary REST failure must not prevent the live public-trade stream.
