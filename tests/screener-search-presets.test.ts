@@ -103,3 +103,10 @@ test('account switching and failed preset writes cannot leak search settings', (
   assert.match(editor, /return false;/);
   assert.match(screener, /const cachedUi = screenerUiSession\.get\(user\?\.uid \|\| 'guest'\)/);
 });
+
+test('empty symbol search explains and preserves full-market filtering', () => {
+  const editor = source('../src/components/profile/ProfileScreenerSearchSettings.tsx');
+  const screener = source('../src/components/CoinScreenerPage.tsx');
+  assert.match(editor, /Якщо залишити поле порожнім, скрінер шукатиме всі монети/);
+  assert.match(screener, /if \(searchQuery\.trim\(\) && !matchesExchangeInstrumentSearch/);
+});
