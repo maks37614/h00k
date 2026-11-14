@@ -336,6 +336,8 @@ export async function verifyEmailToken(token: unknown) {
     // after the address is verified. A stale link must not serve as a login token.
     await client.query("UPDATE auth_action_tokens SET consumed_at = now() WHERE user_id = $1 AND purpose = 'verify-email' AND consumed_at IS NULL", [rows[0].user_id]);
     await client.query('UPDATE auth_users SET email_verified_at = COALESCE(email_verified_at, now()), updated_at = now() WHERE id = $1', [rows[0].user_id]);
+    // A queued follow-up verification email is no longer relevant.
+    await client.query("UPDATE auth_mail_outbox SET completed_at = now(), claimed_until = NULL WHERE user_id = $1 AND purpose = 'verify-email' AND completed_at IS NULL", [rows[0].user_id]);
     await client.query('COMMIT');
     return String(rows[0].user_id);
   } catch (error) { await client.query('ROLLBACK'); throw error; }
@@ -371,6 +373,8 @@ export async function changePasswordWithToken(token: unknown, passwordInput: unk
     await client.query('UPDATE auth_sessions SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL', [id]);
     // Reset all previously issued password links, not just the submitted link.
     await client.query("UPDATE auth_action_tokens SET consumed_at = now() WHERE user_id = $1 AND purpose = 'reset-password' AND consumed_at IS NULL", [id]);
+    // Cancel previously requested recovery mail that is still in the queue.
+    await client.query("UPDATE auth_mail_outbox SET completed_at = now(), claimed_until = NULL WHERE user_id = $1 AND purpose = 'reset-password' AND completed_at IS NULL", [id]);
     await client.query('COMMIT');
   } catch (error) { await client.query('ROLLBACK'); throw error; }
   finally { client.release(); }
