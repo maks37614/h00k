@@ -28,7 +28,7 @@ import {
   Lock,
   ShieldCheck,
 } from 'lucide-react';
-import { SmartAnalysisData, ScannedCoin, DetectedFormation, Kline, Timeframe } from '../types';
+import { SmartAnalysisData, ScannedCoin, DetectedFormation, Kline, Timeframe, CoinGeckoHolderSnapshot } from '../types';
 import { formatCryptoPrice, formatVolume, formatPercent } from '../utils/formatters';
 
 interface SmartAnalysisBlockProps {
@@ -55,6 +55,41 @@ export const SmartAnalysisBlock: React.FC<SmartAnalysisBlockProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'all' | 'btc' | 'tech' | 'orderbook' | 'derivatives' | 'institutional'>('all');
   const analysisAbortRef = useRef<AbortController | null>(null);
+  const [holderSnapshot, setHolderSnapshot] = useState<CoinGeckoHolderSnapshot | null>(null);
+  const [holdersLoading, setHoldersLoading] = useState(true);
+
+  // Holders are independent of the expensive Quant snapshot. Reuse the backend
+  // cache across users and only load on the open details page, not every chart.
+  useEffect(() => {
+    const controller = new AbortController();
+    setHolderSnapshot(null);
+    setHoldersLoading(true);
+    void (async () => {
+      try {
+        const response = await fetch('/api/market/holders?symbol=' +
+          encodeURIComponent(coin.symbol), { signal: controller.signal });
+        if (!response.ok) return;
+        const result = await response.json();
+        if (!controller.signal.aborted && result.success === true && result.data) {
+          setHolderSnapshot(result.data as CoinGeckoHolderSnapshot);
+        }
+      } catch {
+        // Keep n/d. CoinGecko must never break HookChart or the Quant panel.
+      } finally {
+        if (!controller.signal.aborted) setHoldersLoading(false);
+      }
+    })();
+    return () => controller.abort();
+  }, [coin.symbol]);
+
+  const holdersAvailable = holderSnapshot?.status === 'available' &&
+    holderSnapshot.count !== null;
+  const holderDistribution = holdersAvailable ? holderSnapshot?.distribution : null;
+  const holderCountDisplay = holdersAvailable
+    ? new Intl.NumberFormat('uk-UA').format(holderSnapshot!.count!) : 'н/д';
+  const holderTop10Display = holderDistribution &&
+    typeof holderDistribution.top_10 === 'number'
+      ? holderDistribution.top_10.toFixed(2) + '%' : 'н/д';
 
   const fetchAnalysis = async () => {
     analysisAbortRef.current?.abort();
@@ -221,8 +256,12 @@ export const SmartAnalysisBlock: React.FC<SmartAnalysisBlockProps> = ({
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 text-xs">
         <div className="p-3 rounded-xl bg-slate-900/80 border border-slate-800 space-y-1.5">
           <span className="flex items-center gap-1.5 text-slate-400"><Wallet className="w-3.5 h-3.5" /> Аналіз Holders</span>
-          <strong className="block text-white font-mono">н/д</strong>
-          <p className="text-slate-400 text-[10px]">Ончейн-джерело не підключене</p>
+          <strong className="block text-white font-mono">{holdersLoading ? '…' : holderCountDisplay}</strong>
+          <p className="text-slate-400 text-[10px]">
+            {holdersAvailable ? 'Власників · CoinGecko · ' + holderSnapshot!.network
+              : holdersLoading ? 'Завантаження CoinGecko…'
+                : holderSnapshot?.detail || 'CoinGecko Holders недоступні'}
+          </p>
         </div>
         <div className="p-3 rounded-xl bg-slate-900/80 border border-slate-800 space-y-1.5">
           <span className="flex items-center gap-1.5 text-slate-400"><Eye className="w-3.5 h-3.5" /> Великі заявки</span>
@@ -763,11 +802,51 @@ export const SmartAnalysisBlock: React.FC<SmartAnalysisBlockProps> = ({
                 1. Аналіз Holders & Розподіл Гаманців
               </h6>
               <dl className="grid grid-cols-2 gap-2 text-[11px]">
-                <div><dt className="text-slate-400">Топ-10 гаманців</dt><dd className="text-white">н/д</dd></div>
-                <div><dt className="text-slate-400">Активні адреси (24h)</dt><dd className="text-white">н/д</dd></div>
-                <div className="col-span-2"><dt className="text-slate-400">Retail / Whale</dt><dd className="text-white">н/д</dd></div>
+                <div>
+                  <dt className="text-slate-400">Кількість адрес-власників</dt>
+                  <dd className="font-mono font-semibold text-white">{holdersLoading ? '…' : holderCountDisplay}</dd>
+                </div>
+                <div>
+                  <dt className="text-slate-400">Частка групи top_10</dt>
+                  <dd className="font-mono font-semibold text-white">{holdersLoading ? '…' : holderTop10Display}</dd>
+                </div>
+                <div>
+                  <dt className="text-slate-400">Активні адреси (24h)</dt>
+                  <dd className="font-mono text-slate-300">н/д · немає в Demo</dd>
+                </div>
+                <div>
+                  <dt className="text-slate-400">Зміна Holders (24h)</dt>
+                  <dd className="font-mono text-slate-300">н/д · немає історії</dd>
+                </div>
               </dl>
-              <p className="text-slate-400 text-[11px]">{data.participants.holders.phaseDescription}</p>
+              {holderDistribution && (
+                <div className="grid grid-cols-2 gap-1.5 text-[11px]">
+                  {(['11_20', '21_40', '11_30', '31_50', 'rest'] as const).map(key =>
+                    typeof holderDistribution[key] === 'number' ? (
+                      <div key={key} className="flex justify-between gap-2 rounded bg-slate-950/70 px-2 py-1">
+                        <span className="text-slate-400">{key === 'rest' ? 'Решта' : key.replace('_', '–')}</span>
+                        <span className="font-mono text-white">{holderDistribution[key].toFixed(2)}%</span>
+                      </div>
+                    ) : null
+                  )}
+                </div>
+              )}
+              <p className="text-slate-400 text-[11px]">
+                {holdersLoading ? 'Отримання перевірених даних CoinGecko…'
+                  : holderSnapshot?.detail || 'Дані Holders від CoinGecko недоступні.'}
+              </p>
+              {holdersAvailable && (
+                <div className="space-y-1 text-[10px] text-slate-500">
+                  <p>Мережа: {holderSnapshot!.network} · Контракт: {holderSnapshot!.contractAddress?.slice(0, 10)}…{holderSnapshot!.contractAddress?.slice(-5)}</p>
+                  <p>Дані CoinGecko (beta): {holderSnapshot!.lastUpdated
+                    ? new Date(holderSnapshot!.lastUpdated).toLocaleString('uk-UA') : 'час не вказано'}</p>
+                  <p>Групи розподілу включають біржові та контрактні адреси. Це не кількість окремих людей.</p>
+                </div>
+              )}
+              <a href="https://www.coingecko.com/" target="_blank" rel="noopener noreferrer"
+                className="inline-flex text-[11px] text-cyan-300 underline underline-offset-2">
+                Джерело: CoinGecko
+              </a>
             </section>
 
             <section className="p-3.5 rounded-xl bg-slate-900/80 border border-slate-800 space-y-2">
