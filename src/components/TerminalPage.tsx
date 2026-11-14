@@ -47,7 +47,7 @@ import { loadMarketCoins, type MarketCoinSnapshot } from '../utils/marketCoinLoa
 import { TerminalPresetPanel } from './terminal/TerminalPresetPanel';
 import { TerminalClock } from './terminal/TerminalClock';
 import { toggleFullscreenSafe } from '../utils/fullscreenUtils';
-import { useChartProvider } from '../utils/useChartProvider';
+import { normalizeChartProvider } from '../utils/chartPreferences';
 
 interface TerminalPageProps {
   coins: ScannedCoin[];
@@ -70,7 +70,8 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
   onOpenFullscreenModal,
   onReturnToPatterns,
 }) => {
-  const chartProvider = useChartProvider();
+  // The Terminal is HookChart-only. Legacy TradingView settings never create an iframe here.
+  const chartProvider = normalizeChartProvider('hookchart');
   const { preferences } = useAppPreferences();
   const { user, profile } = useAuth();
   const { blocks, config, customPresets, setBlocks: updateBlocks, setConfig, setCustomPresets,
@@ -1260,6 +1261,7 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
               </>
             ) : (
               <ExchangeCandlestickChart
+                forceHookChart
                 visualContext="terminalLarge"
                 symbol={activeCoin.symbol}
                 terminalAutoScale={autoScaleCharts && chartProvider === 'hookchart'}
