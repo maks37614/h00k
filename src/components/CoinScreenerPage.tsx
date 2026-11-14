@@ -650,16 +650,21 @@ export const CoinScreenerPage: React.FC<CoinScreenerPageProps> = ({
           </button>
         </div>
 
-        {user && !!searchSettings.presets?.length && <div className="flex flex-wrap items-center gap-2">
-          <label htmlFor="screener-custom-search-preset" className="text-xs font-semibold text-cyan-300">Мої пресети пошуку:</label>
-          <select id="screener-custom-search-preset" defaultValue="" aria-label="Застосувати мій пресет пошуку"
+        {user && <div className="flex flex-wrap items-center gap-2">
+          <label htmlFor="screener-custom-search-preset" className="text-xs font-semibold text-cyan-300">Пресети пошуку:</label>
+          <select id="screener-custom-search-preset" defaultValue="" aria-label="Застосувати пресет пошуку"
             onChange={event => {
-              const selected = searchSettings.presets?.find(item => item.id === event.target.value);
-              if (selected) applySearchConfig(selected.config);
+              if (event.target.value === '__default__') {
+                applySearchConfig(effectiveScreenerSearchConfig(searchSettings));
+              } else {
+                const selected = searchSettings.presets?.find(item => item.id === event.target.value);
+                if (selected) applySearchConfig(selected.config);
+              }
               event.currentTarget.value = '';
             }}
             className="max-w-full rounded-lg border border-cyan-500/30 bg-slate-950 px-3 py-2 text-xs text-slate-100 focus:border-cyan-400 focus:outline-none">
-            <option value="">Вибрати збережений пресет</option>
+            <option value="">Вибрати пресет</option>
+            <option value="__default__">Застосувати стандартні налаштування</option>
             {(searchSettings.presets || []).map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
           </select>
         </div>}
