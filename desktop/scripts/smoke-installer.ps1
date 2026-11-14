@@ -24,10 +24,26 @@ function Install-H00k([string[]]$Arguments) {
   if ($process.ExitCode -ne 0) { throw "NSIS failed with exit code $($process.ExitCode)" }
 }
 
+function Get-H00kInstallerLanguage {
+  # Per-user NSIS installations store their selection under a subkey of HKCU:\Software.
+  $values = @(Get-ChildItem -Path 'Registry::HKEY_CURRENT_USER\Software' -ErrorAction Stop |
+    ForEach-Object {
+      $item = Get-ItemProperty -LiteralPath $_.PSPath -Name 'H00kInstallerLanguage' -ErrorAction SilentlyContinue
+      if ($null -ne $item -and $null -ne $item.H00kInstallerLanguage) {
+        [string]$item.H00kInstallerLanguage
+      }
+    })
+  if ($values.Count -ne 1) { throw "Expected one stored h00k installer language; got $($values.Count)" }
+  return $values[0]
+}
+
 # GitHub Windows runner is fresh; intentionally exercise both an opted-out and
 # an opted-in install on the same Windows user. No trading terminal is launched.
 if (@(DesktopLinks).Count -ne 0) { throw 'Runner already has a h00k desktop shortcut' }
 Install-H00k @('/S','/NO_DESKTOP_SHORTCUT')
+if ((Get-H00kInstallerLanguage) -ne '1033') {
+  throw 'English must be the initial installer language, regardless of OS locale'
+}
 if (@(DesktopLinks).Count -ne 0) { throw 'Opt-out installation incorrectly created a desktop shortcut' }
 $startLinks = @(StartMenuLinks)
 if ($startLinks.Count -lt 1) { throw 'Installer did not create a Start Menu shortcut' }
@@ -54,4 +70,23 @@ try {
   Write-Host "PASS: $($links[0].Name) -> $($shortcut.TargetPath) with $($ico.Width)x$($ico.Height) icon"
 } finally {
   $ico.Dispose()
+}
+
+# Verify all four language overrides persist without changing the shortcut preference.
+# Interactive Windows users choose the same locales through the first page.
+foreach ($testCase in @(
+  @{ Code = 'pl'; Lcid = '1045' },
+  @{ Code = 'ru'; Lcid = '1049' },
+  @{ Code = 'uk'; Lcid = '1058' },
+  @{ Code = 'en'; Lcid = '1033' }
+)) {
+  Install-H00k @('/S', "/H00K_LANG=$($testCase.Code)")
+  $actual = Get-H00kInstallerLanguage
+  if ($actual -ne $testCase.Lcid) {
+    throw "Language $($testCase.Code) did not persist: expected $($testCase.Lcid), got $actual"
+  }
+  if (@(DesktopLinks).Count -ne 1) {
+    throw "Changing installer language affected the desktop shortcut ($($testCase.Code))"
+  }
+  Write-Host "PASS: installer locale $($testCase.Code) / LCID $actual persisted"
 }

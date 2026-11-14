@@ -33,7 +33,7 @@ function sidebar(uninstall){
  +'<text x="20" y="237" font-family="Segoe UI,Arial,sans-serif" letter-spacing="2" font-size="13" font-weight="700" fill="'+C+'">DESKTOP</text>'
  +'<text x="20" y="261" font-family="Segoe UI,Arial,sans-serif" font-size="10" fill="'+MUTED+'">WINDOWS</text>'
  +'<text x="20" y="297" font-family="Segoe UI,Arial,sans-serif" font-size="9" fill="'+LIGHT+'">'
- +(uninstall?'UNINSTALL':'INSTALL')+' - h00k.top</text>');
+ +'h00k.top</text>');
 }
 function header(){
  return svg(150,57,defs+'<rect width="150" height="57" fill="url(#night)"/>'
