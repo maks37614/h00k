@@ -805,7 +805,7 @@ export function OriginalHookChartSettings({
   if (!open) return null;
 
   const set = <K extends keyof HookChartPreferences>(key: K, value: HookChartPreferences[K]) => onChange({ [key]: value } as HookChartPreferences);
-  const toggleArray = (key: 'analyzedIntervals' | 'levelIntervals' | 'trendIntervals', value: string, max?: number) => {
+  const toggleArray = (key: 'levelIntervals' | 'trendIntervals', value: string, max?: number) => {
     const current = prefs[key] || [];
     const next = current.includes(value) ? current.filter(item => item !== value) : (max && current.length >= max ? current : [...current, value]);
     set(key, next);
