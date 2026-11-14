@@ -1,10 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import type { MarketCoin } from '../src/types';
+import type { MarketCoin, ScannedCoin } from '../src/types';
 import {
   DEFAULT_SCREENER_SEARCH_CONFIG, MAX_SCREENER_SEARCH_PRESETS,
-  compareScreenerSearchCoins, effectiveScreenerSearchConfig,
+  compareScreenerSearchCoins, effectiveScreenerSearchConfig, matchesAdvancedScreenerFilters,
   normalizeScreenerSearchConfig, normalizeScreenerSearchSettings,
 } from '../src/utils/screenerSearchSettings';
 
@@ -158,4 +158,103 @@ test('24h volume filter label is translated while preserving the requested Ukrai
       assert.ok(locale.includes('"' + key + '":'), language + ' must translate ' + key);
     }
   }
+});
+
+test('advanced Screener filters remain off for old saved presets and clamp malformed numeric values', () => {
+  const old = normalizeScreenerSearchConfig({ searchQuery: 'BTC', volumeMode: 'from' });
+  assert.equal(old.minVolatility5mPct, 0);
+  assert.equal(old.minPriceUsd, 0);
+  assert.equal(old.maxPriceUsd, 0);
+  assert.equal(old.maxDistanceToHighPct, null);
+  assert.equal(old.maxDistanceToLowPct, null);
+  assert.equal(old.onlyWithFormations, false);
+  assert.equal(old.minOpenInterestUsd, 0);
+  assert.equal(old.fundingRateDirection, 'any');
+  assert.equal(old.minFundingRateAbsPct, 0);
+  assert.equal(old.minBreakoutRvol, 0);
+  assert.equal(old.volumeMode, 'from');
+  const malformed = normalizeScreenerSearchConfig({
+    minVolatility5mPct: -3, minPriceUsd: Number.POSITIVE_INFINITY,
+    maxDistanceToHighPct: -12, maxDistanceToLowPct: 120,
+    minOpenInterestUsd: -1, fundingRateDirection: 'invalid', minFundingRateAbsPct: 102,
+    minBreakoutRvol: Number.NaN, onlyWithFormations: 'true',
+  });
+  assert.equal(malformed.minVolatility5mPct, 0);
+  assert.equal(malformed.minPriceUsd, 0);
+  assert.equal(malformed.maxDistanceToHighPct, 0);
+  assert.equal(malformed.maxDistanceToLowPct, 100);
+  assert.equal(malformed.minOpenInterestUsd, 0);
+  assert.equal(malformed.fundingRateDirection, 'any');
+  assert.equal(malformed.minFundingRateAbsPct, 100);
+  assert.equal(malformed.minBreakoutRvol, 0);
+  assert.equal(malformed.onlyWithFormations, false);
+});
+
+test('price, volatility and 24h high/low filters are inclusive and combine without market requests', () => {
+  const coinData = { ...coin('ABCUSDT', 5_000_000, 4), price: 1.5, volatility5mPct: 1.1,
+    distanceToHighPct: 1.5, distanceToLowPct: 2.5 };
+  const config = normalizeScreenerSearchConfig({
+    minVolatility5mPct: 1.1, minPriceUsd: 0.01, maxPriceUsd: 10,
+    maxDistanceToHighPct: 1.5, maxDistanceToLowPct: 2.5,
+  });
+  assert.equal(matchesAdvancedScreenerFilters(coinData, config), true);
+  assert.equal(matchesAdvancedScreenerFilters({ ...coinData, price: 11 }, config), false);
+  assert.equal(matchesAdvancedScreenerFilters({ ...coinData, price: 0.001 }, config), false);
+  assert.equal(matchesAdvancedScreenerFilters({ ...coinData, volatility5mPct: 1 }, config), false);
+  assert.equal(matchesAdvancedScreenerFilters({ ...coinData, volatility5mPct: undefined }, config), false);
+  assert.equal(matchesAdvancedScreenerFilters({ ...coinData, distanceToLowPct: 3 }, config), false);
+  assert.equal(matchesAdvancedScreenerFilters({ ...coinData, distanceToHighPct: 2 }, config), false);
+  assert.equal(matchesAdvancedScreenerFilters(coinData, normalizeScreenerSearchConfig({
+    maxDistanceToHighPct: null,
+  })), true);
+});
+
+const formCoin = (ratio: number, confirmed = true, closedCandleOnly = true): ScannedCoin => ({
+  formations: [{ validation: { breakoutConfirmed: confirmed, closedCandleOnly, volumeRatio } }],
+} as unknown as ScannedCoin);
+
+test('only cached detected formations count; breakout RVOL must be confirmed and from closed candles', () => {
+  const sample = coin('ABCUSDT', 5_000_000, 2);
+  const onlyPatterns = normalizeScreenerSearchConfig({ onlyWithFormations: true });
+  assert.equal(matchesAdvancedScreenerFilters(sample, onlyPatterns), false);
+  assert.equal(matchesAdvancedScreenerFilters(sample, onlyPatterns, formCoin(0.8, false)), true);
+  const onlyRvol = normalizeScreenerSearchConfig({ minBreakoutRvol: 1.5 });
+  assert.equal(matchesAdvancedScreenerFilters(sample, onlyRvol), false);
+  assert.equal(matchesAdvancedScreenerFilters(sample, onlyRvol, formCoin(2, false)), false);
+  assert.equal(matchesAdvancedScreenerFilters(sample, onlyRvol, formCoin(2, true, false)), false);
+  assert.equal(matchesAdvancedScreenerFilters(sample, onlyRvol, formCoin(1.49)), false);
+  assert.equal(matchesAdvancedScreenerFilters(sample, onlyRvol, formCoin(1.5)), true);
+});
+
+test('OI and Funding require actual finite quotes and do not infer missing data', () => {
+  const sample = coin('ABCUSDT', 5_000_000, 1);
+  const oi = normalizeScreenerSearchConfig({ minOpenInterestUsd: 10_000_000 });
+  assert.equal(matchesAdvancedScreenerFilters(sample, oi), false);
+  assert.equal(matchesAdvancedScreenerFilters({ ...sample, openInterestUsd: Number.NaN }, oi), false);
+  assert.equal(matchesAdvancedScreenerFilters({ ...sample, openInterestUsd: 9_999_999 }, oi), false);
+  assert.equal(matchesAdvancedScreenerFilters({ ...sample, openInterestUsd: 10_000_000 }, oi), true);
+  const positive = normalizeScreenerSearchConfig({ fundingRateDirection: 'positive', minFundingRateAbsPct: 0.01 });
+  assert.equal(matchesAdvancedScreenerFilters(sample, positive), false);
+  assert.equal(matchesAdvancedScreenerFilters({ ...sample, fundingRatePct: 0 }, positive), false);
+  assert.equal(matchesAdvancedScreenerFilters({ ...sample, fundingRatePct: 0.009 }, positive), false);
+  assert.equal(matchesAdvancedScreenerFilters({ ...sample, fundingRatePct: 0.01 }, positive), true);
+  const negative = normalizeScreenerSearchConfig({ fundingRateDirection: 'negative' });
+  assert.equal(matchesAdvancedScreenerFilters({ ...sample, fundingRatePct: -0.01 }, negative), true);
+  assert.equal(matchesAdvancedScreenerFilters({ ...sample, fundingRatePct: 0.01 }, negative), false);
+});
+
+test('Screener-only advanced UI is wired through profile saved presets and existing formations cache', () => {
+  const ui = source('../src/components/profile/ProfileScreenerSearchSettings.tsx');
+  const screener = source('../src/components/CoinScreenerPage.tsx');
+  const logic = source('../src/utils/screenerSearchSettings.ts');
+  for (const name of [
+    'minVolatility5mPct', 'minPriceUsd', 'maxPriceUsd', 'maxDistanceToHighPct',
+    'maxDistanceToLowPct', 'onlyWithFormations', 'minOpenInterestUsd',
+    'fundingRateDirection', 'minFundingRateAbsPct', 'minBreakoutRvol',
+  ]) assert.ok(ui.includes("setField('" + name + "'"), name + ' must have a setting control');
+  assert.match(screener, /matchesAdvancedScreenerFilters\(coin, advancedFilters, formationsMap\.get\(formationKey\)\)/);
+  assert.match(screener, /setAdvancedFilters\(config\)/);
+  assert.match(screener, /advancedFilters, formationsMap/);
+  assert.doesNotMatch(logic, /fetch\(|new WebSocket\(|fetchKlines\(/);
+  assert.match(ui, /Мінімальна ціна не може перевищувати максимальну/);
 });
