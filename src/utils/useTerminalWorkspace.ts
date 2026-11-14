@@ -114,14 +114,28 @@ export function useTerminalWorkspace() {
   useEffect(() => {
     if (hydrated.current || !uid || profile?.uid !== uid) return;
     hydrated.current = true;
+    // If the user edited cached charts while their account was loading, they
+    // never saw the server version they would be replacing. Treat it as a
+    // conflict rather than silently authorizing an overwrite of cloud charts.
+    if (revision.current > 0 && profile.terminalSettings && !syncConflictRef.current) {
+      syncConflictRef.current = true;
+      const saved = saveConflictBackup(uid, workspaceRef.current);
+      setBackupFailed(!saved);
+      setSyncError(true);
+      setSyncConflict(true);
+      return;
+    }
+    if (syncConflictRef.current) return;
     serverVersion.current = profile.terminalSettings?.version ?? null;
-    // A late profile response must not overwrite a user's new selection.
-    if (revision.current === 0 && !syncConflictRef.current)
+    // With no local changes, the account workspace is authoritative.
+    if (revision.current === 0)
       setWorkspace(loadTerminalWorkspace(uid, profile.terminalSettings));
   }, [uid, profile]);
 
   useEffect(() => {
-    if (uid && profile?.uid === uid && !syncConflict) {
+    // A still-unhydrated or conflicted tab must not inherit the cloud version
+    // and then mistakenly use that version to publish its stale local state.
+    if (uid && hydrated.current && profile?.uid === uid && !syncConflictRef.current) {
       serverVersion.current = profile.terminalSettings?.version ?? null;
     }
   }, [uid, profile?.uid, profile?.terminalSettings?.version, syncConflict]);
