@@ -394,11 +394,34 @@ export interface TerminalSavedPreset {
   createdAt: number;
 }
 
+/** Filters and sorting used only by the coin list on the Screener page. */
+export interface ScreenerSearchConfig {
+  searchQuery: string;
+  exchange: 'all' | ExchangeId;
+  marketType: 'all' | MarketType;
+  maxVolumeUsd: number;
+  presetFilter: ScreenerPresetFilter;
+  sortBy: ScreenerSortBy;
+  sortOrder: 'asc' | 'desc';
+  secondarySortBy: ScreenerSortBy | 'none';
+  secondarySortOrder: 'asc' | 'desc';
+}
+
+export interface ScreenerSearchPreset {
+  id: string;
+  name: string;
+  config: ScreenerSearchConfig;
+}
+
 export interface SearchUserSettings {
+  /** Legacy fields are retained to read profiles saved by older versions. */
   minVolumeUsd?: number;
   presetFilter?: ScreenerPresetFilter;
   sortBy?: ScreenerSortBy;
   sortDirection?: 'asc' | 'desc';
+  defaultConfig?: ScreenerSearchConfig;
+  defaultPresetId?: string | null;
+  presets?: ScreenerSearchPreset[];
 }
 
 export interface UserProfile {
