@@ -40,3 +40,10 @@ test('first launch config then later app launch; settings remain reachable by ge
   assert.match(m,/showStandaloneMenu\(win\)/);
   assert.match(m,/showProviderMenu\(win, provider\)/);
 });
+
+test('narrow floating h00k windows preserve the quick gear and window controls', () => {
+  const css = read('window-shell.css');
+  assert.match(css, /@media\(max-width:360px\)/);
+  assert.match(css, /\.window-actions button\{width:30px/);
+  assert.match(css, /\.desktop-title\{display:none\}/);
+});

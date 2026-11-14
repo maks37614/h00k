@@ -19,3 +19,17 @@ html,body{width:100%;height:100%;padding:0;margin:0;overflow:hidden;background:v
 .window-actions svg{height:18px;width:18px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
 @media(max-width:600px){.titlebar{padding-left:8px}.identity{gap:6px}.identity img{width:63px}.website-label,.title-divider{display:none}.window-actions{gap:1px}.window-actions button{width:34px}.desktop-title{font-size:12px}}
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{transition:none!important}}
+
+
+/* Floating panels can be as narrow as 200 DIP; the gear and Windows controls remain tappable. */
+@media(max-width:360px){
+  .titlebar{padding:0 3px 0 6px;gap:2px}
+  .identity{gap:0;flex:none}
+  .identity img{width:44px;height:30px}
+  .desktop-title{display:none}
+  .window-actions{gap:0}
+  .window-actions button{width:30px;height:32px;border-radius:7px}
+  .window-actions button.settings-btn{margin-right:2px}
+  .action-divider{display:none}
+  .window-actions svg{width:16px;height:16px}
+}
