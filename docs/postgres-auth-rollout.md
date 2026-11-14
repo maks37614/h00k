@@ -24,6 +24,8 @@ For Docker Compose, configure a private .env file (never commit this file):
 POSTGRES_PASSWORD=GENERATE_WITH_openssl_rand_hex_32
 PUBLIC_BASE_URL=https://h00k.top
 AUTH_TRUST_PROXY=1
+TURNSTILE_SITE_KEY=YOUR_CLOUDFLARE_PUBLIC_SITE_KEY
+TURNSTILE_SECRET_KEY=YOUR_CLOUDFLARE_PRIVATE_SECRET_KEY
 SMTP_HOST=smtp.mail.ovh.net
 SMTP_PORT=465
 SMTP_USER=info@h00k.top
@@ -34,6 +36,38 @@ SMTP_FROM="h00k <info@h00k.top>"
 The SMTP example above applies to the owner's OVHcloud MX Plan mailbox; use its
 **mailbox password**, never the OVH admin-account password. Verify SPF/DKIM and
 real inbox delivery on the VPS. Do not commit `.env` to GitHub.
+
+## Cloudflare Turnstile CAPTCHA (required before production deployment)
+
+1. In Cloudflare Dashboard → **Turnstile** → **Add widget**, create a free
+   **Managed** widget for the hostname `h00k.top`. You do **not** need to move
+   domain DNS from OVH to Cloudflare just to use the standalone Turnstile widget.
+2. Copy the **site key** and **secret key** to `/home/ubuntu/h00k/.env`.
+   Never paste the secret in chat, GitHub, client code or public screenshots.
+3. Use the actual hostname configured in `PUBLIC_BASE_URL`. Create a separate
+   widget/keys for staging, with its exact hostname, if using staging.
+4. Rebuild/restart only the application after editing `.env`:
+   `docker compose up -d --build --no-deps app`.
+5. Check `curl -fsS http://127.0.0.1:3000/api/auth/config`:
+   `captcha.configured` must be `true`, and the public site key should appear.
+   The secret must **never** appear in the response.
+6. In a browser, verify login/signup, email recovery and resend with a real
+   challenge. Also test invalid/no token against the API (should fail before DB).
+   Test on mobile and desktop, including expired tokens and script-blocking.
+
+CAPTCHA is mandatory for login, registration, password-reset **email requests**,
+and resending verification mail. Email-link verification, resetting a password
+**with an existing secure email token**, existing sessions, guest screener,
+HookChart, replay, terminal, and WebSocket market data do not require CAPTCHA.
+Missing/misconfigured keys intentionally block those four vulnerable actions;
+this preserves privacy and prevents bot bypass, but login will not work until
+configuration is finished. Cloudflare production test keys are rejected.
+Cloudflare challenges are verified **server-side**, bound to the configured
+hostname and the shared `h00k_auth` action, with a 5-second network timeout
+and a 12-request concurrent verification limit. Existing IP/email rate limits
+remain active and are enforced before database initialization.
+Do not promise bot-proof protection; monitor the CAPTCHA failure rate,
+traffic and SMTP delivery after deployment.
 
 SMTP TLS is mandatory. Verification links last 24 hours; password reset
 links last 30 minutes. Without working SMTP, registration fails closed.
