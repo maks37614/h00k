@@ -33,7 +33,7 @@ import type { VisualChartProfile } from '../hookchart/visualProfiles';
 import { getTradingViewSymbol, normalizeExchangeSymbol } from '../../utils/marketSymbols';
 import { fetchDirectKlines } from '../../utils/directExchangeClient';
 import { formatTerminalQuotedPrice } from '../../utils/terminalPresets';
-import { useChartProvider } from '../../utils/useChartProvider';
+import { normalizeChartProvider } from '../../utils/chartPreferences';
 
 interface TerminalChartWidgetProps {
   block: TerminalChartBlock;
@@ -163,7 +163,8 @@ export const TerminalChartWidget: React.FC<TerminalChartWidgetProps> = ({
   terminalAutoScale = false,
   terminalInitialView,
 }) => {
-  const chartProvider = useChartProvider();
+  // Terminal widgets must always use HookChart, independent of legacy preferences.
+  const chartProvider = normalizeChartProvider('hookchart');
   const useIntegratedHookChartToolbar = chartProvider === 'hookchart';
   // Coin switcher popup state
   const [isCoinPickerOpen, setIsCoinPickerOpen] = useState(false);
@@ -922,6 +923,7 @@ export const TerminalChartWidget: React.FC<TerminalChartWidgetProps> = ({
               </>
             ) : (
               <ExchangeCandlestickChart
+                forceHookChart
                 onLivePriceUpdate={useIntegratedHookChartToolbar ? handleChartPrice : undefined}
                 terminalAutoScale={terminalAutoScale && useIntegratedHookChartToolbar}
                 terminalInitialView={useIntegratedHookChartToolbar ? terminalInitialView : undefined}
