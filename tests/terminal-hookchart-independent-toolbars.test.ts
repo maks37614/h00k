@@ -17,7 +17,9 @@ test('each Terminal chart block owns independent top and side toolbars, includin
   assert.match(widget, /onExtraToolsOpenChange: setExtraToolsOpen/);
   assert.match(widget, /onDrawingToolsOpenChange: setDrawingToolsOpen/);
   assert.match(widget, /terminalToolbarVisibility=\{useIntegratedHookChartToolbar \? terminalToolbarVisibility : undefined\}/);
-  const scopedState = widget.slice(widget.indexOf('const [extraToolsOpen'), widget.indexOf('const [showDrawingToolbar'));
+  // Scope the check to the independently owned open/close state. The rest
+  // of the chart widget legitimately performs viewport and price fetching.
+  const scopedState = widget.slice(widget.indexOf('const [extraToolsOpen'), widget.indexOf('const blockRootRef'));
   assert.doesNotMatch(scopedState, /localStorage|queueSave|WebSocket|fetch|setInterval/);
 });
 
