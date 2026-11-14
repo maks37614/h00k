@@ -5,11 +5,15 @@ import { VISUAL_CONTEXTS, makeVisualProfileKey } from '../src/components/hookcha
 
 const source = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf8');
 
-test('all 7 visual contexts have distinct desktop/mobile account profile keys', () => {
+test('Screener and Formations share two scales while Terminal and devices stay independent', () => {
   const keys = VISUAL_CONTEXTS.flatMap(item =>
     [makeVisualProfileKey(item.id, 'desktop'), makeVisualProfileKey(item.id, 'mobile')]);
-  assert.equal(keys.length, 14);
-  assert.equal(new Set(keys).size, 14);
+  assert.equal(keys.length, 14, 'all historical context names remain supported');
+  assert.equal(new Set(keys).size, 10, 'two shared scales and three Terminal layouts for each device');
+  assert.equal(makeVisualProfileKey('formationsQuick', 'mobile'), makeVisualProfileKey('screenerQuick', 'mobile'));
+  assert.equal(makeVisualProfileKey('formationsFull', 'desktop'), makeVisualProfileKey('screenerFull', 'desktop'));
+  assert.notEqual(makeVisualProfileKey('screenerQuick', 'mobile'), makeVisualProfileKey('screenerQuick', 'desktop'));
+  assert.notEqual(makeVisualProfileKey('screenerQuick', 'desktop'), makeVisualProfileKey('terminalLarge', 'desktop'));
 });
 
 test('Screener, Formations and fullscreen routes pass their profile context into HookChart', () => {
