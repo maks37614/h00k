@@ -43,6 +43,7 @@ export function useTerminalWorkspace() {
   const [workspace, setWorkspace] = useState(() => loadTerminalWorkspace(uid, profile?.uid === uid ? profile?.terminalSettings : undefined));
   const [syncError, setSyncError] = useState(false);
   const [syncConflict, setSyncConflict] = useState(false);
+  const syncConflictRef = useRef(false);
   const serverVersion = useRef<string | null>(profile?.terminalSettings?.version ?? null);
   const revision = useRef(0);
   const savedRevision = useRef(0);
@@ -57,7 +58,8 @@ export function useTerminalWorkspace() {
   const persistToProfile = useCallback((value: typeof workspace, currentRevision: number) => {
     saveQueue.current = saveQueue.current.catch(() => {}).then(async () => {
       const auth = authRef.current;
-      if (!uid || auth.uid !== uid || auth.profile?.uid !== uid || currentRevision < revision.current) return;
+      if (!uid || auth.uid !== uid || auth.profile?.uid !== uid
+        || currentRevision < revision.current || syncConflictRef.current) return;
       const { blocks: _blocks, ...config } = value.config;
       const nextVersion = await auth.updateTerminalWorkspace({
         columns: config.columns, blockHeight: config.blockHeight, config,
@@ -67,6 +69,7 @@ export function useTerminalWorkspace() {
       savedRevision.current = currentRevision;
       if (mounted.current) { setSyncError(false); setSyncConflict(false); }
     }).catch((error: Error & { code?: string }) => {
+      if (error.code === 'TERMINAL_WORKSPACE_CONFLICT') syncConflictRef.current = true;
       if (!mounted.current) return;
       setSyncError(true);
       if (error.code === 'TERMINAL_WORKSPACE_CONFLICT') setSyncConflict(true);
@@ -77,7 +80,8 @@ export function useTerminalWorkspace() {
     mounted.current = true;
     return () => {
       mounted.current = false;
-      if (revision.current !== savedRevision.current) persistToProfile(workspaceRef.current, revision.current);
+      if (!syncConflictRef.current && revision.current !== savedRevision.current)
+        persistToProfile(workspaceRef.current, revision.current);
     };
   }, [persistToProfile]);
 
@@ -136,7 +140,7 @@ export function useTerminalWorkspace() {
     document.body.appendChild(anchor);
     anchor.click();
     anchor.remove();
-    URL.revokeObjectURL(url);
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   }, []);
 
   return { blocks: workspace.blocks, config: workspace.config, customPresets: workspace.presets,
