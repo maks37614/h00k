@@ -77,8 +77,11 @@ export async function fetchHistoricalReplayCandles(
   // 3. If range returned too few candles (e.g. historical boundary), fetch latest candles and cut off inside them
   try {
     const fallbackLatest = await fetchDirectKlines(exchange, market, symbol, timeframe, 500);
-    if (fallbackLatest && fallbackLatest.length > 0) {
-      // Find candle closest to targetTimestampMs
+    if (fallbackLatest && fallbackLatest.length > 0 &&
+        replayFallbackContainsDate(fallbackLatest, targetTimestampMs, timeframe)) {
+      // Latest candles are only a fallback when they actually include the
+      // requested historical time. Never mislabel today's market as a replay
+      // from months ago after the historical API fails.
       const cutoffIdx = findClosestCandleIndex(fallbackLatest, targetTimestampMs);
       return {
         allCandles: fallbackLatest,
@@ -138,6 +141,22 @@ export function processCandlesForCutoff(
     allCandles: uniqueCandles,
     cutoffIndex: cutoffIdx,
   };
+}
+
+/** Latest-only fallback may not substitute 2026 candles for a 2025 replay. */
+export function replayFallbackContainsDate(
+  candles: readonly Kline[], targetTimestampMs: number, timeframe: Timeframe
+): boolean {
+  if (!candles.length || !Number.isFinite(targetTimestampMs)) return false;
+  const targetSec = targetTimestampMs / 1000;
+  let earliest = Infinity, latest = -Infinity;
+  for (const candle of candles) {
+    const time = candle.time > 1e11 ? candle.time / 1000 : candle.time;
+    if (!Number.isFinite(time) || time <= 0) return false;
+    earliest = Math.min(earliest, time);
+    latest = Math.max(latest, time);
+  }
+  return targetSec >= earliest && targetSec <= latest + timeframeToMs(timeframe) / 1000;
 }
 
 function findClosestCandleIndex(candles: Kline[], targetTimestampMs: number): number {
