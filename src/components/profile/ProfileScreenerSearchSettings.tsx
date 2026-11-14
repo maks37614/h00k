@@ -88,7 +88,9 @@ export function ProfileScreenerSearchSettings() {
     if (presets.some(item => item.name.toLowerCase() === name.toLowerCase() && item.id !== editingId)) {
       setError('Пресет із такою назвою вже існує.'); return;
     }
-    const id = editingId && presets.some(item => item.id === editingId) ? editingId : crypto.randomUUID();
+    const id = editingId && presets.some(item => item.id === editingId) ? editingId
+      : (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+        ? crypto.randomUUID() : `preset-${Date.now()}-${Math.random().toString(36).slice(2)}`);
     const item = { id, name: name.slice(0, 40), config: normalizeScreenerSearchConfig(draft, fallback) };
     const next = editingId ? presets.map(p => p.id === editingId ? item : p) : [...presets, item];
     void write({ ...stored, presets: next }, editingId ? 'Пресет оновлено.' : 'Пресет створено.');
@@ -147,7 +149,7 @@ export function ProfileScreenerSearchSettings() {
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <label className={label}>Пошук за монетою
           <input className={control} value={draft.searchQuery} maxLength={80}
-            placeholder="BTC, ETH або залиште порожнім"
+            placeholder="Наприклад, BTC або ETH"
             onChange={event => setField('searchQuery', event.target.value)} />
         </label>
         <label className={label}>Готовий фільтр Скрінера
