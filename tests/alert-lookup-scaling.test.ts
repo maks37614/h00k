@@ -8,7 +8,7 @@ const cycle=source.slice(source.indexOf('async function checkAlertsInternal('),s
 test('six-second alert monitor does not linearly rescan every alert and history for each candidate',()=>{
   assert.match(cycle,/let alertByIdentity = new Map<string, PriceAlert>\(\)/);
   assert.match(cycle,/let processedByIdentity = new Map<string, AlertHistoryItem>\(\)/);
-  assert.match(cycle,/const alert = currentAlert\(candidate\);/);
+  assert.match(cycle,/let alert = currentAlert\(candidate\);/);
   assert.match(cycle,/const prior = processedAlert\(alert\);/);
   assert.doesNotMatch(cycle,/loadAlerts\(\)\.find\(/);
   assert.doesNotMatch(cycle,/const prior = findProcessedAlertHistory\(alert\)/);
@@ -23,8 +23,10 @@ test('indexes refresh when another action replaces cached alerts or history',()=
 });
 
 test('durable claim is still committed before any Telegram dispatch',()=>{
-  const mark=cycle.indexOf('alert.triggered = true;');
-  const persist=cycle.indexOf('if (!saveAlerts(loadAlerts()))',mark);
+  const mark=cycle.indexOf('const fired = { ...alert, triggered: true');
+  const persist=cycle.indexOf('if (!saveAlerts(loadAlerts().map(entry => entry === alert ? fired : entry)))',mark);
   const telegram=cycle.indexOf('sendUserTelegramMessage(',mark);
   assert.ok(mark>=0 && persist>mark && telegram>persist);
+  assert.match(cycle.slice(mark, persist), /triggeredAt: Date\.now\(\), triggeredPrice: currentPrice/);
+  assert.doesNotMatch(cycle.slice(mark, persist), /alert\.triggered\s*=/);
 });
