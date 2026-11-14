@@ -83,8 +83,8 @@ test('legacy page-specific presets migrate to one scale, with Screener priority 
   assert.equal(getVisualProfile({ visualProfiles: reset }, 'screenerQuick', 'desktop').visibleBars,
     getVisualProfile(undefined, 'formationsQuick', 'desktop').visibleBars);
   assert.equal(getVisualProfile({ visualProfiles: reset }, 'terminalMedium', 'desktop').visibleBars, 74);
-  const rawLegacy = { visualProfiles: { 'formationsQuick:mobile': { visibleBars: 191 } } }
-    as unknown as Parameters<typeof getVisualProfile>[0];
+  const rawLegacy = ({ visualProfiles: { 'formationsQuick:mobile': { visibleBars: 191 } } }
+    as unknown as Parameters<typeof getVisualProfile>[0]);
   assert.equal(getVisualProfile(rawLegacy, 'screenerQuick', 'mobile').visibleBars, 191);
 });
 
