@@ -26,12 +26,13 @@ import {
   MarketType,
   Kline,
 } from '../../types';
-import { formatCryptoPrice, formatVolume } from '../../utils/formatters';
+import { formatVolume } from '../../utils/formatters';
 import { ExchangeCandlestickChart } from '../ExchangeCandlestickChart';
 import type { TerminalToolbarVisibility } from '../hookchart/HookChartCanvas';
 import type { VisualChartProfile } from '../hookchart/visualProfiles';
 import { getTradingViewSymbol, normalizeExchangeSymbol } from '../../utils/marketSymbols';
 import { fetchDirectKlines } from '../../utils/directExchangeClient';
+import { formatTerminalQuotedPrice } from '../../utils/terminalPresets';
 import { useChartProvider } from '../../utils/useChartProvider';
 
 interface TerminalChartWidgetProps {
@@ -759,7 +760,7 @@ export const TerminalChartWidget: React.FC<TerminalChartWidgetProps> = ({
                     </span>
                   </div>
                   <span className="font-mono text-[11px] text-slate-300">
-                    ${formatCryptoPrice(c.currentPrice)}
+                    {formatTerminalQuotedPrice(c.currentPrice, c.quoteAsset)}
                   </span>
                 </button>
               ))}
