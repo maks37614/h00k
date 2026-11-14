@@ -356,3 +356,15 @@ test('Terminal workspace JSON import is available and disables auto presets befo
   assert.match(panel, /handleBackupFile\(event\)/);
   assert.match(panel, /onDownloadLocalBackup/);
 });
+
+test('auto-updating market presets preserve an enlarged chart unless that block disappears', () => {
+  const page = source('../src/components/TerminalPage.tsx');
+  const start = page.indexOf('const applyPresetPage = useCallback(');
+  const end = page.indexOf('const handleWorkspaceConfigUpdate', start);
+  assert.ok(start >= 0 && end > start);
+  const updater = page.slice(start, end);
+  assert.doesNotMatch(updater, /setMaximizedBlockId\(null\)/,
+    'refreshing an unchanged market preset must not collapse the current chart');
+  assert.match(page, /if \(maximizedBlockId !== null && !blocks\.some\(block => block\.id === maximizedBlockId\)\)/);
+  assert.match(page, /setMaximizedBlockId\(null\)/);
+});
