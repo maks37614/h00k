@@ -19,6 +19,7 @@ import { FormationsIcon } from '../PageIcons';
 import { ScannedCoin, Timeframe, ExchangeId, MarketType, MarketCoin } from '../../types';
 import { formatCryptoPrice, formatVolume } from '../../utils/formatters';
 import { fetchDirectBinanceTickers, fetchDirectBybitTickers } from '../../utils/directExchangeClient';
+import { normalizeTerminalMarketPair } from '../../utils/terminalPresets';
 
 interface AddChartModalProps {
   isOpen: boolean;
@@ -252,21 +253,23 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({
 
   // Clean custom search ticker candidate
   const cleanSearchSymbol = search.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
-  const hasExactMatch = cleanSearchSymbol && filteredCoins.some((c) => c.symbol === cleanSearchSymbol || c.symbol === `${cleanSearchSymbol}USDT`);
+  // Prefer a real pair's quote asset, including USDC/FDUSD/BTC; only infer
+  // unambiguous stablecoin suffixes for a symbol not found in our market list.
+  const knownPair = unifiedCoins.find(c => c.symbol === cleanSearchSymbol);
+  const inferredQuote = knownPair?.quoteAsset
+    || ['USDT', 'USDC', 'FDUSD', 'BUSD'].find(q => cleanSearchSymbol.length > q.length && cleanSearchSymbol.endsWith(q))
+    || 'USDT';
+  const quickAddInstrument = normalizeTerminalMarketPair(cleanSearchSymbol, inferredQuote);
+  const hasExactMatch = cleanSearchSymbol && filteredCoins.some((c) =>
+    c.symbol === cleanSearchSymbol || c.symbol === quickAddInstrument.symbol);
 
   const handleQuickAddCustom = (ex: ExchangeId, mt: MarketType) => {
-    const symbol = cleanSearchSymbol.endsWith('USDT') ? cleanSearchSymbol : `${cleanSearchSymbol}USDT`;
-    const base = symbol.replace(/(USDT|BUSD|USDC)$/, '') || symbol;
-    onAddChart(
-      {
-        symbol,
-        baseAsset: base,
-        quoteAsset: 'USDT',
-        exchange: ex,
-        marketType: mt,
-      },
-      selectedTimeframe,
+    const exactMarket = unifiedCoins.find(c => c.symbol === cleanSearchSymbol && c.exchange === ex && c.marketType === mt);
+    const { symbol, quoteAsset } = normalizeTerminalMarketPair(
+      cleanSearchSymbol, exactMarket?.quoteAsset || inferredQuote,
     );
+    const base = exactMarket?.baseAsset || symbol.slice(0, -quoteAsset.length);
+    onAddChart({ symbol, baseAsset: base, quoteAsset, exchange: ex, marketType: mt }, selectedTimeframe);
     onClose();
   };
 
@@ -342,7 +345,7 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({
               <div className="flex items-center gap-2">
                 <Zap className="w-4 h-4 text-cyan-400 shrink-0" />
                 <span className="text-xs text-slate-300">
-                  Швидко додати графік для <strong className="text-white font-mono">{cleanSearchSymbol}USDT</strong>:
+                  Швидко додати графік для <strong className="text-white font-mono">{quickAddInstrument.symbol}</strong>:
                 </span>
               </div>
               <div className="flex items-center gap-1.5 flex-wrap">
