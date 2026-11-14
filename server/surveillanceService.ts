@@ -141,6 +141,7 @@ export function loadSurveillanceStore(): UserSurveillanceStore {
 export function saveSurveillanceStore(store: UserSurveillanceStore): boolean {
   const started = performance.now();
   let bytes = 0;
+  let temporaryFile: string | null = null;
   try {
     ensureDataDir();
     let safeStore: UserSurveillanceStore = store;
@@ -154,20 +155,28 @@ export function saveSurveillanceStore(store: UserSurveillanceStore): boolean {
         }
       }
     }
-    const temporaryFile = `${SURVEILLANCE_FILE}.tmp`;
     const payload = JSON.stringify(safeStore);
     bytes = Buffer.byteLength(payload);
-    // This file contains private account selections, alert event history and
-    // strategy settings. A pre-existing .tmp file may have permissive mode;
-    // chmod before rename so the final name is never published as world-readable.
-    fs.writeFileSync(temporaryFile, payload, { encoding: 'utf-8', mode: 0o600 });
-    fs.chmodSync(temporaryFile, 0o600);
+    // Never truncate/reuse a predictable .tmp file: previous deployments may
+    // have left it world-readable, or an attacker may have placed a symlink.
+    // O_EXCL ('wx') creates a fresh, unpredictable 0600 file BEFORE bytes
+    // are written. A failed write/rename is cleaned up without touching the
+    // original, durable surveillance.json.
+    temporaryFile = `${SURVEILLANCE_FILE}.${randomUUID()}.tmp`;
+    fs.writeFileSync(temporaryFile, payload, {
+      encoding: 'utf-8', flag: 'wx', mode: 0o600,
+    });
     fs.renameSync(temporaryFile, SURVEILLANCE_FILE);
+    temporaryFile = null;
     // A failed disk write must never replace the authoritative in-memory copy.
     storeCache = safeStore;
     persistenceMetrics.record('surveillance', performance.now() - started, bytes, true);
     return true;
   } catch (err) {
+    if (temporaryFile) {
+      try { fs.rmSync(temporaryFile, { force: true }); }
+      catch (cleanupError) { console.error('Failed to clean up surveillance temp file:', cleanupError); }
+    }
     persistenceMetrics.record('surveillance', performance.now() - started, bytes, false);
     console.error('Failed to save surveillance.json:', err);
     return false;
