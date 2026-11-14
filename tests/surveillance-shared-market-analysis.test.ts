@@ -47,3 +47,41 @@ test('workers share only market values and retain personal threshold and trackin
   assert.equal((mtf.slice(start,finish).match(/currentPrice/g)||[]).length,1,
     'Future price-sensitive structure calculations must be included in the shared fingerprint');
 });
+
+
+test('hot instruments remain cached when capped LRU evicts a less-recently-used market',()=>{
+  const cache=new SharedMarketAnalysisCache<number>(6000,2);
+  let computations=0;
+  const calc=()=>++computations;
+  assert.equal(cache.get('binance:futures:BTCUSDT','v1',calc,1000),1);
+  assert.equal(cache.get('binance:futures:ETHUSDT','v1',calc,1100),2);
+  assert.equal(cache.get('binance:futures:BTCUSDT','v1',calc,1200),1,
+    'a hot market should be promoted without recomputation');
+  assert.equal(cache.get('binance:futures:SOLUSDT','v1',calc,1300),3);
+  assert.equal(cache.stats().entries,2);
+  assert.equal(cache.get('binance:futures:BTCUSDT','v1',calc,1400),1,
+    'BTC must not be evicted while an older, unused ETH entry exists');
+  assert.equal(cache.get('binance:futures:ETHUSDT','v1',calc,1500),4,
+    'the unused market is recomputed on return');
+  assert.equal(cache.stats().hits,2);
+  assert.equal(cache.stats().misses,4);
+});
+
+test('promoting an LRU entry must not extend its original TTL or reuse stale fingerprints',()=>{
+  const cache=new SharedMarketAnalysisCache<number>(6000,2);
+  let calculations=0;
+  const calc=()=>++calculations;
+  assert.equal(cache.get('bybit:spot:BTCUSDT','v1',calc,1000),1);
+  assert.equal(cache.get('bybit:spot:BTCUSDT','v1',calc,6900),1);
+  assert.equal(cache.get('bybit:spot:BTCUSDT','v1',calc,7000),2,
+    'exact TTL boundary must recalculate despite recent LRU promotion');
+  assert.equal(cache.get('bybit:spot:BTCUSDT','v2',calc,7100),3,
+    'changed candle snapshot still invalidates the cache');
+});
+
+test('workers canonicalize market-only cache identity without changing owner-specific calculations',()=>{
+  const code=readFileSync(new URL('../server/surveillance/coinWorker.ts',import.meta.url),'utf8');
+  assert.match(code,/sharedMarketAnalysis\.get\([\s\S]{0,170}normalizeExchangeSymbol\(this\.coin\.symbol\)/);
+  assert.match(code,/this\.candleFeed\.fingerprint\(\)/);
+  assert.match(code,/this\.setupEngine\.evaluateSetups/);
+});
