@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { isVolumeWithinCap, preferredVolumeSortOrder } from '../src/utils/screenerVolume';
 import type { MarketCoin, ScannedCoin } from '../src/types';
 import {
   DEFAULT_SCREENER_SEARCH_CONFIG, MAX_SCREENER_SEARCH_PRESETS,
@@ -273,4 +274,56 @@ test('Screener-only advanced UI is wired through profile saved presets and exist
   assert.match(screener, /advancedFilters, formationsMap/);
   assert.doesNotMatch(logic, /fetch\(|new WebSocket\(|fetchKlines\(/);
   assert.match(ui, /Мінімальна ціна не може перевищувати максимальну/);
+});
+
+test('profile volume selector uses the same minimum/maximum directions and sorting as Screener', () => {
+  const editor = source('../src/components/profile/ProfileScreenerSearchSettings.tsx');
+  const volumeSection = editor.slice(editor.indexOf('<span>{t(\'screenerVolume24h\')}</span>'),
+    editor.indexOf('<div className="col-span-full space-y-4'));
+  assert.ok(volumeSection.includes("setField('volumeMode', draft.volumeMode === 'to' ? 'from' : 'to')"));
+  assert.ok(volumeSection.includes("setField('maxVolumeUsd', Number(event.target.value))"));
+  assert.ok(volumeSection.indexOf('aria-label="Межа обсягу за 24 години"') < volumeSection.indexOf('aria-pressed={draft.volumeMode'));
+  assert.match(volumeSection, /draft\.volumeMode === 'from' \? '≥' : '≤'/);
+  assert.doesNotMatch(volumeSection, /<span>\{draft.volumeMode === 'to' \?/);
+  assert.match(volumeSection, /!SCREENER_VOLUME_CAPS\.some\(option => option\.value === draft\.maxVolumeUsd\)/);
+  assert.match(editor, /next\.sortOrder = preferredVolumeSortOrder\(next\.volumeMode\)/);
+  assert.match(editor, /key === 'volumeMode' \|\| key === 'maxVolumeUsd'/);
+  assert.match(editor, /key === 'sortBy' && value === 'volume'/);
+  assert.equal(preferredVolumeSortOrder('from'), 'asc');
+  assert.equal(preferredVolumeSortOrder('to'), 'desc');
+});
+
+test('saved profile minimum volume presets survive normalization and produce matching first rows', () => {
+  const profile = normalizeScreenerSearchSettings({
+    defaultConfig: { ...DEFAULT_SCREENER_SEARCH_CONFIG, volumeMode: 'to', maxVolumeUsd: 50_000 },
+    defaultPresetId: 'from-1m',
+    presets: [{
+      id: 'from-1m', name: 'Від $1M',
+      config: { ...DEFAULT_SCREENER_SEARCH_CONFIG,
+        volumeMode: 'from', maxVolumeUsd: 1_000_000, sortBy: 'volume', sortOrder: 'asc' },
+    }],
+  });
+  const applied = effectiveScreenerSearchConfig(profile);
+  assert.equal(applied.volumeMode, 'from');
+  assert.equal(applied.maxVolumeUsd, 1_000_000);
+  assert.equal(applied.sortOrder, 'asc');
+  const coins = [
+    coin('LOWUSDT', 49_999, 1),
+    coin('MINUSDT', 1_000_000, 1),
+    coin('HIGHUSDT', 1_500_000, 1),
+    coin('TOPUSDT', 6_000_000, 1),
+  ];
+  const result = coins.filter(item => isVolumeWithinCap(item.volumeUsd, applied.maxVolumeUsd, applied.volumeMode))
+    .sort((a, b) => compareScreenerSearchCoins(a, b, applied));
+  assert.deepEqual(result.map(item => item.symbol), ['MINUSDT', 'HIGHUSDT', 'TOPUSDT']);
+});
+
+test('new saved profile search defaults replace stale Screener session filters without resets on unrelated writes', () => {
+  const screen = source('../src/components/CoinScreenerPage.tsx');
+  assert.match(screen, /savedConfigKey: string/);
+  assert.match(screen, /const savedConfigKey = JSON\.stringify\(initialSearch\)/);
+  assert.match(screen, /previousUiSession\?\.savedConfigKey === savedConfigKey \? previousUiSession : undefined/);
+  assert.match(screen, /previous\.key === savedConfigKey\) return;/);
+  assert.match(screen, /applySearchConfig\(initialSearch\)/);
+  assert.match(screen, /screenerUiSession\.set\(user\?\.uid \|\| 'guest'/);
 });
