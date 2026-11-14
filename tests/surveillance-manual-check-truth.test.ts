@@ -32,6 +32,13 @@ test('a deleted coin or a rejected stale check is never reported as committed', 
   assert.equal(wasSurveillanceCheckCommitted({}, {}), false);
 });
 
+test('incomplete check errors retain their failed-coin count for retryable 503 responses', () => {
+  const error = new SurveillanceCheckIncompleteError(2);
+  assert.equal(error.name, 'SurveillanceCheckIncompleteError');
+  assert.equal(error.failedChecks, 2);
+  assert.match(error.message, /2 монет/);
+});
+
 test('surveillance endpoints do not report a successful manual scan without new candles', () => {
   const server = readFileSync(new URL('../server.ts', import.meta.url), 'utf8');
   const service = readFileSync(new URL('../server/surveillanceService.ts', import.meta.url), 'utf8');
