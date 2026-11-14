@@ -67,3 +67,62 @@ test('top-of-book and imbalance share sorting until next depth revision',()=>{
  assert.equal(book.thresholdStats().sortedPriceComputations,initial+6,
    'clearing a book releases the cached ordering and invalidates both sides');
 });
+
+
+test('best bid and ask update from deltas without full scans unless current top is removed',()=>{
+ const book=new OrderBookEngine('BTCUSDT','bybit','futures', {
+   mode:'MANUAL',manualThresholdUsd:1000,minPersistenceSeconds:15,minDistancePct:0.1,
+ });
+ const apply=(sequence:number,bids:[number,number][],asks:[number,number][],isSnapshot=false)=>
+   book.applyDepth({sequence,bids,asks,isSnapshot,eventTime:Date.now()});
+ apply(1,[[100,20],[99,12],[98,7]],[[101,10],[102,15],[103,10]],true);
+ assert.deepEqual([book.bestBid,book.bestAsk],[100,101]);
+ assert.equal(book.thresholdStats().bestPriceFullScans,0);
+ apply(2,[[99,19],[97,12]],[[103,18],[104,11]]);
+ assert.deepEqual([book.bestBid,book.bestAsk],[100,101]);
+ assert.equal(book.thresholdStats().bestPriceFullScans,0,
+   'non-best price and quantity updates never rescan the full book');
+ apply(3,[[100.5,17]],[]);
+ assert.deepEqual([book.bestBid,book.bestAsk],[100.5,101]);
+ assert.equal(book.thresholdStats().bestPriceFullScans,0,
+   'a new best can be discovered from the delta alone');
+ apply(4,[[100.5,0]],[]);
+ assert.deepEqual([book.bestBid,book.bestAsk],[100,101]);
+ assert.equal(book.thresholdStats().bestPriceFullScans,1,
+   'removing best bid requires one full bid-only scan');
+ apply(5,[],[[101,0]]);
+ assert.deepEqual([book.bestBid,book.bestAsk],[100,102]);
+ assert.equal(book.thresholdStats().bestPriceFullScans,2,
+   'removing best ask requires one full ask-only scan');
+ apply(6,[[97,0],[96,2]],[[104,0]]);
+ assert.deepEqual([book.bestBid,book.bestAsk],[100,102]);
+ assert.equal(book.thresholdStats().bestPriceFullScans,2,
+   'removing non-best prices does not cause another scan');
+ assert.equal(book.getState().status,'LIVE');
+ assert.ok(book.getOrderBookImbalance(3)<1);
+ apply(7,[[50,12]],[[150,3]],true);
+ assert.deepEqual([book.bestBid,book.bestAsk],[50,150]);
+ assert.equal(book.thresholdStats().bestPriceFullScans,2,
+   'a full snapshot starts a fresh book and calculates best from its own levels');
+ book.clear();
+ assert.deepEqual([book.bestBid,book.bestAsk],[0,0]);
+ assert.deepEqual(book.getDensities(),[]);
+});
+
+test('deleting a best price and adding a replacement in the same packet gives the correct book',()=>{
+ const book=new OrderBookEngine('BTCUSDT','binance','futures', {
+   mode:'MANUAL',manualThresholdUsd:1000,minPersistenceSeconds:15,minDistancePct:0.1,
+ });
+ book.applyDepth({sequence:1,isSnapshot:true,
+   bids:[[100,10],[99,10]],asks:[[103,10],[104,10]],eventTime:Date.now()});
+ book.applyDepth({sequence:2,bids:[[100,0],[102,10]],
+   asks:[[103,0],[101,10]],eventTime:Date.now()});
+ assert.equal(book.bestBid,102);
+ assert.equal(book.bestAsk,101);
+ assert.equal(book.getState().status,'RESYNCING',
+   'a crossed book remains invalid even when incremental top updates look plausible');
+ book.applyDepth({sequence:3,isSnapshot:true,
+   bids:[[100,10],[99,10]],asks:[[101,10]],eventTime:Date.now()});
+ assert.equal(book.getState().status,'LIVE');
+ assert.deepEqual([book.bestBid,book.bestAsk],[100,101]);
+});
