@@ -339,7 +339,7 @@ const HookChartCanvas = forwardRef<HookChartHandle, HookChartCanvasProps>(functi
     const change = sameScope ? replayHistoryChange(previous!.input, klines) : 'reset';
     if (change === 'same') return previous!.candles;
     if ((change === 'append' || change === 'replace-last') && previous?.candles.length &&
-        previous.input.at(-1)?.time * 1000 === previous.candles.at(-1)?.t) {
+        previous.input.at(-1)?.time === previous.candles.at(-1)!.t / 1000) {
       const last = toHookCandles(klines.slice(-1))[0];
       const oldLast = previous.candles.at(-1)!;
       if (last && (change === 'append' ? last.t > oldLast.t : last.t === oldLast.t)) {
