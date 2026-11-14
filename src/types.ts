@@ -328,6 +328,10 @@ export interface PriceAlert {
   triggeredPrice?: number;
   /** Incremented only by an explicit user restart. A completed cycle cannot fire twice. */
   deliveryEpoch?: number;
+  /** Durable dispatch intent, set with the fired state and cleared only after
+   * history is committed. Old triggered alerts without this field are NOT
+   * automatically replayed, preventing duplicate legacy notifications. */
+  deliveryPending?: boolean;
   // Per-user telegram credentials
   telegramBotToken?: string;
   telegramChatId?: string;
