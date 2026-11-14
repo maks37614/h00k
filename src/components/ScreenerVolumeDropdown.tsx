@@ -1,20 +1,27 @@
-import React, { useLayoutEffect, useRef, useState } from 'react';
+import React, { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Check, ChevronDown } from 'lucide-react';
-import { SCREENER_VOLUME_CAPS } from '../utils/screenerVolume';
+import { SCREENER_VOLUME_CAPS, type ScreenerVolumeMode } from '../utils/screenerVolume';
 
-const OPTIONS = [{ value: 0, label: 'Без обмежень' }, ...SCREENER_VOLUME_CAPS];
 
 interface Props {
   id: string;
   labelId: string;
   value: number;
+  mode?: ScreenerVolumeMode;
   onChange: (value: number) => void;
 }
 
-export const ScreenerVolumeDropdown: React.FC<Props> = ({ id, labelId, value, onChange }) => {
+export const ScreenerVolumeDropdown: React.FC<Props> = ({ id, labelId, value, mode = 'to', onChange }) => {
+  const options = useMemo(() => [
+    { value: 0, label: 'Без обмежень' },
+    ...SCREENER_VOLUME_CAPS.map(option => ({
+      value: option.value,
+      label: mode === 'from' ? option.label.replace(/^До /, 'Від ') : option.label,
+    })),
+  ], [mode]);
   const [open, setOpen] = useState(false);
-  const selectedIndex = Math.max(0, OPTIONS.findIndex(option => option.value === value));
+  const selectedIndex = Math.max(0, options.findIndex(option => option.value === value));
   const [activeIndex, setActiveIndex] = useState(selectedIndex);
   const [position, setPosition] = useState<React.CSSProperties | null>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -30,7 +37,7 @@ export const ScreenerVolumeDropdown: React.FC<Props> = ({ id, labelId, value, on
   };
 
   const choose = (index: number) => {
-    onChange(OPTIONS[index].value);
+    onChange(options[index].value);
     close(true);
   };
 
@@ -135,9 +142,9 @@ export const ScreenerVolumeDropdown: React.FC<Props> = ({ id, labelId, value, on
       return;
     }
     const next = event.key === 'Home' ? 0
-      : event.key === 'End' ? OPTIONS.length - 1
-      : event.key === 'ArrowDown' ? (activeIndex + 1) % OPTIONS.length
-      : event.key === 'ArrowUp' ? (activeIndex - 1 + OPTIONS.length) % OPTIONS.length
+      : event.key === 'End' ? options.length - 1
+      : event.key === 'ArrowDown' ? (activeIndex + 1) % options.length
+      : event.key === 'ArrowUp' ? (activeIndex - 1 + options.length) % options.length
       : null;
     if (next !== null) {
       event.preventDefault();
@@ -147,7 +154,7 @@ export const ScreenerVolumeDropdown: React.FC<Props> = ({ id, labelId, value, on
       const key = event.key.toLocaleLowerCase();
       const text = now - searchRef.current.time < 700 ? searchRef.current.text + key : key;
       searchRef.current = { text, time: now };
-      const match = OPTIONS.findIndex(option => option.label.toLocaleLowerCase().startsWith(text));
+      const match = options.findIndex(option => option.label.toLocaleLowerCase().startsWith(text));
       if (match >= 0) {
         event.preventDefault();
         setActiveIndex(match);
@@ -165,17 +172,19 @@ export const ScreenerVolumeDropdown: React.FC<Props> = ({ id, labelId, value, on
         aria-expanded={open}
         aria-controls={open ? listId : undefined}
         aria-labelledby={labelId + ' ' + valueId}
-        title="Показати всі пари з добовим обсягом до вибраної суми включно. Сортування обсягу змінюється окремо."
+        title={mode === 'from'
+          ? 'Показати пари з добовим обсягом від вибраної суми включно. Сортування обсягу змінюється окремо.'
+          : 'Показати пари з добовим обсягом до вибраної суми включно. Сортування обсягу змінюється окремо.'}
         onClick={() => open ? close() : openAt(selectedIndex)}
         onKeyDown={event => {
           if (event.key === 'ArrowDown' || event.key === 'ArrowUp' || event.key === 'Home' || event.key === 'End') {
             event.preventDefault();
-            openAt(event.key === 'Home' ? 0 : event.key === 'End' ? OPTIONS.length - 1 : selectedIndex);
+            openAt(event.key === 'Home' ? 0 : event.key === 'End' ? options.length - 1 : selectedIndex);
           }
         }}
         className="flex min-w-0 flex-1 cursor-pointer items-center justify-between gap-1 rounded-md bg-transparent px-0 py-1 text-xs font-medium text-slate-200 transition-colors hover:text-white focus:outline-none focus-visible:ring-1 focus-visible:ring-cyan-500/70"
       >
-        <span id={valueId} className="min-w-0 truncate">{OPTIONS[selectedIndex].label}</span>
+        <span id={valueId} className="min-w-0 truncate">{options[selectedIndex].label}</span>
         <ChevronDown aria-hidden="true" className={'h-3 w-3 shrink-0 text-slate-400 transition-transform ' + (open ? 'rotate-180' : '')} />
       </button>
       {open && position && createPortal(
@@ -190,7 +199,7 @@ export const ScreenerVolumeDropdown: React.FC<Props> = ({ id, labelId, value, on
           style={position}
           className="fixed z-[100] m-0 list-none overflow-y-auto overscroll-contain touch-pan-y rounded-lg border border-slate-700 bg-slate-950 p-1 text-xs shadow-xl outline-none"
         >
-          {OPTIONS.map((option, index) => (
+          {options.map((option, index) => (
             <li
               key={option.value}
               id={optionId(index)}
