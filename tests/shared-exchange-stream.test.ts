@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { ExchangeStreamClient } from '../server/surveillance/exchangeStream';
 import { acquireExchangeStream, getSharedExchangeStreamStats } from '../server/surveillance/sharedExchangeStream';
 import { OrderBookEngine } from '../server/surveillance/orderBookEngine';
@@ -173,4 +174,33 @@ test('shared cached snapshots use normalized numbers even for string depth tuple
     late.destroy();
     early.destroy();
   }
+});
+
+test('one market error warning is shared across a large number of surveillance owners', t => {
+  t.mock.method(ExchangeStreamClient.prototype, 'connect', () => {});
+  const warnings: unknown[][] = [];
+  t.mock.method(console, 'warn', (...args: unknown[]) => { warnings.push(args); });
+  const owners = Array.from({length: 200}, () =>
+    acquireExchangeStream('MATICUSDT', 'bybit', 'futures'));
+  const source = (owners[0] as any).entry.source as ExchangeStreamClient;
+  try {
+    assert.equal(source.listenerCount('error'), 1,
+      'public stream owns one fallback, not one error logger per owner');
+    for(let i=0;i<50;i++) {
+      assert.doesNotThrow(()=>source.emit('error',new Error('simulated market outage')));
+    }
+    assert.equal(warnings.length,1,'market outage must not flood VPS logs');
+    assert.equal(getSharedExchangeStreamStats().find(row =>
+      row.scope === 'bybit:futures:MATICUSDT:full')?.subscribers,200);
+  } finally {
+    for(const owner of owners) owner.destroy();
+  }
+  assert.equal(getSharedExchangeStreamStats().some(row =>
+    row.scope === 'bybit:futures:MATICUSDT:full'),false);
+});
+
+test('CoinWorker does not install an independent public-stream error logger',()=>{
+  const worker=readFileSync(new URL('../server/surveillance/coinWorker.ts',import.meta.url),'utf8');
+  assert.doesNotMatch(worker,/this\.streamClient\.on\('error',/);
+  assert.match(worker,/acquireExchangeStream\(coin\.symbol, coin\.exchange, coin\.marketType\)/);
 });

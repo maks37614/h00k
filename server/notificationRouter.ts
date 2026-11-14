@@ -2,6 +2,7 @@ import { SurveillanceCoin } from '../src/types';
 import { getUserTelegram } from './userTelegram';
 import { sendUserTelegramMessage, lastTelegramDeliveryAt } from './telegramDelivery';
 import { findSurveillanceCoinById } from './surveillanceService';
+import { NotificationCooldownCache } from './notificationCooldownCache';
 
 export type NotificationSource =
   | 'PRICE_ALERT'
@@ -51,6 +52,8 @@ export interface ShouldNotifyResult {
   allowed: boolean;
   reason?: string;
   scopedKey: string;
+  /** Effective cooldown used to retain an in-memory dedup hint safely. */
+  cooldownMs?: number;
 }
 
 export class NotificationRouter {
@@ -58,7 +61,17 @@ export class NotificationRouter {
 
   // Scoped timestamps: `${source}:${userId}:${coinId}:${exchange}:${marketType}:${eventType}:${eventIdentity}` -> timestamp
   private inFlight = new Set<string>();
-  private scopedAlertTimestamps = new Map<string, number>();
+  private scopedAlertTimestamps = new NotificationCooldownCache();
+  private lastGateFailureLoggedAt = 0;
+  private logGateFailure(error: unknown) {
+    const now = Date.now();
+    if (this.lastGateFailureLoggedAt && now - this.lastGateFailureLoggedAt < 30_000) return;
+    this.lastGateFailureLoggedAt = now;
+    // A corrupted/unreadable private JSON store must fail closed without
+    // crashing the Node process or producing a log line per watching user.
+    console.error('[NotificationRouter] Telegram delivery gate unavailable:',
+      error instanceof Error ? error.message : 'unknown persistence error');
+  }
 
   // Default cooldowns per eventType in ms
   private readonly defaultCooldowns: Record<string, number> = {
@@ -139,12 +152,14 @@ export class NotificationRouter {
       return { allowed: false, reason: 'unauthenticated_user', scopedKey };
 
     // 1. If coin context provided, check active status & config toggles
+    let effectiveCoin = params.coin;
     if (params.coin) {
       if (params.coin.userId && params.coin.userId !== params.userId) return { allowed: false, reason: 'owner_mismatch', scopedKey };
       const coin = params.coin.id && params.coin.userId
         ? findSurveillanceCoinById(params.coin.id, params.userId)?.coin
         : params.coin;
       if (!coin) return { allowed: false, reason: 'coin_removed', scopedKey };
+      effectiveCoin = coin;
 
       if (!coin.isActive) {
         return { allowed: false, reason: 'coin_inactive', scopedKey };
@@ -201,50 +216,67 @@ export class NotificationRouter {
     }
     if (!userTg.confirmedAt) return { allowed: false, reason: 'telegram_not_confirmed', scopedKey };
 
-    // 3. Check Cooldown & Deduplication
+    // 3. Check Cooldown & Deduplication. Use the persisted, current coin
+    // settings rather than a potentially stale worker snapshot.
+    const custom = params.customCooldownMs;
+    const configuredMinutes = effectiveCoin?.config?.cooldownMinutes;
+    const cooldownMs = custom !== undefined && Number.isFinite(custom) && custom >= 0
+      ? custom
+      : configuredMinutes !== undefined && Number.isFinite(configuredMinutes) && configuredMinutes >= 0
+        ? configuredMinutes * 60_000
+        : this.defaultCooldowns[params.eventType.toUpperCase()] ?? 15 * 60_000;
+
     if (params.forceNotify) {
-      return { allowed: true, scopedKey };
+      return { allowed: true, scopedKey, cooldownMs };
     }
 
-    const lastTime = Math.max(this.scopedAlertTimestamps.get(scopedKey) || 0, lastTelegramDeliveryAt(params.userId, scopedKey));
-    const cooldownMs = params.customCooldownMs ??
-      (params.coin?.config?.cooldownMinutes !== undefined
-        ? Math.max(0, params.coin.config.cooldownMinutes) * 60 * 1000
-        : this.defaultCooldowns[params.eventType.toUpperCase()] ?? 15 * 60 * 1000);
+    const lastTime = Math.max(this.scopedAlertTimestamps.last(scopedKey, now),
+      lastTelegramDeliveryAt(params.userId, scopedKey));
 
     if (now - lastTime < cooldownMs) {
       return { allowed: false, reason: `cooldown_active (${Math.round((cooldownMs - (now - lastTime)) / 1000)}s left)`, scopedKey };
     }
 
-    return { allowed: true, scopedKey };
+    return { allowed: true, scopedKey, cooldownMs };
   }
 
   /**
    * Main dispatch method - gates, sends, updates scoped timestamp
    */
   public async dispatch(payload: NotificationEventPayload): Promise<boolean> {
-    const gateResult = this.shouldNotify({
-      source: payload.source,
-      userId: payload.userId,
-      coin: payload.coin,
-      coinId: payload.coinId,
-      symbol: payload.symbol,
-      exchange: payload.exchange,
-      marketType: payload.marketType,
-      timeframe: payload.timeframe,
-      eventType: payload.eventType,
-      eventIdentity: payload.eventIdentity,
-      triggerMode: payload.triggerMode,
-      customCooldownMs: payload.customCooldownMs,
-      forceNotify: payload.forceNotify,
-    });
+    let gateResult: ShouldNotifyResult;
+    try {
+      gateResult = this.shouldNotify({
+        source: payload.source,
+        userId: payload.userId,
+        coin: payload.coin,
+        coinId: payload.coinId,
+        symbol: payload.symbol,
+        exchange: payload.exchange,
+        marketType: payload.marketType,
+        timeframe: payload.timeframe,
+        eventType: payload.eventType,
+        eventIdentity: payload.eventIdentity,
+        triggerMode: payload.triggerMode,
+        customCooldownMs: payload.customCooldownMs,
+        forceNotify: payload.forceNotify,
+      });
+    } catch (error) {
+      this.logGateFailure(error);
+      return false;
+    }
 
     if (!gateResult.allowed || this.inFlight.has(gateResult.scopedKey)) {
       return false;
     }
 
-    const userTg = getUserTelegram(payload.userId);
-    if (!userTg?.botToken || !userTg?.chatId) {
+    // The Telegram link may be edited between the gate and actual dispatch.
+    // Never let a damaged credentials file reject an unawaited CoinWorker call.
+    try {
+      const userTg = getUserTelegram(payload.userId);
+      if (!userTg?.botToken || !userTg?.chatId) return false;
+    } catch (error) {
+      this.logGateFailure(error);
       return false;
     }
 
@@ -254,13 +286,13 @@ export class NotificationRouter {
 
       if (res.success || res.queued) {
         const now = Date.now();
-        this.scopedAlertTimestamps.set(gateResult.scopedKey, now);
+        this.scopedAlertTimestamps.record(gateResult.scopedKey, now, gateResult.cooldownMs);
 
         if (payload.coin) {
           payload.coin.lastNotifiedAt = new Date(now).toISOString();
         }
 
-        console.log(`[NotificationRouter] ✅ Sent Telegram [${payload.source}] to ${payload.userId} for ${payload.symbol} (${payload.eventType}:${payload.eventIdentity})`);
+        console.log(`[NotificationRouter] ${res.success ? '✅ Delivered' : '⏳ Queued'} Telegram [${payload.source}] for ${payload.symbol} (${payload.eventType}:${payload.eventIdentity})`);
         return true;
       }
     } catch (err) {
@@ -273,11 +305,11 @@ export class NotificationRouter {
   }
 
   public recordAlertSent(scopedKey: string, timestamp = Date.now()) {
-    this.scopedAlertTimestamps.set(scopedKey, timestamp);
+    this.scopedAlertTimestamps.record(scopedKey, timestamp);
   }
 
   public getLastAlertTime(scopedKey: string): number {
-    return this.scopedAlertTimestamps.get(scopedKey) || 0;
+    return this.scopedAlertTimestamps.last(scopedKey);
   }
 
   public clear() {
