@@ -139,7 +139,7 @@ test('Screener volume arrow changes only local filter mode, preserving preset an
   assert.match(screener, /setVolumeMode\(current => current === 'to' \? 'from' : 'to'\)/);
   assert.match(screener, /isVolumeWithinCap\(coin\.volumeUsd, maxVolumeUsd, volumeMode\)/);
   assert.match(screener, /mode=\{volumeMode\}/);
-  assert.match(screener, /volumeMode, sortBy/);
+  assert.match(screener, /volumeMode, advancedFilters, sortBy/);
   assert.match(dropdown, /option\.label\.replace\(/);
   assert.match(editor, /setField\('volumeMode', draft\.volumeMode === 'to' \? 'from' : 'to'\)/);
 });
