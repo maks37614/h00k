@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import type { MarketCoin, TerminalChartBlock } from '../src/types';
 import { matchesMarketPreset, selectMarketPresetCoins } from '../src/utils/marketPresets';
-import { blocksForMarketPreset, normalizeTerminalBlocks, normalizeTerminalPresets, terminalStorageKey, TERMINAL_PRESETS_STORAGE_KEY } from '../src/utils/terminalPresets';
+import { blocksForMarketPreset, normalizeTerminalBlocks, normalizeTerminalMarketPair, normalizeTerminalPresets, terminalStorageKey, TERMINAL_PRESETS_STORAGE_KEY } from '../src/utils/terminalPresets';
 
 const coin = (symbol: string, change24h: number, values: Partial<MarketCoin> = {}): MarketCoin => ({
   symbol, baseAsset: symbol.replace('USDT', ''), quoteAsset: 'USDT', exchange: 'binance', marketType: 'futures',
@@ -114,4 +114,12 @@ test('loaded Terminal workspaces repair duplicate chart IDs without discarding t
   assert.equal(next[2].id, 'another');
   assert.equal(previous[1].id, 'reused', 'must not mutate persisted data');
   assert.deepEqual(normalizeTerminalBlocks(next), next, 'migrated keys remain stable on reload');
+});
+
+test('Terminal keeps each exchange instrument quote currency instead of appending USDT', () => {
+  assert.deepEqual(normalizeTerminalMarketPair('BTCUSDT', 'USDT'), { symbol: 'BTCUSDT', quoteAsset: 'USDT' });
+  assert.deepEqual(normalizeTerminalMarketPair('BTCUSDC', 'USDC'), { symbol: 'BTCUSDC', quoteAsset: 'USDC' });
+  assert.deepEqual(normalizeTerminalMarketPair('ETH/BTC', 'BTC'), { symbol: 'ETHBTC', quoteAsset: 'BTC' });
+  assert.deepEqual(normalizeTerminalMarketPair('ETH', 'USDT'), { symbol: 'ETHUSDT', quoteAsset: 'USDT' });
+  assert.deepEqual(normalizeTerminalMarketPair('SOLFDUSD', 'FDUSD'), { symbol: 'SOLFDUSD', quoteAsset: 'FDUSD' });
 });
