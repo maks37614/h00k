@@ -24,9 +24,8 @@ interface AuthContextType {
   user: H00kUser | null;
   profile: UserProfile | null;
   loading: boolean;
-  signInWithGoogle: (inviteCode?: string, isSignUp?: boolean) => Promise<void>;
   signInWithEmail: (email: string, password: string, remember?: boolean) => Promise<void>;
-  registerWithEmail: (email: string, password: string, name?: string, inviteCode?: string) => Promise<void>;
+  registerWithEmail: (email: string, password: string, name?: string) => Promise<void>;
   resendVerification: (email: string) => Promise<void>;
   requestPasswordReset: (email: string) => Promise<void>;
   resetPassword: (password: string) => Promise<void>;
@@ -185,10 +184,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setAuthNotice('Акаунт створено. Перевірте email і перейдіть за посиланням підтвердження.');
     } catch (error) { handleError(error); }
   };
-  const signInWithGoogle = async () => {
-    const error = new Error('Вхід Google тимчасово недоступний. Використайте email і пароль.');
-    handleError(error);
-  };
   const resendVerification = async (email: string) => {
     clearAuthError();
     try {
@@ -271,7 +266,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   return <AuthContext.Provider value={{
-    user, profile, loading, signInWithGoogle, signInWithEmail, registerWithEmail,
+    user, profile, loading, signInWithEmail, registerWithEmail,
     resendVerification, requestPasswordReset, resetPassword, resetToken,
     updateProfileData, logout, logoutAll, listSessions, revokeSession,
     authError, authErrorCode, authNotice, clearAuthError,

@@ -439,7 +439,7 @@ export function createSetupAlertsGroup(
   return { success: true, alerts: alertsToCreate.filter(a => !deletedAlertIds.has(alertIdentity(userId, a.id))) };
 }
 
-// Sync user alerts batch from client/Firestore with smart merge
+// Sync user alerts batch from the signed-in client with smart merge
 export function syncUserAlerts(
   userId: string,
   userAlerts: PriceAlert[],
@@ -473,7 +473,7 @@ export function syncUserAlerts(
     const existing = existingUserAlerts.get(incoming.id);
 
     // The server is authoritative for an existing alert's lifecycle.
-    // A delayed Firestore snapshot must never re-arm a sent notification;
+    // A delayed client snapshot must never re-arm a sent notification;
     // nor may an old triggered snapshot undo a deliberate manual restart.
     const processed = existing ? undefined : findProcessedAlertHistory({ ...incoming, userId });
     mergedUserAlerts.push({

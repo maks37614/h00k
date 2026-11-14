@@ -91,7 +91,7 @@ test('terminal charts respect provider selection while fullscreen always uses Ho
   for (const provider of ['tradingview', 'hookchart', undefined] as const) {
     const auth: NonNullable<React.ContextType<typeof AuthContext>> = {
       user: { uid } as H00kUser, profile: { uid, defaultChartProvider: provider }, loading: false,
-      signInWithGoogle: async () => {}, signInWithEmail: async () => {}, registerWithEmail: async () => {},
+      signInWithEmail: async () => {}, registerWithEmail: async () => {},
       updateProfileData: async () => {}, logout: async () => {},
       resendVerification: async () => {}, requestPasswordReset: async () => {}, resetPassword: async () => {},
       resetToken: null, authNotice: null, listSessions: async () => [], revokeSession: async () => {}, logoutAll: async () => {},

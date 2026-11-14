@@ -5,7 +5,7 @@ import {
   matchesNotificationScope, classifySurveillanceEventType, type SiteNotificationSettings, type SiteNotificationKind,
 } from '../src/utils/siteNotifications';
 
-/** Separate from Firebase UI profile: server cron must enforce explicit opt-in too. */
+/** Separate from account UI preferences: server cron must enforce explicit opt-in too. */
 const file = path.join(process.cwd(), 'server/data/site_notification_settings_v2.json');
 let cache: Map<string, SiteNotificationSettings> | null = null;
 function store(): Map<string, SiteNotificationSettings> {
