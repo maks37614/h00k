@@ -40,6 +40,8 @@ interface TerminalChartWidgetProps {
   allCoins: ScannedCoin[];
   isSingleBlock: boolean;
   isMaximized: boolean;
+  /** Pause charts obscured by a maximized Terminal chart. */
+  isSuspended?: boolean;
   onToggleMaximize: () => void;
   onRemove: () => void;
   onUpdateBlock: (updated: Partial<TerminalChartBlock>) => void;
@@ -144,6 +146,7 @@ export const TerminalChartWidget: React.FC<TerminalChartWidgetProps> = ({
   allCoins,
   isSingleBlock,
   isMaximized,
+  isSuspended = false,
   onToggleMaximize,
   onRemove,
   onUpdateBlock,
@@ -185,7 +188,7 @@ export const TerminalChartWidget: React.FC<TerminalChartWidgetProps> = ({
   });
   const blockRootRef = useRef<HTMLDivElement>(null);
   const [isNearViewport, setIsNearViewport] = useState(isSingleBlock || isMaximized);
-  const shouldLoadWidgets = isSingleBlock || isMaximized || isNearViewport;
+  const shouldLoadWidgets = !isSuspended && (isSingleBlock || isMaximized || isNearViewport);
 
   // Defer charts, feeds, and order books until their block is near the viewport.
   useEffect(() => {
@@ -277,6 +280,19 @@ export const TerminalChartWidget: React.FC<TerminalChartWidgetProps> = ({
 
   const pendingHeaderPriceRef = useRef<number | null>(null);
   const headerPriceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const instrumentKey = `${block.exchange}:${block.marketType}:${block.symbol}`;
+  const previousInstrumentRef = useRef(instrumentKey);
+  useEffect(() => {
+    if (previousInstrumentRef.current === instrumentKey) return;
+    previousInstrumentRef.current = instrumentKey;
+    // Old coin prices and delayed HookChart callbacks must never appear on a new instrument.
+    if (headerPriceTimerRef.current !== null) clearTimeout(headerPriceTimerRef.current);
+    headerPriceTimerRef.current = null;
+    pendingHeaderPriceRef.current = null;
+    const nextPrice = Number.isFinite(coin?.currentPrice) && (coin?.currentPrice ?? 0) > 0 ? coin!.currentPrice : null;
+    setCurrentPrice(nextPrice);
+    setLivePrice(nextPrice ?? 0);
+  }, [instrumentKey, coin?.currentPrice]);
   const handleChartPrice = useCallback((price: number) => {
     if (!Number.isFinite(price) || price <= 0) return;
     pendingHeaderPriceRef.current = price;
