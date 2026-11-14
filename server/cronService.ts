@@ -1,5 +1,5 @@
 import { checkAlertsOnce, loadAlerts, getAllAlerts } from './alertService';
-import { checkCoinSurveillance, getAllActiveSurveillanceCoins, findSurveillanceCoinById, commitSurveillanceCheck, flushDeferredSurveillanceChecks } from './surveillanceService';
+import { checkCoinSurveillance, getAllActiveSurveillanceCoins, findSurveillanceCoinById, commitSurveillanceCheck, flushDeferredSurveillanceChecks, countActiveSurveillanceCoins } from './surveillanceService';
 import { candleCloseCheckPlanner } from './surveillance/candleCloseCheckPlanner';
 import { runBackgroundFormationScans } from './marketService';
 import { getUserTelegram } from './userTelegram';
@@ -315,7 +315,7 @@ class CronManager {
   public getStatus(userId?: string): CronSystemStatus {
     const allAlerts = userId ? getAllAlerts(userId) : loadAlerts();
     const activeAlerts = allAlerts.filter((a) => a.isActive && !a.triggered);
-    const surveillanceCoins = getAllActiveSurveillanceCoins().filter(item => !userId || item.userId === userId);
+    const surveillanceCoinsMonitored = countActiveSurveillanceCoins(userId);
     const tgConfig = getUserTelegram(userId);
 
     return {
@@ -327,7 +327,7 @@ class CronManager {
       stats: {
         totalAlertsMonitored: allAlerts.length,
         activeAlertsCount: activeAlerts.length,
-        surveillanceCoinsMonitored: surveillanceCoins.length,
+        surveillanceCoinsMonitored,
         telegramConfigured: Boolean(tgConfig?.botToken && tgConfig?.chatId && tgConfig?.confirmedAt),
       },
     };
