@@ -311,7 +311,7 @@ export function useOriginalHookChartLiveFeed({
   }, [exchange, marketType, symbol, replay]);
 
   useEffect(() => {
-    const exchangeSymbol = /^[\\p{L}\\p{M}\\p{N}]+$/u.test(symbol);
+    const exchangeSymbol = /^[\p{L}\p{M}\p{N}]+$/u.test(symbol);
     if (replay || !exchangeSymbol || marketType !== 'futures') {
       setFundingRate(Number.NaN);
       setFundingHistory([]);
