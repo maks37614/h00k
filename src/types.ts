@@ -328,6 +328,9 @@ export interface PriceAlert {
   triggeredPrice?: number;
   /** Incremented only by an explicit user restart. A completed cycle cannot fire twice. */
   deliveryEpoch?: number;
+  /** Durable dispatched cycle checkpoint. Old fired alerts without this marker
+   * cannot replay merely because their history has been cleared. */
+  deliveryPending?: boolean;
   // Per-user telegram credentials
   telegramBotToken?: string;
   telegramChatId?: string;

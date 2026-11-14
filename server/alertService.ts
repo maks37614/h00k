@@ -149,11 +149,12 @@ export function loadAlerts(): PriceAlert[] {
   let repaired = false;
   for (const alert of alertsCache) {
     const history = findProcessedAlertHistory(alert);
-    if (history && (!alert.triggered || alert.isActive)) {
+    if (history && (!alert.triggered || alert.isActive || alert.deliveryPending)) {
       alert.triggered = true;
       alert.isActive = false;
       alert.triggeredAt = history.triggeredAt;
       alert.triggeredPrice = history.triggeredPrice;
+      alert.deliveryPending = false;
       repaired = true;
     }
   }
@@ -305,6 +306,14 @@ export function deleteHistoryItem(id: string, userId?: string): boolean {
     return true;
   }
   return false;
+}
+
+/** Rearming while an old delivery is unresolved would erase its durable intent. */
+export class AlertDispatchPendingError extends Error {
+  constructor() {
+    super('Сповіщення ще очікує збереження доставки. Спробуйте пізніше.');
+    this.name = 'AlertDispatchPendingError';
+  }
 }
 
 // Get all alerts (strictly filtered by user, never leaked to guests)
@@ -608,6 +617,8 @@ export function syncUserAlerts(
       triggeredAt: existing ? existing.triggeredAt : processed ? processed.triggeredAt : incoming.triggeredAt,
       triggeredPrice: existing ? existing.triggeredPrice : processed ? processed.triggeredPrice : incoming.triggeredPrice,
       deliveryEpoch: existing ? existing.deliveryEpoch : incoming.deliveryEpoch,
+      // Browser sync never owns the durable dispatch checkpoint.
+      deliveryPending: existing ? existing.deliveryPending : false,
       language: normalizeLanguage(incoming.language || existing?.language || effectiveLanguage),
     });
   }
@@ -661,6 +672,9 @@ export function toggleAlert(id: string, userId?: string, isActive?: boolean): Pr
     alert.isActive = isActive ?? !alert.isActive;
     // Only this explicit user action starts a new delivery cycle.
     if (alert.isActive && alert.triggered) {
+      // Restarting an unfinished cycle would erase its only durable dispatch
+      // intent. Explicit deletion/clear remains available to cancel it.
+      if (alert.deliveryPending) throw new AlertDispatchPendingError();
       alert.deliveryEpoch = (alert.deliveryEpoch ?? 0) + 1;
       alert.triggered = false;
       alert.triggeredAt = undefined;
@@ -753,6 +767,15 @@ async function checkAlertsInternal(userId?: string) {
   // exchange subscription universe with that user's private subset.
   // Keep network subscriptions global but evaluate/notify only the caller.
   const activeAlerts = userId ? allActive.filter(a => a.userId === userId) : allActive;
+  // The fired marker and the dispatch intent are committed together. If
+  // Telegram queue creation, history persistence, or the process crashes
+  // afterwards, the next pass can resume using the *same* delivery epoch.
+  // Only new-style alerts with this explicit durable intent are replayed:
+  // old fired alerts whose history was cleared must never fire again.
+  const recoverable = alerts.filter(a => a.deliveryPending === true && a.triggered
+    && !a.isActive && Boolean(a.userId) && a.userId !== 'guest'
+    && Number.isSafeInteger(a.triggeredAt) && Number.isFinite(a.triggeredPrice)
+    && (userId === undefined || a.userId === userId));
   const watched = new Map<string, { exchange: ExchangeId; market: MarketType; symbol: string }>();
   for (const alert of allActive) {
     const key = `${alert.exchange}:${alert.marketType}:${alert.symbol}`;
@@ -760,7 +783,7 @@ async function checkAlertsInternal(userId?: string) {
       watched.set(key, { exchange: alert.exchange, market: alert.marketType, symbol: alert.symbol });
   }
   publicPriceFeed.watch([...watched.values()]);
-  if (activeAlerts.length === 0) return;
+  if (activeAlerts.length === 0 && recoverable.length === 0) return;
 
   // Group prices only for the subset actually being checked.
   const uniqueKeys = new Map<string, { exchange: ExchangeId; market: MarketType; symbol: string }>();
@@ -821,22 +844,27 @@ async function checkAlertsInternal(userId?: string) {
     return processedByIdentity.get(JSON.stringify([alert.userId, alert.id, alert.deliveryEpoch ?? 0]));
   };
 
-  for (const candidate of activeAlerts) {
+  for (const candidate of [...recoverable, ...activeAlerts]) {
     let alert = currentAlert(candidate);
-    if (!alert || !alert.isActive || alert.triggered) continue;
+    if (!alert) continue;
+    const recovering = alert.deliveryPending === true && alert.triggered && !alert.isActive;
+    if (!recovering && (!alert.isActive || alert.triggered)) continue;
     const prior = processedAlert(alert);
     if (prior) {
       const restored = { ...alert, triggered: true, isActive: false,
+        deliveryPending: false,
         triggeredAt: prior.triggeredAt, triggeredPrice: prior.triggeredPrice };
-      if (!saveAlerts(loadAlerts().map(entry => entry === alert ? restored : entry)))
-        throw new Error('[Alerts] Failed to persist a previously fired notification');
+      if (!recovering || alert.deliveryPending) {
+        if (!saveAlerts(loadAlerts().map(entry => entry === alert ? restored : entry)))
+          throw new Error('[Alerts] Failed to finalize a previously fired notification');
+      }
       continue;
     }
     const key = `${alert.exchange}:${alert.marketType}:${alert.symbol}`;
-    const currentPrice = priceMap.get(key);
-    if (currentPrice === undefined) continue;
+    const currentPrice = recovering ? alert.triggeredPrice : priceMap.get(key);
+    if (currentPrice === undefined || !Number.isFinite(currentPrice) || currentPrice <= 0) continue;
 
-    let isTriggered = false;
+    let isTriggered = recovering;
     if (alert.condition === 'gte' && currentPrice >= alert.targetPrice) {
       isTriggered = true;
     } else if (alert.condition === 'lte' && currentPrice <= alert.targetPrice) {
@@ -844,15 +872,16 @@ async function checkAlertsInternal(userId?: string) {
     }
 
     if (isTriggered) {
-      const fired = { ...alert, triggered: true, isActive: false,
-        triggeredAt: Date.now(), triggeredPrice: currentPrice };
-      if (!saveAlerts(loadAlerts().map(entry => entry === alert ? fired : entry))) {
-        // Never deliver a notification without its durable completion marker.
-        // The original alert remains unchanged and can retry next cycle.
-        console.error('[Alerts] Could not persist fired state; skipped Telegram notification');
-        continue;
+      if (!recovering) {
+        const fired = { ...alert, triggered: true, isActive: false,
+          deliveryPending: true, triggeredAt: Date.now(), triggeredPrice: currentPrice };
+        if (!saveAlerts(loadAlerts().map(entry => entry === alert ? fired : entry))) {
+          // Never send Telegram before the durable fired marker and intent.
+          console.error('[Alerts] Could not persist fired state; skipped Telegram notification');
+          continue;
+        }
+        alert = fired;
       }
-      alert = fired;
 
       console.log(`[ALERT TRIGGERED] ${alert.symbol} target: ${alert.targetPrice}, live price: ${currentPrice}, condition: ${alert.condition}`);
 
@@ -925,6 +954,14 @@ async function checkAlertsInternal(userId?: string) {
         console.error(`[ALERT DISPATCH ERROR] Failed to send Telegram alert for ${alert.symbol}:`, dispatchErr);
       }
 
+      // A configured Telegram recipient requires a durable queue record.
+      // A disk failure or queue-capacity rejection must not permanently
+      // mark the alert's dispatch as complete; replay it next monitor pass.
+      if (userAllowedTelegram && !telegramDeliveryId) {
+        console.warn('[Alerts] Telegram enqueue was not confirmed; keeping durable dispatch intent');
+        continue;
+      }
+
       // Record in Alert History
       const historyItem: AlertHistoryItem = {
         id: `hist_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
@@ -949,6 +986,17 @@ async function checkAlertsInternal(userId?: string) {
         createdAt: new Date().toISOString(),
       };
       addHistoryItem(historyItem);
+      // Commit the completed dispatch only *after* the history is durable.
+      // If this write fails, the next pass sees history and finalizes without
+      // resending. Never overwrite a user-initiated new epoch or a deletion.
+      const latest = currentAlert(alert);
+      if (latest?.deliveryPending && latest.triggered
+          && latest.triggeredAt === alert.triggeredAt
+          && (latest.deliveryEpoch ?? 0) === (alert.deliveryEpoch ?? 0)) {
+        if (!saveAlerts(loadAlerts().map(entry =>
+          entry === latest ? { ...entry, deliveryPending: false } : entry)))
+          throw new Error('[Alerts] Could not finalize durable Telegram dispatch intent');
+      }
     }
   }
 

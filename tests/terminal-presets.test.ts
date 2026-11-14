@@ -132,6 +132,8 @@ test('Terminal keeps each exchange instrument quote currency instead of appendin
 test('Terminal displays non-USD quote assets without a misleading dollar sign', () => {
   assert.equal(formatTerminalQuotedPrice(0.025, 'BTC'), '0.02500 BTC');
   assert.equal(formatTerminalQuotedPrice(3.5, 'ETH'), '3.50 ETH');
-  assert.equal(formatTerminalQuotedPrice(10, 'USDT'), '$10.00');
-  assert.equal(formatTerminalQuotedPrice(10, 'USDC'), '$10.00');
+  // A stablecoin quote is not a USD-denominated price. UI displays the
+  // instrument's quote asset separately rather than inventing a dollar sign.
+  assert.equal(formatTerminalQuotedPrice(10, 'USDT'), '10.00');
+  assert.equal(formatTerminalQuotedPrice(10, 'USDC'), '10.00');
 });
