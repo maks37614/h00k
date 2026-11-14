@@ -1,4 +1,5 @@
 import type { Express, Request, Response, NextFunction } from 'express';
+import { captchaConfig, verifyAuthCaptcha } from './authCaptcha';
 import {
   AuthFailure, COOKIE_NAME, initializeIdentity, registerAccount, checkCredentials,
   verifyEmailToken, resendVerification, sendReset, changePasswordWithToken, readAccount,
@@ -89,7 +90,27 @@ export async function requirePostgresSession(req: Request, res: Response, next: 
 export function installPostgresIdentityRoutes(app: Express) {
   // Schema initialization is shared and idempotent; startServer awaits it first.
   app.disable('x-powered-by');
-  app.get('/api/auth/config', (_req, res) => res.setHeader('Cache-Control', 'no-store').json({ backend: 'postgres' }));
+  app.get('/api/auth/config', (_req, res) => res.setHeader('Cache-Control', 'no-store').json({
+    backend: 'postgres', captcha: captchaConfig(),
+  }));
+
+  // Verify CAPTCHA and apply IP/email quotas BEFORE PostgreSQL schema initialization:
+  // malicious or automated POSTs must never trigger expensive account queries or SMTP.
+  const captchaRoutes: Record<string, { kind: string; max: number; durationMs: number }> = {
+    '/register': { kind: 'signup', max: 4, durationMs: 60 * 60 * 1000 },
+    '/login': { kind: 'login', max: 10, durationMs: 15 * 60 * 1000 },
+    '/forgot-password': { kind: 'forgot', max: 4, durationMs: 60 * 60 * 1000 },
+    '/resend-verification': { kind: 'verify', max: 3, durationMs: 60 * 60 * 1000 },
+  };
+  app.use('/api/auth', (req, res, next) => {
+    const limit = req.method === 'POST' ? captchaRoutes[req.path] : undefined;
+    if (!limit) { next(); return; }
+    try {
+      checkOrigin(req);
+      rateLimit(req, limit.kind, limit.max, limit.durationMs);
+      void verifyAuthCaptcha(req).then(() => next(), error => failed(res, error));
+    } catch (error) { failed(res, error); }
+  });
   app.use(['/api/auth', '/api/account'], (_req, res, next) => {
     res.setHeader('Cache-Control', 'no-store');
     next();
@@ -106,17 +127,14 @@ export function installPostgresIdentityRoutes(app: Express) {
   });
 
   app.post('/api/auth/register', protectOrigin, wrap(async (req, res) => {
-    rateLimit(req, 'signup', 4, 60 * 60 * 1000);
     await registerAccount(req.body?.email, req.body?.password, req.body?.displayName);
     res.status(202).json({ success: true, message: 'Перевірте пошту та підтвердіть адресу.' });
   }));
   app.post('/api/auth/resend-verification', protectOrigin, wrap(async (req, res) => {
-    rateLimit(req, 'verify', 3, 60 * 60 * 1000);
     await resendVerification(req.body?.email);
     res.json({ success: true });
   }));
   app.post('/api/auth/login', protectOrigin, wrap(async (req, res) => {
-    rateLimit(req, 'login', 10, 15 * 60 * 1000);
     const account = await checkCredentials(req.body?.email, req.body?.password);
     const session = await createSession(account.user.uid, req, req.body?.remember !== false);
     res.cookie(COOKIE_NAME, session.token, cookieOptions(session.days, req.body?.remember !== false));
@@ -133,7 +151,6 @@ export function installPostgresIdentityRoutes(app: Express) {
     res.json({ success: true, ...account, csrf: (await currentSessionFromToken(req, session.token)).csrf });
   }));
   app.post('/api/auth/forgot-password', protectOrigin, wrap(async (req, res) => {
-    rateLimit(req, 'forgot', 4, 60 * 60 * 1000);
     await sendReset(req.body?.email);
     res.json({ success: true, message: 'Якщо акаунт існує, ми надішлемо лист для відновлення.' });
   }));

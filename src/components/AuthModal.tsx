@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { AuthCaptcha } from './AuthCaptcha';
 import { X, LogIn, UserPlus, Mail, Lock, UserRound, Eye, EyeOff, AlertCircle, CheckCircle2, ShieldCheck, KeyRound, ArrowLeft } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
@@ -28,19 +29,48 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [showPassword, setShowPassword] = useState(false);
   const [busy, setBusy] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const [captchaSiteKey, setCaptchaSiteKey] = useState<string | null>(null);
+  const [captchaStatus, setCaptchaStatus] = useState<'loading' | 'ready' | 'unavailable'>('loading');
+  const [captchaEpoch, setCaptchaEpoch] = useState(0);
   useEffect(() => {
     if (isOpen) {
       setMode(resetToken ? 'reset' : initialMode);
       setPassword('');
       setLocalError(null);
+      setCaptchaToken(null);
+      setCaptchaEpoch(value => value + 1);
       clearAuthError();
     }
   }, [isOpen, initialMode, resetToken]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    let active = true;
+    setCaptchaStatus('loading');
+    setCaptchaSiteKey(null);
+    void fetch('/api/auth/config', { credentials: 'same-origin', cache: 'no-store' })
+      .then(async response => {
+        if (!response.ok) throw new Error('CAPTCHA config unavailable');
+        return response.json();
+      })
+      .then(config => {
+        if (!active) return;
+        const key = config?.captcha?.configured && typeof config.captcha.siteKey === 'string'
+          ? config.captcha.siteKey : null;
+        setCaptchaSiteKey(key);
+        setCaptchaStatus(key ? 'ready' : 'unavailable');
+      })
+      .catch(() => { if (active) setCaptchaStatus('unavailable'); });
+    return () => { active = false; };
+  }, [isOpen]);
 
   if (!isOpen) return null;
   const changeMode = (next: Mode) => {
     setMode(next);
     setPassword('');
+    setCaptchaToken(null);
+    setCaptchaEpoch(value => value + 1);
     setLocalError(null);
     clearAuthError();
   };
@@ -55,18 +85,19 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     if (['signup', 'reset'].includes(mode) && password.length < 12) {
       setLocalError('Пароль має містити щонайменше 12 символів.'); return;
     }
+    if (mode !== 'reset' && !captchaToken) { setLocalError('Спочатку пройдіть перевірку CAPTCHA.'); return; }
     setBusy(true);
     try {
       if (mode === 'signin') {
-        await signInWithEmail(email.trim(), password, remember);
+        await signInWithEmail(email.trim(), password, remember, captchaToken || '');
         setPassword('');
         onSuccess?.();
         onClose();
       } else if (mode === 'signup') {
-        await registerWithEmail(email.trim(), password, displayName);
+        await registerWithEmail(email.trim(), password, displayName, captchaToken || '');
         setPassword('');
       } else if (mode === 'forgot') {
-        await requestPasswordReset(email.trim());
+        await requestPasswordReset(email.trim(), captchaToken || '');
       } else {
         await resetPassword(password);
         setPassword('');
@@ -74,11 +105,16 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       }
     } catch {
       // AuthContext provides localized error and error code.
-    } finally { setBusy(false); }
+    } finally {
+      setBusy(false);
+      if (mode !== 'reset') { setCaptchaToken(null); setCaptchaEpoch(value => value + 1); }
+    }
   };
   const sendAgain = async () => {
+    if (!captchaToken) { setLocalError('Спочатку пройдіть перевірку CAPTCHA.'); return; }
     setBusy(true);
-    try { await resendVerification(email); } catch {} finally { setBusy(false); }
+    try { await resendVerification(email, captchaToken); } catch {}
+    finally { setBusy(false); setCaptchaToken(null); setCaptchaEpoch(value => value + 1); }
   };
   const title = mode === 'signup' ? 'Безкоштовна реєстрація' :
     mode === 'forgot' ? 'Відновлення доступу' :
@@ -196,7 +232,20 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   className="text-xs text-cyan-300 hover:text-cyan-200">Забули пароль?</button>
               </div>
             )}
-            <button type="submit" disabled={busy}
+            {mode !== 'reset' && (
+              <div className="rounded-xl border border-slate-700/70 bg-slate-950/50 px-2 py-3">
+                <div className="mb-2 flex items-center gap-2 text-xs text-slate-300">
+                  <ShieldCheck size={14} className="text-cyan-300" /> Захист від ботів
+                </div>
+                {captchaStatus === 'ready' && captchaSiteKey
+                  ? <AuthCaptcha key={`${mode}-${captchaEpoch}`} siteKey={captchaSiteKey} onTokenChange={setCaptchaToken} />
+                  : <p role="status" className="text-xs leading-relaxed text-amber-200">
+                      {captchaStatus === 'loading' ? 'Завантажуємо перевірку CAPTCHA…' :
+                        'CAPTCHA ще не налаштована або недоступна. Зверніться до адміністратора.'}
+                    </p>}
+              </div>
+            )}
+            <button type="submit" disabled={busy || (mode !== 'reset' && !captchaToken)}
               className="flex w-full items-center justify-center gap-2 rounded-xl bg-cyan-600 px-4 py-3 text-sm font-bold text-white transition-colors hover:bg-cyan-500 disabled:opacity-50">
               {mode === 'reset' ? <KeyRound size={17}/> : <ShieldCheck size={17}/>}
               {busy ? 'Обробка…' : mode === 'signup' ? 'Зареєструватися безкоштовно' :
@@ -204,7 +253,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             </button>
           </form>
           {(authErrorCode === 'EMAIL_UNVERIFIED' || authErrorCode === 'EMAIL_EXISTS' || authErrorCode === 'MAIL_DELIVERY_FAILED') && (
-            <button type="button" disabled={busy} onClick={sendAgain}
+            <button type="button" disabled={busy || !captchaToken} onClick={sendAgain}
               className="mt-3 w-full rounded-lg border border-amber-500/30 px-3 py-2 text-xs font-semibold text-amber-300 hover:bg-amber-950/30 disabled:opacity-50">
               Надіслати лист підтвердження ще раз
             </button>
@@ -216,7 +265,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             </button>
           )}
           <p className="mt-5 text-center text-[11px] leading-relaxed text-slate-500">
-            Безкоштовний акаунт · Захищені сесії · Підтвердження email
+            Безкоштовний акаунт · CAPTCHA · Захищені сесії · Підтвердження email
           </p>
         </div>
       </div>

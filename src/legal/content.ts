@@ -127,6 +127,7 @@ export const legalContent: Record<SupportedLanguage, LegalCopy> = {
         ]},
         { heading: '6. Отримувачі та постачальники', paragraphs: [
           'Акаунти, захищені хеші паролів та профілі зберігаються в PostgreSQL на VPS. Для листів підтвердження та відновлення пароля використовується налаштований SMTP-провайдер (зокрема OVHcloud MX Plan).',
+          'Для запобігання автоматизованим реєстраціям, спробам входу та розсиланню листів використовується Cloudflare Turnstile. Під час перевірки Cloudflare може обробляти IP-адресу, технічні дані браузера й токен перевірки згідно зі своєю політикою конфіденційності.',
           'У разі використання сповіщень дані, необхідні для доставки, передаються Telegram. При роботі інших інтеграцій дані можуть оброблятися відповідними незалежними постачальниками.',
           'Постачальники обробляють дані в межах своїх функцій та застосовних договірних і законодавчих вимог. Для окремих сторонніх платформ діють їхні власні політики конфіденційності.'
         ]},
@@ -267,6 +268,7 @@ export const legalContent: Record<SupportedLanguage, LegalCopy> = {
         ]},
         { heading: '6. Recipients and providers', paragraphs: [
           'Accounts, protected password hashes and profiles are stored in PostgreSQL on the VPS. Email verification and password-recovery messages are delivered by the configured SMTP provider (including OVHcloud MX Plan).',
+          'Cloudflare Turnstile is used to prevent automated registration, login attacks and abuse of recovery emails. During verification, Cloudflare may process IP addresses, browser technical data and challenge tokens under its own privacy policy.',
           'Where Telegram alerts are enabled, delivery-related data is sent to Telegram. Other integrations may involve independent providers processing relevant information.',
           'Providers process data under their applicable agreements and legal duties. Independent platforms have their own privacy policies.'
         ]},
@@ -407,6 +409,7 @@ export const legalContent: Record<SupportedLanguage, LegalCopy> = {
         ]},
         { heading: '6. Получатели и поставщики', paragraphs: [
           'Аккаунты, защищённые хеши паролей и профили хранятся в PostgreSQL на VPS. Письма подтверждения и восстановления пароля отправляет настроенный SMTP-провайдер (в том числе OVHcloud MX Plan).',
+          'Для защиты от автоматических регистраций, перебора паролей и злоупотребления почтовыми сообщениями используется Cloudflare Turnstile. Во время проверки Cloudflare может обрабатывать IP-адреса, технические данные браузера и токены проверки согласно своей политике конфиденциальности.',
           'При включённых Telegram-уведомлениях необходимые данные передаются Telegram. Другие интеграции могут включать независимых поставщиков.',
           'Поставщики обрабатывают данные в рамках своих договоров и требований закона. У независимых платформ действуют собственные политики.'
         ]},
@@ -547,6 +550,7 @@ export const legalContent: Record<SupportedLanguage, LegalCopy> = {
         ]},
         { heading: '6. Odbiorcy i dostawcy', paragraphs: [
           'Konta, zabezpieczone skróty haseł i profile są przechowywane w PostgreSQL na VPS. Wiadomości weryfikacyjne i służące do odzyskiwania hasła dostarcza skonfigurowany dostawca SMTP (w tym OVHcloud MX Plan).',
+          'Do ochrony przed automatyczną rejestracją, próbami logowania i nadużywaniem wiadomości e-mail służy Cloudflare Turnstile. Podczas weryfikacji Cloudflare może przetwarzać adres IP, dane techniczne przeglądarki i token weryfikacyjny zgodnie ze swoją polityką prywatności.',
           'Przy włączonych alertach informacje niezbędne do doręczenia są przekazywane Telegramowi. Inne integracje mogą obejmować niezależnych dostawców.',
           'Dostawcy przetwarzają dane zgodnie z odpowiednimi umowami i obowiązkami prawnymi. Niezależne platformy mają własne polityki prywatności.'
         ]},
