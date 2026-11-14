@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import type { ExchangeId, HookChartPreferences, MarketType } from '../../types';
 import { clampHookChartHistory } from '../../utils/hookChartHistory';
 import { normalizeDensityDistance } from './marketAnalytics';
-import { applyVisualDefaultsForDevice, VISUAL_ZOOM_MIN, VISUAL_ZOOM_MAX, VISUAL_GAP_MAX, getVisualProfile, makeVisualProfileKey, normalizedVisualProfiles, patchVisualProfile, selectableVisualContexts, visualDeviceForWidth, type VisualContextId, type VisualDevice, type VisualProfileKey } from './visualProfiles';
+import { applyVisualDefaultsForDevice, VISUAL_ZOOM_MIN, VISUAL_ZOOM_MAX, VISUAL_GAP_MAX, getVisualProfile, makeVisualProfileKey, normalizedVisualProfiles, patchVisualProfile, selectableVisualContexts, visibleScaleContext, visualDeviceForWidth, type VisualContextId, type VisualDevice, type VisualProfileKey } from './visualProfiles';
 import type { Candle, Viewport } from './engine';
 import { HookChartVisualPreview } from './HookChartVisualPreview';
 import { DEFAULT_CROSSHAIR_LINE_WIDTH, normalizeCrosshairLineWidth } from './chartCursor';
@@ -423,10 +423,9 @@ function StrategySettings({ activeId, onSelect }: { activeId: string; onSelect: 
 
 /** Custom chart-context picker avoids Safari's bright native <select> popup.
  * A body portal keeps the menu visible outside the clipped settings sections. */
-export function VisualContextPicker({ value, onChange, includeTerminalContexts = true }: {
+export function VisualContextPicker({ value, onChange }: {
   value: VisualContextId;
   onChange: (id: VisualContextId) => void;
-  includeTerminalContexts?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [placement, setPlacement] = useState<{
@@ -436,8 +435,8 @@ export function VisualContextPicker({ value, onChange, includeTerminalContexts =
   const menuRef = useRef<HTMLDivElement>(null);
   const focusedOnOpen = useRef(false);
   const menuId = React.useId();
-  const contexts = selectableVisualContexts(includeTerminalContexts);
-  const chosen = contexts.find(context => context.id === value) ?? contexts[0];
+  const contexts = selectableVisualContexts();
+  const chosen = contexts.find(context => context.id === visibleScaleContext(value)) ?? contexts[0];
 
   useEffect(() => {
     if (!open) {
@@ -531,22 +530,18 @@ export function VisualContextPicker({ value, onChange, includeTerminalContexts =
         className="hookchart-visual-context-menu"
         style={{ left: placement.left, top: placement.top, width: placement.width, maxHeight: placement.maxHeight }}
         onKeyDown={moveFocus}>
-        {contexts.map((context, index) => {
-          const group = index === 0 ? 'Скрінер' : index === 2 ? 'Формації' : index === 4 ? 'Термінал' : null;
-          const active = context.id === value;
-          return <React.Fragment key={context.id}>
-            {group && <div className="visualContextGroup" role="presentation">{group}</div>}
-            <button type="button" role="option" aria-selected={active}
-              className={'visualContextOption' + (active ? ' selected' : '')}
-              onClick={() => {
-                onChange(context.id);
-                setOpen(false);
-                triggerRef.current?.focus({ preventScroll: true });
-              }}>
-              <span className="visualContextCheck" aria-hidden="true">{active ? '✓' : ''}</span>
-              <span className="visualContextOptionLabel">{context.label.split(' · ')[1] ?? context.label}</span>
-            </button>
-          </React.Fragment>;
+        {contexts.map(context => {
+          const active = context.id === visibleScaleContext(value);
+          return <button type="button" key={context.id} role="option" aria-selected={active}
+            className={'visualContextOption' + (active ? ' selected' : '')}
+            onClick={() => {
+              onChange(context.id);
+              setOpen(false);
+              triggerRef.current?.focus({ preventScroll: true });
+            }}>
+            <span className="visualContextCheck" aria-hidden="true">{active ? '✓' : ''}</span>
+            <span className="visualContextOptionLabel">{context.label}</span>
+          </button>;
         })}
       </div>, document.body,
     )}
@@ -556,12 +551,11 @@ export function VisualContextPicker({ value, onChange, includeTerminalContexts =
 /** Real HookChart preview uses the current chart's candles, with optional one-time sample in profile settings. */
 function VisualProfileEditor({
   visualContext, visualDevice, selectedProfile, onContextChange, onDeviceChange,
-  onProfileChange, onReset, onApplyToAll, onCapture, includeTerminalContexts,
+  onProfileChange, onReset, onApplyToAll, onCapture,
   live, previewLongColor, previewShortColor, saveStatus,
 }: {
   visualContext: VisualContextId;
   visualDevice: VisualDevice;
-  includeTerminalContexts: boolean;
   selectedProfile: import('./visualProfiles').VisualChartProfile;
   onContextChange: (id: VisualContextId) => void;
   onDeviceChange: (device: VisualDevice) => void;
@@ -586,10 +580,9 @@ function VisualProfileEditor({
     <Section title="Компактний перегляд масштабу"
       help="Схема показує зміни налаштувань без звернень до бірж. У реальному HookChart масштаб залежить від розміру вікна. Типи графіків та налаштування телефона і комп'ютера зберігаються окремо.">
       <div className="visualProfileSelection">
-        <Setting label="Тип графіка" help={includeTerminalContexts
-          ? 'Оберіть, для якого графіка Скрінера, Формацій або Термінала змінюєте вигляд. Інші типи не змінюються, якщо не натиснути «Зробити типовими».'
-          : 'Оберіть, для якого графіка Скрінера або Формацій змінюєте вигляд. Інші типи не змінюються, якщо не натиснути «Зробити типовими».'}>
-          <VisualContextPicker value={visualContext} onChange={onContextChange} includeTerminalContexts={includeTerminalContexts} />
+        <Setting label="Тип графіка"
+          help="Швидкий перегляд і Повний графік мають спільний масштаб для Скрінера та Формацій. Налаштування телефона й комп’ютера залишаються окремими.">
+          <VisualContextPicker value={visualContext} onChange={onContextChange} />
         </Setting>
         <Choice label="Пристрій" help="Телефон і комп'ютер мають окремі профілі. Редагування одного не змінює вигляд іншого."
           values={['mobile', 'desktop']} labels={['Телефон', 'Комп’ютер']}
@@ -716,11 +709,11 @@ export function OriginalHookChartSettings({
   previewShortColor?: string;
 }) {
   const [tab, setTab] = useState<'main' | 'chart' | 'strategies' | 'hotkeys'>('main');
-  const [visualContext, setVisualContext] = useState<VisualContextId>(activeVisualContext || 'screenerQuick');
+  const [visualContext, setVisualContext] = useState<VisualContextId>(() => visibleScaleContext(activeVisualContext));
   const [visualDevice, setVisualDevice] = useState<VisualDevice>(() =>
     typeof window === 'undefined' ? 'desktop' : visualDeviceForWidth(window.innerWidth));
   useEffect(() => {
-    if (activeVisualContext) setVisualContext(activeVisualContext);
+    if (activeVisualContext) setVisualContext(visibleScaleContext(activeVisualContext));
   }, [activeVisualContext]);
   const dialogRef = useRef<HTMLDivElement>(null);
   const [headerHelpOpen, setHeaderHelpOpen] = useState(false);
@@ -1026,7 +1019,6 @@ export function OriginalHookChartSettings({
           </Section>
         </> : tab === 'chart' ? (
           <VisualProfileEditor
-            includeTerminalContexts={Boolean(activeVisualContext?.startsWith('terminal'))}
             visualContext={visualContext}
             visualDevice={visualDevice}
             selectedProfile={getVisualProfile(prefs, visualContext, visualDevice)}
@@ -1043,7 +1035,7 @@ export function OriginalHookChartSettings({
               const profiles = applyVisualDefaultsForDevice(prefs.visualProfiles, visualDevice, selected);
               set('visualProfiles', profiles);
             }}
-            onCapture={onCaptureVisual && activeVisualContext === visualContext && visualDevice === (typeof window === 'undefined' ? 'desktop' : visualDeviceForWidth(window.innerWidth)) && currentViewport && (currentPlotWidth || 0) > 100
+            onCapture={onCaptureVisual && activeVisualContext && !activeVisualContext.startsWith('terminal') && visibleScaleContext(activeVisualContext) === visualContext && visualDevice === (typeof window === 'undefined' ? 'desktop' : visualDeviceForWidth(window.innerWidth)) && currentViewport && (currentPlotWidth || 0) > 100
               ? () => onCaptureVisual(makeVisualProfileKey(visualContext, visualDevice)) : undefined}
             live={!!currentViewport}
             saveStatus={saveStatus}
