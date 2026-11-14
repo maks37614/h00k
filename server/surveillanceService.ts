@@ -59,7 +59,7 @@ export function loadSurveillanceStore(): UserSurveillanceStore {
   // unreadable, malformed, or cannot be migrated. A later write must never
   // erase someone's 24/7-monitor configuration because of a read failure.
   ensureDataDir();
-  let candidate: UserSurveillanceStore = {};
+  let candidate: UserSurveillanceStore = Object.create(null) as UserSurveillanceStore;
   let migrated = false;
 
   if (fs.existsSync(SURVEILLANCE_FILE)) {
@@ -96,7 +96,7 @@ export function loadSurveillanceStore(): UserSurveillanceStore {
   // copy. Never mutate the cached user store until the fixed file is durable.
   const ids = new Set<string>();
   let repaired = false;
-  const normalized: UserSurveillanceStore = {};
+  const normalized: UserSurveillanceStore = Object.create(null) as UserSurveillanceStore;
   for (const [userId, coins] of Object.entries(candidate)) {
     if (!Array.isArray(coins))
       throw new Error(`Invalid surveillance.json: account ${userId} must contain a coin list`);
