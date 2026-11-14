@@ -100,8 +100,8 @@ export const ORIGINAL_HOOKCHART_DEFAULTS: HookChartPreferences = {
   levelBreak: 0.35,
   levelLabelMode: 'always',
   levelLabelColor: '#2090F0',
-  levelLabelSize: 11,
-  levelLineWidth: 1,
+  levelLabelSize: 9,
+  levelLineWidth: 0.3,
   levelLabelStyle: 'text',
   levelLineStyle: 'solid',
   allowWick: true,
@@ -174,8 +174,8 @@ export function normalizeOriginalHookChartPreferences(source?: HookChartPreferen
     : ['1h', '4h', '1d'];
   next.levelLabelColor = /^#[0-9a-f]{6}$/i.test(source?.levelLabelColor || '') ? source!.levelLabelColor : '#2090F0';
   // Preserve existing users' level-label font sizes; the new line width is separate.
-  next.levelLabelSize = Number.isFinite(source?.levelLabelSize) ? Math.max(10, Math.min(24, source!.levelLabelSize!)) : 11;
-  next.levelLineWidth = Number.isFinite(source?.levelLineWidth) ? Math.max(0.2, Math.min(5, source!.levelLineWidth!)) : 1;
+  next.levelLabelSize = Number.isFinite(source?.levelLabelSize) ? Math.max(8, Math.min(24, source!.levelLabelSize!)) : 9;
+  next.levelLineWidth = Number.isFinite(source?.levelLineWidth) ? Math.max(0.2, Math.min(5, source!.levelLineWidth!)) : 0.3;
   next.levelLabelStyle = ['text', 'filled', 'outline'].includes(source?.levelLabelStyle || '') ? source!.levelLabelStyle : 'text';
   next.levelLineStyle = ['solid', 'dash', 'dot'].includes(source?.levelLineStyle || '') ? source!.levelLineStyle : 'solid';
   const overlays = source?.overlays || [];
@@ -737,7 +737,7 @@ export function OriginalHookChartSettings({
   previewLongColor?: string;
   previewShortColor?: string;
 }) {
-  const [tab, setTab] = useState<'main' | 'chart' | 'strategies' | 'hotkeys'>('main');
+  const [tab, setTab] = useState<'main' | 'levels' | 'chart' | 'strategies' | 'hotkeys'>('main');
   const [visualContext, setVisualContext] = useState<VisualContextId>(() => visibleScaleContext(activeVisualContext));
   const [visualDevice, setVisualDevice] = useState<VisualDevice>(() =>
     typeof window === 'undefined' ? 'desktop' : visualDeviceForWidth(window.innerWidth));
@@ -850,6 +850,7 @@ export function OriginalHookChartSettings({
       </div>
       <div className="settingsTabs">
         <button type="button" className={tab === 'main' ? 'active' : ''} onClick={() => setTab('main')}>Основні</button>
+        <button type="button" className={tab === 'levels' ? 'active' : ''} onClick={() => setTab('levels')}>Рівні</button>
         <button type="button" className={tab === 'chart' ? 'active' : ''} onClick={() => setTab('chart')}>Масштаб</button>
         <button type="button" className={tab === 'strategies' ? 'active' : ''} onClick={() => setTab('strategies')}>Стратегії</button>
         <button type="button" className={tab === 'hotkeys' ? 'active' : ''} onClick={() => setTab('hotkeys')}>Гарячі клавіші</button>
@@ -936,35 +937,6 @@ export function OriginalHookChartSettings({
             <SwitchRow label="Сценарна оцінка монет" value={!!prefs.scoring} onChange={value => set('scoring', value)} />
           </Section>
 
-          <Section title="Круглі числа (колонка RN)">
-            <SwitchRow unavailable label="Показувати відстань до найближчого круглого числа" value={!!prefs.roundDistance} onChange={value => set('roundDistance', value)} />
-            <Choice label="Ступінь округлення" values={[1, 2, 3]} value={prefs.roundness ?? 2} set={value => set('roundness', value)} />
-            <SwitchRow label="Показувати сітку круглих чисел на графіку" desc="Тонкі ненав’язливі лінії круглих цін." value={!!prefs.roundGrid} onChange={value => set('roundGrid', value)} />
-          </Section>
-
-          <Section title="Підтримка та опір">
-            <SwitchRow label="Показувати підтримку та опір" desc="S — підтримка нижче ціни, R — опір вище ціни. Рівні з підтвердженим пробоєм приховуються." value={!!prefs.autoSR} onChange={value => onChange({ autoSR: value, overlays: value ? Array.from(new Set([...(prefs.overlays || []), 'sr'])) : (prefs.overlays || []).filter(id => id !== 'sr') })} />
-            <SwitchRow label="Показувати мітки S/R" desc="Вмикає або вимикає підписи підтримки й опору; лінії керуються перемикачем вище." value={prefs.showSRLabels !== false} onChange={value => set('showSRLabels', value)} />
-          </Section>
-
-          <Section title="Автоматичні рівні">
-            <MultiChoice label="Таймфрейми автовизначення рівнів" desc="Можна вибрати всі п’ять таймфреймів. За замовчуванням: 1г, 4г і 1d; 5 хв та 15 хв вимкнено. Зніміть усі, щоб вимкнути автовизначення." values={['5m', '15m', '1h', '4h', '1d']} selected={prefs.levelIntervals || []} toggle={value => toggleArray('levelIntervals', value)} />
-            <Setting label="Колір міток рівнів" desc="Колір активних рівнів та їхніх підписів. Пробиті рівні залишаються сірими."><input className="colorInput" aria-label="Колір міток рівнів" type="color" value={prefs.levelLabelColor || '#2090F0'} onChange={event => set('levelLabelColor', event.target.value)} /></Setting>
-            <Setting label="Розмір міток рівнів"><Num value={prefs.levelLineWidth ?? 1} min={0.2} max={5} step={0.1} set={value => set('levelLineWidth', value)} /><b className="valueBadge">px</b></Setting>
-            <Setting label="Розмір тексту міток рівнів"><Num value={prefs.levelLabelSize ?? 11} min={10} max={24} step={1} set={value => set('levelLabelSize', value)} /><b className="valueBadge">px</b></Setting>
-            <Choice label="Тип міток рівнів" values={['text', 'filled', 'outline']} labels={['Текст', 'Із заливкою', 'Із рамкою']} value={prefs.levelLabelStyle || 'text'} set={value => set('levelLabelStyle', value)} />
-            <Choice label="Тип ліній рівнів" values={['solid', 'dash', 'dot']} labels={['Суцільна', 'Пунктир', 'Крапки']} value={prefs.levelLineStyle || 'solid'} set={value => set('levelLineStyle', value)} />
-            <SwitchRow unavailable label="Показувати у списку найближчі рівні" value={prefs.showNearestLevels !== false} onChange={value => set('showNearestLevels', value)} />
-            <Setting label="Кількість свічок для визначення рівня"><Num value={prefs.levelCandleCount ?? 15} min={5} max={60} set={value => set('levelCandleCount', value)} /></Setting>
-            <Setting label="Глибина історії для визначення рівнів" desc="Кількість свічок для кожного інтервалу"><Num value={prefs.levelHistory ?? 500} min={80} max={1500} set={value => set('levelHistory', value)} /></Setting>
-            <Setting label="Підтвердження рівнів" desc="Скільки незалежних підходів потрібно"><Num value={prefs.levelCount ?? 3} min={2} max={10} set={value => set('levelCount', value)} /></Setting>
-            <Setting label="Допустима різниця"><Num value={prefs.levelDiff ?? 0.18} min={0.01} max={3} step={0.01} set={value => set('levelDiff', value)} /><b className="valueBadge">%</b></Setting>
-            <Setting label="Пробій"><Num value={prefs.levelBreak ?? 0.35} min={0} max={5} step={0.05} set={value => set('levelBreak', value)} /><b className="valueBadge">%</b></Setting>
-            <Choice label="Підписи рівнів" values={['always', 'hover', 'off']} labels={['Завжди', 'При наведенні', 'Вимкнені']} value={prefs.levelLabelMode || 'always'} set={value => set('levelLabelMode', value)} />
-            <SwitchRow label="Показувати пробиті рівні" desc="Сірі лінії рівнів, які вже були підтверджено пробиті." value={prefs.showBrokenLevels !== false} onChange={value => set('showBrokenLevels', value)} />
-            <SwitchRow label="Дозволити «прокол» рівня" desc="Перетин тінню не ламає рівень до підтвердження закриттям." value={prefs.allowWick !== false} onChange={value => set('allowWick', value)} />
-          </Section>
-
           <Section title="Тренди">
             <MultiChoice label="Інтервали трендів" values={['15m', '1h', '4h', '1d']} selected={prefs.trendIntervals || []} toggle={value => toggleArray('trendIntervals', value, 3)} max={3} />
             <Setting label="Глибина історії для визначення похилих ліній"><Num value={prefs.trendHistory ?? 300} min={80} max={1500} set={value => set('trendHistory', value)} /></Setting>
@@ -1048,6 +1020,36 @@ export function OriginalHookChartSettings({
             <SwitchRow label="Різниця із середньою кількістю угод (колонка TR)" value={prefs.tradesTR !== false} onChange={value => set('tradesTR', value)} />
             <Setting label="Кількість свічок"><Num value={prefs.tradesCandles ?? 100} min={2} max={1500} set={value => set('tradesCandles', value)} /></Setting>
           </Section>
+        </MainSettingsHelpContext.Provider> : tab === 'levels' ? <MainSettingsHelpContext.Provider value={true}>
+          <Section title="Круглі числа (колонка RN)">
+            <SwitchRow unavailable label="Показувати відстань до найближчого круглого числа" value={!!prefs.roundDistance} onChange={value => set('roundDistance', value)} />
+            <Choice label="Ступінь округлення" values={[1, 2, 3]} value={prefs.roundness ?? 2} set={value => set('roundness', value)} />
+            <SwitchRow label="Показувати сітку круглих чисел на графіку" desc="Тонкі ненав’язливі лінії круглих цін." value={!!prefs.roundGrid} onChange={value => set('roundGrid', value)} />
+          </Section>
+
+          <Section title="Підтримка та опір">
+            <SwitchRow label="Показувати підтримку та опір" desc="S — підтримка нижче ціни, R — опір вище ціни. Рівні з підтвердженим пробоєм приховуються." value={!!prefs.autoSR} onChange={value => onChange({ autoSR: value, overlays: value ? Array.from(new Set([...(prefs.overlays || []), 'sr'])) : (prefs.overlays || []).filter(id => id !== 'sr') })} />
+            <SwitchRow label="Показувати мітки S/R" desc="Вмикає або вимикає підписи підтримки й опору; лінії керуються перемикачем вище." value={prefs.showSRLabels !== false} onChange={value => set('showSRLabels', value)} />
+          </Section>
+
+          <Section title="Автоматичні рівні">
+            <MultiChoice label="Таймфрейми автовизначення рівнів" desc="Можна вибрати всі п’ять таймфреймів. За замовчуванням: 1г, 4г і 1d; 5 хв та 15 хв вимкнено. Зніміть усі, щоб вимкнути автовизначення." values={['5m', '15m', '1h', '4h', '1d']} selected={prefs.levelIntervals || []} toggle={value => toggleArray('levelIntervals', value)} />
+            <Setting label="Колір міток рівнів" desc="Колір активних рівнів та їхніх підписів. Пробиті рівні залишаються сірими."><input className="colorInput" aria-label="Колір міток рівнів" type="color" value={prefs.levelLabelColor || '#2090F0'} onChange={event => set('levelLabelColor', event.target.value)} /></Setting>
+            <Setting label="Розмір міток рівнів"><Num value={prefs.levelLineWidth ?? 0.3} min={0.2} max={5} step={0.1} set={value => set('levelLineWidth', value)} /><b className="valueBadge">px</b></Setting>
+            <Setting label="Розмір тексту міток рівнів"><Num value={prefs.levelLabelSize ?? 9} min={8} max={24} step={1} set={value => set('levelLabelSize', value)} /><b className="valueBadge">px</b></Setting>
+            <Choice label="Тип міток рівнів" values={['text', 'filled', 'outline']} labels={['Текст', 'Із заливкою', 'Із рамкою']} value={prefs.levelLabelStyle || 'text'} set={value => set('levelLabelStyle', value)} />
+            <Choice label="Тип ліній рівнів" values={['solid', 'dash', 'dot']} labels={['Суцільна', 'Пунктир', 'Крапки']} value={prefs.levelLineStyle || 'solid'} set={value => set('levelLineStyle', value)} />
+            <SwitchRow unavailable label="Показувати у списку найближчі рівні" value={prefs.showNearestLevels !== false} onChange={value => set('showNearestLevels', value)} />
+            <Setting label="Кількість свічок для визначення рівня"><Num value={prefs.levelCandleCount ?? 15} min={5} max={60} set={value => set('levelCandleCount', value)} /></Setting>
+            <Setting label="Глибина історії для визначення рівнів" desc="Кількість свічок для кожного інтервалу"><Num value={prefs.levelHistory ?? 500} min={80} max={1500} set={value => set('levelHistory', value)} /></Setting>
+            <Setting label="Підтвердження рівнів" desc="Скільки незалежних підходів потрібно"><Num value={prefs.levelCount ?? 3} min={2} max={10} set={value => set('levelCount', value)} /></Setting>
+            <Setting label="Допустима різниця"><Num value={prefs.levelDiff ?? 0.18} min={0.01} max={3} step={0.01} set={value => set('levelDiff', value)} /><b className="valueBadge">%</b></Setting>
+            <Setting label="Пробій"><Num value={prefs.levelBreak ?? 0.35} min={0} max={5} step={0.05} set={value => set('levelBreak', value)} /><b className="valueBadge">%</b></Setting>
+            <Choice label="Підписи рівнів" values={['always', 'hover', 'off']} labels={['Завжди', 'При наведенні', 'Вимкнені']} value={prefs.levelLabelMode || 'always'} set={value => set('levelLabelMode', value)} />
+            <SwitchRow label="Показувати пробиті рівні" desc="Сірі лінії рівнів, які вже були підтверджено пробиті." value={prefs.showBrokenLevels !== false} onChange={value => set('showBrokenLevels', value)} />
+            <SwitchRow label="Дозволити «прокол» рівня" desc="Перетин тінню не ламає рівень до підтвердження закриттям." value={prefs.allowWick !== false} onChange={value => set('allowWick', value)} />
+          </Section>
+
         </MainSettingsHelpContext.Provider> : tab === 'chart' ? (
           <VisualProfileEditor
             visualContext={visualContext}
