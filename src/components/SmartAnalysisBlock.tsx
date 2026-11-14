@@ -795,138 +795,136 @@ export const SmartAnalysisBlock: React.FC<SmartAnalysisBlockProps> = ({
         </div>
       )}
 
-      {/* Institutional diagnostics: distinguish observed quotes from unverified
-          participants. Keep all four topics, but never manufacture wallet data. */}
+      {/* Only verified, available institutions-related indicators are shown. */}
       {showModule('institutional') && (
         <div className="p-4 rounded-xl bg-slate-950/80 border border-indigo-900/40 space-y-4">
           <div className="flex items-center gap-2 border-b border-slate-800/80 pb-3">
             <Fingerprint className="w-4 h-4 text-cyan-400" />
             <h5 className="text-xs font-bold text-white uppercase tracking-wider">
-              Інституційні індикатори та межі достовірності
+              Ончейн-дані, великі заявки та ринкова вразливість
             </h5>
           </div>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5 text-xs">
-            <section className="p-3.5 rounded-xl bg-slate-900/80 border border-slate-800 space-y-2">
-              <h6 className="flex items-center gap-2 font-bold text-white">
-                <Wallet className="w-4 h-4 text-emerald-400" />
-                1. Аналіз Holders & Розподіл Гаманців
-              </h6>
-              <dl className="grid grid-cols-2 gap-2 text-[11px]">
-                <div>
-                  <dt className="text-slate-400">Кількість адрес-власників</dt>
-                  <dd className="font-mono font-semibold text-white">{holdersLoading ? '…' : holderCountDisplay}</dd>
-                </div>
-                <div>
-                  <dt className="text-slate-400">Частка токенів у топ-10% адрес</dt>
-                  <dd className="font-mono font-semibold text-white">{holdersLoading ? '…' : holderTop10Display}</dd>
-                </div>
-                <div>
-                  <dt className="text-slate-400">Активні адреси (24h)</dt>
-                  <dd className="font-mono text-slate-300">н/д · немає в Demo</dd>
-                </div>
-                <div>
-                  <dt className="text-slate-400">Зміна Holders (24h)</dt>
-                  <dd className="font-mono text-slate-300">н/д · немає історії</dd>
-                </div>
-              </dl>
-              {holderDistribution && (
-                <div className="grid grid-cols-2 gap-1.5 text-[11px]">
-                  {(['11_20', '21_40', '11_30', '31_50', 'rest'] as const).map(key =>
-                    typeof holderDistribution[key] === 'number' ? (
-                      <div key={key} className="flex justify-between gap-2 rounded bg-slate-950/70 px-2 py-1">
-                        <span className="text-slate-400">{key === 'rest' ? 'Решта' : key.replace('_', '–')}</span>
-                        <span className="font-mono text-white">{holderDistribution[key].toFixed(2)}%</span>
-                      </div>
-                    ) : null
-                  )}
-                </div>
-              )}
-              <p className="text-slate-400 text-[11px]">
-                {holdersLoading ? 'Отримання перевірених даних CoinGecko…'
-                  : holderSnapshot?.detail || 'Дані Holders від CoinGecko недоступні.'}
-              </p>
-              {holdersAvailable && (
-                <div className="space-y-1 text-[10px] text-slate-500">
-                  <p>Мережа: {holderSnapshot!.network} · Контракт: {holderSnapshot!.contractAddress?.slice(0, 10)}…{holderSnapshot!.contractAddress?.slice(-5)}</p>
-                  <p>Дані CoinGecko (beta): {holderSnapshot!.lastUpdated
-                    ? new Date(holderSnapshot!.lastUpdated).toLocaleString('uk-UA') : 'час не вказано'}</p>
-                  <p>CoinGecko top_10 — верхні 10% адрес за балансом, а НЕ десять адрес. Можливі біржові та контрактні гаманці; це не кількість людей.</p>
-                </div>
-              )}
-              <a href="https://www.coingecko.com/" target="_blank" rel="noopener noreferrer"
-                className="inline-flex text-[11px] text-cyan-300 underline underline-offset-2">
-                Джерело: CoinGecko
-              </a>
-            </section>
-
-            <section className="p-3.5 rounded-xl bg-slate-900/80 border border-slate-800 space-y-2">
-              <h6 className="flex items-center gap-2 font-bold text-white">
-                <Eye className="w-4 h-4 text-cyan-400" />
-                2. Великі лімітні заявки
-              </h6>
-              <p className="text-[11px] text-slate-400">
-                Обсяг у поточному знімку: <strong className="text-white">
-                {data.participants.largePlayer.clusterVolumeUsd === null
-                  ? 'н/д' : formatVolume(data.participants.largePlayer.clusterVolumeUsd)}
-                </strong>
-              </p>
-              <div className="space-y-1.5">
-                {data.participants.largePlayer.trackedClusters.length > 0
-                  ? data.participants.largePlayer.trackedClusters.map((cluster, index) => (
-                    <div key={index} className="flex flex-wrap items-center justify-between gap-2 rounded bg-slate-950/70 border border-slate-800 px-2 py-1.5 text-[11px]">
-                      <span className="text-slate-300">
-                        {cluster.side === 'buy' ? 'BID' : 'ASK'} · {formatCryptoPrice(cluster.price)}
-                      </span>
-                      <strong className="font-mono text-white">{formatVolume(cluster.volumeUsd)}</strong>
-                    </div>
-                  )) : <p className="text-slate-400">Немає підтверджених великих заявок у поточному зрізі або дані недоступні.</p>}
-              </div>
-              <p className="text-slate-400 text-[11px]">{data.participants.largePlayer.details}</p>
-            </section>
-
-            <section className="p-3.5 rounded-xl bg-slate-900/80 border border-slate-800 space-y-2">
-              <h6 className="flex items-center gap-2 font-bold text-white">
-                <Radio className="w-4 h-4 text-indigo-400" />
-                3. Маркет-мейкер
-              </h6>
-              <p className="text-slate-300 text-[11px]">
-                Підтверджений спред вибраного ринку: <strong className="text-white">
-                  {data.spread.spreadPct === null ? 'н/д' : data.spread.spreadPct + '%'}
-                </strong>
-              </p>
-              <p className="text-slate-400 text-[11px]">Алгоритм, швидкість поновлення, особа маркет-мейкера та захист від сквизу: н/д.</p>
-              <p className="text-slate-400 text-[11px]">{data.participants.marketMaker.details}</p>
-            </section>
-
-            <section className="p-3.5 rounded-xl bg-slate-900/80 border border-slate-800 space-y-2">
-              <h6 className="flex items-center gap-2 font-bold text-white">
-                <ShieldAlert className="w-4 h-4 text-amber-400" />
-                4. Евристичний індекс ринкової вразливості
-              </h6>
-              <p className="font-mono text-lg font-bold text-white">
-                {data.participants.manipulativeCoin.riskScore === null
-                  ? 'н/д' : data.participants.manipulativeCoin.riskScore + ' / 100'}
-              </p>
-              <div className="space-y-1.5">
-                {data.participants.manipulativeCoin.signals.map((sig, index) => (
-                  <div key={index} className="flex items-start gap-2 rounded bg-slate-950/70 border border-slate-800 p-2 text-[11px]">
-                    {sig.detected === true
-                      ? <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-amber-400" />
-                      : <CheckCircle2 className="w-3.5 h-3.5 shrink-0 text-cyan-400" />}
-                    <div>
-                      <span className="font-semibold text-white">{sig.name}</span>
-                      <p className="text-slate-400">{sig.description}</p>
-                    </div>
+            {visible.holders && (
+              <section className="p-3.5 rounded-xl bg-slate-900/80 border border-slate-800 space-y-2">
+                <h6 className="flex items-center gap-2 font-bold text-white">
+                  <Wallet className="w-4 h-4 text-emerald-400" />
+                  Аналіз Holders & Розподіл Гаманців
+                </h6>
+                <dl className="grid grid-cols-2 gap-2 text-[11px]">
+                  <div>
+                    <dt className="text-slate-400">Кількість адрес-власників</dt>
+                    <dd className="font-mono font-semibold text-white">{holderCountDisplay}</dd>
                   </div>
-                ))}
-                {data.participants.manipulativeCoin.signals.length === 0 && (
-                  <p className="text-slate-400">Достовірні показники для оцінки недоступні.</p>
+                  {visible.holderConcentration && (
+                    <div>
+                      <dt className="text-slate-400">Частка токенів у топ-10% адрес</dt>
+                      <dd className="font-mono font-semibold text-white">{holderTop10Display}</dd>
+                    </div>
+                  )}
+                </dl>
+                {holderDistribution && (
+                  <div className="grid grid-cols-2 gap-1.5 text-[11px]">
+                    {(['11_20', '21_40', '11_30', '31_50', 'rest'] as const).map(key =>
+                      typeof holderDistribution[key] === 'number' && Number.isFinite(holderDistribution[key]) ? (
+                        <div key={key} className="flex justify-between gap-2 rounded bg-slate-950/70 px-2 py-1">
+                          <span className="text-slate-400">{key === 'rest' ? 'Решта' : key.replace('_', '–')}</span>
+                          <span className="font-mono text-white">{holderDistribution[key].toFixed(2)}%</span>
+                        </div>
+                      ) : null
+                    )}
+                  </div>
                 )}
-              </div>
-              <p className="text-amber-200 text-[11px]">
-                {data.participants.manipulativeCoin.warningSummary}
-              </p>
-            </section>
+                <div className="space-y-1 text-[10px] text-slate-500">
+                  {holderSnapshot?.network && holderSnapshot?.contractAddress && (
+                    <p>Мережа: {holderSnapshot.network} · Контракт: {holderSnapshot.contractAddress.slice(0, 10)}…{holderSnapshot.contractAddress.slice(-5)}</p>
+                  )}
+                  {holderSnapshot?.lastUpdated && (
+                    <p>CoinGecko: {new Date(holderSnapshot.lastUpdated).toLocaleString('uk-UA')}</p>
+                  )}
+                  <p>Власники — це адреси, а не окремі люди. Біржі й контракти можуть володіти великими частками.</p>
+                </div>
+                <a href="https://www.coingecko.com/" target="_blank" rel="noopener noreferrer"
+                  className="inline-flex text-[11px] text-cyan-300 underline underline-offset-2">
+                  Джерело: CoinGecko
+                </a>
+              </section>
+            )}
+
+            {visible.largeOrders && (
+              <section className="p-3.5 rounded-xl bg-slate-900/80 border border-slate-800 space-y-2">
+                <h6 className="flex items-center gap-2 font-bold text-white">
+                  <Eye className="w-4 h-4 text-cyan-400" />
+                  Великі лімітні заявки
+                </h6>
+                {data.participants.largePlayer.clusterVolumeUsd !== null && (
+                  <p className="text-[11px] text-slate-400">
+                    Обсяг у поточному знімку: <strong className="text-white">
+                      {formatVolume(data.participants.largePlayer.clusterVolumeUsd)}
+                    </strong>
+                  </p>
+                )}
+                <div className="space-y-1.5">
+                  {data.participants.largePlayer.trackedClusters
+                    .filter(cluster => Number.isFinite(cluster.price) && cluster.price > 0 &&
+                      Number.isFinite(cluster.volumeUsd) && cluster.volumeUsd > 0)
+                    .map((cluster, index) => (
+                      <div key={index} className="flex flex-wrap items-center justify-between gap-2 rounded bg-slate-950/70 border border-slate-800 px-2 py-1.5 text-[11px]">
+                        <span className="text-slate-300">
+                          {cluster.side === 'buy' ? 'BID' : 'ASK'} · {formatCryptoPrice(cluster.price)}
+                        </span>
+                        <strong className="font-mono text-white">{formatVolume(cluster.volumeUsd)}</strong>
+                      </div>
+                    ))}
+                </div>
+                <p className="text-slate-400 text-[11px]">Це лімітні заявки у стакані, не підтверджені виконані угоди.</p>
+              </section>
+            )}
+
+            {visible.marketMaker && (
+              <section className="p-3.5 rounded-xl bg-slate-900/80 border border-slate-800 space-y-2">
+                <h6 className="flex items-center gap-2 font-bold text-white">
+                  <Radio className="w-4 h-4 text-indigo-400" />
+                  Маркет-мейкер
+                </h6>
+                <p className="text-white text-[11px]">{data.participants.marketMaker.activityLabel}</p>
+                {visible.spread && (
+                  <p className="text-slate-300 text-[11px]">
+                    Підтверджений спред: <strong className="text-white">{data.spread.spreadPct}%</strong>
+                  </p>
+                )}
+              </section>
+            )}
+
+            {visible.vulnerability && (
+              <section className="p-3.5 rounded-xl bg-slate-900/80 border border-slate-800 space-y-2">
+                <h6 className="flex items-center gap-2 font-bold text-white">
+                  <ShieldAlert className="w-4 h-4 text-amber-400" />
+                  Евристичний індекс ринкової вразливості
+                </h6>
+                <p className="font-mono text-lg font-bold text-white">
+                  {data.participants.manipulativeCoin.riskScore} / 100
+                </p>
+                <div className="space-y-1.5">
+                  {data.participants.manipulativeCoin.signals
+                    .filter(sig => sig.detected !== null)
+                    .map((sig, index) => (
+                      <div key={index} className="flex items-start gap-2 rounded bg-slate-950/70 border border-slate-800 p-2 text-[11px]">
+                        {sig.detected === true
+                          ? <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-amber-400" />
+                          : <CheckCircle2 className="w-3.5 h-3.5 shrink-0 text-cyan-400" />}
+                        <div>
+                          <span className="font-semibold text-white">{sig.name}</span>
+                          <p className="text-slate-400">{sig.description}</p>
+                        </div>
+                      </div>
+                    ))}
+                </div>
+                <p className="text-amber-200 text-[11px]">
+                  {data.participants.manipulativeCoin.warningSummary}
+                </p>
+              </section>
+            )}
           </div>
         </div>
       )}
