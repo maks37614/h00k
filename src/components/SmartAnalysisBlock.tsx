@@ -722,89 +722,75 @@ export const SmartAnalysisBlock: React.FC<SmartAnalysisBlockProps> = ({
         </div>
       )}
 
-      {/* Module 4: Derivatives & Open Interest */}
+      {/* Module 4: Show only exchanges with verified OI/funding measurements. */}
       {showModule('derivatives') && (
         <div className="p-4 rounded-xl bg-slate-950/70 border border-slate-800 space-y-3">
           <div className="flex items-center gap-2">
             <BarChart3 className="w-4 h-4 text-indigo-400" />
             <h5 className="text-xs font-bold text-white uppercase tracking-wider">
-              Деривативи, Графік Open Interest (Binance & Bybit) та Funding Rate
+              Деривативи, Open Interest та Funding Rate
             </h5>
           </div>
-
-          {/* Unavailable values are explicit; never show synthetic OI as market evidence. */}
-          {data.derivatives.oiCoverage === 'spot' && (
-            <p className="text-[11px] text-amber-200">
-              Для спотових пар Open Interest не застосовується. Перемкніться на ф'ючерси.
-            </p>
-          )}
-          {data.derivatives.oiCoverage === 'partial' && (
-            <p className="text-[11px] text-amber-300">
-              Доступний OI лише однієї біржі. Сума неповна і не підходить для підтвердження входу.
-            </p>
-          )}
-          {data.derivatives.oiCoverage === 'none' && (
-            <p className="text-[11px] text-amber-300">
-              Реальних актуальних даних OI наразі немає. Оцінки та графіки не підставляються.
-            </p>
-          )}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs font-mono">
             {([
-              { label: 'Binance Futures', info: data.derivatives.binanceOI, color: 'bg-cyan-500/60' },
-              { label: 'Bybit Linear', info: data.derivatives.bybitOI, color: 'bg-indigo-500/60' },
-            ]).map(source => (
+              { label: 'Binance Futures', info: data.derivatives.binanceOI, color: 'bg-cyan-500/60', visible: visible.binanceOI },
+              { label: 'Bybit Linear', info: data.derivatives.bybitOI, color: 'bg-indigo-500/60', visible: visible.bybitOI },
+            ]).filter(source => source.visible).map(source => (
               <div key={source.label} className="p-3 rounded-lg bg-slate-900/80 border border-slate-800 space-y-2">
                 <div className="flex items-center justify-between text-slate-400 font-sans gap-2">
                   <span>OI {source.label}</span>
-                  <span className="text-[10px]">
-                    {source.info.change1hPct === null
-                      ? 'Δ1h: н/д'
-                      : `${source.info.change1hPct > 0 ? '+' : ''}${source.info.change1hPct}% (1h)`}
-                  </span>
+                  {source.info.change1hPct !== null && Number.isFinite(source.info.change1hPct) && (
+                    <span className="text-[10px]">
+                      {source.info.change1hPct > 0 ? '+' : ''}{source.info.change1hPct}% (1h)
+                    </span>
+                  )}
                 </div>
-                <div className="text-base font-bold text-white">
-                  {source.info.currentUsd === null ? 'Немає даних' : formatVolume(source.info.currentUsd)}
-                </div>
-                {source.info.history.length >= 3 ? (
+                <div className="text-base font-bold text-white">{formatVolume(source.info.currentUsd!)}</div>
+                {source.info.history.length >= 3 && (
                   <div className="flex items-end gap-1 h-6 pt-1" title="Реальна історія OI, лише послідовні свічки">
-                    {source.info.history.map((value, index) => {
-                      const low = Math.min(...source.info.history);
-                      const high = Math.max(...source.info.history);
+                    {source.info.history.filter(Number.isFinite).map((value, index) => {
+                      const history = source.info.history.filter(Number.isFinite);
+                      const low = Math.min(...history);
+                      const high = Math.max(...history);
                       const heightPct = high > low ? Math.max(((value - low) / (high - low)) * 100, 15) : 50;
                       return <div key={index} className={`flex-1 rounded-t ${source.color}`}
                         style={{ height: `${heightPct}%` }} title={formatVolume(value)} />;
                     })}
                   </div>
-                ) : (
-                  <p className="text-[10px] text-slate-500 font-sans">Історія відсутня або з пропусками</p>
                 )}
               </div>
             ))}
-            <div className="p-3 rounded-lg bg-slate-900/80 border border-slate-800 space-y-1.5">
-              <div className="flex items-center justify-between text-slate-400 font-sans">
-                <span>Funding Rate · Binance / Bybit</span>
-                <span className="text-[10px]">{data.derivatives.hasPerpFutures ? 'PERP' : 'SPOT'}</span>
+            {(visible.binanceFunding || visible.bybitFunding) && (
+              <div className="p-3 rounded-lg bg-slate-900/80 border border-slate-800 space-y-1.5">
+                <span className="text-slate-400 font-sans block">Funding Rate · Binance / Bybit</span>
+                {visible.binanceFunding && (
+                  <div className="flex justify-between gap-2 text-[11px]">
+                    <span className="text-slate-400">Binance Futures</span>
+                    <strong className="font-mono text-white">
+                      {data.derivatives.fundingRate! > 0 ? '+' : ''}{data.derivatives.fundingRate}%
+                    </strong>
+                  </div>
+                )}
+                {visible.bybitFunding && (
+                  <div className="flex justify-between gap-2 text-[11px]">
+                    <span className="text-slate-400">Bybit Linear</span>
+                    <strong className="font-mono text-white">
+                      {data.derivatives.predictedFundingRate! > 0 ? '+' : ''}{data.derivatives.predictedFundingRate}%
+                    </strong>
+                  </div>
+                )}
               </div>
-              <div className="text-base font-bold text-white">
-                {data.derivatives.fundingRate !== null
-                  ? `${data.derivatives.fundingRate > 0 ? '+' : ''}${data.derivatives.fundingRate}% · Binance`
-                  : data.derivatives.predictedFundingRate !== null
-                    ? `${data.derivatives.predictedFundingRate > 0 ? '+' : ''}${data.derivatives.predictedFundingRate}% · Bybit`
-                    : 'н/д'}
+            )}
+            {visible.totalOI && (
+              <div className="p-3 rounded-lg bg-slate-900/80 border border-slate-800 space-y-1.5">
+                <span className="text-slate-400 font-sans block">
+                  {data.derivatives.oiCoverage === 'partial' ? 'OI доступної біржі' : 'Сумарний OI'}
+                </span>
+                <strong className="text-base font-bold text-white">
+                  {formatVolume(data.derivatives.totalOIUsd!)}
+                </strong>
               </div>
-              <p className="text-[10px] text-slate-400 font-sans">
-                Binance Futures: {data.derivatives.fundingRate === null
-                  ? 'н/д · немає відповіді біржі' : `${data.derivatives.fundingRate}%`}
-              </p>
-              <p className="text-[10px] text-slate-400 font-sans">
-                Bybit Linear: {data.derivatives.predictedFundingRate === null
-                  ? 'н/д' : `${data.derivatives.predictedFundingRate}%`}
-              </p>
-              <p className="text-[10px] text-slate-400 font-sans">
-                {data.derivatives.totalOIUsd === null ? 'Сумарний OI: н/д'
-                  : `${data.derivatives.oiCoverage === 'partial' ? 'OI доступної біржі' : 'Сумарний OI'}: ${formatVolume(data.derivatives.totalOIUsd)}`}
-              </p>
-            </div>
+            )}
           </div>
         </div>
       )}
