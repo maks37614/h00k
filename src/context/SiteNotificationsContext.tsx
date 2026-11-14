@@ -528,6 +528,8 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
         url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
         url.searchParams.set('exchange', exchange);
         url.searchParams.set('symbol', symbol);
+        // Notification-only subscribers never need the large historical chart snapshot.
+        url.searchParams.set('live', '1');
         socket = new WebSocket(url);
         socket.onopen = () => { /* Reset failure count only after valid live data arrives. */ };
         socket.onmessage = message => {
