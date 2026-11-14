@@ -25,7 +25,7 @@ export function formatTerminalQuotedPrice(price: number | null | undefined, quot
   const quote = (quoteAsset || 'USDT').toUpperCase();
   const formatted = formatCryptoPrice(price);
   return ['USDT', 'USDC', 'BUSD', 'FDUSD', 'USD'].includes(quote)
-    ? `${formatted}`
+    ? `$${formatted}`
     : `${formatted} ${quote}`;
 }
 
