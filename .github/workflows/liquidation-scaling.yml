@@ -6,6 +6,10 @@ on:
     paths:
       - 'server/liquidationFeed.ts'
       - 'server/liquidationUpstreamPool.ts'
+      - 'src/components/hookchart/liquidationStream.ts'
+      - 'src/components/hookchart/liquidationMultiplexClient.ts'
+      - 'tests/liquidation-multi-client-relay.test.ts'
+      - 'tests/liquidation-browser-multiplex.test.ts'
       - 'tests/liquidation-feed.test.ts'
       - 'tests/liquidation-upstream-pool.test.ts'
       - 'tests/hookchart-shared-liquidation-view.test.ts'
@@ -28,4 +32,4 @@ jobs:
       - name: TypeScript validation
         run: npm run lint
       - name: Liquidation protocol, pooling and existing HookChart regression
-        run: node --import ./tests/fixtures/offline-network.mjs --import tsx --test tests/liquidation-feed.test.ts tests/liquidation-upstream-pool.test.ts tests/hookchart-shared-liquidation-view.test.ts tests/hookchart-liquidation-socket-lifecycle.test.ts
+        run: node --import ./tests/fixtures/offline-network.mjs --import tsx --test tests/liquidation-feed.test.ts tests/liquidation-upstream-pool.test.ts tests/liquidation-multi-client-relay.test.ts tests/liquidation-browser-multiplex.test.ts tests/hookchart-shared-liquidation-view.test.ts tests/hookchart-liquidation-socket-lifecycle.test.ts
