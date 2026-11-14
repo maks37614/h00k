@@ -5,6 +5,14 @@ import { ORDER_BOOK_MAX_AGE_MS, isFreshDepthTime, parseDepthLevels, type Normali
 
 type Listener = (...args: any[]) => void;
 
+/** Public price levels only. Personal density thresholds/history never enter
+ * this view. Consumers must not mutate the shared maps. */
+export interface SharedPublicOrderBook {
+  readonly bids: ReadonlyMap<number, number>;
+  readonly asks: ReadonlyMap<number, number>;
+  readonly revision: number;
+}
+
 /** Public exchange ticker. No user settings or private data. */
 export type SharedMarketTicker = {
   price: number;
@@ -25,8 +33,13 @@ type Entry = {
   depthSequence: number;
   depthEventTime: number;
   depthReceivedAt: number;
+  depthRevision: number;
   /** The most recently validated public packet; never private user data. */
-  normalizedDepth: { packet: RawDepthDelta; levels: NormalizedDepthLevels } | null;
+  normalizedDepth: {
+    packet: RawDepthDelta;
+    levels: NormalizedDepthLevels;
+    book: SharedPublicOrderBook | null;
+  } | null;
 };
 
 const entries = new Map<string, Entry>();
@@ -58,7 +71,7 @@ export class SharedExchangeStreamHandle {
       entry = { key, source, refs: 0, lastResyncAt: 0, lastErrorLoggedAt: 0,
         ticker: { price: 0, high24h: 0, low24h: 0, change24h: 0, volume24hUsd: 0 },
         bids: new Map(), asks: new Map(), depthSequence: 0, depthEventTime: 0, depthReceivedAt: 0,
-        normalizedDepth: null };
+        depthRevision: 0, normalizedDepth: null };
       entries.set(key, entry);
       // Maintain an instrument-level snapshot so a subscriber joining an
       // already-running WS can initialize its own book without reconnecting
@@ -97,6 +110,7 @@ export class SharedExchangeStreamHandle {
       source.on('status', (status: string) => {
         if (status !== 'LIVE') {
           shared.normalizedDepth = null;
+          shared.depthRevision++;
           shared.depthSequence = 0;
           shared.depthReceivedAt = 0;
           shared.bids.clear(); shared.asks.clear();
@@ -115,13 +129,16 @@ export class SharedExchangeStreamHandle {
           shared.depthSequence = 0;
           shared.depthReceivedAt = 0;
           shared.depthEventTime = 0;
+          shared.depthRevision++;
           shared.bids.clear(); shared.asks.clear();
           return;
         }
         // Keep validated arrays available to synchronous per-owner listeners
         // of this exact EventEmitter packet. A new event replaces this record,
         // even if its object identity is reused by an upstream adapter.
-        const validated = { packet: delta, levels: { bids, asks } };
+        const validated: NonNullable<Entry['normalizedDepth']> = {
+          packet: delta, levels: { bids, asks }, book: null,
+        };
         shared.normalizedDepth = validated;
         // Cached data exists only for this synchronous EventEmitter fanout.
         // A delayed consumer or a reused/mutated upstream packet must parse
@@ -137,6 +154,7 @@ export class SharedExchangeStreamHandle {
           shared.depthSequence = 0;
           shared.depthReceivedAt = 0;
           shared.depthEventTime = 0;
+          shared.depthRevision++;
           shared.bids.clear(); shared.asks.clear();
           if (!delta.isSnapshot) return;
         }
@@ -145,14 +163,24 @@ export class SharedExchangeStreamHandle {
         } else if (!shared.depthSequence || delta.sequence! <= shared.depthSequence) {
           return;
         }
-        // Use *parsed numeric* levels rather than the original untrusted
-        // tuples. A string-valued WebSocket fallback must not poison a late
-        // subscriber's numerical book with string Map keys or quantities.
-        for (const [p, q] of bids) q > 0 ? shared.bids.set(p, q) : shared.bids.delete(p);
-        for (const [p, q] of asks) q > 0 ? shared.asks.set(p, q) : shared.asks.delete(p);
+        // The canonical public order book is maintained just once. Revisions
+        // advance only for actual price/quantity changes, except full resets.
+        let bookChanged = Boolean(delta.isSnapshot);
+        for (const [p, q] of bids) {
+          if ((shared.bids.get(p) ?? 0) !== q) bookChanged = true;
+          q > 0 ? shared.bids.set(p, q) : shared.bids.delete(p);
+        }
+        for (const [p, q] of asks) {
+          if ((shared.asks.get(p) ?? 0) !== q) bookChanged = true;
+          q > 0 ? shared.asks.set(p, q) : shared.asks.delete(p);
+        }
+        if (bookChanged) shared.depthRevision++;
         shared.depthSequence = delta.sequence!;
         shared.depthEventTime = time;
         shared.depthReceivedAt = now;
+        validated.book = {
+          bids: shared.bids, asks: shared.asks, revision: shared.depthRevision,
+        };
       });
     }
     entry.refs++;
@@ -170,6 +198,16 @@ export class SharedExchangeStreamHandle {
     if (this.disposed) return null;
     const candidate = this.entry.normalizedDepth;
     return candidate?.packet === delta ? candidate.levels : null;
+  }
+
+  /** Returns the same canonical public maps for every owner of the market,
+   * only during a valid, synchronized, synchronous exchange depth emission.
+   * No stale/malformed packets or late subscriber replays receive this view.
+   */
+  sharedBook(delta: RawDepthDelta): SharedPublicOrderBook | null {
+    if (this.disposed) return null;
+    const candidate = this.entry.normalizedDepth;
+    return candidate?.packet === delta ? candidate.book : null;
   }
 
   on(event: string, listener: Listener): this {
