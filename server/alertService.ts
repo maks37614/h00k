@@ -127,7 +127,6 @@ export function loadAlerts(): PriceAlert[] {
     console.error('Failed to read alerts.json:', err);
     throw err;
   }
-  isAlertsLoaded = true;
   alertsCache = alertsCache.filter(a => !deletedAlertIds.has(alertIdentity(a.userId || 'guest', a.id)));
   // Repair stale alert snapshots from the durable trigger history on startup.
   // A Telegram notification already processed must not be armed again.
@@ -143,8 +142,10 @@ export function loadAlerts(): PriceAlert[] {
     }
   }
   if (repaired && !saveAlerts(alertsCache)) {
-    console.error('[Alerts] Could not persist restored triggered states; notification dispatch is unsafe');
+    throw new Error('[Alerts] Could not persist restored triggered states; notification dispatch is unsafe');
   }
+  // Do not expose the partially reconstructed store when history is unreadable.
+  isAlertsLoaded = true;
   return alertsCache;
 }
 
@@ -761,8 +762,6 @@ async function checkAlertsInternal(userId?: string) {
     if (price !== null && Number.isFinite(price) && price > 0) priceMap.set(key, price);
   });
 
-  let updated = false;
-
   // Price-alert cycles run every six seconds. Index the *current* in-memory
   // collections once, instead of scanning all users' alerts and history for
   // every candidate (quadratic work when many users configure alerts).
@@ -796,15 +795,14 @@ async function checkAlertsInternal(userId?: string) {
   };
 
   for (const candidate of activeAlerts) {
-    const alert = currentAlert(candidate);
+    let alert = currentAlert(candidate);
     if (!alert || !alert.isActive || alert.triggered) continue;
     const prior = processedAlert(alert);
     if (prior) {
-      alert.triggered = true;
-      alert.isActive = false;
-      alert.triggeredAt = prior.triggeredAt;
-      alert.triggeredPrice = prior.triggeredPrice;
-      if (!saveAlerts(loadAlerts())) console.error('[Alerts] Failed to repair a previously fired notification');
+      const restored = { ...alert, triggered: true, isActive: false,
+        triggeredAt: prior.triggeredAt, triggeredPrice: prior.triggeredPrice };
+      if (!saveAlerts(loadAlerts().map(entry => entry === alert ? restored : entry)))
+        throw new Error('[Alerts] Failed to persist a previously fired notification');
       continue;
     }
     const key = `${alert.exchange}:${alert.marketType}:${alert.symbol}`;
@@ -819,21 +817,15 @@ async function checkAlertsInternal(userId?: string) {
     }
 
     if (isTriggered) {
-      alert.triggered = true;
-      alert.isActive = false;
-      alert.triggeredAt = Date.now();
-      alert.triggeredPrice = currentPrice;
-      updated = true;
-      if (!saveAlerts(loadAlerts())) {
-        // Never send a message that cannot be marked completed durably:
-        // otherwise it could be sent again after the next restart.
-        alert.triggered = false;
-        alert.isActive = true;
-        alert.triggeredAt = undefined;
-        alert.triggeredPrice = undefined;
+      const fired = { ...alert, triggered: true, isActive: false,
+        triggeredAt: Date.now(), triggeredPrice: currentPrice };
+      if (!saveAlerts(loadAlerts().map(entry => entry === alert ? fired : entry))) {
+        // Never deliver a notification without its durable completion marker.
+        // The original alert remains unchanged and can retry next cycle.
         console.error('[Alerts] Could not persist fired state; skipped Telegram notification');
         continue;
       }
+      alert = fired;
 
       console.log(`[ALERT TRIGGERED] ${alert.symbol} target: ${alert.targetPrice}, live price: ${currentPrice}, condition: ${alert.condition}`);
 
@@ -933,9 +925,6 @@ async function checkAlertsInternal(userId?: string) {
     }
   }
 
-  if (updated) {
-    saveAlerts(loadAlerts());
-  }
 }
 
 // Start background monitor loop
