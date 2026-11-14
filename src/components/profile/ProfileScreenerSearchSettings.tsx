@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { BookmarkPlus, CheckCircle2, Search, Trash2 } from 'lucide-react';
+import { ArrowDownToLine, ArrowUpToLine, BookmarkPlus, CheckCircle2, Search, Trash2 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import type { ScreenerSearchConfig, SearchUserSettings } from '../../types';
 import { getStoredPreferences } from '../../utils/userPreferences';
@@ -176,11 +176,24 @@ export function ProfileScreenerSearchSettings() {
             <option value="all">Усі ринки</option><option value="futures">Ф’ючерси</option><option value="spot">Спот</option>
           </select>
         </label>
-        <label className={label}>Максимальний обсяг 24г
-          <select className={control} value={draft.maxVolumeUsd} onChange={event => setField('maxVolumeUsd', Number(event.target.value))}>
-            <option value={0}>Без обмежень</option>
-            {SCREENER_VOLUME_CAPS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
-          </select>
+        <label className={label}>Обсяг 24год:
+          <div className="flex min-w-0 items-center gap-2">
+            <button type="button"
+              aria-label={draft.volumeMode === 'to' ? 'Змінити обсяг на Від' : 'Змінити обсяг на До'}
+              title="Перемкнути граничний обсяг між До та Від"
+              onClick={() => setField('volumeMode', draft.volumeMode === 'to' ? 'from' : 'to')}
+              className="flex shrink-0 items-center gap-1 rounded-lg border border-slate-700 bg-slate-950 px-2.5 py-2.5 text-sm text-cyan-300 hover:border-cyan-500 focus:outline-none focus-visible:ring-1 focus-visible:ring-cyan-500">
+              {draft.volumeMode === 'to' ? <ArrowDownToLine size={16} /> : <ArrowUpToLine size={16} />}
+              <span>{draft.volumeMode === 'to' ? 'До' : 'Від'}</span>
+            </button>
+            <select aria-label="Межа обсягу за 24 години" className={control} value={draft.maxVolumeUsd}
+              onChange={event => setField('maxVolumeUsd', Number(event.target.value))}>
+              <option value={0}>Без обмежень</option>
+              {SCREENER_VOLUME_CAPS.map(option => <option key={option.value} value={option.value}>
+                {draft.volumeMode === 'from' ? option.label.replace(/^До /, 'Від ') : option.label}
+              </option>)}
+            </select>
+          </div>
         </label>
         <div className="hidden sm:block" aria-hidden="true" />
         <label className={label}>Основний показник сортування
