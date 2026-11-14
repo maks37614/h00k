@@ -134,6 +134,35 @@ export const adaptiveCut = (values: number[], loQ = .97, hiQ = .995, madMult = 3
   return Math.max(1, Math.min(hi, Math.max(lo, raw)));
 };
 export const atr=(c:Candle[],n=40)=>{const x=c.slice(-Math.max(2,n));if(x.length<2)return 0;let s=0,k=0;for(let i=1;i<x.length;i++){const p=x[i-1].c,z=x[i];s+=Math.max(z.h-z.l,Math.abs(z.h-p),Math.abs(z.l-p));k++}return k?s/k:0};
+/** Last-candle-relative 24h chart stats without allocating candle arrays every tick.
+ * Klines reach the chart sorted by time, so a binary search skips old history.
+ */
+export function chartMarketStatistics(candles: readonly Candle[], natrPeriod = 14) {
+  const last = candles.at(-1);
+  if (!last) return { vol24: 0, high: 0, low: 0, natr: NaN };
+  const cutoff = last.t - 86_400_000;
+  let left = 0, right = candles.length;
+  while (left < right) {
+    const mid = (left + right) >>> 1;
+    if (candles[mid].t < cutoff) left = mid + 1;
+    else right = mid;
+  }
+  let vol24 = 0, high = -Infinity, low = Infinity;
+  for (let i = left; i < candles.length; i++) {
+    const candle = candles[i];
+    vol24 += (candle.v || 0) * candle.c;
+    if (candle.h > high) high = candle.h;
+    if (candle.l < low) low = candle.l;
+  }
+  // ATR already reads only its requested trailing window.
+  return {
+    vol24,
+    high: high === -Infinity ? last.h : high,
+    low: low === Infinity ? last.l : low,
+    natr: last.c > 0 ? atr(candles as Candle[], Math.max(2, natrPeriod || 14)) / last.c * 100 : NaN,
+  };
+}
+
 export const formatUsd=(n:number)=>{const a=Math.abs(n);if(a>=1e9)return `${(n/1e9).toFixed(a>=1e10?1:2)}B`;if(a>=1e6)return `${(n/1e6).toFixed(a>=1e7?1:2)}M`;if(a>=1e3)return `${(n/1e3).toFixed(a>=1e4?0:1)}K`;return n.toFixed(0)};
 
 // Exact structural extrema. The ray price is NEVER averaged: p is the actual wick high/low.
