@@ -55,6 +55,12 @@ export class OrderBookEngine {
   } | null = null;
   private sortedPriceComputations = 0;
   private bestPriceFullScans = 0;
+  // Empty depth heartbeats advance freshness but do not change book levels.
+  // Keep time-driven persistence classification accurate at 1-second cadence
+  // without re-scanning all bids/asks for every no-op packet.
+  private lastDensityEvaluationAt = 0;
+  private densityInputsDirty = false;
+  private densityEvaluations = 0;
 
   constructor(
     public readonly symbol: string,
@@ -71,6 +77,7 @@ export class OrderBookEngine {
     if (!(this.config.manualThresholdUsd > 0) || !Number.isFinite(this.config.manualThresholdUsd)) this.config.manualThresholdUsd = 1000000;
     if (previous !== JSON.stringify(this.config)) {
       this.thresholdMemo = null;
+      this.densityInputsDirty = true;
       if (this.dataValid && Date.now() - this.lastReceivedAt <= 5000) this.evaluateDensities();
     }
   }
@@ -79,6 +86,7 @@ export class OrderBookEngine {
     if (this.volume24hUsd !== next) {
       this.volume24hUsd = next;
       this.thresholdMemo = null;
+      this.densityInputsDirty = true;
     }
   }
   public setStatus(newStatus: OrderBookStatus) {
@@ -123,6 +131,21 @@ export class OrderBookEngine {
     if (!delta.isSnapshot && this.lastUpdateId > 0 && seq <= this.lastUpdateId) return;
     if (!delta.isSnapshot && (this.lastUpdateId === 0 || this.sequenceGap || !this.dataValid)) {
       this.status = 'SYNCING';
+      return;
+    }
+    if (!delta.isSnapshot && bids.length === 0 && asks.length === 0) {
+      // A valid heartbeat still refreshes source freshness and sequence.
+      // Never invalidate the price-ordering/median cache when the book is
+      // unchanged. Re-scan once per second for density persistence ages, or
+      // immediately when per-owner 24h volume/config changes the threshold.
+      this.lastReceivedAt = now;
+      this.lastExchangeTimestamp = delta.eventTime || 0;
+      this.lastUpdateId = seq;
+      this.sequenceGap = false;
+      if (this.densityInputsDirty || !this.lastDensityEvaluationAt ||
+          now < this.lastDensityEvaluationAt || now - this.lastDensityEvaluationAt >= 1000) {
+        this.evaluateDensities();
+      }
       return;
     }
     this.lastReceivedAt = now;
@@ -260,7 +283,8 @@ export class OrderBookEngine {
   public thresholdStats() {
     return { medianComputations: this.medianComputations, bookRevision: this.bookRevision,
       sortedPriceComputations: this.sortedPriceComputations,
-      bestPriceFullScans: this.bestPriceFullScans };
+      bestPriceFullScans: this.bestPriceFullScans,
+      densityEvaluations: this.densityEvaluations };
   }
 
   private newlyAppearedDensities: DensityItem[] = [];
@@ -275,6 +299,9 @@ export class OrderBookEngine {
 
   private evaluateDensities() {
     const now = Date.now();
+    this.lastDensityEvaluationAt = now;
+    this.densityInputsDirty = false;
+    this.densityEvaluations++;
     const mid = (this.bestBid + this.bestAsk) / 2 || this.bestBid || this.bestAsk || 1;
     const threshold = this.calculateAdaptiveThreshold();
     const seen = new Set<string>();
@@ -395,5 +422,5 @@ export class OrderBookEngine {
   private hasFreshData(): boolean {
     return isFreshDepthTime(this.lastReceivedAt) && (!this.lastExchangeTimestamp || isFreshDepthTime(this.lastExchangeTimestamp));
   }
-  public clear(){this.bookRevision++;this.thresholdMemo=null;this.sortedPricesMemo=null;this.bids.clear();this.asks.clear();this.activeDensities.clear();this.densityStats.clear();this.dataValid=false;this.sequenceGap=false;this.status='CONNECTING';this.lastUpdateId=0;this.lastReceivedAt=0;this.lastExchangeTimestamp=0;this.bestBid=0;this.bestAsk=0;this.newlyAppearedDensities=[];}
+  public clear(){this.bookRevision++;this.thresholdMemo=null;this.sortedPricesMemo=null;this.lastDensityEvaluationAt=0;this.densityInputsDirty=false;this.bids.clear();this.asks.clear();this.activeDensities.clear();this.densityStats.clear();this.dataValid=false;this.sequenceGap=false;this.status='CONNECTING';this.lastUpdateId=0;this.lastReceivedAt=0;this.lastExchangeTimestamp=0;this.bestBid=0;this.bestAsk=0;this.newlyAppearedDensities=[];}
 }
