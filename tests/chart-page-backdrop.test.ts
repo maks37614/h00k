@@ -51,7 +51,7 @@ test('chart background is an inert detached DOM snapshot, not a mounted copy of 
     assert.equal(snapshot.querySelector('[id]'), null);
     assert.ok([...snapshot.querySelectorAll('input')].every(input => input.value === ''));
     assert.ok([...snapshot.querySelectorAll('input')].every(input => !input.hasAttribute('value')));
-    snapshot.querySelector('#btc')?.dispatchEvent(new dom.window.Event('click', {bubbles: true}));
+    snapshot.querySelector('main button')!.dispatchEvent(new dom.window.Event('click', {bubbles: true}));
     assert.equal(clicked,0,'native event listener from live Screener must not be copied');
     dom.window.document.body.appendChild(snapshot);
     assert.equal(snapshot.isConnected, true);
