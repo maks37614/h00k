@@ -58,3 +58,12 @@ test('independent full h00k window gets the same isolated settings gear', () => 
   assert.match(main, /PROVIDERS\.map\(id =>/);
   assert.match(main, /settings\.setupComplete && profile\.enabled/);
 });
+
+test('quick menu exposes auto-attach, follow and always-on-top toggles', () => {
+  const main = read('main.cjs');
+  for (const option of ['Прикріплювати автоматично', 'Слідувати за вікном',
+    'Завжди поверх інших вікон']) assert.ok(main.includes(option));
+  for (const field of ['autoAttach', 'follow', 'alwaysOnTop']) {
+    assert.ok(main.includes(field + ': !profile.' + field));
+  }
+});

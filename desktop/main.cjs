@@ -228,6 +228,13 @@ function openToolbarMenu(event) {
       click: () => patchQuickProfile(provider, { mode, follow: mode !== 'floating' }),
     })) },
     { type: 'separator' },
+    { label: 'Прикріплювати автоматично', type: 'checkbox', checked: profile.autoAttach,
+      click: () => patchQuickProfile(provider, { autoAttach: !profile.autoAttach }) },
+    { label: 'Слідувати за вікном', type: 'checkbox', checked: profile.follow,
+      click: () => patchQuickProfile(provider, { follow: !profile.follow }) },
+    { label: 'Завжди поверх інших вікон', type: 'checkbox', checked: profile.alwaysOnTop,
+      click: () => patchQuickProfile(provider, { alwaysOnTop: !profile.alwaysOnTop }) },
+    { type: 'separator' },
     { label: 'Відкрити h00k.top у браузері', click: () => void shell.openExternal(WEBSITE) },
     { label: 'Відкріпити від ' + label, click: () => {
       settings.profiles[provider].enabled = false;
