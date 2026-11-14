@@ -47,6 +47,13 @@ export class OrderBookEngine {
   private thresholdMemo: {revision: number; volume: number; mode: string;
     manual: number; value: number} | null = null;
   private medianComputations = 0;
+  // OrderBookState and imbalance callers may both request the same top
+  // levels many times between depth packets. Cache *price ordering only*;
+  // return new level objects so consumers cannot mutate another read.
+  private sortedPricesMemo: {
+    revision: number; bids?: number[]; asks?: number[];
+  } | null = null;
+  private sortedPriceComputations = 0;
 
   constructor(
     public readonly symbol: string,
@@ -105,6 +112,7 @@ export class OrderBookEngine {
     this.lastReceivedAt = now;
     this.bookRevision++;
     this.thresholdMemo = null;
+    this.sortedPricesMemo = null;
     this.lastExchangeTimestamp = delta.eventTime || 0;
     this.sequenceGap = false;
     this.lastUpdateId = seq;
@@ -146,11 +154,31 @@ export class OrderBookEngine {
     if (this.dataValid) this.evaluateDensities();
   }
 
+  private getSortedPrices(side: 'bids' | 'asks'): number[] {
+    let memo = this.sortedPricesMemo;
+    if (!memo || memo.revision !== this.bookRevision) {
+      memo = { revision: this.bookRevision };
+      this.sortedPricesMemo = memo;
+    }
+    if (!memo[side]) {
+      memo[side] = Array.from((side === 'bids' ? this.bids : this.asks).keys())
+        .sort(side === 'bids' ? (a,b)=>b-a : (a,b)=>a-b);
+      this.sortedPriceComputations++;
+    }
+    return memo[side]!;
+  }
+
   public getSortedBids(limit = 30): OrderBookLevel[] {
-    return Array.from(this.bids.keys()).sort((a,b)=>b-a).slice(0,limit).map(price=>({price, quantity:this.bids.get(price)||0, notionalUsd:price*(this.bids.get(price)||0)}));
+    return this.getSortedPrices('bids').slice(0,limit).map(price=>{
+      const quantity = this.bids.get(price) || 0;
+      return {price,quantity,notionalUsd:price*quantity};
+    });
   }
   public getSortedAsks(limit = 30): OrderBookLevel[] {
-    return Array.from(this.asks.keys()).sort((a,b)=>a-b).slice(0,limit).map(price=>({price, quantity:this.asks.get(price)||0, notionalUsd:price*(this.asks.get(price)||0)}));
+    return this.getSortedPrices('asks').slice(0,limit).map(price=>{
+      const quantity = this.asks.get(price) || 0;
+      return {price,quantity,notionalUsd:price*quantity};
+    });
   }
 
   public getState(): OrderBookState {
@@ -189,7 +217,8 @@ export class OrderBookEngine {
   }
 
   public thresholdStats() {
-    return { medianComputations: this.medianComputations, bookRevision: this.bookRevision };
+    return { medianComputations: this.medianComputations, bookRevision: this.bookRevision,
+      sortedPriceComputations: this.sortedPriceComputations };
   }
 
   private newlyAppearedDensities: DensityItem[] = [];
@@ -319,5 +348,5 @@ export class OrderBookEngine {
   private hasFreshData(): boolean {
     return isFreshDepthTime(this.lastReceivedAt) && (!this.lastExchangeTimestamp || isFreshDepthTime(this.lastExchangeTimestamp));
   }
-  public clear(){this.bookRevision++;this.thresholdMemo=null;this.bids.clear();this.asks.clear();this.activeDensities.clear();this.densityStats.clear();this.dataValid=false;this.sequenceGap=false;this.status='CONNECTING';this.lastUpdateId=0;this.lastReceivedAt=0;this.lastExchangeTimestamp=0;this.bestBid=0;this.bestAsk=0;this.newlyAppearedDensities=[];}
+  public clear(){this.bookRevision++;this.thresholdMemo=null;this.sortedPricesMemo=null;this.bids.clear();this.asks.clear();this.activeDensities.clear();this.densityStats.clear();this.dataValid=false;this.sequenceGap=false;this.status='CONNECTING';this.lastUpdateId=0;this.lastReceivedAt=0;this.lastExchangeTimestamp=0;this.bestBid=0;this.bestAsk=0;this.newlyAppearedDensities=[];}
 }
