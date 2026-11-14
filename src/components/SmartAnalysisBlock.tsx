@@ -207,7 +207,7 @@ export const SmartAnalysisBlock: React.FC<SmartAnalysisBlockProps> = ({
     visible.modules[module] && (selectedTab === 'all' || selectedTab === module);
   const tabs: Array<{ id: SmartAnalysisModule; label: string }> = [
     { id: 'btc', label: 'Контекст BTC (15m → 5m → 1m)' },
-    { id: 'tech', label: 'RSI, EMA, Об'єми та Спред' },
+    { id: 'tech', label: 'RSI, EMA, Об’єми та Спред' },
     { id: 'orderbook', label: 'Стакан, POC та Ліквідність' },
     { id: 'derivatives', label: 'Open Interest та Деривативи' },
     { id: 'institutional', label: 'Holders / Заявки / ММ / Ризики' },
