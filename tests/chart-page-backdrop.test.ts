@@ -181,7 +181,9 @@ test('mobile background has a smaller resource budget and never performs a live 
 test('the original Screener tears down periodic network refresh and restores personal filters on return', () => {
   const screener=source('../src/components/CoinScreenerPage.tsx');
   assert.match(screener,/const screenerUiSession = new Map/);
-  assert.match(screener,/const cachedUi = screenerUiSession\.get\(user\?\.uid \|\| 'guest'\)/);
+  assert.match(screener,/const previousUiSession = screenerUiSession\.get\(user\?\.uid \|\| 'guest'\)/);
+  assert.match(screener,/const cachedUi = previousUiSession\?\.savedConfigKey === savedConfigKey \? previousUiSession : undefined/,
+    'stale in-session filters must not override changed profile defaults');
   for(const field of ['searchQuery','exchange','marketType','sortBy','sortOrder','secondarySortBy','secondarySortOrder','viewMode','displayLimit']){
     assert.match(screener,new RegExp('cachedUi\\?\\.'+field), 'screen must restore '+field);
   }
