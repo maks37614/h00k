@@ -283,7 +283,10 @@ test('Terminal sync conflicts are visible outside hidden menus and can be recove
   // Cloud hydration now checks the conflict first and only loads the remote
   // state if there were no local edits; keep the two safety gates explicit.
   assert.match(hook, /if \(syncConflictRef\.current\) return;/);
-  assert.match(hook, /if \(revision\.current === 0\) \{[\s\S]*?setWorkspace\(loadTerminalWorkspace\(uid, profile\.terminalSettings\)\)/);
+  // Hydration now normalizes the server workspace before assignment. Assert
+  // both the no-local-edits gate and that the normalized result is applied.
+  assert.match(hook, /if \(revision\.current === 0\) \{[\s\S]*?const hydratedWorkspace = loadTerminalWorkspace\(uid, profile\.terminalSettings\)/);
+  assert.match(hook, /setWorkspace\(hydratedWorkspace\)/);
   assert.match(hook, /window\.confirm\(/);
   assert.match(hook, /window\.location\.reload\(\)/);
 });
