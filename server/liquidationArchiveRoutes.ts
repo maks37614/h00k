@@ -16,6 +16,10 @@ export function installLiquidationArchiveRoutes(app: Express) {
     });
     return;
   }
+  // Runs only for an enabled PostgreSQL archive. The first check catches up
+  // after VPS downtime; subsequent checks do not affect normal HookChart Liq.
+  liquidationArchive.startMonthlyMaintenance();
+
   const cached = new Map<string, { at: number; data: Payload }>();
   const inflight = new Map<string, Promise<Payload>>();
   const throttles = new Map<string, { at: number; count: number }>();
@@ -44,7 +48,9 @@ export function installLiquidationArchiveRoutes(app: Express) {
       if (now - value.at > 60_000) throttles.delete(key);
 
     const hours = period === '24h' ? 24 : 168;
-    const key = exchange + ':' + symbol + ':' + hours;
+    // Monthly purge must invalidate even an otherwise fresh server cache.
+    const key = new Date(now).toISOString().slice(0, 7) + ':' +
+      exchange + ':' + symbol + ':' + hours;
     const stored = cached.get(key);
     if (stored && now - stored.at < 30_000) {
       res.set('Cache-Control','public, max-age=20');
