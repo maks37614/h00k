@@ -320,7 +320,7 @@ export const FullscreenChartModal: React.FC<FullscreenChartModalProps> = ({
   const content = (
     <div
       className={pageMode
-        ? 'relative flex w-full min-h-[100dvh] flex-col bg-[#090d16]'
+        ? 'relative flex w-full min-h-[100dvh] flex-col bg-transparent'
         : 'fixed inset-0 z-[100] w-screen h-[100dvh] max-h-[100dvh] min-h-[100dvh] bg-[#090d16] flex flex-col overflow-hidden animate-in fade-in duration-200'}
       role={pageMode ? 'region' : 'dialog'}
       aria-modal={pageMode ? undefined : true}
