@@ -1004,6 +1004,7 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
           <TerminalPresetPanel
             blocks={blocks} watchlist={localWatchlist} presets={customPresets}
             selection={coinPresetSelection} timeframe={timeframe} activePreset={activeMarketPreset} autoUpdate
+            menuOpen={showCoinPresets}
             snapshot={marketSnapshot} loading={marketLoading} error={marketError}
             onActivePresetChange={handleActiveMarketPresetChange}
             onPresetChosen={() => setShowCoinPresets(false)}
