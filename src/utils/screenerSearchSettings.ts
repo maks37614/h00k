@@ -1,6 +1,6 @@
 import type {
   ExchangeId, MarketCoin, MarketType, ScreenerPresetFilter, ScreenerSearchConfig,
-  ScreenerSearchPreset, ScreenerSortBy, SearchUserSettings,
+  ScreenerSearchPreset, ScreenerSortBy, SearchUserSettings, ScannedCoin,
 } from '../types';
 import { getCoinDistanceToHigh, getCoinDistanceToLow, getCoinVol5m } from './marketPresets';
 
@@ -168,4 +168,45 @@ export function compareScreenerSearchCoins(
   }
   return a.symbol.localeCompare(b.symbol) || a.exchange.localeCompare(b.exchange)
     || a.marketType.localeCompare(b.marketType);
+}
+
+/**
+ * Extra Screener-only filters. The scanner lookup is supplied by the existing
+ * App state; this function neither fetches candles nor triggers another scan.
+ * Missing OI, funding and validated breakout RVOL fail closed if their
+ * corresponding filter is active (never interpreted as zero).
+ */
+export function matchesAdvancedScreenerFilters(
+  coin: MarketCoin,
+  config: Pick<ScreenerSearchConfig,
+    'minVolatility5mPct' | 'minPriceUsd' | 'maxPriceUsd'
+    | 'maxDistanceToHighPct' | 'maxDistanceToLowPct'
+    | 'onlyWithFormations' | 'minOpenInterestUsd'
+    | 'fundingRateDirection' | 'minFundingRateAbsPct' | 'minBreakoutRvol'>,
+  scanned?: ScannedCoin,
+): boolean {
+  if (config.minVolatility5mPct > 0 && (!Number.isFinite(coin.volatility5mPct)
+    || (coin.volatility5mPct ?? -1) < config.minVolatility5mPct)) return false;
+  if (config.minPriceUsd > 0 && (!Number.isFinite(coin.price) || coin.price < config.minPriceUsd)) return false;
+  if (config.maxPriceUsd > 0 && (!Number.isFinite(coin.price) || coin.price > config.maxPriceUsd)) return false;
+  if (config.maxDistanceToHighPct !== null && (!Number.isFinite(coin.distanceToHighPct)
+    || coin.distanceToHighPct < 0 || coin.distanceToHighPct > config.maxDistanceToHighPct)) return false;
+  if (config.maxDistanceToLowPct !== null && (!Number.isFinite(coin.distanceToLowPct)
+    || coin.distanceToLowPct < 0 || coin.distanceToLowPct > config.maxDistanceToLowPct)) return false;
+  if (config.onlyWithFormations && !(scanned?.formations?.length)) return false;
+  if (config.minOpenInterestUsd > 0 && (!Number.isFinite(coin.openInterestUsd)
+    || (coin.openInterestUsd ?? 0) < config.minOpenInterestUsd)) return false;
+  if (config.fundingRateDirection !== 'any' || config.minFundingRateAbsPct > 0) {
+    const funding = coin.fundingRatePct;
+    if (funding === undefined || !Number.isFinite(funding)) return false;
+    if (config.fundingRateDirection === 'positive' && funding <= 0) return false;
+    if (config.fundingRateDirection === 'negative' && funding >= 0) return false;
+    if (config.minFundingRateAbsPct > 0 && Math.abs(funding) < config.minFundingRateAbsPct) return false;
+  }
+  if (config.minBreakoutRvol > 0 && !scanned?.formations?.some(formation =>
+    formation.validation?.breakoutConfirmed === true
+    && formation.validation?.closedCandleOnly === true
+    && Number.isFinite(formation.validation.volumeRatio)
+    && formation.validation.volumeRatio >= config.minBreakoutRvol)) return false;
+  return true;
 }
