@@ -8,9 +8,9 @@ CREATE TABLE IF NOT EXISTS h00k_liquidation_events (
   event_id TEXT NOT NULL CHECK (length(event_id) BETWEEN 1 AND 180),
   event_time TIMESTAMPTZ NOT NULL,
   side TEXT NOT NULL CHECK (side IN ('LONG','SHORT')),
-  price DOUBLE PRECISION NOT NULL CHECK (price > 0 AND isfinite(price)),
-  quantity DOUBLE PRECISION NOT NULL CHECK (quantity > 0 AND isfinite(quantity)),
-  observed_notional DOUBLE PRECISION NOT NULL CHECK (observed_notional > 0 AND isfinite(observed_notional)),
+  price DOUBLE PRECISION NOT NULL CHECK (price > 0 AND price < 'Infinity'::float8),
+  quantity DOUBLE PRECISION NOT NULL CHECK (quantity > 0 AND quantity < 'Infinity'::float8),
+  observed_notional DOUBLE PRECISION NOT NULL CHECK (observed_notional > 0 AND observed_notional < 'Infinity'::float8),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   PRIMARY KEY (exchange,symbol,event_id)
 );
