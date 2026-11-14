@@ -173,7 +173,7 @@ export class OrderBookEngine {
       this.sharedBookActive
         ? previousSharedRevision === this.sharedBookRevision
         : bids.every(([p, q]) => (this.bids.get(p) ?? 0) === q) &&
-          asks.every(([p, q]) => (this.asks.get(p) ?? 0) === q
+          asks.every(([p, q]) => (this.asks.get(p) ?? 0) === q)
     );
     if (unchangedBook) {
       // Valid heartbeats still advance freshness/sequence. Re-evaluate age
