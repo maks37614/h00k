@@ -1,5 +1,13 @@
 import type { SurveillanceCoin } from '../../src/types';
 
+/** Signals a partial manual 24/7 check without claiming success. */
+export class SurveillanceCheckIncompleteError extends Error {
+  constructor(public readonly failedChecks: number) {
+    super(`Не вдалося завершити перевірку ${failedChecks} монет. Спробуйте пізніше.`);
+    this.name = 'SurveillanceCheckIncompleteError';
+  }
+}
+
 /**
  * A successful manual check needs newly calculated market state, not just a
  * previously saved snapshot. An exchange outage returns an unchanged coin.
