@@ -341,7 +341,9 @@ test('Terminal workspace JSON import is available and disables auto presets befo
   assert.match(hook, /parseTerminalWorkspaceBackup\(json\)/);
   assert.match(hook, /setWorkspace\(recovered\)/);
   assert.match(page, /onImportWorkspaceBackup=\{handleImportWorkspaceBackup\}/);
-  assert.match(page, /if \(imported\) \{\s*setActiveMarketPreset\(null\)/);
+  // Allow explanatory comments between the import success guard and its first
+  // protection action; test behavior rather than exact whitespace layout.
+  assert.match(page, /if \(imported\) \{\s*(?:\/\/[^\n]*\n\s*)?setActiveMarketPreset\(null\)/);
   assert.match(panel, /accept=".json,application\/json"/);
   assert.match(panel, /handleBackupFile\(event\)/);
   assert.match(panel, /onDownloadLocalBackup/);
