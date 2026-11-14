@@ -47,3 +47,54 @@ test('PostgreSQL 16 Liq archive deduplicates reconnects and cumulative Binance f
     await pool.end();
   }
 });
+
+test('PostgreSQL monthly purge deletes ONLY Liq events and keeps its reset marker across restart', {
+  skip: process.env.LIQ_TEST_PG !== '1',
+}, async () => {
+  const pool=new Pool({
+    host:process.env.PGHOST,user:process.env.PGUSER,password:process.env.PGPASSWORD,
+    database:process.env.PGDATABASE,max:1,
+  });
+  let mockNow=Date.now();
+  const currentMonth=new Date(mockNow).toISOString().slice(0,7);
+  const archive=new LiquidationArchive(true,100,()=>pool,()=>mockNow);
+  const id='monthly:'+randomUUID();
+  const untouched='keep:'+randomUUID();
+  try {
+    // The real PostgreSQL schema also includes the maintenance marker.
+    await archive.runMonthlyCleanup();
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS h00k_liq_monthly_sentinel
+        (id TEXT PRIMARY KEY)`);
+    await pool.query('INSERT INTO h00k_liq_monthly_sentinel (id) VALUES ($1)',[untouched]);
+    archive.record({exchange:'binance',symbol:'BTCUSDT',id,t:mockNow-1000,
+      side:'SHORT',p:65000,q:0.1,usd:6500});
+    await archive.flush();
+    const before=await pool.query(
+      'SELECT count(*)::int AS n FROM h00k_liquidation_events WHERE event_id=$1',[id]);
+    assert.equal(before.rows[0].n,1);
+    const nextMonth=new Date(mockNow);
+    nextMonth.setUTCMonth(nextMonth.getUTCMonth()+1,1);
+    nextMonth.setUTCHours(0,10,0,0);
+    mockNow=nextMonth.getTime();
+    assert.equal(await archive.runMonthlyCleanup(),true,'once at new UTC calendar month');
+    assert.equal(await archive.runMonthlyCleanup(),false,'not twice');
+    const after=await pool.query(
+      'SELECT count(*)::int AS n FROM h00k_liquidation_events WHERE event_id=$1',[id]);
+    assert.equal(after.rows[0].n,0);
+    const other=await pool.query(
+      'SELECT count(*)::int AS n FROM h00k_liq_monthly_sentinel WHERE id=$1',[untouched]);
+    assert.equal(other.rows[0].n,1,'unrelated PostgreSQL tables survive reset');
+    const marker=await pool.query(
+      "SELECT last_completed_month,reset_count FROM h00k_liquidation_archive_maintenance WHERE task_name='monthly'");
+    assert.equal(String(marker.rows[0].last_completed_month).trim(),
+      new Date(mockNow).toISOString().slice(0,7));
+    assert.ok(Number(marker.rows[0].reset_count)>=1);
+    const restarted=new LiquidationArchive(true,100,()=>pool,()=>mockNow);
+    assert.equal(await restarted.runMonthlyCleanup(),false);
+  } finally {
+    await pool.query('DELETE FROM h00k_liq_monthly_sentinel WHERE id=$1',[untouched]).catch(()=>{});
+    await pool.query('DELETE FROM h00k_liquidation_events WHERE event_id=$1',[id]).catch(()=>{});
+    await pool.end();
+  }
+});
