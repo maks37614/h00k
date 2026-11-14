@@ -121,7 +121,7 @@ export function saveSurveillanceStore(store: UserSurveillanceStore): boolean {
     }
     storeCache = safeStore;
     const temporaryFile = `${SURVEILLANCE_FILE}.tmp`;
-    fs.writeFileSync(temporaryFile, JSON.stringify(safeStore, null, 2), 'utf-8');
+    fs.writeFileSync(temporaryFile, JSON.stringify(safeStore), 'utf-8');
     fs.renameSync(temporaryFile, SURVEILLANCE_FILE);
     return true;
   } catch (err) {
