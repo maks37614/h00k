@@ -249,3 +249,48 @@ article,
     height: 24px;
   }
 }
+
+/*
+ * Routed chart background: a frozen copy of the previous screen.
+ * The live Screener / Formations DOM is unmounted; this layer never receives
+ * pointer events or runs JS, WebSockets, network polling or CSS animations.
+ * Keep the HookChart panels themselves opaque for clear prices and candles.
+ */
+.chart-page-backdrop {
+  position:fixed;
+  inset:0;
+  z-index:0;
+  overflow:hidden;
+  pointer-events:none;
+  user-select:none;
+  background:linear-gradient(150deg,#0a1627 0%,#070a12 72%);
+  contain:paint;
+}
+.chart-page-backdrop__frozen {
+  position:absolute;
+  inset:0;
+  opacity:.52;
+  filter:blur(1.5px) saturate(.72);
+  pointer-events:none;
+}
+.chart-page-backdrop__frozen,
+.chart-page-backdrop__frozen *,
+.chart-page-backdrop__frozen *::before,
+.chart-page-backdrop__frozen *::after {
+  animation:none!important;
+  transition:none!important;
+  scroll-behavior:auto!important;
+  pointer-events:none!important;
+  caret-color:transparent!important;
+  backdrop-filter:none!important;
+  -webkit-backdrop-filter:none!important;
+}
+.chart-page-backdrop::after {
+  position:absolute;
+  inset:0;
+  content:"";
+  background:linear-gradient(180deg,rgba(5,9,18,.36),rgba(5,9,18,.60));
+}
+@media (max-width:640px) {
+  .chart-page-backdrop__frozen {opacity:.43;filter:blur(1px) saturate(.7)}
+}
