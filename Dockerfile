@@ -6,6 +6,8 @@ COPY package.json package-lock.json ./
 RUN npm ci
 
 COPY . .
+ARG VITE_LIQ_CLIENT_MULTIPLEX=0
+ENV VITE_LIQ_CLIENT_MULTIPLEX=${VITE_LIQ_CLIENT_MULTIPLEX}
 RUN npm run build && npm prune --omit=dev
 
 FROM node:22-bookworm-slim AS runtime
