@@ -39,7 +39,7 @@ test('English is default with a visible native-language selector preceding welco
   assert.ok(nsis.includes('StrCpy $LANGUAGE 1033'), 'English is set before pages');
   assert.ok(nsis.indexOf('Page custom h00kLanguagePageCreate') < nsis.indexOf('MUI_PAGE_WELCOME'),
     'language selector comes before the first content page');
-  for(const lang of ['English (default)', 'Polski', 'Русский', 'Українська']) {
+  for(const lang of ['"English"', '"Polski"', '"Русский"', '"Українська"']) {
     assert.ok(nsis.includes(lang), 'missing visible language: ' + lang);
   }
   assert.ok(nsis.includes('h00kLanguagePageLeave'), 'switcher must save the language');
@@ -73,4 +73,14 @@ test('existing shortcut opt-in logic and icon packaging are preserved',()=>{
   assert.ok(nsis.includes('WinShell::SetLnkAUMI'));
   assert.equal(config.build.win.icon, 'build/h00k.ico');
   assert.equal(config.build.nsis.installerIcon,'build/h00k-installer.ico');
+});
+
+test('onboarding text is scrollable and language selector fits standard Windows wizard', () => {
+  assert.equal((nsis.match(/NSD_CreateMLText/g)||[]).length, 3);
+  assert.equal((nsis.match(/NSD_Edit_SetReadOnly/g)||[]).length, 3);
+  assert.ok(nsis.includes('NSD_RemoveStyle'));
+  const radios=[...nsis.matchAll(/NSD_CreateRadioButton\} 0 (\d+)u 100% (\d+)u/g)];
+  assert.equal(radios.length,4);
+  for(const [,y,h] of radios)assert.ok(Number(y)+Number(h)<=140,
+    'the installer language switch must remain visible on standard NSIS page');
 });
