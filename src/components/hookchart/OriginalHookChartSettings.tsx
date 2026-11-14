@@ -82,9 +82,6 @@ export const ORIGINAL_HOOKCHART_DEFAULTS: HookChartPreferences = {
   autoChannel: false,
   autoPOC: false,
   autoStops: false,
-  sortEnabled: ['V24', 'P24', 'Price'],
-  sortDisabled: ['Ticker', 'OI', 'Funding'],
-  analyzedIntervals: ['5m', '15m', '1h', '4h'],
   scoring: false,
   roundDistance: false,
   roundness: 2,
@@ -813,21 +810,6 @@ export function OriginalHookChartSettings({
     const next = current.includes(value) ? current.filter(item => item !== value) : (max && current.length >= max ? current : [...current, value]);
     set(key, next);
   };
-  const toggleSort = (value: string) => {
-    const enabled = prefs.sortEnabled || [];
-    const disabled = prefs.sortDisabled || [];
-    if (enabled.includes(value)) onChange({ sortEnabled: enabled.filter(item => item !== value), sortDisabled: [...disabled, value] });
-    else onChange({ sortDisabled: disabled.filter(item => item !== value), sortEnabled: [...enabled, value] });
-  };
-  const moveSort = (value: string) => {
-    const enabled = prefs.sortEnabled || [];
-    const index = enabled.indexOf(value);
-    if (index < 0 || enabled.length < 2) return;
-    const next = [...enabled];
-    next.splice(index, 1);
-    next.push(value);
-    set('sortEnabled', next);
-  };
 
   return <div className={embedded ? "originalSettingsBackdrop embeddedSettingsBackdrop" : "originalSettingsBackdrop"} onMouseDown={event => { if (!embedded && event.target === event.currentTarget) onClose(); }}>
     <div ref={dialogRef} tabIndex={embedded ? undefined : -1} className="originalSettingsPanel" role={embedded ? "region" : "dialog"} aria-modal={embedded ? undefined : true} aria-label="Налаштування hookchart">
@@ -923,14 +905,6 @@ export function OriginalHookChartSettings({
             </div></Setting>
             <Setting label="Свічка Long"><input className="colorInput" type="color" value={prefs.candleLongColor || '#0ECB81'} onChange={event => set('candleLongColor', event.target.value)} /></Setting>
             <Setting label="Свічка Short"><input className="colorInput" type="color" value={prefs.candleShortColor || '#F6465D'} onChange={event => set('candleShortColor', event.target.value)} /></Setting>
-          </Section>
-
-          <Section title="Дані та сортування">
-            <Setting unavailable label="Типи та порядок сортування" desc="Клік переміщує тип праворуч. Подвійний клік вмикає/вимикає."><div className="sortGroups">
-              <small>Увімкнені</small><div className="settingsChips">{(prefs.sortEnabled || []).map(item => <button type="button" key={item} onClick={() => moveSort(item)} onDoubleClick={() => toggleSort(item)}>{item}</button>)}</div>
-              <small>Вимкнені</small><div className="settingsChips muted">{(prefs.sortDisabled || []).map(item => <button type="button" key={item} onDoubleClick={() => toggleSort(item)}>{item}</button>)}</div>
-            </div></Setting>
-            <MultiChoice unavailable label="Інтервали аналізу" desc="Не більше 4" values={['5m', '15m', '30m', '1h', '4h', '1d']} selected={prefs.analyzedIntervals || []} toggle={value => toggleArray('analyzedIntervals', value, 4)} max={4} />
           </Section>
 
           <Section title="Скоринг">
