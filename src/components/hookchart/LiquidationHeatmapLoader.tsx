@@ -17,7 +17,25 @@ type Props = {
 type Result = { data: LiquidationHeatmapSnapshot | null; status: Status };
 
 const CACHE_MS = 55_000;
-const cache = new Map<string,{at:number;result:Result}>();
+// Cap serialized browser cache to 3 MiB per tab; JS object overhead depends on
+// the engine. A hidden/off map does not keep accumulating new responses.
+const MAX_CACHE_BYTES = 3 * 1024 * 1024;
+let cacheBytes = 0;
+const cache = new Map<string,{at:number;result:Result;bytes:number}>();
+const putCache = (key:string,result:Result) => {
+  const bytes = new TextEncoder().encode(JSON.stringify(result)).byteLength;
+  const previous=cache.get(key);
+  if(previous){cacheBytes-=previous.bytes;cache.delete(key);}
+  if(bytes>MAX_CACHE_BYTES)return;
+  while(cache.size>=16 || cacheBytes+bytes>MAX_CACHE_BYTES){
+    const oldest=cache.keys().next().value;
+    if(oldest===undefined)break;
+    cacheBytes-=cache.get(oldest)!.bytes;
+    cache.delete(oldest);
+  }
+  cache.set(key,{at:Date.now(),result,bytes});
+  cacheBytes+=bytes;
+};
 const inFlight = new Map<string,Promise<Result>>();
 
 /** Shared requests per browser tab; even 20 Terminal charts showing the same
@@ -52,8 +70,7 @@ export async function fetchSharedObservedHeatmap(
   inFlight.set(key,task);
   try {
     const result=await task;
-    if(cache.size>=40)cache.delete(cache.keys().next().value!);
-    cache.set(key,{at:Date.now(),result});
+    putCache(key,result);
     return result;
   }finally{
     if(inFlight.get(key)===task)inFlight.delete(key);
