@@ -48,12 +48,14 @@ export async function fetchHookChartFunding(
       fetchSharedChartJson(`${BINANCE_FUTURES_API}/fapi/v1/premiumIndex?symbol=${encodeURIComponent(symbol)}`),
       refreshHistory
         ? fetchSharedChartJson(`${BINANCE_FUTURES_API}/fapi/v1/fundingRate?symbol=${encodeURIComponent(symbol)}&limit=100`, 'funding-history')
+          .catch(() => null) // Optional history must not invalidate a fresh rate.
         : Promise.resolve(null),
     ]);
     return {
       rate: premium?.lastFundingRate == null ? Number.NaN : Number(premium.lastFundingRate),
-      history: refreshHistory ? (Array.isArray(history) ? history : [])
-        .map((row: any) => Number(row.fundingRate)).filter(Number.isFinite) : undefined,
+      history: refreshHistory && Array.isArray(history)
+        ? history.map((row: any) => Number(row.fundingRate)).filter(Number.isFinite)
+        : undefined,
       nextFundingAt: Number(premium?.nextFundingTime),
     };
   }
@@ -61,13 +63,15 @@ export async function fetchHookChartFunding(
     fetchSharedChartJson(`${BYBIT_API}/v5/market/tickers?category=linear&symbol=${encodeURIComponent(symbol)}`),
     refreshHistory
       ? fetchSharedChartJson(`${BYBIT_API}/v5/market/funding/history?category=linear&symbol=${encodeURIComponent(symbol)}&limit=100`, 'funding-history')
+        .catch(() => null) // Rate and historical endpoint have separate reliability.
       : Promise.resolve(null),
   ]);
   const value = ticker?.result?.list?.[0]?.fundingRate;
   return {
     rate: ticker?.retCode === 0 && value != null ? Number(value) : Number.NaN,
-    history: refreshHistory ? (history?.result?.list || [])
-      .map((row: any) => Number(row.fundingRate)).filter(Number.isFinite) : undefined,
+    history: refreshHistory && history?.retCode === 0 && Array.isArray(history?.result?.list)
+      ? history.result.list.map((row: any) => Number(row.fundingRate)).filter(Number.isFinite)
+      : undefined,
     nextFundingAt: Number(ticker?.result?.list?.[0]?.nextFundingTime),
   };
 }
@@ -103,7 +107,10 @@ export function createSharedFundingSubscriptions(loader: Loader = fetchHookChart
         try {
           const packet = await loader(exchange, symbol.trim().toUpperCase(), refreshHistory);
           if (current.stopped || entries.get(key) !== current) return;
-          const history = refreshHistory ? packet.history ?? [] : current.snapshot.history;
+          // A historical rate-limit/error must not erase the last valid
+          // series, nor postpone the next attempt for fifteen minutes.
+          const history = refreshHistory && packet.history !== undefined
+            ? packet.history : current.snapshot.history;
           const nextHistory = equalHistory(current.snapshot.history, history) ? current.snapshot.history : history;
           if (!Object.is(current.snapshot.rate, packet.rate) || nextHistory !== current.snapshot.history) {
             current.snapshot = Object.freeze({ rate: packet.rate, history: nextHistory });
@@ -111,9 +118,16 @@ export function createSharedFundingSubscriptions(loader: Loader = fetchHookChart
               try { subscriber(current.snapshot); } catch { /* one chart must not interrupt another */ }
             }
           }
-          if (refreshHistory) current.lastHistoryFetchAt = clock.now();
-          if (Number.isFinite(packet.nextFundingAt) && packet.nextFundingAt! > clock.now())
+          if (refreshHistory && packet.history !== undefined)
+            current.lastHistoryFetchAt = clock.now();
+          if (Number.isFinite(packet.nextFundingAt) && packet.nextFundingAt! > clock.now()) {
             current.nextFundingAt = packet.nextFundingAt!;
+          } else if (refreshHistory && packet.history !== undefined &&
+                     current.nextFundingAt > 0 && current.nextFundingAt <= clock.now()) {
+            // After settlement, an API response without a new settlement time
+            // must not force an identical history download every minute.
+            current.nextFundingAt = 0;
+          }
         } catch {
           if (current.stopped || entries.get(key) !== current) return;
           if (!Number.isNaN(current.snapshot.rate) || current.snapshot.history.length) {
