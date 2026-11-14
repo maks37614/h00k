@@ -43,6 +43,6 @@ test('installer and settings consistently present the h00k Desktop name', () => 
   for (const strings of Object.values(translations)) {
     assert.match(strings.welcome, /h00k Desktop/);
   }
-  assert.match(assets, /WINDOWS<\/text>/);
+  assert.match(assets, /uninstall\?'UNINSTALL':'WINDOWS'/); // distinct robot sidebars
   assert.equal(pkg.build.productName, 'h00k Desktop');
 });
