@@ -702,7 +702,7 @@ async function startServer() {
         return res.status(503).json({ success: false, error: 'Не вдалося зберегти монету. Спробуйте пізніше.' });
       surveillanceManager.startWorkerForCoin(newCoin);
       const { coin: checkedCoin } = await checkCoinSurveillance(newCoin, true);
-      if (!hasFreshSurveillanceCheck(newCoin, checkedCoin))
+      if (!hasFreshSurveillanceCheck({ lastCheckedAt: undefined }, checkedCoin))
         return res.status(202).json({ success: true, pending: true, coin: newCoin,
           message: 'Монету збережено в нагляді. Очікуємо актуальні свічки біржі.' });
       const committed = commitSurveillanceCheck(checkedCoin);
