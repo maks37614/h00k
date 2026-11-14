@@ -23,6 +23,7 @@ import {
   createAlertsBatch,
   deleteAlert,
   toggleAlert,
+  AlertDispatchPendingError,
   clearTriggeredAlerts,
   syncUserAlerts,
   getAlertHistory,
@@ -690,6 +691,8 @@ async function startServer() {
       }
       res.json({ success: true, alert });
     } catch (err: any) {
+      if (err instanceof AlertDispatchPendingError)
+        return res.status(409).setHeader('Retry-After', '5').json({ success: false, error: err.message });
       res.status(500).json({ success: false, error: err.message });
     }
   });
