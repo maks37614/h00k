@@ -282,6 +282,8 @@ export const TerminalChartWidget: React.FC<TerminalChartWidgetProps> = ({
   const headerPriceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const instrumentKey = `${block.exchange}:${block.marketType}:${block.symbol}`;
   const previousInstrumentRef = useRef(instrumentKey);
+  const activeInstrumentRef = useRef(instrumentKey);
+  activeInstrumentRef.current = instrumentKey;
   useEffect(() => {
     if (previousInstrumentRef.current === instrumentKey) return;
     previousInstrumentRef.current = instrumentKey;
@@ -294,6 +296,8 @@ export const TerminalChartWidget: React.FC<TerminalChartWidgetProps> = ({
     setLivePrice(nextPrice ?? 0);
   }, [instrumentKey, coin?.currentPrice]);
   const handleChartPrice = useCallback((price: number) => {
+    // Late data from an unmounted/replaced chart must not update the next coin.
+    if (activeInstrumentRef.current !== instrumentKey) return;
     if (!Number.isFinite(price) || price <= 0) return;
     pendingHeaderPriceRef.current = price;
     if (headerPriceTimerRef.current !== null) return;
@@ -306,7 +310,7 @@ export const TerminalChartWidget: React.FC<TerminalChartWidgetProps> = ({
       setCurrentPrice(previous => previous === latest ? previous : latest);
       setLivePrice(previous => previous === latest ? previous : latest);
     }, 250);
-  }, []);
+  }, [instrumentKey]);
   useEffect(() => () => {
     if (headerPriceTimerRef.current !== null) clearTimeout(headerPriceTimerRef.current);
     headerPriceTimerRef.current = null;
