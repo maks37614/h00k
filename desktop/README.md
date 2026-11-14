@@ -297,9 +297,9 @@ npm install
 npm test
 npm run dist
 node installer/prepare.cjs
-npm install --prefix installer
 npm test --prefix installer
-npm run dist --prefix installer
+# GitHub Actions stages the launcher outside the parent npm project
+# and runs installer/build-isolated.ps1 on Windows.
 ```
 
 GitHub Actions performs these steps, verifies the original NSIS installer
@@ -315,3 +315,10 @@ This launcher does not silently elevate privileges or intercept credentials.
 **Manual verification remaining:** actual pointer/eye motion and walking
 frame pacing on Windows 10 and 11 with high-DPI screens; unplugged/secondary
 monitors, reopening Quick Start and visual line wrapping in all languages.
+
+**Build isolation:** the animated setup is staged in RUNNER_TEMP before
+packaging because electron-builder otherwise includes a nested copy of the
+parent h00k project and a duplicate NSIS executable. CI rejects duplicate
+workers and a launcher app.asar larger than 30MB. Use the Windows CI workflow
+for this reproducible packaging path; do not run electron-builder from the
+nested installer folder in an unisolated checkout.
