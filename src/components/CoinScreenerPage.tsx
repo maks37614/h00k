@@ -36,6 +36,7 @@ import {
   MarketType,
   MarketCoin,
   ScreenerPresetFilter,
+  ScreenerSearchConfig,
   ScreenerSortBy,
   ScannedCoin,
   DetectedFormation,
@@ -52,7 +53,7 @@ import { matchesExchangeInstrumentSearch } from '../utils/marketSymbols';
 import { isVolumeWithinCap, type ScreenerVolumeMode } from '../utils/screenerVolume';
 import { ScreenerVolumeDropdown } from './ScreenerVolumeDropdown';
 import { ScreenerSortDropdown } from './ScreenerSortDropdown';
-import { compareScreenerSearchCoins, effectiveScreenerSearchConfig, normalizeScreenerSearchSettings } from '../utils/screenerSearchSettings';
+import { compareScreenerSearchCoins, effectiveScreenerSearchConfig, matchesAdvancedScreenerFilters, normalizeScreenerSearchSettings } from '../utils/screenerSearchSettings';
 import { ScreenerCopySymbolButton } from './ScreenerCopySymbolButton';
 import { isCoinInWatchlist, type CoinIdentifier } from '../utils/watchlistUtils';
 
@@ -105,6 +106,7 @@ const screenerUiSession = new Map<string, {
   marketType: 'all' | MarketType;
   maxVolumeUsd: number;
   volumeMode: ScreenerVolumeMode;
+  advancedFilters: ScreenerSearchConfig;
   sortBy: ScreenerSortBy;
   sortOrder: 'asc' | 'desc';
   secondarySortBy: ScreenerSortBy | 'none';
@@ -165,6 +167,7 @@ export const CoinScreenerPage: React.FC<CoinScreenerPageProps> = ({
   // 0 means unlimited; positive thresholds include the selected value in both directions.
   const [maxVolumeUsd, setMaxVolumeUsd] = useState<number>(() => cachedUi?.maxVolumeUsd ?? initialSearch.maxVolumeUsd);
   const [volumeMode, setVolumeMode] = useState<ScreenerVolumeMode>(() => cachedUi?.volumeMode ?? initialSearch.volumeMode);
+  const [advancedFilters, setAdvancedFilters] = useState<ScreenerSearchConfig>(() => cachedUi?.advancedFilters ?? initialSearch);
   const [sortBy, setSortBy] = useState<ScreenerSortBy>(() => cachedUi?.sortBy ?? initialSearch.sortBy);
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>(() => cachedUi?.sortOrder ?? initialSearch.sortOrder);
   const [secondarySortBy, setSecondarySortBy] = useState<ScreenerSortBy | 'none'>(() => cachedUi?.secondarySortBy ?? initialSearch.secondarySortBy);
@@ -210,6 +213,7 @@ export const CoinScreenerPage: React.FC<CoinScreenerPageProps> = ({
     setMarketType(config.marketType);
     setMaxVolumeUsd(config.maxVolumeUsd);
     setVolumeMode(config.volumeMode);
+    setAdvancedFilters(config);
     setSortBy(config.sortBy);
     setSortOrder(config.sortOrder);
     setSecondarySortBy(config.secondarySortBy);
@@ -231,10 +235,10 @@ export const CoinScreenerPage: React.FC<CoinScreenerPageProps> = ({
 
   useEffect(() => {
     screenerUiSession.set(user?.uid || 'guest', {
-      presetFilter, searchQuery, exchange, marketType, maxVolumeUsd, volumeMode, sortBy,
+      presetFilter, searchQuery, exchange, marketType, maxVolumeUsd, volumeMode, advancedFilters, sortBy,
       sortOrder, secondarySortBy, secondarySortOrder, viewMode, displayLimit,
     });
-  }, [user?.uid, presetFilter, searchQuery, exchange, marketType, maxVolumeUsd, volumeMode,
+  }, [user?.uid, presetFilter, searchQuery, exchange, marketType, maxVolumeUsd, volumeMode, advancedFilters,
     sortBy, sortOrder, secondarySortBy, secondarySortOrder, viewMode, displayLimit]);
 
   const currentRequest = useRef<{ key: string; controller: AbortController } | null>(null);
@@ -341,7 +345,9 @@ export const CoinScreenerPage: React.FC<CoinScreenerPageProps> = ({
       // Apply an inclusive ceiling or floor to already loaded 24-hour volume values.
       if (!isVolumeWithinCap(coin.volumeUsd, maxVolumeUsd, volumeMode)) return false;
 
-      return matchesMarketPreset(coin, presetFilter);
+      if (!matchesMarketPreset(coin, presetFilter)) return false;
+      const formationKey = `${coin.exchange}_${coin.symbol}_${coin.marketType}`.toUpperCase();
+      return matchesAdvancedScreenerFilters(coin, advancedFilters, formationsMap.get(formationKey));
     });
 
     // Multi-priority sorting uses only the quotes already in memory.
@@ -350,7 +356,8 @@ export const CoinScreenerPage: React.FC<CoinScreenerPageProps> = ({
     }));
 
     return result;
-  }, [coins, searchQuery, exchange, marketType, maxVolumeUsd, volumeMode, presetFilter, sortBy, sortOrder, secondarySortBy, secondarySortOrder]);
+  }, [coins, searchQuery, exchange, marketType, maxVolumeUsd, volumeMode, presetFilter, advancedFilters, formationsMap,
+    sortBy, sortOrder, secondarySortBy, secondarySortOrder]);
 
   // Market stats calculated from all coins
   const marketStats = useMemo(() => {
