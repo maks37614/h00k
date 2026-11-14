@@ -4,7 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
 import type { ScreenerSearchConfig, SearchUserSettings } from '../../types';
 import { getStoredPreferences } from '../../utils/userPreferences';
-import { SCREENER_VOLUME_CAPS } from '../../utils/screenerVolume';
+import { SCREENER_VOLUME_CAPS, preferredVolumeSortOrder } from '../../utils/screenerVolume';
 import {
   MAX_SCREENER_SEARCH_PRESETS, SCREENER_SEARCH_SORT_OPTIONS,
   normalizeScreenerSearchConfig, normalizeScreenerSearchSettings,
@@ -58,7 +58,17 @@ export function ProfileScreenerSearchSettings() {
   }, [user?.uid, profile?.uid]);
 
   const setField = <K extends keyof ScreenerSearchConfig>(key: K, value: ScreenerSearchConfig[K]) => {
-    setDraft(previous => normalizeScreenerSearchConfig({ ...previous, [key]: value }, fallback));
+    setDraft(previous => {
+      const next = { ...previous, [key]: value };
+      // Keep the profile editor consistent with the Screener's volume filter:
+      // changing the threshold or direction shows the closest matching coins first.
+      // Explicit manual changes to sortOrder remain available.
+      if ((key === 'volumeMode' || key === 'maxVolumeUsd' || (key === 'sortBy' && value === 'volume'))
+        && next.sortBy === 'volume') {
+        next.sortOrder = preferredVolumeSortOrder(next.volumeMode);
+      }
+      return normalizeScreenerSearchConfig(next, fallback);
+    });
     setMessage('');
   };
 
@@ -189,22 +199,31 @@ export function ProfileScreenerSearchSettings() {
         <div className={label}>
           <span>{t('screenerVolume24h')}</span>
           <div className="flex min-w-0 items-center gap-2">
-            <button type="button"
-              aria-label={draft.volumeMode === 'to' ? 'Змінити обсяг на Від' : 'Змінити обсяг на До'}
-              title="Перемкнути граничний обсяг між До та Від"
-              onClick={() => setField('volumeMode', draft.volumeMode === 'to' ? 'from' : 'to')}
-              className="flex shrink-0 items-center gap-1 rounded-lg border border-slate-700 bg-slate-950 px-2.5 py-2.5 text-sm text-cyan-300 hover:border-cyan-500 focus:outline-none focus-visible:ring-1 focus-visible:ring-cyan-500">
-              {draft.volumeMode === 'to' ? <ArrowDownToLine size={16} /> : <ArrowUpToLine size={16} />}
-              <span>{draft.volumeMode === 'to' ? t('screenerVolumeTo') : t('screenerVolumeFrom')}</span>
-            </button>
             <select aria-label="Межа обсягу за 24 години" className={control} value={draft.maxVolumeUsd}
               onChange={event => setField('maxVolumeUsd', Number(event.target.value))}>
               <option value={0}>{t('screenerVolumeUnlimited')}</option>
+              {draft.maxVolumeUsd > 0 && !SCREENER_VOLUME_CAPS.some(option => option.value === draft.maxVolumeUsd) && (
+                <option value={draft.maxVolumeUsd}>
+                  {draft.volumeMode === 'from' ? '≥' : '≤'} ${new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 2 }).format(draft.maxVolumeUsd)}
+                </option>
+              )}
               {SCREENER_VOLUME_CAPS.map(option => <option key={option.value} value={option.value}>
-                {option.label.replace(/^До /, `${draft.volumeMode === 'from' ? t('screenerVolumeFrom') : t('screenerVolumeTo')} `)}
+                {draft.volumeMode === 'from' ? '≥' : '≤'} {option.label.replace(/^До /, '')}
               </option>)}
             </select>
+            <button type="button"
+              aria-label={draft.volumeMode === 'to' ? 'Перемкнути обсяг на Від (≥)' : 'Перемкнути обсяг на До (≤)'}
+              aria-pressed={draft.volumeMode === 'from'}
+              title={draft.volumeMode === 'to' ? 'До вибраного обсягу включно (≤). Перемкнути на Від.' : 'Від вибраного обсягу включно (≥). Перемкнути на До.'}
+              onClick={() => setField('volumeMode', draft.volumeMode === 'to' ? 'from' : 'to')}
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-slate-700 bg-slate-950 text-cyan-300 hover:border-cyan-500 focus:outline-none focus-visible:ring-1 focus-visible:ring-cyan-500">
+              {draft.volumeMode === 'to' ? <ArrowDownToLine size={16} /> : <ArrowUpToLine size={16} />}
+            </button>
           </div>
+          <p className="text-[11px] font-normal leading-relaxed text-slate-400">
+            {draft.volumeMode === 'from' ? '≥ — від вибраної суми включно' : '≤ — до вибраної суми включно'}.
+            {draft.sortBy === 'volume' ? ' Найближчі до межі монети показуються першими, якщо не змінити порядок вручну.' : ''}
+          </p>
         </div>
         <div className="col-span-full space-y-4 rounded-xl border border-cyan-500/20 bg-slate-900/40 p-3 sm:p-4">
           <div>
