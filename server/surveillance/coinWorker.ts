@@ -262,7 +262,7 @@ export class CoinWorker {
     // same exchange:market:symbol and identical OHLCV snapshot. Personal rules,
     // thresholds, third-touch state, DOM mode and notification history stay local.
     const shared = sharedMarketAnalysis.get(
-      `${this.coin.exchange}:${this.coin.marketType}:${this.coin.symbol}`,
+      `${this.coin.exchange}:${this.coin.marketType}:${normalizeExchangeSymbol(this.coin.symbol)}`,
       this.candleFeed.fingerprint(),
       () => ({
         structures: this.mtfEngine.getMultiTimeframeStructures(price),
