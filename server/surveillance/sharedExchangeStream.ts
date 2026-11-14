@@ -121,7 +121,14 @@ export class SharedExchangeStreamHandle {
         // Keep validated arrays available to synchronous per-owner listeners
         // of this exact EventEmitter packet. A new event replaces this record,
         // even if its object identity is reused by an upstream adapter.
-        shared.normalizedDepth = { packet: delta, levels: { bids, asks } };
+        const validated = { packet: delta, levels: { bids, asks } };
+        shared.normalizedDepth = validated;
+        // Cached data exists only for this synchronous EventEmitter fanout.
+        // A delayed consumer or a reused/mutated upstream packet must parse
+        // again rather than trust the previous event's numeric values.
+        queueMicrotask(() => {
+          if (shared.normalizedDepth === validated) shared.normalizedDepth = null;
+        });
         // Never build a late-joiner's "fresh" snapshot by applying new
         // deltas to a stale pre-outage book. The source must re-snapshot first.
         if (shared.depthSequence > 0 &&
