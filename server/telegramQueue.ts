@@ -29,41 +29,39 @@ export class TelegramDispatchQueue {
     this.queued++;
     const chatKey = JSON.stringify([botId, chatId]);
     const previousChat = this.chatDeliveryTails.get(chatKey) ?? Promise.resolve();
-    const previousAdmission = this.botAdmissionTails.get(botId) ?? Promise.resolve();
     const requestedAt = this.now();
 
-    // Only the START of a send is paced, not the full HTTP response. The
-    // admission chain waits for the next slot and then releases the next
-    // different chat while this one may still be waiting on Telegram.
-    const admitted = previousAdmission.catch(() => {}).then(async () => {
-      const now = this.now();
-      const botWait = Math.max(0, (this.nextBotAt.get(botId) ?? 0) - now);
-      const chatWait = Math.max(0, (this.nextChatAt.get(chatKey) ?? 0) - now);
-      const wait = Math.max(botWait, chatWait);
-      if (wait > 0) await this.sleep(wait);
-      const at = this.now();
-      this.nextBotAt.set(botId, at + this.botGapMs);
-      this.nextChatAt.set(chatKey, at + this.chatGapMs);
-      this.lastAdmissionWaitMs = Math.max(0, at - requestedAt);
-      // Bound retained destinations; active chats are kept separately in
-      // chatDeliveryTails and are not affected by pruning old timestamps.
-      if (this.nextChatAt.size > 6000) {
-        for (const [key, deadline] of this.nextChatAt) {
-          if (deadline < at - this.chatGapMs) this.nextChatAt.delete(key);
+    const work = previousChat.catch(() => {}).then(async () => {
+      // A second send to one chat must first wait for its earlier HTTP send
+      // to finish. Only THEN enter the bot's reservation queue: otherwise a
+      // pending slow same-chat send could block or burst other chat starts.
+      const previousAdmission = this.botAdmissionTails.get(botId) ?? Promise.resolve();
+      const admitted = previousAdmission.catch(() => {}).then(async () => {
+        const now = this.now();
+        const botWait = Math.max(0, (this.nextBotAt.get(botId) ?? 0) - now);
+        const chatWait = Math.max(0, (this.nextChatAt.get(chatKey) ?? 0) - now);
+        const wait = Math.max(botWait, chatWait);
+        if (wait > 0) await this.sleep(wait);
+        const at = this.now();
+        this.nextBotAt.set(botId, at + this.botGapMs);
+        this.nextChatAt.set(chatKey, at + this.chatGapMs);
+        this.lastAdmissionWaitMs = Math.max(0, at - requestedAt);
+        // Bound metadata, not any active chat's FIFO delivery state.
+        if (this.nextChatAt.size > 6000) {
+          for (const [key, deadline] of this.nextChatAt) {
+            if (deadline < at - this.chatGapMs) this.nextChatAt.delete(key);
+          }
         }
-      }
-    });
-    const safeAdmission = admitted.then(() => {}, () => {});
-    this.botAdmissionTails.set(botId, safeAdmission);
-    void safeAdmission.then(() => {
-      if (this.botAdmissionTails.get(botId) === safeAdmission)
-        this.botAdmissionTails.delete(botId);
-    });
-
-    const work = admitted.then(async () => {
-      // Telegram messages for one chat cannot overtake an earlier slow send,
-      // even when that send exceeds the nominal 1.1s per-chat spacing.
-      await previousChat.catch(() => {});
+      });
+      // Reserve the next start slot for the same bot; free it immediately
+      // after admission, not after a potentially 10-second HTTP response.
+      const safeAdmission = admitted.then(() => {}, () => {});
+      this.botAdmissionTails.set(botId, safeAdmission);
+      void safeAdmission.then(() => {
+        if (this.botAdmissionTails.get(botId) === safeAdmission)
+          this.botAdmissionTails.delete(botId);
+      });
+      await admitted;
       this.inFlight++;
       try { return await dispatch(); }
       finally { this.inFlight--; }
