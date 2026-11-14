@@ -23,6 +23,7 @@ export const DEFAULT_SCREENER_SEARCH_CONFIG: ScreenerSearchConfig = {
   exchange: 'all',
   marketType: 'futures',
   maxVolumeUsd: 0,
+  volumeMode: 'to',
   presetFilter: 'all',
   sortBy: 'volume',
   sortOrder: 'desc',
@@ -57,6 +58,7 @@ export function normalizeScreenerSearchConfig(
       ? raw.marketType as 'all' | MarketType : base.marketType,
     maxVolumeUsd: typeof raw.maxVolumeUsd === 'number' && Number.isFinite(raw.maxVolumeUsd)
       ? Math.max(0, Math.min(1_000_000_000_000_000, raw.maxVolumeUsd)) : base.maxVolumeUsd,
+    volumeMode: raw.volumeMode === 'from' || raw.volumeMode === 'to' ? raw.volumeMode : base.volumeMode,
     presetFilter: presetFilters.includes(raw.presetFilter as ScreenerPresetFilter)
       ? raw.presetFilter as ScreenerPresetFilter : base.presetFilter,
     sortBy,
