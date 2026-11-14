@@ -13,7 +13,7 @@ test('unimplemented settings are visibly unavailable while operational chart con
   const dom = new JSDOM(html);
   const document = dom.window.document;
   const unavailable = [...document.querySelectorAll('fieldset[disabled]')];
-  assert.equal(unavailable.length, 12, 'two unavailable level controls moved from Basic to Levels');
+  assert.equal(unavailable.length, 10, 'removed both unavailable Data and Sorting controls');
   for (const fieldset of unavailable) {
     assert.match(fieldset.closest('.settingRow')!.textContent!, /Ще не реалізовано/);
     for (const control of fieldset.querySelectorAll('input,button,select')) assert.equal(control.matches(':disabled'), true);
