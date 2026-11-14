@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { ExchangeStreamClient } from '../server/surveillance/exchangeStream';
 import { acquireExchangeStream } from '../server/surveillance/sharedExchangeStream';
 import { CoinWorker } from '../server/surveillance/coinWorker';
@@ -79,4 +80,14 @@ test('Binance stale/untimestamped public ticker and trades are not accepted as l
     assert.deepEqual(prices,[100]);
     assert.deepEqual(trades,[102]);
   } finally {source.destroy();}
+});
+
+test('setup notifications revalidate current market price after asynchronous BTC context',()=>{
+  const worker=readFileSync(new URL('../server/surveillance/coinWorker.ts',import.meta.url),'utf8');
+  const from=worker.indexOf('const btcContext = await this.macroEngine.updateBTCContext()');
+  const to=worker.indexOf('// 8. Setup Detection',from);
+  assert.ok(from>0 && to>from);
+  const guarded=worker.slice(from,to);
+  assert.match(guarded,/!this\.streamClient\.hasFreshMarketQuote\(\)/);
+  assert.match(guarded,/this\.currentPrice !== price/);
 });
