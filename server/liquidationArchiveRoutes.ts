@@ -20,7 +20,27 @@ export function installLiquidationArchiveRoutes(app: Express) {
   // after VPS downtime; subsequent checks do not affect normal HookChart Liq.
   liquidationArchive.startMonthlyMaintenance();
 
-  const cached = new Map<string, { at: number; data: Payload }>();
+  // 8 MiB serialized-data ceiling (heap usage is higher and engine-specific).
+  // Never let hundreds of different enabled chart maps grow an unbounded RAM
+  // cache; these are reusable only while someone is viewing the map.
+  const MAX_CACHE_BYTES = 8 * 1024 * 1024;
+  let cacheBytes = 0;
+  const cached = new Map<string, { at: number; data: Payload; bytes: number }>();
+  const putCache = (key: string, data: Payload) => {
+    const bytes = Buffer.byteLength(JSON.stringify(data), 'utf8');
+    const previous = cached.get(key);
+    if (previous) { cacheBytes -= previous.bytes; cached.delete(key); }
+    // Large maps are still served, but not kept in shared server RAM.
+    if (bytes > MAX_CACHE_BYTES) return;
+    while (cached.size >= 40 || cacheBytes + bytes > MAX_CACHE_BYTES) {
+      const oldest = cached.keys().next().value;
+      if (oldest === undefined) break;
+      cacheBytes -= cached.get(oldest)!.bytes;
+      cached.delete(oldest);
+    }
+    cached.set(key, { at: Date.now(), data, bytes });
+    cacheBytes += bytes;
+  };
   const inflight = new Map<string, Promise<Payload>>();
   const throttles = new Map<string, { at: number; count: number }>();
 
@@ -68,8 +88,7 @@ export function installLiquidationArchiveRoutes(app: Express) {
     }
     try {
       const result = await job;
-      cached.set(key,{at:Date.now(),data:result});
-      if (cached.size > 100) cached.delete(cached.keys().next().value!);
+      putCache(key, result);
       res.set('Cache-Control','public, max-age=20');
       res.json({ success:true, data:result });
     } catch {
