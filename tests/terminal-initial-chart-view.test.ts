@@ -368,3 +368,15 @@ test('auto-updating market presets preserve an enlarged chart unless that block 
   assert.match(page, /if \(maximizedBlockId !== null && !blocks\.some\(block => block\.id === maximizedBlockId\)\)/);
   assert.match(page, /setMaximizedBlockId\(null\)/);
 });
+
+test('identical 30-second market snapshots do not reapply the preset page twice', () => {
+  const page = source('../src/components/TerminalPage.tsx');
+  const start = page.indexOf('const handleApplyMarketCoins = useCallback(');
+  const end = page.indexOf('const handleActiveMarketPresetChange =', start);
+  assert.ok(start >= 0 && end > start);
+  const handler = page.slice(start, end);
+  assert.match(handler, /current\.length === selected\.length/);
+  assert.match(handler, /current\.every\(\(coin, index\) => coinMarketKey\(coin\) === coinMarketKey\(selected\[index\]\)\)/);
+  assert.match(handler, /\? current : selected/);
+  assert.match(handler, /applyPresetPage\(selected, presetPageRef\.current\)/);
+});
