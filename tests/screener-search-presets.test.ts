@@ -92,3 +92,14 @@ test('profile search settings are confined to coin Screener and legacy HookChart
   assert.match(screener, /result\.sort\(\(a, b\) => compareScreenerSearchCoins/);
   assert.doesNotMatch(hook, /Дані та сортування|Типи та порядок сортування|Інтервали аналізу/);
 });
+
+test('account switching and failed preset writes cannot leak search settings', () => {
+  const app = source('../src/App.tsx');
+  const editor = source('../src/components/profile/ProfileScreenerSearchSettings.tsx');
+  const screener = source('../src/components/CoinScreenerPage.tsx');
+  assert.match(app, /<CoinScreenerPage\s+key=\{user\?\.uid \|\| 'guest'\}/);
+  assert.match(editor, /await updateProfileData\(\{ searchSettings:/);
+  assert.match(editor, /if \(saved\) setEditingId\(id\)/);
+  assert.match(editor, /return false;/);
+  assert.match(screener, /const cachedUi = screenerUiSession\.get\(user\?\.uid \|\| 'guest'\)/);
+});
