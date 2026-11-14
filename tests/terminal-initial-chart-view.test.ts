@@ -66,7 +66,7 @@ test('initial terminal view is stored in existing profile workspace, not a new g
   const page = source('../src/components/TerminalPage.tsx');
   assert.match(types, /initialChartView\?: VisualChartProfile/);
   assert.match(hook, /config\.initialChartView = normalizeVisualProfile\(config\.initialChartView, 'terminalMedium'\)/);
-  assert.match(hook, /terminalSettings:/);
+  assert.match(hook, /auth\.updateTerminalWorkspace\(\{/);
   assert.match(page, /terminalInitialView=\{config\.initialChartView\}/);
   assert.match(page, /<TerminalSettingsDrawer/);
 });
