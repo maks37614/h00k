@@ -327,7 +327,11 @@ test('Terminal increments save revisions only for committed React workspaces', (
   assert.ok(updaterEnd > 0);
   assert.doesNotMatch(updates.slice(0, updaterEnd), /revision\.current \+= 1/);
   assert.match(updates, /if \(lastCommittedWorkspace\.current === workspace\) return/);
-  assert.match(updates, /if \(skipHydrationCommit\.current\)/);
+  assert.match(updates, /const isPureHydration = hydrationWorkspaceRef\.current === workspace/);
+  assert.match(updates, /if \(!isPureHydration\) revision\.current \+= 1/);
+  assert.match(hook, /hydrationWorkspaceRef\.current = hydratedWorkspace/);
+  assert.doesNotMatch(hook, /skipHydrationCommit/,
+    'hydration must not suppress a concurrent user edit batched into the same commit');
   assert.match(updates, /revision\.current \+= 1/);
   assert.match(hook, /revision\.current === savedRevision\.current/);
   assert.match(hook, /lastCommittedWorkspace\.current !== workspace/);
