@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { preparePersonalStateRows, STATE_MIGRATION_CHUNK } from '../server/pgPersonalState';
+import { preparePersonalStateRows, STATE_MIGRATION_CHUNK,
+ personalStateSnapshotDigest, DEFAULT_PERSONAL_STATE_STAGE_KEY } from '../server/pgPersonalState';
 
 test('staging skips guest, former-user, malformed state, and preserves valid per-user rows',()=>{
  const snap={
@@ -29,9 +30,24 @@ test('staging is idempotent, atomic and does not replace JSON canonical state',(
  assert.match(code,/await client.query\('BEGIN'\)/);
  assert.match(code,/await client.query\('ROLLBACK'\)/);
  assert.match(code,/pg_advisory_xact_lock/);
+ assert.match(code,/IS NOT DISTINCT FROM EXCLUDED/);
+ assert.match(code,/PostgreSQL staging conflict/);
+ assert.match(code,/snapshot_sha256 FROM h00k_personal_state_staging_runs/);
+ assert.match(sql,/CREATE TABLE IF NOT EXISTS h00k_personal_state_staging_runs/);
+ assert.match(cli,/stagedSnapshotMatches/);
  for(const name of ['h00k_surveillance_state','h00k_price_alert_state','h00k_alert_history_state']) {
   assert.match(sql,new RegExp('CREATE TABLE IF NOT EXISTS '+name));
  }
  assert.match(cli,/liveCutover:false/);
  assert.match(cli,/Specify exactly --dry-run or --apply/);
+});
+
+test('snapshot fingerprint is stable for exact replays and changes for altered inputs',()=>{
+ const original={surveillance:{a:[]},alerts:[{id:'alert'}],history:[]} as any;
+ const digest=personalStateSnapshotDigest(original);
+ assert.match(digest,/^[0-9a-f]{64}$/);
+ assert.equal(personalStateSnapshotDigest(structuredClone(original)),digest);
+ original.alerts[0].id='changed-alert';
+ assert.notEqual(personalStateSnapshotDigest(original),digest);
+ assert.equal(DEFAULT_PERSONAL_STATE_STAGE_KEY,'legacy-json');
 });
