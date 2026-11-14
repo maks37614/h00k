@@ -173,3 +173,21 @@ test('Terminal preserves actual quote timestamp instead of claiming every refres
   assert.match(page, /timeframe: preferences\.defaultTimeframe, lastUpdated: marketSnapshot\.timestamp \?\? 0/);
   assert.match(page, /\[marketCoins, marketSnapshot\.timestamp, formationCoins, preferences\.defaultTimeframe\]/);
 });
+
+test('favorite click is visible in multi-chart mode and never wipes existing charts', () => {
+  const page = source('../src/components/TerminalPage.tsx');
+  const start = page.indexOf('const handleSelectFavoriteCoin =');
+  const end = page.indexOf('// Build TradingView Embed URL', start);
+  assert.ok(start >= 0 && end > start);
+  const handler = page.slice(start, end);
+  assert.match(handler, /setIsFavoritesDrawerOpen\(false\)/);
+  assert.match(handler, /if \(blocks\.length === 1\)/);
+  assert.match(handler, /setBlocks\(previous => previous\.map\(block => \(\{/);
+  assert.match(handler, /\.\.\.block, symbol: favCoin\.symbol/);
+  assert.match(handler, /const alreadyOpen = blocks\.find\(block => coinMarketKey\(block\) === coinMarketKey\(favCoin\)\)/);
+  assert.match(handler, /setMaximizedBlockId\(alreadyOpen\.id\)/);
+  assert.match(handler, /if \(blocks\.length >= MAX_TERMINAL_CHARTS\)/);
+  assert.match(handler, /setBlocks\(previous => previous\.length >= MAX_TERMINAL_CHARTS \? previous : \[\.\.\.previous, nextBlock\]\)/);
+  assert.doesNotMatch(handler, /setBlocks\(\[/, 'favorite selection must not discard the grid');
+  assert.match(page, /blocks\.some\(block => coinMarketKey\(block\) === coinMarketKey\(favCoin\)\)/);
+});
