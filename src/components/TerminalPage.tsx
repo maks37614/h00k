@@ -1315,6 +1315,7 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
         isOpen={isAddModalOpen}
         onClose={() => setIsAddModalOpen(false)}
         coins={coins}
+        terminalMarketCoins={marketCoins}
         watchlist={localWatchlist}
         onAddChart={handleAddChart}
       />
