@@ -1,5 +1,6 @@
 import { exchangeFetch, chartExchangeFetch } from './exchangeHttp';
 import { getVerifiedBtcContext } from './verifiedBtcContext';
+import { calculatePOC } from './estimatedPoc';
 import { ExchangeId, MarketType, Timeframe, Kline, SmartAnalysisData, DetectedFormation } from '../src/types';
 import { fetchKlines } from './marketService';
 import { fetchHookChartOIHistory } from './hookchartOI';
@@ -78,51 +79,6 @@ function calculateATR(klines: Kline[], period: number = 14): number {
   const slice = trs.slice(-period);
   if (slice.length === 0) return 0;
   return slice.reduce((a, b) => a + b, 0) / slice.length;
-}
-
-// Calculate Volume POC (Point of Control)
-function calculatePOC(klines: Kline[]): { pocPrice: number | null; pocVolumePct: number | null } {
-  if (klines.length < 10) return { pocPrice: null, pocVolumePct: null };
-
-  let minPrice = Infinity;
-  let maxPrice = -Infinity;
-  for (const k of klines) {
-    if (k.low < minPrice) minPrice = k.low;
-    if (k.high > maxPrice) maxPrice = k.high;
-  }
-
-  if (minPrice >= maxPrice || minPrice === Infinity) {
-    return { pocPrice: null, pocVolumePct: null };
-  }
-
-  const BINS = 24;
-  const binSize = (maxPrice - minPrice) / BINS;
-  const bins = new Array(BINS).fill(0);
-  let totalVol = 0;
-
-  for (const k of klines) {
-    const mid = (k.high + k.low + k.close) / 3;
-    const binIdx = Math.min(Math.max(Math.floor((mid - minPrice) / binSize), 0), BINS - 1);
-    bins[binIdx] += k.volume;
-    totalVol += k.volume;
-  }
-
-  let maxBinIdx = 0;
-  let maxBinVol = 0;
-  bins.forEach((vol, idx) => {
-    if (vol > maxBinVol) {
-      maxBinVol = vol;
-      maxBinIdx = idx;
-    }
-  });
-
-  const pocPrice = minPrice + (maxBinIdx + 0.5) * binSize;
-  if (totalVol <= 0 || maxBinVol <= 0) return { pocPrice: null, pocVolumePct: null };
-  const pocVolumePct = Math.round((maxBinVol / totalVol) * 100);
-  return {
-    pocPrice: Number(pocPrice.toPrecision(6)),
-    pocVolumePct,
-  };
 }
 
 // BTC structure is measured from the same confirmed exchange candles as charts,
