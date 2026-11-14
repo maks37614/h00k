@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { Server } from 'node:http';
 import WebSocket, { WebSocketServer } from 'ws';
+import { sharedLiquidationUpstreams } from './liquidationUpstreamPool';
 
 export type LiquidationRow = {
   id: string; side: 'LONG' | 'SHORT'; t: number; p: number; q: number; usd: number;
@@ -13,12 +14,19 @@ type Entry = {
   upstream: WebSocket | null; ping: ReturnType<typeof setInterval> | null;
   reconnect: ReturnType<typeof setTimeout> | null;
   failures: number; idleAt: number; lastEventAt: number;
+  pooledStop: (() => void) | null; pooledConnected: boolean;
 };
 const RETAIN_MS = 30 * 60_000;
 const MAX_ROWS = 1500;
-const IDLE_GRACE_MS = 30 * 60_000;
-const MAX_MARKETS = 64;
-const MAX_CLIENTS = 2000;
+// Stop an unused upstream after two minutes, but retain the rolling 30m history.
+const IDLE_GRACE_MS = 2 * 60_000;
+const MULTIPLEX_ENABLED = process.env.LIQ_MULTIPLEX_ENABLED !== '0';
+const envInt = (name: string, fallback: number, min: number, max: number) => {
+  const n = Number(process.env[name]);
+  return Number.isSafeInteger(n) && n >= min && n <= max ? n : fallback;
+};
+const MAX_MARKETS = MULTIPLEX_ENABLED ? envInt('LIQ_MARKET_CAP', 256, 64, 768) : 64;
+const MAX_CLIENTS = envInt('LIQ_CLIENT_CAP', 2000, 100, 5000);
 const STORE_FILE = path.join(process.cwd(), 'server', 'data', 'liquidations.json');
 const validSymbol = (symbol: string) => symbol.length <= 80 && /^[\p{L}\p{M}\p{N}]{3,80}$/u.test(symbol);
 
@@ -75,6 +83,8 @@ export class SharedLiquidationFeed {
   private counters = { upstreamConnections: 0, reconnects: 0, received: 0, duplicates: 0,
     rejectedClients: 0, savedSnapshots: 0, failedSaves: 0 };
   private writing: Promise<void> | null = null;
+  private revision = 0;
+  private savedRevision = 0;
 
   constructor() {
     try {
@@ -97,17 +107,23 @@ export class SharedLiquidationFeed {
   private makeEntry(exchange: Exchange, symbol: string, rows: LiquidationRow[] = []): Entry {
     return { key: `${exchange}:${symbol}`, exchange, symbol, rows, clients: new Set(),
       upstream: null, ping: null, reconnect: null, failures: 0,
-      idleAt: Date.now(), lastEventAt: rows.length ? Math.max(...rows.map(r => r.t)) : 0 };
+      idleAt: Date.now(), lastEventAt: rows.length ? Math.max(...rows.map(r => r.t)) : 0,
+      pooledStop: null, pooledConnected: false };
   }
 
   stats() {
     const all = [...this.entries.values()];
+    const upstreamPool = MULTIPLEX_ENABLED ? sharedLiquidationUpstreams.stats() : null;
     return { ...this.counters, activeMarkets: all.length,
-      connectedMarkets: all.filter(e => e.upstream?.readyState === WebSocket.OPEN).length,
+      mode: MULTIPLEX_ENABLED ? 'multiplex' : 'legacy',
+      maxMarkets: MAX_MARKETS, maxClients: MAX_CLIENTS, upstreamPool,
+      connectedMarkets: all.filter(e =>
+        e.pooledConnected || e.upstream?.readyState === WebSocket.OPEN).length,
       viewers: all.reduce((count, e) => count + e.clients.size, 0),
       storedEvents: all.reduce((count, e) => count + e.rows.length, 0),
       byInstrument: all.map(e => ({ source: e.key, viewers: e.clients.size,
-        connected: e.upstream?.readyState === WebSocket.OPEN, events: e.rows.length,
+        connected: e.pooledConnected || e.upstream?.readyState === WebSocket.OPEN,
+        events: e.rows.length,
         lastEventAt: e.lastEventAt || null })) };
   }
 
@@ -128,7 +144,9 @@ export class SharedLiquidationFeed {
 
   private prune(entry: Entry) {
     const cutoff = Date.now() - RETAIN_MS;
+    const count = entry.rows.length;
     entry.rows = entry.rows.filter(row => row.t >= cutoff).slice(-MAX_ROWS);
+    if (entry.rows.length !== count) this.revision++;
   }
 
   private onRows(entry: Entry, rows: LiquidationRow[]) {
@@ -143,12 +161,19 @@ export class SharedLiquidationFeed {
       } else entry.rows.push(row);
       entry.lastEventAt = Math.max(entry.lastEventAt, row.t);
       this.counters.received++;
+      this.revision++;
       this.broadcast(entry, { type: 'liquidation', event: row });
     }
     this.prune(entry);
   }
 
   private stopUpstream(entry: Entry) {
+    if (entry.pooledStop) {
+      const release = entry.pooledStop;
+      entry.pooledStop = null;
+      entry.pooledConnected = false;
+      release();
+    }
     if (entry.reconnect) clearTimeout(entry.reconnect);
     entry.reconnect = null;
     if (entry.ping) clearInterval(entry.ping);
@@ -159,6 +184,17 @@ export class SharedLiquidationFeed {
   }
 
   private connect(entry: Entry) {
+    if (MULTIPLEX_ENABLED) {
+      if (entry.pooledStop) return;
+      entry.pooledStop = sharedLiquidationUpstreams.subscribe(entry.exchange, entry.symbol, {
+        onPacket: packet => this.onRows(entry, parseLiquidations(entry.exchange, entry.symbol, packet)),
+        onStatus: connected => {
+          entry.pooledConnected = connected;
+          this.broadcast(entry, { type: 'status', connected });
+        },
+      });
+      return;
+    }
     if (entry.upstream || entry.reconnect) return;
     const url = liquidationUpstreamUrl(entry.exchange, entry.symbol);
     let socket: WebSocket;
@@ -219,7 +255,11 @@ export class SharedLiquidationFeed {
     if (!entry && this.entries.size >= MAX_MARKETS) {
       const idle = [...this.entries.values()].filter(e => !e.clients.size)
         .sort((a, b) => a.idleAt - b.idleAt)[0];
-      if (idle) { this.stopUpstream(idle); this.entries.delete(idle.key); }
+      if (idle) {
+        this.stopUpstream(idle);
+        this.entries.delete(idle.key);
+        this.revision++;
+      }
     }
     if (!entry && this.entries.size >= MAX_MARKETS) {
       this.counters.rejectedClients++;
@@ -235,12 +275,12 @@ export class SharedLiquidationFeed {
     // Profile notifications need only new events. Avoid sending up to 1,500
     // historical rows to every notification-only client on reconnect.
     if (liveOnly) {
-      this.send(client, { type: 'status', connected: entry.upstream?.readyState === WebSocket.OPEN });
+      this.send(client, { type: 'status', connected: entry.pooledConnected || entry.upstream?.readyState === WebSocket.OPEN });
     } else {
       this.send(client, { type: 'snapshot', events: entry.rows,
-        connected: entry.upstream?.readyState === WebSocket.OPEN });
+        connected: entry.pooledConnected || entry.upstream?.readyState === WebSocket.OPEN });
     }
-    if (!entry.upstream && !entry.reconnect) this.connect(entry);
+    if (!entry.pooledStop && !entry.upstream && !entry.reconnect) this.connect(entry);
     const current = entry;
     client.on('message', () => client.close(1008, 'Read-only stream'));
     client.on('close', () => {
@@ -255,7 +295,10 @@ export class SharedLiquidationFeed {
         this.prune(entry);
         if (!entry.clients.size && Date.now() - entry.idleAt >= IDLE_GRACE_MS) {
           this.stopUpstream(entry);
-          if (!entry.rows.length) this.entries.delete(key);
+          if (!entry.rows.length) {
+            this.entries.delete(key);
+            this.revision++;
+          }
         }
       }
       void this.save();
@@ -265,6 +308,8 @@ export class SharedLiquidationFeed {
 
   private async save(): Promise<void> {
     if (this.writing) return this.writing;
+    if (this.savedRevision === this.revision) return;
+    const revision = this.revision;
     const rows = Object.fromEntries([...this.entries].map(([key, entry]) => [key, entry.rows])
       .filter(([, data]) => (data as LiquidationRow[]).length));
     const pending = (async () => {
@@ -273,6 +318,7 @@ export class SharedLiquidationFeed {
         const temp = STORE_FILE + '.tmp';
         await fs.promises.writeFile(temp, JSON.stringify(rows), 'utf8');
         await fs.promises.rename(temp, STORE_FILE);
+        this.savedRevision = revision;
         this.counters.savedSnapshots++;
       } catch (error) {
         this.counters.failedSaves++;
