@@ -936,7 +936,7 @@ export const FormationDetailsModal: React.FC<FormationDetailsModalProps> = ({
     <>
       {!isFullscreenChartOpen && (
     <div className={pageMode
-      ? 'relative w-full min-h-0 bg-[#070a12] pb-4 sm:pb-6'
+      ? 'relative w-full min-h-0 bg-transparent pb-4 sm:pb-6'
       : 'fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-4 md:p-6 bg-black/80 backdrop-blur-sm overflow-y-auto no-scrollbar'}>
       <div className={pageMode
         ? 'relative mx-auto flex w-full max-w-6xl flex-col bg-slate-900 shadow-2xl sm:my-4 sm:rounded-3xl sm:border sm:border-slate-800 2xl:max-w-7xl'
