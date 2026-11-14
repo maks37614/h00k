@@ -34,8 +34,15 @@ test('real PostgreSQL: verify email, login, isolate data, revoke session and res
         "INSERT INTO auth_action_tokens (token_hash, user_id, purpose, expires_at) VALUES ($1, $2, 'verify-email', now() + interval '10 minutes')",
         [verificationHash, uidA],
       );
+      const verifySibling = randomUUID().replaceAll('-', '') + randomUUID().replaceAll('-', '');
+      await db.query(
+        "INSERT INTO auth_action_tokens (token_hash, user_id, purpose, expires_at) VALUES ($1, $2, 'verify-email', now() + interval '10 minutes')",
+        [createHash('sha256').update(verifySibling).digest('hex'), uidA],
+      );
       assert.equal(await verifyEmailToken(verifyToken), uidA);
       await assert.rejects(verifyEmailToken(verifyToken), /застаріле/);
+      await assert.rejects(verifyEmailToken(verifySibling), /застаріле/,
+        'another email-confirmation link must not remain usable as a login link');
       const credentials = await checkCredentials(emailA, password);
       assert.equal(credentials.user.uid, uidA);
       assert.equal(credentials.user.emailVerified, true);
@@ -112,10 +119,22 @@ test('real PostgreSQL: verify email, login, isolate data, revoke session and res
         "INSERT INTO auth_action_tokens (token_hash, user_id, purpose, expires_at) VALUES ($1, $2, 'reset-password', now() + interval '10 minutes')",
         [resetHash, uidA],
       );
+      const resetSibling = randomUUID().replaceAll('-', '') + randomUUID().replaceAll('-', '');
+      await db.query(
+        "INSERT INTO auth_action_tokens (token_hash, user_id, purpose, expires_at) VALUES ($1, $2, 'reset-password', now() + interval '10 minutes')",
+        [createHash('sha256').update(resetSibling).digest('hex'), uidA],
+      );
+      // A structurally correct but invalid link must be rejected before hashing.
+      const invalidToken = randomUUID().replaceAll('-', '') + randomUUID().replaceAll('-', '');
+      await assert.rejects(changePasswordWithToken(invalidToken, 'another-secure-password'), /застаріле/);
       await changePasswordWithToken(resetToken, 'a-new-secure-password-1234');
       await assert.rejects(checkCredentials(emailA, password), /Неправильна/);
       assert.equal((await checkCredentials(emailA, 'a-new-secure-password-1234')).user.uid, uidA);
       await assert.rejects(changePasswordWithToken(resetToken, 'another-secure-password'), /застаріле/);
+      await assert.rejects(changePasswordWithToken(resetSibling, 'another-secure-password'), /застаріле/,
+        'a sibling reset link must be consumed after the first successful password change');
+      await assert.rejects(checkCredentials(emailA, 'x'.repeat(200000)), /Неправильна/,
+        'oversized login passwords must be rejected without expensive hashing');
     } finally {
       await db.query('DELETE FROM auth_users WHERE id = ANY($1::text[])', [[uidA, uidB]]);
       await db.end();

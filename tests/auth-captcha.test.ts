@@ -59,6 +59,9 @@ test('Turnstile config remains public while missing keys fail closed, including 
       body: JSON.stringify({ email: 'blocked@example.invalid', password: 'strong-password-123' }),
     });
     assert.equal(response.status, 503, route);
+    assert.equal(response.headers.get('cache-control'), 'no-store',
+      'even CAPTCHA-denied auth responses must not be cached');
+    assert.equal(response.headers.get('referrer-policy'), 'no-referrer');
     assert.equal((await response.json()).code, 'CAPTCHA_NOT_CONFIGURED', route);
   }
 });

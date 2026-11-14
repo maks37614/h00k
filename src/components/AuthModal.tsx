@@ -24,6 +24,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const [mode, setMode] = useState<Mode>(resetToken ? 'reset' : initialMode);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [passwordConfirmation, setPasswordConfirmation] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [remember, setRemember] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
@@ -37,12 +38,18 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     if (isOpen) {
       setMode(resetToken ? 'reset' : initialMode);
       setPassword('');
+      setPasswordConfirmation('');
       setLocalError(null);
       setCaptchaToken(null);
       setCaptchaEpoch(value => value + 1);
       clearAuthError();
     }
-  }, [isOpen, initialMode, resetToken]);
+  }, [isOpen, initialMode]);
+  // A successful reset clears resetToken. Do not clear authNotice again when it
+  // changes: the "password updated" success message must remain visible.
+  useEffect(() => {
+    if (isOpen && resetToken) setMode('reset');
+  }, [isOpen, resetToken]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -69,6 +76,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   const changeMode = (next: Mode) => {
     setMode(next);
     setPassword('');
+    setPasswordConfirmation('');
     setCaptchaToken(null);
     setCaptchaEpoch(value => value + 1);
     setLocalError(null);
@@ -85,6 +93,9 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     if (['signup', 'reset'].includes(mode) && password.length < 12) {
       setLocalError('Пароль має містити щонайменше 12 символів.'); return;
     }
+    if (['signup', 'reset'].includes(mode) && password !== passwordConfirmation) {
+      setLocalError('Паролі не збігаються. Введіть однаковий пароль у двох полях.'); return;
+    }
     if (mode !== 'reset' && !captchaToken) { setLocalError('Спочатку пройдіть перевірку CAPTCHA.'); return; }
     setBusy(true);
     try {
@@ -96,11 +107,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       } else if (mode === 'signup') {
         await registerWithEmail(email.trim(), password, displayName, captchaToken || '');
         setPassword('');
+        setPasswordConfirmation('');
       } else if (mode === 'forgot') {
         await requestPasswordReset(email.trim(), captchaToken || '');
       } else {
         await resetPassword(password);
         setPassword('');
+        setPasswordConfirmation('');
         setMode('signin');
       }
     } catch {
@@ -219,6 +232,20 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     className="absolute right-2 top-1.5 rounded-lg p-1.5 text-slate-400 hover:text-white">
                     {showPassword ? <EyeOff size={17}/> : <Eye size={17}/>}
                   </button>
+                </span>
+              </label>
+            )}
+            {(mode === 'signup' || mode === 'reset') && (
+              <label className="block text-xs font-medium text-slate-300">
+                Повторіть пароль
+                <span className="relative mt-1 block">
+                  <Lock size={16} className="absolute left-3 top-2.5 text-slate-500"/>
+                  <input type={showPassword ? 'text' : 'password'} required
+                    minLength={12} maxLength={128} autoComplete="new-password"
+                    value={passwordConfirmation}
+                    onChange={event => setPasswordConfirmation(event.target.value)}
+                    placeholder="Введіть пароль ще раз"
+                    className="w-full rounded-xl border border-slate-700 bg-slate-950 py-2.5 pl-10 pr-3 text-sm text-white outline-none focus:border-cyan-400"/>
                 </span>
               </label>
             )}
