@@ -7,18 +7,23 @@ import { OriginalHookChartSettings, VisualContextPicker, normalizeOriginalHookCh
 import {
   VISUAL_CONTEXTS, applyVisualDefaultsForDevice, captureVisualProfile, getVisualProfile, makeVisualProfileKey,
   normalizeVisualProfile, normalizedVisualProfiles, patchVisualProfile, selectableVisualContexts, visualContextForTerminalWidth,
-  visualDeviceForWidth,
+  canonicalVisualContext, visibleScaleContext, visualDeviceForWidth,
 } from '../src/components/hookchart/visualProfiles';
 
 const src = (name: string) => readFileSync(new URL(name, import.meta.url), 'utf8');
 
-test('visual settings have seven independent chart contexts and separate phone/desktop keys', () => {
+test('Screener and Formations share two scale profiles, while devices and Terminal stay separate', () => {
   assert.deepEqual(VISUAL_CONTEXTS.map(item => item.id), [
     'screenerQuick','screenerFull','formationsQuick','formationsFull',
     'terminalLarge','terminalMedium','terminalCompact',
   ]);
   assert.notEqual(makeVisualProfileKey('screenerQuick','mobile'),makeVisualProfileKey('screenerFull','mobile'));
+  assert.equal(makeVisualProfileKey('formationsQuick','desktop'),makeVisualProfileKey('screenerQuick','desktop'));
+  assert.equal(makeVisualProfileKey('formationsFull','mobile'),makeVisualProfileKey('screenerFull','mobile'));
   assert.notEqual(makeVisualProfileKey('formationsQuick','desktop'),makeVisualProfileKey('formationsQuick','mobile'));
+  assert.equal(canonicalVisualContext('formationsQuick'), 'screenerQuick');
+  assert.equal(canonicalVisualContext('terminalMedium'), 'terminalMedium');
+  assert.equal(visibleScaleContext('formationsFull'), 'screenerFull');
   assert.equal(visualDeviceForWidth(390),'mobile');
   assert.equal(visualDeviceForWidth(767),'mobile');
   assert.equal(visualDeviceForWidth(768),'desktop');
@@ -49,19 +54,52 @@ test('visual chart profiles sanitize invalid JSON while preserving other context
   assert.equal(normalized[key]?.verticalZoom,1);
 });
 
+test('legacy page-specific presets migrate to one scale, with Screener priority and Formation fallback', () => {
+  const old = {
+    'screenerQuick:desktop': { visibleBars: 101, rightGapBars: 17 },
+    'formationsQuick:desktop': { visibleBars: 202, rightGapBars: 27 },
+    'formationsFull:mobile': { visibleBars: 138, rightGapBars: 33 },
+    'terminalMedium:desktop': { visibleBars: 74, rightGapBars: 19 },
+  };
+  const migrated = normalizedVisualProfiles(old);
+  assert.equal(migrated['screenerQuick:desktop']?.visibleBars, 101);
+  assert.equal(migrated['screenerFull:mobile']?.visibleBars, 138);
+  assert.ok(!('formationsQuick:desktop' in migrated));
+  assert.ok(!('formationsFull:mobile' in migrated));
+  assert.equal(migrated['terminalMedium:desktop']?.visibleBars, 74);
+  const settings = { visualProfiles: migrated };
+  assert.deepEqual(getVisualProfile(settings, 'formationsQuick', 'desktop'),
+    getVisualProfile(settings, 'screenerQuick', 'desktop'));
+  assert.deepEqual(getVisualProfile(settings, 'formationsFull', 'mobile'),
+    getVisualProfile(settings, 'screenerFull', 'mobile'));
+
+  const edited = patchVisualProfile(migrated, 'formationsQuick:desktop', { visibleBars: 117 });
+  assert.equal(getVisualProfile({ visualProfiles: edited }, 'screenerQuick', 'desktop').visibleBars, 117);
+  assert.equal(getVisualProfile({ visualProfiles: edited }, 'formationsQuick', 'desktop').visibleBars, 117);
+  assert.equal(getVisualProfile({ visualProfiles: edited }, 'screenerFull', 'mobile').visibleBars, 138);
+  assert.equal(getVisualProfile({ visualProfiles: edited }, 'terminalMedium', 'desktop').visibleBars, 74);
+  const reset = patchVisualProfile(edited, 'formationsQuick:desktop', null);
+  assert.ok(!('screenerQuick:desktop' in reset));
+  assert.equal(getVisualProfile({ visualProfiles: reset }, 'screenerQuick', 'desktop').visibleBars,
+    getVisualProfile(undefined, 'formationsQuick', 'desktop').visibleBars);
+  assert.equal(getVisualProfile({ visualProfiles: reset }, 'terminalMedium', 'desktop').visibleBars, 74);
+  const rawLegacy = { visualProfiles: { 'formationsQuick:mobile': { visibleBars: 191 } } };
+  assert.equal(getVisualProfile(rawLegacy, 'screenerQuick', 'mobile').visibleBars, 191);
+});
+
 test('capture records relative viewport properties, not fixed prices or ticker', () => {
   const base = getVisualProfile(undefined,'formationsQuick','desktop');
   const captured = captureVisualProfile(base,800,{
     barWidth:8,rightOffset:12,autoY:false,manualRange:50,
   },100);
   assert.deepEqual(captured,{
-    visibleBars:88,verticalZoom:2,autoPriceScale:false,rightGapBars:12,
+    visibleBars:90,verticalZoom:2,autoPriceScale:false,rightGapBars:10,
   });
   const auto = captureVisualProfile(base,800,{
     barWidth:10,rightOffset:15,autoY:true,manualRange:null,yZoom:1.3,
   });
   assert.equal(auto.verticalZoom,1.3);
-  assert.equal(auto.visibleBars,68);
+  assert.equal(auto.visibleBars,70);
   assert.ok(!('manualCenter' in captured));
   assert.ok(!('price' in captured));
   const withGap = { ...base, rightGapBars: 26 };
@@ -81,7 +119,7 @@ test('Масштаб tab uses existing personal settings persistence and preview
   const prefs = normalizeOriginalHookChartPreferences({
     visualProfiles:patchVisualProfile(undefined,'formationsFull:mobile',{visibleBars:140}),
   });
-  assert.equal(prefs.visualProfiles?.['formationsFull:mobile']?.visibleBars,140);
+  assert.equal(prefs.visualProfiles?.['screenerFull:mobile']?.visibleBars,140);
   const html = renderToStaticMarkup(React.createElement(OriginalHookChartSettings,{
     open:true,embedded:true,prefs,onChange:()=>{},onApplyStrategy:()=>{},onClose:()=>{},
   }));
@@ -168,48 +206,43 @@ test('making the selected visual scale default applies to seven chart types on j
 });
 
 
-test('standalone chart settings hide Terminal presets without deleting their saved profiles', () => {
-  const all = selectableVisualContexts(true);
-  const standalone = selectableVisualContexts(false);
-  assert.equal(all.length, 7);
-  assert.deepEqual(standalone.map(item => item.id), [
-    'screenerQuick', 'screenerFull', 'formationsQuick', 'formationsFull',
-  ]);
-  assert.ok(all.some(item => item.id === 'terminalLarge'));
-  assert.ok(!standalone.some(item => item.id.startsWith('terminal')));
+test('Scale picker offers only two options and keeps Terminal presets in saved settings', () => {
+  const options = selectableVisualContexts();
+  assert.deepEqual(options.map(item => item.label), ['Швидкий перегляд', 'Повний графік']);
+  assert.deepEqual(options.map(item => item.id), ['screenerQuick', 'screenerFull']);
+  assert.deepEqual(selectableVisualContexts(true), options);
   const prefs = patchVisualProfile(undefined, 'terminalCompact:desktop', { visibleBars: 54 });
   assert.equal(getVisualProfile({ visualProfiles: prefs }, 'terminalCompact', 'desktop').visibleBars, 54);
+  assert.equal(VISUAL_CONTEXTS.length, 7, 'the internal Terminal profiles are still available');
 
   const chart = src('../src/components/hookchart/OriginalHookChartSettings.tsx');
-  assert.match(chart, /includeTerminalContexts=\{Boolean\(activeVisualContext\?\.startsWith\('terminal'\)\)\}/,
-    'account and Screener/Formation settings must not offer Terminal sizes');
-  assert.match(chart, /includeTerminalContexts=\{includeTerminalContexts\}/);
-  assert.match(chart, /contexts\.map\(\(context, index\)/);
-  assert.match(chart, /selectableVisualContexts\(includeTerminalContexts\)/);
+  assert.match(chart, /const contexts = selectableVisualContexts\(\)/);
+  assert.match(chart, /contexts\.map\(context =>/);
+  assert.doesNotMatch(chart, /includeTerminalContexts/);
   assert.match(src('../src/components/hookchart/HookChartCanvas.tsx'), /activeVisualContext=\{activeVisualContext\}/);
 });
 
-test('iOS chart-type picker replaces the native bright select without losing seven contexts', () => {
+test('iOS scale picker replaces the native bright select and shows only shared scales', () => {
   const markup = renderToStaticMarkup(React.createElement(VisualContextPicker, {
     value: 'formationsQuick', onChange: () => {},
   }));
   assert.match(markup, /aria-label="Тип графіка для візуальних налаштувань"/);
   assert.match(markup, /aria-haspopup="listbox"/);
   assert.match(markup, /aria-expanded="false"/);
-  assert.match(markup, /Формації · Швидкий перегляд/);
+  assert.match(markup, /Швидкий перегляд/);
   assert.match(markup, /class="visualContextTrigger"/);
   assert.doesNotMatch(markup, /<select|<option/);
 
   const editor = src('../src/components/hookchart/OriginalHookChartSettings.tsx');
   const styles = src('../src/components/hookchart/integration.css');
   const chartEditor = editor.slice(editor.indexOf('function VisualProfileEditor'), editor.indexOf('export function OriginalHookChartSettings'));
-  assert.match(chartEditor, /<VisualContextPicker value=\{visualContext\} onChange=\{onContextChange\} includeTerminalContexts=\{includeTerminalContexts\}/);
+  assert.match(chartEditor, /<VisualContextPicker value=\{visualContext\} onChange=\{onContextChange\}/);
   assert.doesNotMatch(chartEditor, /<select/);
   assert.match(editor, /createPortal\(/);
   assert.match(editor, /role="listbox"/);
   assert.match(editor, /role="option" aria-selected=\{active\}/);
-  assert.match(editor, /contexts\.map\(\(context, index\)/);
-  assert.match(editor, /const group = index === 0 \? 'Скрінер' : index === 2 \? 'Формації' : index === 4 \? 'Термінал'/);
+  assert.match(editor, /contexts\.map\(context =>/);
+  assert.doesNotMatch(editor, /const group = index === 0/);
   assert.match(editor, /onChange\(context\.id\)/);
   assert.match(editor, /document\.addEventListener\('pointerdown', dismiss\)/);
   assert.match(editor, /window\.addEventListener\('keydown', keydown, true\)/);
