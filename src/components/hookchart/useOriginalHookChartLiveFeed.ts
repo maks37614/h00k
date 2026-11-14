@@ -11,7 +11,7 @@ import { connectSharedHookChartLiquidations } from './sharedLiquidationStream';
 import { HookChartDensityBook, type DensityAutoStats } from './densityBook';
 import { EMPTY_SESSION_LIQUIDATIONS, getSessionLiquidationTotals, recordSessionLiquidation, sessionLiquidationScope, subscribeSessionLiquidations } from './liquidationSession';
 import { canonicalLiquidationId, deduplicateLiquidations, filterVisibleLiquidations } from './liquidationDisplay';
-import { equalDepthAutoStats, nextLiquidationCascadeTransition, shouldPublishDepthView, shouldPublishLiquidationView } from './feedPublishPolicy';
+import { equalDepthAutoStats, nextLiquidationAdaptiveCutExpiry, nextLiquidationCascadeTransition, shouldPublishDepthView, shouldPublishLiquidationView } from './feedPublishPolicy';
 import { LiquidationEventBuffer } from './liquidationEventBuffer';
 
 type BookLevel = { p: number; q: number };
@@ -244,6 +244,8 @@ export function useOriginalHookChartLiveFeed({
     let previouslyHadRows = false;
     let lastPublishedRows: Liquidation[] | null = null;
     let nextCascadeTransitionAt = Infinity;
+    let lastAdaptiveRows: Liquidation[] | null = null;
+    let adaptiveExpiresAt = -Infinity;
     let pendingLiquidationPublish: ReturnType<typeof setTimeout> | null = null;
     const publish = () => {
       if (dead) return;
@@ -266,13 +268,19 @@ export function useOriginalHookChartLiveFeed({
         setCascadeClock(now);
         setLiquidations(rows);
       }
-      const values = rows.filter(row => now - row.t <= 15 * 60_000)
-        .map(row => row.usd).filter(value => Number.isFinite(value) && value > 0);
-      const adaptive = !values.length ? 0 : values.length < 6
-        ? quantile(values, .75)
-        : Math.max(quantile(values, .8), adaptiveCut(values, .8, .98, 2.5));
-      setLiquidationCut(values.length ? Math.max(1000, adaptive) : 0);
-      setLiquidationLastEventAt(latestEventAt || null);
+      // Percentile calculations also depend only on the event set and its
+      // 15-minute eligibility window, not on every two-second display tick.
+      if (rows !== lastAdaptiveRows || now > adaptiveExpiresAt) {
+        lastAdaptiveRows = rows;
+        adaptiveExpiresAt = nextLiquidationAdaptiveCutExpiry(rows, now);
+        const values = rows.filter(row => now - row.t <= 15 * 60_000)
+          .map(row => row.usd).filter(value => Number.isFinite(value) && value > 0);
+        const adaptive = !values.length ? 0 : values.length < 6
+          ? quantile(values, .75)
+          : Math.max(quantile(values, .8), adaptiveCut(values, .8, .98, 2.5));
+        setLiquidationCut(values.length ? Math.max(1000, adaptive) : 0);
+        setLiquidationLastEventAt(latestEventAt || null);
+      }
     };
     const scheduleLiquidationPublish = () => {
       if (dead || pendingLiquidationPublish !== null) return;
