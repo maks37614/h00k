@@ -9,6 +9,7 @@
 export const CHART_BACKDROP_NODE_LIMIT = 220;
 export const CHART_BACKDROP_VISIT_LIMIT = 720;
 const MAX_TEXT_CHARS = 140;
+const MAX_TEXT_NODES = 380;
 const MAX_DEPTH = 24;
 
 // Never create nodes that can fetch, execute, animate independently, or
@@ -38,6 +39,8 @@ const SAFE_INLINE_STYLES = [
 type CaptureBudget = {
   nodes: number;
   visited: number;
+  textNodes: number;
+  limit: number;
   width: number;
   height: number;
 };
@@ -52,7 +55,7 @@ function visibleInViewport(element: HTMLElement, budget: CaptureBudget): boolean
 }
 
 function copyVisibleMarkup(source: Element, budget: CaptureBudget, depth = 0): HTMLElement | null {
-  if (budget.nodes >= CHART_BACKDROP_NODE_LIMIT ||
+  if (budget.nodes >= budget.limit ||
       budget.visited >= CHART_BACKDROP_VISIT_LIMIT || depth >= MAX_DEPTH) return null;
   budget.visited++;
   const tag = source.tagName.toLowerCase();
@@ -80,9 +83,11 @@ function copyVisibleMarkup(source: Element, budget: CaptureBudget, depth = 0): H
   }
   // No attributes, event-handler props, form values or CSS URLs are copied.
   for (const node of source.childNodes) {
-    if (budget.nodes >= CHART_BACKDROP_NODE_LIMIT ||
-        budget.visited >= CHART_BACKDROP_VISIT_LIMIT) break;
+    if (budget.nodes >= budget.limit ||
+        budget.visited >= CHART_BACKDROP_VISIT_LIMIT ||
+        budget.textNodes >= MAX_TEXT_NODES) break;
     if (node.nodeType === 3) {
+      budget.textNodes++;
       const text = (node.textContent || '').slice(0, MAX_TEXT_CHARS);
       if (text.trim()) copy.appendChild(source.ownerDocument.createTextNode(text));
     } else if (node.nodeType === 1) {
@@ -106,11 +111,12 @@ export function captureChartPageBackdrop(root: HTMLElement | null): HTMLDivEleme
   frame.setAttribute('aria-hidden', 'true');
   frame.inert = true;
   const budget: CaptureBudget = {
-    nodes: 0, visited: 0,
+    nodes: 0, visited: 0, textNodes: 0,
+    limit: window.innerWidth <= 640 ? 140 : CHART_BACKDROP_NODE_LIMIT,
     width: window.innerWidth, height: window.innerHeight,
   };
   for (const source of sources) {
-    if (budget.nodes >= CHART_BACKDROP_NODE_LIMIT ||
+    if (budget.nodes >= budget.limit ||
         budget.visited >= CHART_BACKDROP_VISIT_LIMIT) break;
     const rect = source.getBoundingClientRect();
     const part = copyVisibleMarkup(source, budget);
