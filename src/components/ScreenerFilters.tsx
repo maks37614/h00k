@@ -38,14 +38,14 @@ export const ScreenerFilters: React.FC<ScreenerFiltersProps> = ({
     <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-4 space-y-4">
       {/* Row 1: Search and timeframe */}
       <div className="flex flex-wrap items-center justify-center gap-2">
-        <div className="relative w-full sm:w-56">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+        <div className={`relative w-full sm:w-56 ${earlyMode ? '' : 'lg:w-[280px]'}`}>
+          <Search className={`w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none ${earlyMode ? '' : 'lg:w-[18px] lg:h-[18px]'}`} />
           <input
             type="text"
             placeholder={t('search')}
             value={filters.searchQuery}
             onChange={(e) => onFilterChange({ searchQuery: e.target.value })}
-            className="w-full pl-9 pr-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-cyan-500 transition-colors uppercase font-mono"
+            className={`w-full pl-9 pr-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-cyan-500 transition-colors uppercase font-mono ${earlyMode ? '' : 'lg:pl-10 lg:py-2 lg:text-sm'}`}
           />
         </div>
         <div className="inline-flex w-fit items-center bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs font-mono">
