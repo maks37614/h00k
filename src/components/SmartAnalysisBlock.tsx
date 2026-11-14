@@ -594,14 +594,15 @@ export const SmartAnalysisBlock: React.FC<SmartAnalysisBlockProps> = ({
                 Стакан ордерів, Зона POC та Рівні Ліквідності
               </h5>
             </div>
-            <span className="text-xs text-slate-400 font-mono">
-              Стакан {data.orderbook.source}: Bid/Ask = <strong className="text-white">{data.orderbook.bidAskRatio ?? 'н/д'}</strong>
-            </span>
+            {visible.imbalance && <span className="text-xs text-slate-400 font-mono">
+              Стакан {data.orderbook.source}: Bid/Ask = <strong className="text-white">{data.orderbook.bidAskRatio}</strong>
+            </span>}
           </div>
 
           {/* Orderbook Walls & POC */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5 text-xs font-mono">
             {/* Long Wall (Bid) */}
+            {visible.bid && (
             <div className="p-3 rounded-lg bg-emerald-950/20 border border-emerald-800/40 space-y-1">
               <span className="text-[10px] text-emerald-400 font-sans block font-semibold">
                 Найбільша стіна в лонг (Bid Wall):
@@ -610,11 +611,13 @@ export const SmartAnalysisBlock: React.FC<SmartAnalysisBlockProps> = ({
                 {priceOrNA(data.orderbook.bidWallPrice)}
               </div>
               <div className="text-[11px] text-emerald-300">
-                Обсяг заявки: {volumeOrNA(data.orderbook.bidWallUsd)}
+                Обсяг заявки: {formatVolume(data.orderbook.bidWallUsd!)}
               </div>
             </div>
+            )}
 
             {/* POC Zone */}
+            {visible.poc && (
             <div className="p-3 rounded-lg bg-indigo-950/20 border border-indigo-800/40 space-y-1">
               <span className="text-[10px] text-indigo-300 font-sans block font-semibold">
                 Оціночний POC за свічками · 24 закриті 1h (не профіль угод):
@@ -623,11 +626,13 @@ export const SmartAnalysisBlock: React.FC<SmartAnalysisBlockProps> = ({
                 {priceOrNA(data.levels.pocPrice)}
               </div>
               <div className="text-[11px] text-indigo-300">
-                Частка обсягу в ціновому кошику: {data.levels.pocVolumePct === null ? 'н/д' : data.levels.pocVolumePct + '%'}
+                {data.levels.pocVolumePct !== null && 'Частка обсягу в ціновому кошику: ' + data.levels.pocVolumePct + '%'}
               </div>
             </div>
+            )}
 
             {/* Short Wall (Ask) */}
+            {visible.ask && (
             <div className="p-3 rounded-lg bg-rose-950/20 border border-rose-800/40 space-y-1">
               <span className="text-[10px] text-rose-400 font-sans block font-semibold">
                 Найбільша стіна в шорт (Ask Wall):
@@ -636,9 +641,10 @@ export const SmartAnalysisBlock: React.FC<SmartAnalysisBlockProps> = ({
                 {priceOrNA(data.orderbook.askWallPrice)}
               </div>
               <div className="text-[11px] text-rose-300">
-                Обсяг заявки: {volumeOrNA(data.orderbook.askWallUsd)}
+                Обсяг заявки: {formatVolume(data.orderbook.askWallUsd!)}
               </div>
             </div>
+            )}
           </div>
 
           {/* Detected Large Orders List */}
@@ -679,12 +685,13 @@ export const SmartAnalysisBlock: React.FC<SmartAnalysisBlockProps> = ({
 
           {/* Liquidity Levels & S/R */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+            {visible.liquidityLevels && (
             <div className="p-3 rounded-lg bg-slate-900/80 border border-slate-800">
               <span className="font-semibold text-slate-300 block mb-1.5">
                 Розрахункові цінові орієнтири (не підтверджені стоп-ордери):
               </span>
               <div className="space-y-1 font-mono text-[11px]">
-                {data.levels.liquidityLevels.map((liq, i) => (
+                {data.levels.liquidityLevels.filter(liq => Number.isFinite(liq.price) && liq.price > 0).map((liq, i) => (
                   <div key={i} className="flex items-center justify-between text-slate-300">
                     <span className="text-slate-400 truncate mr-2">{liq.label}</span>
                     <span className="text-white font-bold">{formatCryptoPrice(liq.price)}</span>
@@ -692,22 +699,25 @@ export const SmartAnalysisBlock: React.FC<SmartAnalysisBlockProps> = ({
                 ))}
               </div>
             </div>
+            )}
 
+            {(visible.support || visible.resistance) && (
             <div className="p-3 rounded-lg bg-slate-900/80 border border-slate-800">
               <span className="font-semibold text-slate-300 block mb-1.5">
                 Оціночні рівні Support / Resistance (екстремуми 15 закритих свічок з відступом 0,4%):
               </span>
               <div className="space-y-1.5 font-mono text-[11px]">
-                <div className="flex items-center justify-between">
+                {visible.support && <div className="flex items-center justify-between">
                   <span className="text-emerald-400">Орієнтовна підтримка:</span>
                   <span className="text-white font-bold">{formatCryptoPrice(data.levels.strongSupport)}</span>
-                </div>
-                <div className="flex items-center justify-between">
+                </div>}
+                {visible.resistance && <div className="flex items-center justify-between">
                   <span className="text-rose-400">Орієнтовний опір:</span>
                   <span className="text-white font-bold">{formatCryptoPrice(data.levels.strongResistance)}</span>
-                </div>
+                </div>}
               </div>
             </div>
+            )}
           </div>
         </div>
       )}
