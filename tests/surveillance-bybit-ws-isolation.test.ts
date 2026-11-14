@@ -62,3 +62,34 @@ test('Bybit trade stream rejects wrong-symbol, stale, future and invalid-side pr
     assert.ok(trades.every(x=>x.time===now));
   } finally { client.destroy(); }
 });
+
+test('a delayed but individually fresh Bybit ticker cannot rewind price or OI', t => {
+  t.mock.method(ExchangeStreamClient.prototype,'connect',()=>{});
+  const now=Date.now();
+  t.mock.method(Date,'now',()=>now);
+  const client=new ExchangeStreamClient('BTCUSDT','bybit','futures');
+  const quotes:Array<{price:number;time:number}>=[];
+  const oi:Array<{amountCoins:number;valueUsd:number;time:number}>=[];
+  client.on('price',data=>quotes.push({price:data.price,time:data.time}));
+  client.on('open-interest',data=>oi.push(data));
+  const send=(time:number,price:string,amount:string,value:string,type='delta')=>
+    (client as any).handleIncomingMessage({
+      topic:'tickers.BTCUSDT',ts:time,type,
+      data:{symbol:'BTCUSDT',lastPrice:price,
+        openInterest:amount,openInterestValue:value},
+    });
+  try {
+    send(now-3000,'100','10','1000','snapshot');
+    send(now-1000,'110','12','1200');
+    // This old frame is not expired by the general 5s clock, but is older
+    // than the last accepted ticker update. It must not reset the snapshot.
+    send(now-2000,'99','9','900','snapshot');
+    assert.deepEqual(quotes.map(q=>q.price),[100,110]);
+    assert.deepEqual(oi.map(x=>x.valueUsd),[1000,1200]);
+    assert.equal((client as any).bybitTicker.lastPrice,'110');
+    assert.equal((client as any).lastBybitTickerEventTime,now-1000);
+    send(now,'115','14','1400');
+    assert.deepEqual(quotes.map(q=>q.price),[100,110,115]);
+    assert.deepEqual(oi.map(x=>x.amountCoins),[10,12,14]);
+  } finally { client.destroy(); }
+});
