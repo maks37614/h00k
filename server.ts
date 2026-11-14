@@ -112,6 +112,16 @@ async function startServer() {
     try {
       const jobId = (req.body?.job || 'all').toString();
       if (!['all', 'price_alerts', 'surveillance'].includes(jobId)) return res.status(400).json({ success: false, error: 'Невідоме завдання' });
+      // The legacy manual CRON route must share the same per-user budget as
+      // /api/surveillance/check-all; otherwise it bypasses the 60s throttle
+      // and allows repeated four-timeframe REST bursts against the VPS.
+      const checksSurveillance = jobId !== 'price_alerts';
+      const windowMs = checksSurveillance ? 60_000 : 15_000;
+      const throttleKey = checksSurveillance ? 'check-all' : 'manual-price-alerts';
+      if (!userWorkThrottle.allow(res.locals.userId, throttleKey, windowMs))
+        return res.status(429).setHeader('Retry-After', String(windowMs / 1000)).json({
+          success: false, error: 'Повторна ручна перевірка буде доступна пізніше.',
+        });
       if (jobId !== 'surveillance') await checkAlertsOnce(res.locals.userId);
       if (jobId !== 'price_alerts') await checkAllUserCoins(res.locals.userId);
       const result = { success: true, message: 'Ваші сповіщення перевірено' };
