@@ -118,8 +118,8 @@ test('map switch is under expanded tools, disabled by default, absent on replay/
     'Liq map switch is rendered in one place only');
   const posAfter = ui.slice(mapIcon, settings);
   assert.doesNotMatch(posAfter, /className=\{'liqHeatmapPeriod'/);
-  const css = readFileSync(new URL('../src/components/hookchart/integration.css',import.meta.url),'utf8');
-  assert.match(css,/\.hookchart-terminal \.hookchart-terminal-toolbar \.toolbarRight\.hasLiqMap/);
+  const anchoredCss = readFileSync(new URL('../src/components/hookchart/integration.css',import.meta.url),'utf8');
+  assert.match(anchoredCss,/\.hookchart-terminal \.hookchart-terminal-toolbar \.toolbarRight\.hasLiqMap/);
 
   // Compact map glyph, never the old flame-and-text pill. Accessible
   // label/pressed state remain available for mobile assistive technology.
