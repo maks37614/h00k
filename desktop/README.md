@@ -1,4 +1,4 @@
-# h00k Desktop — h00k Desktop (Windows MVP)
+# h00k Desktop — програма для Windows
 
 This is a separate Electron application for the existing https://h00k.top website.
 It does not execute exchange scanners on the user's computer or change VPS deployment.
