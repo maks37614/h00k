@@ -152,6 +152,7 @@ export function installHookChartKlineRelay(
     });
     const disconnected = () => {
       if (entry.closed || entry.upstream !== ws) return;
+      entry.upstream = null;
       if (entry.ping !== null) clearInterval(entry.ping);
       entry.ping = null;
       broadcast(entry, JSON.stringify({ type: 'status', connected: false }));
@@ -206,6 +207,10 @@ export function installHookChartKlineRelay(
         entry.lastReceivedAt = 0;
         entry.last = null;
         broadcast(entry, JSON.stringify({ type: 'status', connected: false }));
+        // Do not leave a silent but OPEN exchange socket hanging forever.
+        if (entry.upstream) {
+          try { entry.upstream.close(); } catch {}
+        }
       }
     }
   }, 5000);
@@ -225,7 +230,8 @@ export function installHookChartKlineRelay(
     stats: () => ({
       activeMarkets: entries.size,
       clients: [...entries.values()].reduce((sum, item) => sum + item.clients.size, 0),
-      upstreamSockets: [...entries.values()].filter(item => item.upstream !== null).length,
+      upstreamSockets: [...entries.values()].filter(item =>
+        item.upstream?.readyState === WebSocket.OPEN).length,
       ...counters,
       // No symbols or personal identifiers in this aggregate operator view.
     }),
