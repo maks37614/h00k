@@ -18,6 +18,7 @@ import { getTimeframeMs } from './surveillance/multiTimeframeEngine';
 import { fetchKlines } from './marketService';
 import { surveillanceCheckCandleCache } from './surveillance/checkCandleCache';
 import { candleCloseCheckPlanner } from './surveillance/candleCloseCheckPlanner';
+import { sharedSurveillanceState } from './surveillance/sharedSurveillanceState';
 import { getUserTelegram } from './alertService';
 import { surveillanceManager } from './surveillance/surveillanceManager';
 import { notificationRouter } from './notificationRouter';
@@ -678,7 +679,13 @@ async function checkCoinSurveillanceInternal(
       : surveillanceCheckCandleCache.get(coin.exchange, coin.marketType, coin.symbol, tf,
           tf === '4h' ? 80 : 60)).catch(() => [])));
   const source = Object.fromEntries(frames.map((tf, i) => [tf, fetched[i]])) as Record<typeof frames[number], Kline[]>;
-  const newState = await calculateSurveillanceState(coin.symbol, coin.exchange, coin.marketType, config, source);
+  // All users following the same candle snapshot share pure market analysis.
+  // Event identities, notification thresholds and Telegram delivery remain per user.
+  const publicStateFor = (candles: typeof source) =>
+    sharedSurveillanceState.get(coin.exchange, coin.marketType, coin.symbol,
+      config, candles, () => calculateSurveillanceState(
+        coin.symbol, coin.exchange, coin.marketType, config, candles));
+  const newState = await publicStateFor(source);
   if (!newState) return { coin, newEvents: [] };
 
   const now = Date.now();
@@ -705,7 +712,7 @@ async function checkCoinSurveillanceInternal(
 
     const causalSource = Object.fromEntries(frames.map(frame => [frame, source[frame].filter(c =>
       normalizeKlineTimeMs(c.time) + getTimeframeMs(frame) <= startTime)])) as typeof source;
-    const levels = await calculateSurveillanceState(coin.symbol, coin.exchange, coin.marketType, config, causalSource);
+    const levels = await publicStateFor(causalSource);
     if (!levels) continue;
     const previousClose = closed[closed.length - 2].close;
     const price = candle.close;
@@ -740,7 +747,7 @@ async function checkCoinSurveillanceInternal(
     const endTime = startTime + getTimeframeMs(tf);
     const completedSource = Object.fromEntries(frames.map(frame => [frame, source[frame].filter(c =>
       normalizeKlineTimeMs(c.time) + getTimeframeMs(frame) <= endTime)])) as typeof source;
-    const completedState = await calculateSurveillanceState(coin.symbol, coin.exchange, coin.marketType, config, completedSource);
+    const completedState = await publicStateFor(completedSource);
     if (config.structureEnabled && completedState && levels.structureTrend !== completedState.structureTrend) add(
       'STRUCTURE_SHIFT', 'structure', `🔄 Зміна структури (${completedState.structureTrend.toUpperCase()})`,
       `Підтверджено закриттям ${tf}.`, 'critical', completedState.structureTrend);
