@@ -213,7 +213,7 @@ export class SharedLiquidationFeed {
     entry.reconnect.unref?.();
   }
 
-  addClient(client: WebSocket, exchange: Exchange, symbol: string) {
+  addClient(client: WebSocket, exchange: Exchange, symbol: string, liveOnly = false) {
     const key = `${exchange}:${symbol}`;
     let entry = this.entries.get(key);
     if (!entry && this.entries.size >= MAX_MARKETS) {
@@ -232,8 +232,14 @@ export class SharedLiquidationFeed {
     }
     entry.clients.add(client);
     this.prune(entry);
-    this.send(client, { type: 'snapshot', events: entry.rows,
-      connected: entry.upstream?.readyState === WebSocket.OPEN });
+    // Profile notifications need only new events. Avoid sending up to 1,500
+    // historical rows to every notification-only client on reconnect.
+    if (liveOnly) {
+      this.send(client, { type: 'status', connected: entry.upstream?.readyState === WebSocket.OPEN });
+    } else {
+      this.send(client, { type: 'snapshot', events: entry.rows,
+        connected: entry.upstream?.readyState === WebSocket.OPEN });
+    }
     if (!entry.upstream && !entry.reconnect) this.connect(entry);
     const current = entry;
     client.on('message', () => client.close(1008, 'Read-only stream'));
@@ -300,7 +306,7 @@ export function installLiquidationStream(server: Server) {
       client.close(1008, 'Invalid exchange or symbol');
       return;
     }
-    liquidationFeed.addClient(client, exchange, symbol);
+    liquidationFeed.addClient(client, exchange, symbol, url.searchParams.get('live') === '1');
   });
   liquidationFeed.startPersistence();
   return liquidationFeed;
