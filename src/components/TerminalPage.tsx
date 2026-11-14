@@ -469,13 +469,6 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
     updateBlocks((prev) => prev.map((b) => b.timeframe === tf ? b : { ...b, timeframe: tf }));
   };
 
-  const handleTimeframeSelect = (tf: Timeframe) => {
-    setTimeframe(tf);
-    handleApplyGlobalTimeframe(tf);
-
-
-  };
-
   const handleApplyPreset = (presetKey: 'focus_btc' | 'top_3' | 'top_4_patterns' | 'grid_4') => {
     if (presetKey === 'focus_btc') {
       const btc = coins.find((c) => c.symbol === 'BTCUSDT') || {
