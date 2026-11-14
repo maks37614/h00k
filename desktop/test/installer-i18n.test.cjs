@@ -79,7 +79,7 @@ test('onboarding text is scrollable and language selector fits standard Windows 
   assert.equal((nsis.match(/NSD_CreateMLText/g)||[]).length, 3);
   assert.equal((nsis.match(/NSD_Edit_SetReadOnly/g)||[]).length, 3);
   assert.ok(nsis.includes('NSD_RemoveStyle'));
-  const radios=[...nsis.matchAll(/NSD_CreateRadioButton\} 0 (\d+)u 100% (\d+)u/g)];
+  const radios=[...nsis.matchAll(/NSD_Create(?:First|Additional)RadioButton\} 0 (\d+)u 100% (\d+)u/g)];
   assert.equal(radios.length,4);
   for(const [,y,h] of radios)assert.ok(Number(y)+Number(h)<=140,
     'the installer language switch must remain visible on standard NSIS page');
