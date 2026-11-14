@@ -24,6 +24,16 @@ export const DEFAULT_SCREENER_SEARCH_CONFIG: ScreenerSearchConfig = {
   marketType: 'futures',
   maxVolumeUsd: 0,
   volumeMode: 'to',
+  minVolatility5mPct: 0,
+  minPriceUsd: 0,
+  maxPriceUsd: 0,
+  maxDistanceToHighPct: null,
+  maxDistanceToLowPct: null,
+  onlyWithFormations: false,
+  minOpenInterestUsd: 0,
+  fundingRateDirection: 'any',
+  minFundingRateAbsPct: 0,
+  minBreakoutRvol: 0,
   presetFilter: 'all',
   sortBy: 'volume',
   sortOrder: 'desc',
@@ -38,6 +48,17 @@ function record(value: unknown): Record<string, unknown> {
 
 function validSort(value: unknown): value is ScreenerSortBy {
   return typeof value === 'string' && sortKeys.has(value as ScreenerSortBy);
+}
+
+function nonNegativeNumber(value: unknown, fallback: number, max: number): number {
+  return typeof value === 'number' && Number.isFinite(value)
+    ? Math.min(max, Math.max(0, value)) : fallback;
+}
+
+function optionalPercent(value: unknown, fallback: number | null): number | null {
+  if (value === null) return null;
+  return typeof value === 'number' && Number.isFinite(value)
+    ? Math.max(0, Math.min(100, value)) : fallback;
 }
 
 /** Avoid taking arbitrary, oversized or stale values from persisted profile JSON. */
@@ -59,6 +80,17 @@ export function normalizeScreenerSearchConfig(
     maxVolumeUsd: typeof raw.maxVolumeUsd === 'number' && Number.isFinite(raw.maxVolumeUsd)
       ? Math.max(0, Math.min(1_000_000_000_000_000, raw.maxVolumeUsd)) : base.maxVolumeUsd,
     volumeMode: raw.volumeMode === 'from' || raw.volumeMode === 'to' ? raw.volumeMode : base.volumeMode,
+    minVolatility5mPct: nonNegativeNumber(raw.minVolatility5mPct, base.minVolatility5mPct, 1000),
+    minPriceUsd: nonNegativeNumber(raw.minPriceUsd, base.minPriceUsd, 1e12),
+    maxPriceUsd: nonNegativeNumber(raw.maxPriceUsd, base.maxPriceUsd, 1e12),
+    maxDistanceToHighPct: optionalPercent(raw.maxDistanceToHighPct, base.maxDistanceToHighPct),
+    maxDistanceToLowPct: optionalPercent(raw.maxDistanceToLowPct, base.maxDistanceToLowPct),
+    onlyWithFormations: typeof raw.onlyWithFormations === 'boolean' ? raw.onlyWithFormations : base.onlyWithFormations,
+    minOpenInterestUsd: nonNegativeNumber(raw.minOpenInterestUsd, base.minOpenInterestUsd, 1e16),
+    fundingRateDirection: raw.fundingRateDirection === 'positive' || raw.fundingRateDirection === 'negative'
+      || raw.fundingRateDirection === 'any' ? raw.fundingRateDirection : base.fundingRateDirection,
+    minFundingRateAbsPct: nonNegativeNumber(raw.minFundingRateAbsPct, base.minFundingRateAbsPct, 100),
+    minBreakoutRvol: nonNegativeNumber(raw.minBreakoutRvol, base.minBreakoutRvol, 50),
     presetFilter: presetFilters.includes(raw.presetFilter as ScreenerPresetFilter)
       ? raw.presetFilter as ScreenerPresetFilter : base.presetFilter,
     sortBy,
