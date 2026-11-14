@@ -387,6 +387,13 @@ export const SmartAnalysisBlock: React.FC<SmartAnalysisBlockProps> = ({
                   (data.btcContext.change24h >= 0 ? '+' : '') + data.btcContext.change24h.toFixed(2) + '%'}
               </span>
             </div>
+            <p className="text-[10px] text-slate-500">
+              {data.btcContext.priceSource === 'closed_1m_candle'
+                ? 'Ціна: закриття останньої підтвердженої 1m свічки; не live-котирування.'
+                : data.btcContext.priceSource === 'binance_ticker'
+                  ? 'Ціна і зміна 24h: Binance Futures / ticker 24hr.'
+                  : 'Ціна BTC недоступна: біржові джерела не відповідають.'}
+            </p>
           </div>
 
           {/* Sharp impulse alert banner if active */}
@@ -622,7 +629,7 @@ export const SmartAnalysisBlock: React.FC<SmartAnalysisBlockProps> = ({
             {/* POC Zone */}
             <div className="p-3 rounded-lg bg-indigo-950/20 border border-indigo-800/40 space-y-1">
               <span className="text-[10px] text-indigo-300 font-sans block font-semibold">
-                Оціночний POC за свічками (не біржовий профіль угод):
+                Оціночний POC за свічками · 24 закриті 1h (не профіль угод):
               </span>
               <div className="text-sm font-bold text-white">
                 {priceOrNA(data.levels.pocPrice)}
@@ -674,7 +681,7 @@ export const SmartAnalysisBlock: React.FC<SmartAnalysisBlockProps> = ({
                     </div>
                     <div className="text-right">
                       <span className="font-bold block">{formatVolume(order.amountUsd)}</span>
-                      <span className="text-[9px] text-slate-400">{order.distancePct}% від поточної</span>
+                      <span className="text-[9px] text-slate-400">{order.distancePct}% від найкращої {order.side === 'bid' ? 'Bid' : 'Ask'}</span>
                     </div>
                   </div>
                 ))}
@@ -777,15 +784,22 @@ export const SmartAnalysisBlock: React.FC<SmartAnalysisBlockProps> = ({
             ))}
             <div className="p-3 rounded-lg bg-slate-900/80 border border-slate-800 space-y-1.5">
               <div className="flex items-center justify-between text-slate-400 font-sans">
-                <span>Funding Rate</span>
+                <span>Funding Rate · Binance / Bybit</span>
                 <span className="text-[10px]">{data.derivatives.hasPerpFutures ? 'PERP' : 'SPOT'}</span>
               </div>
               <div className="text-base font-bold text-white">
-                {data.derivatives.fundingRate === null ? 'Немає даних'
-                  : `${data.derivatives.fundingRate > 0 ? '+' : ''}${data.derivatives.fundingRate}%`}
+                {data.derivatives.fundingRate !== null
+                  ? `${data.derivatives.fundingRate > 0 ? '+' : ''}${data.derivatives.fundingRate}% · Binance`
+                  : data.derivatives.predictedFundingRate !== null
+                    ? `${data.derivatives.predictedFundingRate > 0 ? '+' : ''}${data.derivatives.predictedFundingRate}% · Bybit`
+                    : 'н/д'}
               </div>
               <p className="text-[10px] text-slate-400 font-sans">
-                Bybit funding: {data.derivatives.predictedFundingRate === null
+                Binance Futures: {data.derivatives.fundingRate === null
+                  ? 'н/д · немає відповіді біржі' : `${data.derivatives.fundingRate}%`}
+              </p>
+              <p className="text-[10px] text-slate-400 font-sans">
+                Bybit Linear: {data.derivatives.predictedFundingRate === null
                   ? 'н/д' : `${data.derivatives.predictedFundingRate}%`}
               </p>
               <p className="text-[10px] text-slate-400 font-sans">
@@ -819,7 +833,7 @@ export const SmartAnalysisBlock: React.FC<SmartAnalysisBlockProps> = ({
                   <dd className="font-mono font-semibold text-white">{holdersLoading ? '…' : holderCountDisplay}</dd>
                 </div>
                 <div>
-                  <dt className="text-slate-400">Частка групи top_10</dt>
+                  <dt className="text-slate-400">Частка токенів у топ-10% адрес</dt>
                   <dd className="font-mono font-semibold text-white">{holdersLoading ? '…' : holderTop10Display}</dd>
                 </div>
                 <div>
@@ -852,7 +866,7 @@ export const SmartAnalysisBlock: React.FC<SmartAnalysisBlockProps> = ({
                   <p>Мережа: {holderSnapshot!.network} · Контракт: {holderSnapshot!.contractAddress?.slice(0, 10)}…{holderSnapshot!.contractAddress?.slice(-5)}</p>
                   <p>Дані CoinGecko (beta): {holderSnapshot!.lastUpdated
                     ? new Date(holderSnapshot!.lastUpdated).toLocaleString('uk-UA') : 'час не вказано'}</p>
-                  <p>Групи розподілу включають біржові та контрактні адреси. Це не кількість окремих людей.</p>
+                  <p>CoinGecko top_10 — верхні 10% адрес за балансом, а НЕ десять адрес. Можливі біржові та контрактні гаманці; це не кількість людей.</p>
                 </div>
               )}
               <a href="https://www.coingecko.com/" target="_blank" rel="noopener noreferrer"
