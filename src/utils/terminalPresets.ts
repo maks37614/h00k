@@ -1,6 +1,15 @@
 import type { MarketCoin, TerminalChartBlock, TerminalSavedPreset, Timeframe } from '../types';
 import { coinMarketKey } from './marketPresets';
 
+/** Preserve the real quote currency instead of silently forcing every pair to USDT. */
+export function normalizeTerminalMarketPair(symbolInput: string, quoteInput?: string): { symbol: string; quoteAsset: string } {
+  const quoteAsset = (quoteInput || 'USDT').toUpperCase().replace(/[^A-Z0-9]/g, '') || 'USDT';
+  const cleanSymbol = (symbolInput || 'BTCUSDT').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const symbol = cleanSymbol.length > quoteAsset.length && cleanSymbol.endsWith(quoteAsset)
+    ? cleanSymbol : `${cleanSymbol}${quoteAsset}`;
+  return { symbol, quoteAsset };
+}
+
 export const TERMINAL_PRESETS_STORAGE_KEY = 'crypto_screener_terminal_presets';
 export function terminalStorageKey(key: string, uid?: string): string {
   return `${key}_${uid || 'guest'}`;
