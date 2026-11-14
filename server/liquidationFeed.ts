@@ -391,7 +391,8 @@ export function installLiquidationStream(server: Server) {
   const sockets = new WebSocketServer({ noServer: true, maxPayload: 1024 });
   server.on('upgrade', (request, socket, head) => {
     const pathname = (request.url || '').split('?')[0];
-    if (pathname !== '/api/hookchart/liquidations') return;
+    if (pathname !== '/api/hookchart/liquidations' &&
+        pathname !== '/api/hookchart/liquidations-multi') return;
     sockets.handleUpgrade(request, socket, head, client => sockets.emit('connection', client, request));
   });
   sockets.on('connection', (client, request) => {
@@ -400,6 +401,66 @@ export function installLiquidationStream(server: Server) {
       return;
     }
     const url = new URL(request.url || '/', 'http://localhost');
+    if (url.pathname === '/api/hookchart/liquidations-multi') {
+      // 1 browser socket -> up to 64 markets, one subscription per market.
+      // No client can subscribe to an arbitrary count or flood our server.
+      const topics = new Set<string>();
+      const MAX_TOPICS_PER_CLIENT = 64;
+      let commandWindowStart = Date.now();
+      let commands = 0;
+      const handle = (raw: WebSocket.RawData) => {
+        const now = Date.now();
+        if (now - commandWindowStart >= 60_000) {
+          commandWindowStart = now;
+          commands = 0;
+        }
+        if (++commands > 160) {
+          client.close(1008, 'Too many liquidation subscriptions');
+          return;
+        }
+        let msg: Record<string, unknown>;
+        try { msg = JSON.parse(raw.toString()); }
+        catch { client.close(1008, 'Invalid liquidation request'); return; }
+        if (!msg || typeof msg !== 'object' ||
+            (msg.type !== 'subscribe' && msg.type !== 'unsubscribe') ||
+            (msg.exchange !== 'binance' && msg.exchange !== 'bybit') ||
+            typeof msg.symbol !== 'string') {
+          client.close(1008, 'Invalid liquidation request');
+          return;
+        }
+        const exchange = msg.exchange;
+        const symbol = msg.symbol.trim().toUpperCase();
+        if (!validSymbol(symbol)) {
+          client.close(1008, 'Invalid liquidation symbol');
+          return;
+        }
+        const scope = exchange + ':' + symbol;
+        if (msg.type === 'unsubscribe') {
+          if (topics.delete(scope)) liquidationFeed.removeBulkClient(client, exchange, symbol);
+          return;
+        }
+        if (topics.has(scope)) return;
+        if (topics.size >= MAX_TOPICS_PER_CLIENT) {
+          client.send(JSON.stringify({
+            type:'status', exchange, symbol, connected:false, capacity:true,
+          }));
+          return;
+        }
+        if (liquidationFeed.addBulkClient(client, exchange, symbol, msg.live === true)) {
+          topics.add(scope);
+        }
+      };
+      client.on('message', handle);
+      client.on('close', () => {
+        for (const scope of topics) {
+          const sep = scope.indexOf(':');
+          liquidationFeed.removeBulkClient(client,
+            scope.slice(0, sep) as Exchange, scope.slice(sep + 1));
+        }
+        topics.clear();
+      });
+      return;
+    }
     const exchange = url.searchParams.get('exchange');
     const symbol = (url.searchParams.get('symbol') || '').trim().toUpperCase();
     if ((exchange !== 'binance' && exchange !== 'bybit') || !validSymbol(symbol)) {
