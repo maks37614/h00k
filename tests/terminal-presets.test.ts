@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import type { MarketCoin, TerminalChartBlock } from '../src/types';
 import { matchesMarketPreset, selectMarketPresetCoins } from '../src/utils/marketPresets';
 import { blocksForMarketPreset, normalizeTerminalBlocks, normalizeTerminalMarketPair, formatTerminalQuotedPrice, normalizeTerminalPresets, terminalStorageKey, TERMINAL_PRESETS_STORAGE_KEY } from '../src/utils/terminalPresets';
+import { loadTerminalWorkspace } from '../src/utils/useTerminalWorkspace';
 
 const coin = (symbol: string, change24h: number, values: Partial<MarketCoin> = {}): MarketCoin => ({
   symbol, baseAsset: symbol.replace('USDT', ''), quoteAsset: 'USDT', exchange: 'binance', marketType: 'futures',
@@ -165,4 +166,43 @@ test('hidden Terminal market-presets menu only ranks the active category while p
   assert.match(panel, /: activePreset \? \[activePreset\] : \[\]/);
   assert.match(panel, /if \(activePreset && autoUpdate && !error && readyCoins\[activePreset\]\.length\)/);
   assert.match(panel, /selectMarketPresetCoins\(snapshot\.coins, id, selection, Number\.POSITIVE_INFINITY\)/);
+});
+
+test('Terminal reload recovers conflicting local charts rather than overwriting them with the cloud', () => {
+  const uid = 'terminal-conflict-recovery-test';
+  const entries = new Map<string, string>();
+  const original = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+  Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: {
+    getItem: (key: string) => entries.get(key) ?? null,
+    setItem: (key: string, value: string) => { entries.set(key, value); },
+    removeItem: (key: string) => { entries.delete(key); },
+  } });
+  const cloud: any = {
+    columns: 2, blockHeight: 'medium', config: { layoutPreset: 'custom', columns: 2, autoFitScreen: true, blockHeight: 'medium' },
+    blocks: [{ id: 'cloud', symbol: 'BTCUSDT', exchange: 'binance', marketType: 'futures', timeframe: '15m', colSpan: 1 }],
+    customPresets: [], version: 'server-revision',
+  };
+  try {
+    const conflictKey = terminalStorageKey('crypto_screener_terminal_conflict_backup', uid);
+    entries.set(conflictKey, JSON.stringify({
+      config: { ...cloud.config, columns: 3 },
+      blocks: [{ id: 'local', symbol: 'ETHUSDT', exchange: 'bybit', marketType: 'spot', timeframe: '5m', colSpan: 1 }],
+      presets: [],
+    }));
+    const local = loadTerminalWorkspace(uid, cloud);
+    assert.equal(local.blocks.length, 1);
+    assert.equal(local.blocks[0].symbol, 'ETHUSDT');
+    assert.equal(local.blocks[0].exchange, 'bybit');
+    assert.equal(local.config.columns, 3);
+    entries.delete(conflictKey);
+    const remote = loadTerminalWorkspace(uid, cloud);
+    assert.equal(remote.blocks[0].symbol, 'BTCUSDT');
+    assert.equal(remote.config.columns, 2);
+    entries.set(conflictKey, JSON.stringify({ blocks: 'invalid' }));
+    const corrupted = loadTerminalWorkspace(uid, cloud);
+    assert.equal(corrupted.blocks[0].symbol, 'BTCUSDT');
+  } finally {
+    if (original) Object.defineProperty(globalThis, 'localStorage', original);
+    else Reflect.deleteProperty(globalThis, 'localStorage');
+  }
 });
