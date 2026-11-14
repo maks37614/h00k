@@ -353,7 +353,7 @@ function LiquidationMinimum({ value, disabled, onChange }: { value?: number | nu
     onKeyDown={event => { if (event.key === 'Enter') event.currentTarget.blur(); }}
   />;
 }
-function Num({ value, set, min, max, step = 1, disabled = false, ariaLabel }: { value: number; set: (value: number) => void; min?: number; max?: number; step?: number; disabled?: boolean; ariaLabel?: string }) {
+function Num({ value, set, min, max, disabled = false, ariaLabel }: { value: number; set: (value: number) => void; min?: number; max?: number; step?: number; disabled?: boolean; ariaLabel?: string }) {
   // Keep a temporary string while editing. Number('') is zero, so committing
   // on every keystroke prevents users from deleting a displayed 0 on iOS.
   const [draft, setDraft] = useState<string | null>(null);
