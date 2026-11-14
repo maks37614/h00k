@@ -44,6 +44,25 @@ export function parseTerminalWorkspaceBackup(json: string): WorkspaceSnapshot {
     throw new Error('У JSON відсутні графіки, налаштування або пресети.');
   if (value.blocks.length > 250 || value.presets.length > 30)
     throw new Error('Забагато графіків або пресетів у файлі.');
+  const validChart = (candidate: unknown): boolean => {
+    if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) return false;
+    const block = candidate as Record<string, unknown>;
+    const marketId = (part: unknown): boolean =>
+      typeof part === 'string' && part.length > 0 && part.length <= 48 && /^[A-Za-z0-9]+$/.test(part);
+    return typeof block.id === 'string' && block.id.trim().length > 0 && block.id.length <= 180
+      && marketId(block.symbol) && marketId(block.baseAsset) && marketId(block.quoteAsset)
+      && ['binance', 'bybit'].includes(String(block.exchange))
+      && ['spot', 'futures'].includes(String(block.marketType))
+      && ['1m', '5m', '15m', '1h', '4h', '1d'].includes(String(block.timeframe))
+      && (block.colSpan == null || [1, 2, 3, 4, 'full'].includes(block.colSpan as number | string))
+      && (block.heightPx == null || (typeof block.heightPx === 'number'
+        && Number.isFinite(block.heightPx) && block.heightPx >= 180 && block.heightPx <= 2400));
+  };
+  if (!value.blocks.every(validChart)
+      || value.presets.some((preset: unknown) => !preset || typeof preset !== 'object'
+        || !Array.isArray((preset as TerminalSavedPreset).blocks)
+        || !(preset as TerminalSavedPreset).blocks.every(validChart)))
+    throw new Error('Файл містить некоректні символи, параметри або ID графіків.');
   const blocks = normalizeTerminalBlocks(value.blocks);
   const presets = normalizeTerminalPresets(value.presets);
   // Never silently remove an invalid entry during backup restoration.
