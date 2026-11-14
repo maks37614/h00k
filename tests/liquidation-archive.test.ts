@@ -91,3 +91,20 @@ test('Postgres migration rejects invalid price values and has indexed event time
   assert.match(feed,/liquidationArchive\.record/);
   assert.match(feed,/LIQ_MARKET_CAP/);
 });
+
+test('7d heatmap keeps latest 6,000 bins when archive exceeds its output cap', async () => {
+  // DB query returns descending timestamp, newest first; output is ascending
+  // for the HookChart binary-search viewport transform.
+  const rows=Array.from({length:6001},(_,i)=>({
+    t:2_000_000_000-i*900,bin:2200,side:'SHORT',amount:'1500',orders:'1',
+  }));
+  const fake={
+    query:async (sql:string) => sql.includes('SELECT FLOOR') ? {rows} : {rows:[]},
+  } as unknown as Pool;
+  const archive=new LiquidationArchive(true,5,()=>fake);
+  const result=await archive.heatmap('binance','BTCUSDT',168);
+  assert.equal(result?.bins.length,6000);
+  assert.equal(result?.truncated,true);
+  assert.equal(result?.bins.at(-1)?.time,2_000_000_000_000,'latest bin retained');
+  assert.ok(result!.bins[0].time<result!.bins.at(-1)!.time);
+});
