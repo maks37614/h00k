@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { SCREENER_VOLUME_CAPS, isVolumeWithinCap } from '../src/utils/screenerVolume';
+import type { MarketCoin } from '../src/types';
+import { compareScreenerSearchCoins } from '../src/utils/screenerSearchSettings';
+import { SCREENER_VOLUME_CAPS, isVolumeWithinCap, preferredVolumeSortOrder } from '../src/utils/screenerVolume';
 
 test('screener volume options include intermediate tiers and stop at 50B', () => {
   const caps = SCREENER_VOLUME_CAPS.map(option => option.value);
@@ -58,4 +60,24 @@ test('changing the direction applies from/to to the same selected amount without
   assert.equal(isVolumeWithinCap(10_000_000, 50_000, 'to'), false);
   assert.equal(isVolumeWithinCap(50_000, 50_000, 'from'), true);
   assert.equal(isVolumeWithinCap(50_000, 50_000, 'to'), true);
+});
+
+test('from-filter shows the closest qualifying volumes on the first screen, not the same high-volume coins', () => {
+  const volumes = [15_000, 40_000, 50_000, 55_000, 70_000, 120_000, 1_000_000, 4_000_000];
+  const coins = volumes.map((volumeUsd, index) => ({
+    volumeUsd, symbol: 'PAIR' + index + 'USDT', exchange: 'binance', marketType: 'futures',
+  } as MarketCoin));
+  const visible = (mode: 'from' | 'to') => coins
+    .filter(coin => isVolumeWithinCap(coin.volumeUsd, 50_000, mode))
+    .sort((a, b) => compareScreenerSearchCoins(a, b, {
+      sortBy: 'volume', sortOrder: preferredVolumeSortOrder(mode),
+      secondarySortBy: 'none', secondarySortOrder: 'desc',
+    }))
+    .slice(0, 3).map(coin => coin.volumeUsd);
+
+  assert.equal(preferredVolumeSortOrder('from'), 'asc');
+  assert.equal(preferredVolumeSortOrder('to'), 'desc');
+  assert.deepEqual(visible('to'), [50_000, 40_000, 15_000]);
+  assert.deepEqual(visible('from'), [50_000, 55_000, 70_000]);
+  // Both modes include the exact selected boundary, but show different results.
 });
