@@ -65,10 +65,12 @@ test('Bybit API error is unavailable, not an empty successful market', async () 
   assert.match(feed.status('bybit', 'futures').error!, /10006/);
 });
 
-test('valid empty markets are successful and malformed quotes never enter results', async () => {
+test('malformed upstream tickers are unavailable; a genuinely empty browser source remains valid', async () => {
   const feed = new MarketTickerFeed(async () => json([{ ...binanceTicker, lastPrice: 'Infinity' }]));
   assert.deepEqual(await feed.get('binance', 'spot'), []);
-  assert.equal(feed.status('binance', 'spot').status, 'live');
+  assert.equal(feed.status('binance', 'spot').status, 'unavailable');
+  assert.equal(feed.diagnostics()[0].restSuccesses, 0,
+    'an upstream list with zero valid USDT tickers must not refresh quote freshness');
   const empty = await loadMarketCoins({ exchange: 'binance', marketType: 'spot' }, new AbortController().signal, {
     request: async () => json({ success: true, data: [], timestamp: 10 }),
     binance: async () => { throw new Error('should not fall back for a valid empty response'); },
