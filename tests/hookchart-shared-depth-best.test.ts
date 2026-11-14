@@ -92,3 +92,28 @@ test('invalid crossed shared depth causes resync rather than publishing a false 
   assert.equal(onBook({ sequence: 12, eventTime: now + 2, bids: [[100, 2]], asks: [] }), false);
   off();
 });
+
+test('multiple charts that reject one depth delta receive the same shared repair snapshot', () => {
+  const now = Date.now();
+  let onBook!: (update: BookUpdate) => boolean;
+  const shared = createSharedDepthSubscriptions(options => {
+    onBook = options.onBook;
+    return () => {};
+  });
+  const base = { exchange: 'binance' as const, marketType: 'futures' as const, symbol: 'SOLUSDT' };
+  const repaired: BookUpdate[] = [];
+  const chart = () => shared.subscribe({ ...base, onBook: update => {
+    if (update.isSnapshot) { repaired.push(update); return true; }
+    return false;
+  }, onStatus: () => {} });
+  const off1 = chart(), off2 = chart();
+  assert.equal(onBook({ isSnapshot: true, sequence: 10, eventTime: now,
+    bids: [[99, 2]], asks: [[101, 3]] }), true);
+  repaired.length = 0;
+  assert.equal(onBook({ sequence: 11, eventTime: now + 1,
+    bids: [[99, 4]], asks: [] }), true);
+  assert.equal(repaired.length, 2);
+  assert.strictEqual(repaired[0], repaired[1]);
+  assert.deepEqual(repaired[0].bids, [[99, 4]]);
+  off1(); off2();
+});
