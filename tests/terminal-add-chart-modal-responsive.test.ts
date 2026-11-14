@@ -70,3 +70,18 @@ test('Terminal quick add preserves a selected market quote instead of inventing 
   assert.match(source, /\{quickAddInstrument\.symbol\}/);
   assert.doesNotMatch(source, /\{cleanSearchSymbol\}USDT/);
 });
+
+test('closed Terminal Add Chart modal skips full-market recomputation', () => {
+  assert.match(source, /const formationsMap = useMemo\(\(\) => \{[\s\S]*?if \(!isOpen\) return map;/);
+  assert.match(source, /const unifiedCoins = useMemo\(\(\) => \{\s*if \(!isOpen\) return \[\];/);
+  assert.match(source, /const filteredCoins = useMemo\(\(\) => \{\s*if \(!isOpen\) return \[\];/);
+});
+
+test('Terminal Add Chart visibly enforces the workspace chart limit without silent deletion', () => {
+  const page = readFileSync(new URL('../src/components/TerminalPage.tsx', import.meta.url), 'utf8');
+  assert.match(page, /atChartLimit=\{blocks\.length >= MAX_TERMINAL_CHARTS\}/);
+  assert.match(page, /prev\.length >= MAX_TERMINAL_CHARTS \? prev : \[\.\.\.prev, newBlock\]/);
+  assert.match(source, /Досягнуто ліміт 50 графіків/);
+  assert.match(source, /disabled=\{atChartLimit\}/);
+  assert.match(source, /if \(atChartLimit\) return;/);
+});
