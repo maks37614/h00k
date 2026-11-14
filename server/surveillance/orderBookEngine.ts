@@ -3,6 +3,7 @@ import { RawDepthDelta } from './exchangeStream';
 import { DensityItem, OrderBookLevel, OrderBookState, OrderBookStatus } from './types';
 import { ORDER_BOOK_MAX_AGE_MS, isFreshDepthTime, parseDepthLevels, type NormalizedDepthLevels } from '../../src/utils/orderBookValidation';
 import { lowerMedian } from './lowerMedian';
+import type { SharedPublicOrderBook } from './sharedExchangeStream';
 
 export interface DensityConfig {
   mode: 'AUTO' | 'MANUAL' | 'HYBRID';
@@ -26,8 +27,13 @@ interface DensityStats {
 }
 
 export class OrderBookEngine {
-  private bids = new Map<number, number>();
-  private asks = new Map<number, number>();
+  // In production these may point to one shared public market book. All
+  // private density history, thresholds and alert state remain per owner.
+  private bids: ReadonlyMap<number, number> = new Map();
+  private asks: ReadonlyMap<number, number> = new Map();
+  private sharedBookActive = false;
+  private sharedBookRevision: number | null = null;
+  private privateBookCopies = 0;
   private activeDensities = new Map<string, DensityItem>();
   private densityHistory: DensityItem[] = [];
   private densityStats = new Map<string, DensityStats>();
@@ -96,6 +102,7 @@ export class OrderBookEngine {
     this.status = newStatus;
     if (newStatus !== 'LIVE') {
       this.dataValid = false;
+      this.sharedBookRevision = null;
       // A reconnect/STALE status invalidates incremental continuity. Another
       // delta alone must never make the old book LIVE without a fresh snapshot.
       this.sequenceGap = true;
@@ -105,7 +112,8 @@ export class OrderBookEngine {
     }
   }
 
-  public applyDepth(delta: RawDepthDelta, validated?: NormalizedDepthLevels | null) {
+  public applyDepth(delta: RawDepthDelta, validated?: NormalizedDepthLevels | null,
+    publicBook?: SharedPublicOrderBook | null) {
     const now = Date.now();
     // The shared exchange stream has already validated these public tuples.
     // Otherwise (manual, isolated or late-replay callers), parse and fail
@@ -138,11 +146,38 @@ export class OrderBookEngine {
       this.status = 'SYNCING';
       return;
     }
-    if (!delta.isSnapshot && bids.length === 0 && asks.length === 0) {
-      // A valid heartbeat still refreshes source freshness and sequence.
-      // Never invalidate the price-ordering/median cache when the book is
-      // unchanged. Re-scan once per second for density persistence ages, or
-      // immediately when per-owner 24h volume/config changes the threshold.
+    const previousSharedRevision = this.sharedBookRevision;
+    if (publicBook && validated) {
+      // One immutable-by-convention canonical *public* book for all owners.
+      // No personal calculator ever writes to these maps.
+      this.bids = publicBook.bids;
+      this.asks = publicBook.asks;
+      this.sharedBookActive = true;
+      this.sharedBookRevision = publicBook.revision;
+    } else {
+      if (this.sharedBookActive) {
+        // Offline/fallback packets must never mutate the canonical book.
+        this.bids = new Map(this.bids);
+        this.asks = new Map(this.asks);
+        this.privateBookCopies++;
+      }
+      this.sharedBookActive = false;
+      this.sharedBookRevision = null;
+    }
+
+    // Upstream may repeat the same quantities as a delta without using an
+    // empty packet. Avoid a full per-owner median/density pass in that case.
+    // The public market revision also catches changes already applied to the
+    // shared maps *before* personal EventEmitter callbacks execute.
+    const unchangedBook = !delta.isSnapshot && (
+      this.sharedBookActive
+        ? previousSharedRevision === this.sharedBookRevision
+        : bids.every(([p, q]) => (this.bids.get(p) ?? 0) === q) &&
+          asks.every(([p, q]) => (this.asks.get(p) ?? 0) === q
+    );
+    if (unchangedBook) {
+      // Valid heartbeats still advance freshness/sequence. Re-evaluate age
+      // every second or immediately when user configuration/volume changes.
       this.lastReceivedAt = now;
       this.lastExchangeTimestamp = delta.eventTime || 0;
       this.lastUpdateId = seq;
@@ -161,8 +196,10 @@ export class OrderBookEngine {
     this.sequenceGap = false;
     this.lastUpdateId = seq;
     if (delta.isSnapshot) {
-      this.bids.clear();
-      this.asks.clear();
+      if (!this.sharedBookActive) {
+        this.bids = new Map();
+        this.asks = new Map();
+      }
       this.activeDensities.clear();
       this.densityStats.clear();
       this.newlyAppearedDensities = [];
@@ -181,10 +218,10 @@ export class OrderBookEngine {
       if (!Number.isFinite(price) || price <= 0 ||
           !Number.isFinite(qty) || qty < 0) continue;
       if (qty === 0) {
-        this.bids.delete(price);
+        if (!this.sharedBookActive) (this.bids as Map<number, number>).delete(price);
         if (price === bestBid) bidDeletedAtBest = true;
       } else {
-        this.bids.set(price, qty);
+        if (!this.sharedBookActive) (this.bids as Map<number, number>).set(price, qty);
         if (price > bestBid) bestBid = price;
       }
     }
@@ -192,10 +229,10 @@ export class OrderBookEngine {
       if (!Number.isFinite(price) || price <= 0 ||
           !Number.isFinite(qty) || qty < 0) continue;
       if (qty === 0) {
-        this.asks.delete(price);
+        if (!this.sharedBookActive) (this.asks as Map<number, number>).delete(price);
         if (price === bestAsk) askDeletedAtBest = true;
       } else {
-        this.asks.set(price, qty);
+        if (!this.sharedBookActive) (this.asks as Map<number, number>).set(price, qty);
         if (price < bestAsk) bestAsk = price;
       }
     }
@@ -290,7 +327,9 @@ export class OrderBookEngine {
       sortedPriceComputations: this.sortedPriceComputations,
       bestPriceFullScans: this.bestPriceFullScans,
       densityEvaluations: this.densityEvaluations,
-      depthParseFallbacks: this.depthParseFallbacks };
+      depthParseFallbacks: this.depthParseFallbacks,
+      sharedBookActive: this.sharedBookActive,
+      privateBookCopies: this.privateBookCopies };
   }
 
   private newlyAppearedDensities: DensityItem[] = [];
@@ -428,5 +467,5 @@ export class OrderBookEngine {
   private hasFreshData(): boolean {
     return isFreshDepthTime(this.lastReceivedAt) && (!this.lastExchangeTimestamp || isFreshDepthTime(this.lastExchangeTimestamp));
   }
-  public clear(){this.bookRevision++;this.thresholdMemo=null;this.sortedPricesMemo=null;this.lastDensityEvaluationAt=0;this.densityInputsDirty=false;this.bids.clear();this.asks.clear();this.activeDensities.clear();this.densityStats.clear();this.dataValid=false;this.sequenceGap=false;this.status='CONNECTING';this.lastUpdateId=0;this.lastReceivedAt=0;this.lastExchangeTimestamp=0;this.bestBid=0;this.bestAsk=0;this.newlyAppearedDensities=[];}
+  public clear(){this.bookRevision++;this.thresholdMemo=null;this.sortedPricesMemo=null;this.lastDensityEvaluationAt=0;this.densityInputsDirty=false;this.sharedBookActive=false;this.sharedBookRevision=null;this.bids=new Map();this.asks=new Map();this.activeDensities.clear();this.densityStats.clear();this.dataValid=false;this.sequenceGap=false;this.status='CONNECTING';this.lastUpdateId=0;this.lastReceivedAt=0;this.lastExchangeTimestamp=0;this.bestBid=0;this.bestAsk=0;this.newlyAppearedDensities=[];}
 }
