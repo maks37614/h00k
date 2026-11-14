@@ -88,6 +88,44 @@ test('duplicate create requests preserve a paused or triggered alert', () => {
 });
 
 
+test('retrying an existing alert returns a detached snapshot, not a mutable persistence reference', () => {
+  const owner = 'retry-detached-owner';
+  const first = service.createAlert(alert('retry-detached', owner));
+  const retry = service.createAlert(alert(first.id, owner));
+  assert.notStrictEqual(retry, service.loadAlerts().find(item => item.id === first.id && item.userId === owner));
+
+  retry.isActive = false;
+  retry.triggered = true;
+  retry.triggeredAt = Date.now();
+  let stored = service.getAllAlerts(owner)[0];
+  assert.equal(stored.isActive, true);
+  assert.equal(stored.triggered, false);
+  assert.equal(stored.triggeredAt, undefined);
+
+  service.toggleAlert(first.id, owner, false);
+  const pausedRetry = service.createAlert(alert(first.id, owner));
+  assert.equal(pausedRetry.isActive, false);
+  pausedRetry.isActive = true;
+  assert.equal(service.getAllAlerts(owner)[0].isActive, false);
+});
+
+test('duplicate IDs in a client sync are merged once and cannot re-arm paused alerts', () => {
+  const owner = 'sync-duplicate-owner';
+  const created = service.createAlert(alert('sync-duplicate', owner));
+  service.toggleAlert(created.id, owner, false);
+  const staleClient = { ...created, isActive: true, triggered: false };
+
+  const synced = service.syncUserAlerts(owner, [staleClient, { ...staleClient }]);
+  assert.deepEqual(synced.map(row => row.id), ['sync-duplicate']);
+  assert.equal(synced[0].isActive, false);
+  assert.equal(service.getAllAlerts(owner).length, 1);
+  assert.equal(service.getAllAlerts(owner)[0].isActive, false);
+
+  const unrelated = service.createAlert(alert('sync-other', 'sync-other-owner'));
+  assert.equal(service.getAllAlerts('sync-other-owner').find(row => row.id === unrelated.id)?.isActive, true);
+});
+
+
 test('API alert and history snapshots cannot silently change stored user state', () => {
   const owner = 'immutable-alert-snapshot';
   const created = service.createAlert(alert('immut-create', owner));
