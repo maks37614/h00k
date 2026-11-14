@@ -19,6 +19,7 @@ import { getTimeframeMs } from './surveillance/multiTimeframeEngine';
 import { fetchKlines } from './marketService';
 import { surveillanceCheckCandleCache } from './surveillance/checkCandleCache';
 import { hasFreshSurveillanceCheck, wasSurveillanceCheckCommitted, SurveillanceCheckIncompleteError } from './surveillance/checkResult';
+import { ScopedSurveillanceChecks, type SurveillanceCheckOptions } from './surveillance/scopedChecks';
 import { candleCloseCheckPlanner } from './surveillance/candleCloseCheckPlanner';
 import { sharedSurveillanceState } from './surveillance/sharedSurveillanceState';
 import { getUserTelegram } from './alertService';
@@ -699,33 +700,31 @@ ${state.momentumRecentPct !== undefined ? `• <b>Імпульс (${coin.config.
 🔗 <a href="${exchangeUrl}">Перейти на біржу ${exchangeUpper}</a>`;
 }
 
-const checkFlights = new Map<string, Promise<{ coin: SurveillanceCoin; newEvents: SurveillanceEvent[] }>>();
+type SurveillanceCheckResult = { coin: SurveillanceCoin; newEvents: SurveillanceEvent[] };
+const checkFlights = new ScopedSurveillanceChecks<SurveillanceCoin, SurveillanceCheckResult>(
+  checkCoinSurveillanceInternal,
+);
 
-export async function checkCoinSurveillance(
+export function checkCoinSurveillance(
   requestedCoin: SurveillanceCoin,
   options: { forceCheck?: boolean; forceNotify?: boolean } | boolean = false
-): Promise<{ coin: SurveillanceCoin; newEvents: SurveillanceEvent[] }> {
-  const key = `${requestedCoin.userId}:${requestedCoin.id}`;
-  const existing = checkFlights.get(key);
-  if (existing) return existing;
-  const checking = checkCoinSurveillanceInternal(requestedCoin, options);
-  checkFlights.set(key, checking);
-  try { return await checking; }
-  finally { if (checkFlights.get(key) === checking) checkFlights.delete(key); }
+): Promise<SurveillanceCheckResult> {
+  // Array keys keep identities isolated even if a user or coin ID contains ':'.
+  const key = JSON.stringify([requestedCoin.userId, requestedCoin.id]);
+  return checkFlights.check(key, requestedCoin, options);
 }
 
 async function checkCoinSurveillanceInternal(
   requestedCoin: SurveillanceCoin,
-  options: { forceCheck?: boolean; forceNotify?: boolean } | boolean
-): Promise<{ coin: SurveillanceCoin; newEvents: SurveillanceEvent[] }> {
+  options: SurveillanceCheckOptions,
+): Promise<SurveillanceCheckResult> {
   const current = findSurveillanceCoinById(requestedCoin.id, requestedCoin.userId)?.coin;
   if (!current) return { coin: requestedCoin, newEvents: [] };
   const coin = structuredClone(current);
   const config = coin.config;
   const prevState = coin.state;
-  const forceNotify = typeof options === 'object' && Boolean(options.forceNotify);
+  const { forceCheck, forceNotify } = options;
   const frames = ['1d', '4h', '1h', '15m'] as const;
-  const forceCheck = typeof options === 'object' && Boolean(options.forceCheck);
   const fetched = await Promise.all(frames.map(tf =>
     (forceCheck
       ? fetchKlines(coin.exchange, coin.marketType, coin.symbol, tf, tf === '4h' ? 80 : 60)
