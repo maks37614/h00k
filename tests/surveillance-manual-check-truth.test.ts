@@ -44,7 +44,7 @@ test('surveillance endpoints do not report a successful manual scan without new 
   assert.match(checkOne, /if \(!hasFreshSurveillanceCheck\(found\.coin, updated\)\)/);
   assert.match(checkOne, /status\(503\)\.setHeader\('Retry-After', '10'\)/);
   assert.match(checkOne, /if \(!wasSurveillanceCheckCommitted\(updated, committed\)\)/);
-  assert.match(createCoin, /status\(202\)\.json\(\{ success: true, pending: true/);
+  assert.match(createCoin, /return res\.json\(\{ success: true, pending: true/);
   assert.match(checkAll, /if \(!hasFreshSurveillanceCheck\(coin, updated\)\)/);
   assert.match(checkAll, /if \(!wasSurveillanceCheckCommitted\(updated, committed\)\)/);
   assert.match(checkAll, /if \(failedChecks\) throw new Error/);
