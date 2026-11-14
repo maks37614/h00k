@@ -37,6 +37,17 @@ function ensureDataDir() {
   }
 }
 
+/** Only a genuinely missing file means there is no saved store. Permission,
+ * I/O and filesystem failures are errors and must never become an empty list. */
+function readStoreFileIfPresent(filename: string): string | null {
+  try {
+    return fs.readFileSync(filename, 'utf-8');
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
+    throw error;
+  }
+}
+
 interface UserSurveillanceStore {
   [userId: string]: SurveillanceCoin[];
 }
@@ -62,8 +73,8 @@ export function loadSurveillanceStore(): UserSurveillanceStore {
   let candidate: UserSurveillanceStore = Object.create(null) as UserSurveillanceStore;
   let migrated = false;
 
-  if (fs.existsSync(SURVEILLANCE_FILE)) {
-    const raw = fs.readFileSync(SURVEILLANCE_FILE, 'utf-8');
+  const raw = readStoreFileIfPresent(SURVEILLANCE_FILE);
+  if (raw !== null) {
     const parsed: unknown = JSON.parse(raw);
     if (Array.isArray(parsed)) {
       // Legacy single-list format: migrate once without losing the old file
@@ -83,8 +94,9 @@ export function loadSurveillanceStore(): UserSurveillanceStore {
     }
   } else {
     const legacyFile = path.join(DATA_DIR, 'surveillance_legacy.json');
-    if (fs.existsSync(legacyFile)) {
-      const legacy: unknown = JSON.parse(fs.readFileSync(legacyFile, 'utf-8'));
+    const legacyRaw = readStoreFileIfPresent(legacyFile);
+    if (legacyRaw !== null) {
+      const legacy: unknown = JSON.parse(legacyRaw);
       if (!Array.isArray(legacy))
         throw new Error('Invalid surveillance_legacy.json: expected an array');
       candidate = { guest: legacy as SurveillanceCoin[] };
@@ -131,7 +143,7 @@ export function saveSurveillanceStore(store: UserSurveillanceStore): boolean {
     ensureDataDir();
     let safeStore: UserSurveillanceStore = store;
     if (Array.isArray(store)) {
-      safeStore = {};
+      safeStore = Object.create(null) as UserSurveillanceStore;
       for (const item of store as any[]) {
         if (item && typeof item === 'object') {
           const uid = (item.userId && String(item.userId).trim()) || 'guest';
