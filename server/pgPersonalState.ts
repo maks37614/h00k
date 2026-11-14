@@ -120,6 +120,15 @@ export async function stagePersonalStateToPostgres(client:DbClient,snapshot:Pers
     const users = await client.query('SELECT id FROM auth_users');
     const known=new Set<string>(users.rows.map((row:{id:string})=>row.id));
     const prepared=preparePersonalStateRows(snapshot,known);
+    // A matching staging marker means the source was already committed.
+    // Do not even attempt INSERTs on replay: an idempotent ON CONFLICT
+    // still INSERTS rows that a user has since intentionally deleted.
+    // --verify is the only safe way to check an existing staged snapshot.
+    if (previous.rows.length) {
+      await client.query('COMMIT');
+      return { surveillance:0, alerts:0, history:0, ...prepared.skipped,
+        stageKey, snapshotSha256, alreadyStaged:true, verificationRequired:true };
+    }
     const surveillance=await batchInsert(client,'h00k_surveillance_state',
       ['user_id','coin_id','exchange','market_type','symbol','is_active','payload'],
       prepared.surveillance.map(r=>[r.owner,r.id,r.exchange,r.market,r.symbol,r.active,
@@ -135,14 +144,13 @@ export async function stagePersonalStateToPostgres(client:DbClient,snapshot:Pers
       history!==prepared.history.length)
       throw new Error('PostgreSQL staging conflict: a target row differs from the JSON snapshot; '+
         'the transaction was rolled back without replacing the newer state');
-    if(!previous.rows.length) {
-      const inserted=await client.query(
-        'INSERT INTO h00k_personal_state_staging_runs(stage_key,snapshot_sha256) VALUES ($1,$2)',
-        [stageKey,snapshotSha256]);
-      if(inserted.rowCount!==1) throw new Error('PostgreSQL staging marker write failed');
-    }
+    const inserted=await client.query(
+      'INSERT INTO h00k_personal_state_staging_runs(stage_key,snapshot_sha256) VALUES ($1,$2)',
+      [stageKey,snapshotSha256]);
+    if(inserted.rowCount!==1) throw new Error('PostgreSQL staging marker write failed');
     await client.query('COMMIT');
-    return {surveillance,alerts,history,...prepared.skipped,stageKey,snapshotSha256};
+    return {surveillance,alerts,history,...prepared.skipped,stageKey,snapshotSha256,
+      alreadyStaged:false,verificationRequired:true};
   } catch(e) { await client.query('ROLLBACK');throw e; }
 }
 export const readPersonalStateSchema=()=>readFileSync(new URL('./migrations/002_personal_state.sql',

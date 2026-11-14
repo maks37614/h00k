@@ -39,7 +39,11 @@ test('PostgreSQL 16 staging is idempotent, indexed and excludes former user IDs'
     const counts=await stagePersonalStateToPostgres(client,snapshots as any,schema,{stageKey:owner});
     assert.deepEqual([counts.surveillance,counts.alerts,counts.history,counts.orphaned],
       [1,1,1,1]);
-    await stagePersonalStateToPostgres(client,snapshots as any,schema,{stageKey:owner});
+    const repeat=await stagePersonalStateToPostgres(client,snapshots as any,schema,{stageKey:owner});
+    assert.equal(repeat.alreadyStaged,true);
+    assert.equal(repeat.verificationRequired,true);
+    assert.deepEqual([repeat.surveillance,repeat.alerts,repeat.history],[0,0,0],
+      'same-source replay must not perform any staged-table writes');
     const verifyOptions={stageKey:owner,scopeOwners:[owner]};
     const identical=await verifyPersonalStateStaging(client,snapshots as any,verifyOptions);
     assert.equal(identical.consistent,true);
@@ -66,10 +70,10 @@ test('PostgreSQL 16 staging is idempotent, indexed and excludes former user IDs'
     await client.query(
       'UPDATE h00k_price_alert_state SET is_active=false WHERE user_id=$1 AND alert_id=$2',
       [owner,'alert-1']);
-    await assert.rejects(
-      () => stagePersonalStateToPostgres(client,snapshots as any,schema,{stageKey:owner}),
-      /PostgreSQL staging conflict/,
-    );
+    const replayAfterEdit=await stagePersonalStateToPostgres(
+      client,snapshots as any,schema,{stageKey:owner});
+    assert.equal(replayAfterEdit.alreadyStaged,true,
+      'a matching JSON snapshot must not overwrite even a changed live row');
     const newer=await client.query(
       'SELECT is_active FROM h00k_price_alert_state WHERE user_id=$1 AND alert_id=$2',
       [owner,'alert-1']);
@@ -118,6 +122,19 @@ test('PostgreSQL 16 staging is idempotent, indexed and excludes former user IDs'
     assert.equal(missingAndExtra.consistent,false);
     assert.equal(missingAndExtra.history.missing,1);
     assert.equal(missingAndExtra.history.extra,1);
+    const replayAfterDelete=await stagePersonalStateToPostgres(
+      client,snapshots as any,schema,{stageKey:owner});
+    assert.equal(replayAfterDelete.alreadyStaged,true);
+    const notResurrected=await client.query(
+      'SELECT history_id FROM h00k_alert_history_state WHERE user_id=$1 ORDER BY history_id',
+      [owner]);
+    assert.deepEqual(notResurrected.rows.map((row:{history_id:string})=>row.history_id),
+      ['history-extra'],
+      're-running --apply must not resurrect deleted history or remove newer rows');
+    const stillDifferent=await verifyPersonalStateStaging(client,snapshots as any,verifyOptions);
+    assert.equal(stillDifferent.consistent,false);
+    assert.equal(stillDifferent.history.missing,1);
+    assert.equal(stillDifferent.history.extra,1);
   } finally {
     await client.query('DELETE FROM h00k_personal_state_staging_runs WHERE stage_key=$1',[owner]).catch(()=>{});
     await client.query('DELETE FROM h00k_alert_history_state WHERE user_id=$1',[owner]).catch(()=>{});

@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { preparePersonalStateRows, STATE_MIGRATION_CHUNK,
- personalStateSnapshotDigest, DEFAULT_PERSONAL_STATE_STAGE_KEY } from '../server/pgPersonalState';
+ personalStateSnapshotDigest, DEFAULT_PERSONAL_STATE_STAGE_KEY,
+ stagePersonalStateToPostgres } from '../server/pgPersonalState';
 
 test('staging skips guest, former-user, malformed state, and preserves valid per-user rows',()=>{
  const snap={
@@ -50,4 +51,24 @@ test('snapshot fingerprint is stable for exact replays and changes for altered i
  original.alerts[0].id='changed-alert';
  assert.notEqual(personalStateSnapshotDigest(original),digest);
  assert.equal(DEFAULT_PERSONAL_STATE_STAGE_KEY,'legacy-json');
+});
+
+test('matching committed staging marker short-circuits before all personal INSERTs',async()=>{
+ const snapshot={ surveillance:{},alerts:[],history:[] } as any;
+ const digest=personalStateSnapshotDigest(snapshot);
+ const calls:string[]=[];
+ const client={query:async (sql:string,values?:unknown[])=>{
+  calls.push(sql);
+  if (sql.includes('SELECT snapshot_sha256 FROM h00k_personal_state_staging_runs'))
+   return {rows:[{snapshot_sha256:digest}]};
+  if (sql.includes('SELECT id FROM auth_users')) return {rows:[]};
+  return {rows:[],rowCount:0};
+ }} as any;
+ const result=await stagePersonalStateToPostgres(client,snapshot,'-- schema already installed');
+ assert.equal(result.alreadyStaged,true);
+ assert.equal(result.verificationRequired,true);
+ assert.deepEqual([result.surveillance,result.alerts,result.history],[0,0,0]);
+ assert.equal(calls.includes('COMMIT'),true);
+ assert.equal(calls.some(sql=>/INSERT INTO h00k_(?:surveillance_state|price_alert_state|alert_history_state|personal_state_staging_runs)/.test(sql)),false,
+  'repeat of an already committed snapshot can never recreate deleted rows');
 });
