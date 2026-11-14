@@ -157,6 +157,12 @@ export function saveSurveillanceStore(store: UserSurveillanceStore): boolean {
     }
     const payload = JSON.stringify(safeStore);
     bytes = Buffer.byteLength(payload);
+    // Remove an abandoned predictable name from older deployments without
+    // opening or following it (including if an attacker made it a symlink).
+    try { fs.unlinkSync(`${SURVEILLANCE_FILE}.tmp`); }
+    catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    }
     // Never truncate/reuse a predictable .tmp file: previous deployments may
     // have left it world-readable, or an attacker may have placed a symlink.
     // O_EXCL ('wx') creates a fresh, unpredictable 0600 file BEFORE bytes
