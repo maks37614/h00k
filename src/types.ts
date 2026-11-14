@@ -829,12 +829,12 @@ export interface SmartAnalysisData {
     quality: 'ultra_tight' | 'normal' | 'wide' | 'unavailable';
   };
   volatility: {
-    dailyRangePct: number;
+    dailyRangePct: number | null;
     atr: number;
     atrPct: number;
-    positionInDayRangePct: number; // 0% = Low, 100% = High
-    high24h: number;
-    low24h: number;
+    positionInDayRangePct: number | null; // 0% = Low, 100% = High
+    high24h: number | null;
+    low24h: number | null;
   };
 
   // 5. Orderbook & Walls
