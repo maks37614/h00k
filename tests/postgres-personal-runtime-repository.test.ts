@@ -103,7 +103,11 @@ test('PostgreSQL transaction preserves owner isolation, revisions and independen
     await assert.rejects(
       ()=>repo.replace(owner,0,{alerts:[]}),PersonalStateRevisionConflict,
       'a stale session must never wipe newer personal alerts');
-    const v2=await repo.replace(other,0,{alerts:[alert(other,'alert2')] as any});
+    const v2=await repo.replace(other,0,{
+      surveillance:[coin(other,'coin2')] as any,
+      alerts:[alert(other,'alert2')] as any,
+      history:[event(other,'history2')] as any,
+    });
     assert.equal(v2,1);
     const v3=await repo.replace(owner,1,{alerts:[]});
     assert.equal(v3,2);
