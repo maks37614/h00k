@@ -247,3 +247,14 @@ test('old Terminal workspaces stay readable and the server issues new revision t
   assert.match(types, /interface TerminalWorkspaceSettings \{[\s\S]*?version\?: string;/);
   assert.match(backend, /patch\.terminalSettings = \{ \.\.\.safeWorkspace, version: randomUUID\(\) \}/);
 });
+
+test('Terminal always chooses native HookChart, never legacy TradingView even on old accounts', () => {
+  const page = source('../src/components/TerminalPage.tsx');
+  const widget = source('../src/components/terminal/TerminalChartWidget.tsx');
+  const wrapper = source('../src/components/ExchangeCandlestickChart.tsx');
+  assert.match(page, /const chartProvider = normalizeChartProvider\('hookchart'\)/);
+  assert.match(widget, /const chartProvider = normalizeChartProvider\('hookchart'\)/);
+  assert.match(page, /<ExchangeCandlestickChart\s+forceHookChart/);
+  assert.match(widget, /<ExchangeCandlestickChart\s+forceHookChart/);
+  assert.match(wrapper, /forceHookChart=\{forceHookChart\}/);
+});
