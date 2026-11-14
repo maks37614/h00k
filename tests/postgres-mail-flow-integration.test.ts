@@ -6,7 +6,7 @@ import type { Server } from 'node:http';
 import express from 'express';
 import nodemailer from 'nodemailer';
 import { installPostgresIdentityRoutes } from '../server/pgIdentityRoutes';
-import { identityPool, COOKIE_NAME, processAuthMailJobs } from '../server/pgIdentity';
+import { identityPool, COOKIE_NAME, processAuthMailJobs, sendReset } from '../server/pgIdentity';
 
 type CapturedMail = { from: string; to: string; subject: string; text: string };
 function tokenFrom(message: CapturedMail, param: 'verifyEmail' | 'resetPassword'): string {
@@ -148,7 +148,16 @@ test('real PostgreSQL and captured SMTP: register, verify, login, recover, resen
     assert.equal(mail.length, 1, 'unknown emails produce no outgoing message');
     const forgot = await post('/api/auth/forgot-password', { email });
     assert.equal(forgot.status, 200);
+    assert.deepEqual(await forgot.json(), await unknown.json(),
+      'registered and unknown recovery requests must return the same public response');
     assert.equal(mail.length, 1, 'a public recovery request must not wait for SMTP');
+    await sendReset(email); // A concurrent request must reuse the pending queue job.
+    const pending = await db.query(`
+      SELECT count(*)::int AS count FROM auth_mail_outbox
+      WHERE user_id = (SELECT id FROM auth_users WHERE email = $1)
+        AND purpose = 'reset-password' AND completed_at IS NULL
+    `, [email]);
+    assert.equal(pending.rows[0].count, 1, 'one pending queue job per account/purpose');
     assert.deepEqual(await processAuthMailJobs(), { processed: 1, delivered: 1 });
     assert.equal(mail.length, 2);
     assert.match(mail[1].subject, /пароля/);
