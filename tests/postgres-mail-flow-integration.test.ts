@@ -27,6 +27,8 @@ test('real PostgreSQL and captured SMTP: register, verify, login, recover, resen
     from: process.env.SMTP_FROM,
     port: process.env.SMTP_PORT,
     base: process.env.PUBLIC_BASE_URL,
+    captchaSite: process.env.TURNSTILE_SITE_KEY,
+    captchaSecret: process.env.TURNSTILE_SECRET_KEY,
   };
   const id1 = randomUUID(), id2 = randomUUID();
   const email = 'auth-mail-' + id1 + '@example.invalid';
@@ -42,6 +44,22 @@ test('real PostgreSQL and captured SMTP: register, verify, login, recover, resen
       return { accepted: [item.to] };
     },
   }));
+  // Test the real HTTP routes without contacting the external Turnstile API.
+  const nativeFetch = globalThis.fetch;
+  const validatedTokens = new Set<string>();
+  t.mock.method(globalThis, 'fetch', async (...args: Parameters<typeof fetch>) => {
+    if (String(args[0]) !== 'https://challenges.cloudflare.com/turnstile/v0/siteverify') {
+      return nativeFetch(...args);
+    }
+    const body = new URLSearchParams(String(args[1]?.body || ''));
+    const token = body.get('response') || '';
+    const valid = body.get('secret') === 'unit-test-captcha-secret' &&
+      token.startsWith('valid-' + id1) && !validatedTokens.has(token);
+    if (valid) validatedTokens.add(token);
+    return new Response(JSON.stringify({
+      success: valid, hostname: 'h00k.top', action: 'h00k_auth',
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  });
   let server: Server | undefined;
   let db: ReturnType<typeof identityPool> | undefined;
   try {
@@ -49,6 +67,8 @@ test('real PostgreSQL and captured SMTP: register, verify, login, recover, resen
     process.env.SMTP_FROM = '';
     process.env.PUBLIC_BASE_URL = 'https://h00k.top';
     process.env.SMTP_PORT = '587';
+    process.env.TURNSTILE_SITE_KEY = 'unit-test-captcha-site';
+    process.env.TURNSTILE_SECRET_KEY = 'unit-test-captcha-secret';
 
     const app = express();
     app.use(express.json());
@@ -58,6 +78,8 @@ test('real PostgreSQL and captured SMTP: register, verify, login, recover, resen
       listener.once('error', reject);
     });
     const origin = 'http://127.0.0.1:' + (server.address() as AddressInfo).port;
+    const protectedRoutes = new Set(['/api/auth/register', '/api/auth/login',
+      '/api/auth/forgot-password', '/api/auth/resend-verification']);
     const post = (route: string, data: unknown, credentials?: { cookie: string; csrf: string }) => fetch(origin + route, {
       method: 'POST',
       headers: {
@@ -65,7 +87,9 @@ test('real PostgreSQL and captured SMTP: register, verify, login, recover, resen
         Origin: origin,
         ...(credentials ? { Cookie: credentials.cookie, 'X-CSRF-Token': credentials.csrf } : {}),
       },
-      body: JSON.stringify(data),
+      body: JSON.stringify(protectedRoutes.has(route)
+        ? { ...(data as Record<string, unknown>), captchaToken: 'valid-' + id1 + '-' + randomUUID() }
+        : data),
     });
     db = identityPool();
 
@@ -177,6 +201,8 @@ test('real PostgreSQL and captured SMTP: register, verify, login, recover, resen
       SMTP_FROM: old.from,
       SMTP_PORT: old.port,
       PUBLIC_BASE_URL: old.base,
+      TURNSTILE_SITE_KEY: old.captchaSite,
+      TURNSTILE_SECRET_KEY: old.captchaSecret,
     })) {
       if (value === undefined) delete process.env[name];
       else process.env[name] = value;
