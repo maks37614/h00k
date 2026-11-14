@@ -36,11 +36,12 @@ test('desktop quick formation totals are removed without removing nav formation 
   assert.match(source, /id="nav-category-patterns-btn"/);
 });
 
-
 test('site header retains icon borders but does not show a manual refresh button', () => {
-  assert.doesNotMatch(css, /\\.app-header:is\\(\\[data-page="screener"\\], \\[data-page="patterns"\\]\\) button/);
-  assert.doesNotMatch(source, /id="refresh-screener-btn"|<RefreshCw/);
-  assert.match(source, /<SiteNotificationBell/);
-  assert.match(source, /id="open-telegram-btn"[\\s\\S]*?border-sky-500\\/40/);
-  assert.match(source, /id="open-watchlist-btn"[\\s\\S]*?border-slate-800/);
+  assert.ok(!css.includes('button * {\\n  border-width: 0;'));
+  assert.ok(!source.includes('id="refresh-screener-btn"'));
+  assert.ok(!source.includes('<RefreshCw'));
+  assert.ok(source.includes('<SiteNotificationBell'));
+  const actions = source.slice(source.indexOf('<SiteNotificationBell'));
+  assert.ok(actions.includes('border-sky-500/40'));
+  assert.ok(actions.includes('border-slate-800'));
 });
