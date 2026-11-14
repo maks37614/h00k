@@ -19,7 +19,7 @@ test('desktop clock is centered above the timeframe, not above the whole control
 test('on wide screens autoscale comes before 1x–4x on the left, presets and plus after timeframe', () => {
   const counter = secondRow.indexOf('Монет: {terminalCoinCount}');
   const auto = secondRow.indexOf('{renderAutoScaleButton()}');
-  const one = secondRow.indexOf('title="1 Графік (на весь екран)"');
+  const one = secondRow.indexOf('title="1 колонка (зберегти всі графіки)"');
   const four = secondRow.indexOf('title="4 Колонки"');
   const timeframe = secondRow.indexOf('{/* Timeframe Selector */}');
   const preset = secondRow.indexOf('ref={presetsButtonRef}');
@@ -29,6 +29,9 @@ test('on wide screens autoscale comes before 1x–4x on the left, presets and pl
   assert.match(secondRow, /hidden shrink-0 items-center lg:ml-auto lg:flex/);
   assert.match(secondRow, /col-start-3 row-start-1 flex items-center justify-self-start/);
   assert.equal((secondRow.match(/title="4 Колонки"/g) ?? []).length, 1);
+  const layouts = secondRow.slice(secondRow.indexOf('title="1 колонка (зберегти всі графіки)"'), timeframe);
+  assert.doesNotMatch(layouts, /setBlocks\(/, 'column buttons must never discard open charts');
+  assert.doesNotMatch(layouts, /handleApplyPreset\(/, 'column buttons must not replace selected coins');
 });
 
 test('top-right shortcuts are anchored to the right and bordered on desktop', () => {
