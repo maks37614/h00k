@@ -1,13 +1,22 @@
 import type { MarketCoin, TerminalChartBlock, TerminalSavedPreset, Timeframe } from '../types';
 import { coinMarketKey } from './marketPresets';
 
-/** Preserve the real quote currency instead of silently forcing every pair to USDT. */
+const TERMINAL_KNOWN_QUOTES = ['FDUSD', 'USDT', 'USDC', 'BUSD', 'BTC'] as const;
+
+/** Keep an existing pair's quote asset; never turn ETHBTC into ETHBTCUSDT. */
 export function normalizeTerminalMarketPair(symbolInput: string, quoteInput?: string): { symbol: string; quoteAsset: string } {
-  const quoteAsset = (quoteInput || 'USDT').toUpperCase().replace(/[^A-Z0-9]/g, '') || 'USDT';
-  const cleanSymbol = (symbolInput || 'BTCUSDT').toUpperCase().replace(/[^A-Z0-9]/g, '');
-  const symbol = cleanSymbol.length > quoteAsset.length && cleanSymbol.endsWith(quoteAsset)
-    ? cleanSymbol : `${cleanSymbol}${quoteAsset}`;
-  return { symbol, quoteAsset };
+  const cleanSymbol = (symbolInput || 'BTCUSDT').toUpperCase().replace(/[^A-Z0-9]/g, '') || 'BTCUSDT';
+  const specifiedQuote = (quoteInput || 'USDT').toUpperCase().replace(/[^A-Z0-9]/g, '') || 'USDT';
+  // A 3+ character base avoids mistaking short ticker names such as WBTC for
+  // a BTC-quoted pair when the user intends to trade WBTC/USDT.
+  const detectedQuote = TERMINAL_KNOWN_QUOTES.find(quote =>
+    cleanSymbol.endsWith(quote) && cleanSymbol.length >= quote.length + 3);
+  if (detectedQuote) return { symbol: cleanSymbol, quoteAsset: detectedQuote };
+  return {
+    symbol: cleanSymbol.length > specifiedQuote.length && cleanSymbol.endsWith(specifiedQuote)
+      ? cleanSymbol : `${cleanSymbol}${specifiedQuote}`,
+    quoteAsset: specifiedQuote,
+  };
 }
 
 /** Maximum number of newly added live HookCharts in one Terminal workspace. */
