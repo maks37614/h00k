@@ -71,6 +71,13 @@ test('real PostgreSQL: verify email, login, isolate data, revoke session and res
       const versionB = nextWorkspace.profile.terminalSettings?.version;
       assert.notEqual(versionB, versionA);
       await assert.rejects(
+        updateAccountProfile(uidA, {
+          terminalSettings: { columns: 1, blockHeight: 'medium', blocks: [] },
+        }),
+        (error: any) => error.status === 409 && error.code === 'TERMINAL_WORKSPACE_CONFLICT',
+        'an older browser tab cannot overwrite a workspace after a newer client has versioned it',
+      );
+      await assert.rejects(
         updateAccountProfile(uidA, workspace('SOLUSDT', versionA)),
         (error: any) => error.status === 409 && error.code === 'TERMINAL_WORKSPACE_CONFLICT',
         'stale tab must not silently overwrite the newest Terminal workspace',
