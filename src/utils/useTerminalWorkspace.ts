@@ -50,8 +50,11 @@ export function parseTerminalWorkspaceBackup(json: string): WorkspaceSnapshot {
   if (blocks.length !== value.blocks.length || presets.length !== value.presets.length
       || value.presets.some((preset: unknown) => {
         if (!preset || typeof preset !== 'object' || !Array.isArray((preset as TerminalSavedPreset).blocks)) return true;
-        return normalizeTerminalBlocks((preset as TerminalSavedPreset).blocks).length !==
-          (preset as TerminalSavedPreset).blocks.length;
+        // normalizeTerminalPresets caps each saved preset at 50 charts.
+        // Reject oversize imports instead of reporting success after losing
+        // the additional chart blocks from the user's backup.
+        const presetBlocks = (preset as TerminalSavedPreset).blocks;
+        return presetBlocks.length > 50 || normalizeTerminalBlocks(presetBlocks).length !== presetBlocks.length;
       })) throw new Error('Файл містить пошкоджені графіки або пресети.');
   const source = value.config as Record<string, unknown>;
   const config: TerminalWorkspaceConfig = { ...DEFAULT_CONFIG };
