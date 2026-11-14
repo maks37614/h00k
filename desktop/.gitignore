@@ -4,3 +4,7 @@ build/*.bmp
 build/*.ico
 build/*.png
 build/installer-locales.nsh
+installer/node_modules/
+installer/dist/
+installer/assets/
+installer/ui.html
