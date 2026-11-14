@@ -67,9 +67,12 @@ test('PostgreSQL transaction preserves owner isolation, revisions and independen
     const identity=readFileSync(new URL('../server/migrations/001_identity.sql',import.meta.url),'utf8');
     const staging=readFileSync(new URL('../server/migrations/002_personal_state.sql',import.meta.url),'utf8');
     const runtime=readFileSync(new URL('../server/migrations/005_personal_state_runtime.sql',import.meta.url),'utf8');
+    const ownerPrivacy=readFileSync(new URL('../server/migrations/006_personal_state_owner_fk.sql',import.meta.url),'utf8');
     await client.query(identity);
     await client.query(staging);
     await client.query(runtime);
+    await client.query(ownerPrivacy);
+    await client.query(ownerPrivacy); // Idempotent on a restarted migration runner.
     for(const id of [owner,other]){
       await client.query(
         'INSERT INTO auth_users (id,email,password_hash,display_name) VALUES ($1,$2,$3,$4)',
@@ -109,6 +112,19 @@ test('PostgreSQL transaction preserves owner isolation, revisions and independen
     assert.equal(after.state.history.length,1,
       'an alerts-only transaction must preserve the independent history');
     assert.deepEqual((await repo.readOwner(other)).state.alerts.map(x=>x.id),['alert2']);
+
+    // Deleting a registered owner MUST remove sensitive market monitoring,
+    // price alerts, alert history and runtime activation. Another user's
+    // records remain untouched.
+    await client.query('DELETE FROM auth_users WHERE id=$1',[other]);
+    for (const table of ['h00k_surveillance_state','h00k_price_alert_state',
+      'h00k_alert_history_state','h00k_personal_state_runtime_owners']) {
+      const gone=await client.query('SELECT count(*)::int AS count FROM '+table+' WHERE user_id=$1',[other]);
+      assert.equal(gone.rows[0].count,0,table+' retained personal data after account removal');
+    }
+    await assert.rejects(()=>repo.readOwner(other),PersonalStateInactiveError);
+    assert.equal((await repo.readOwner(owner)).state.history.length,1,
+      'cascade for a deleted owner must not touch another owner');
   } finally {
     for(const id of [owner,other]){
       for(const table of ['h00k_price_alert_state','h00k_alert_history_state',
