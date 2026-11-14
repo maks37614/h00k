@@ -41,6 +41,24 @@ test('failed validation and disk writes do not block later setup retry', () => {
   assert.equal(gate.size(), 1);
 });
 
+test('completed groups are periodically reconciled after external alert resets', () => {
+  const gate = new AutoSetupGroupGate(256, 15 * 60_000);
+  let checks = 0;
+  const storeCheck = () => { checks++; return { success: true }; };
+  assert.equal(gate.ensure('resumable-setup', storeCheck, 100_000), true);
+  for (let tick = 1; tick < 150; tick++) {
+    assert.equal(gate.ensure('resumable-setup', storeCheck, 100_000 + tick * 6000), false);
+  }
+  assert.equal(checks, 1, 'six-second updates do not cause a persistence lookup');
+  assert.equal(gate.ensure('resumable-setup', storeCheck, 100_000 + 15 * 60_000), true,
+    'an unchanged setup is eventually reconciled with the source-of-truth alert store');
+  assert.equal(checks, 2);
+  assert.equal(gate.ensure('resumable-setup', storeCheck, 100_000 + 15 * 60_000 + 6000), false);
+  assert.equal(gate.ensure('resumable-setup', storeCheck, 1), true,
+    'a backwards clock adjustment does not suppress checks indefinitely');
+  assert.throws(() => new AutoSetupGroupGate(1, 0), /at least one second/);
+});
+
 test('bounded worker cache cannot accumulate unlimited historic setup IDs', () => {
   const gate = new AutoSetupGroupGate(3);
   let writes = 0;
