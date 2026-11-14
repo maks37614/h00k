@@ -48,7 +48,7 @@ import { normalizeExchangeSymbol } from './src/utils/marketSymbols';
 import { cronManager } from './server/cronService';
 import { surveillanceManager } from './server/surveillance/surveillanceManager';
 import { surveillanceReplayEngine } from './server/surveillance/replayEngine';
-import { hasFreshSurveillanceCheck, wasSurveillanceCheckCommitted } from './server/surveillance/checkResult';
+import { hasFreshSurveillanceCheck, wasSurveillanceCheckCommitted, SurveillanceCheckIncompleteError } from './server/surveillance/checkResult';
 import { fetchHookChartOIHistory } from './server/hookchartOI';
 import { requireUserAuth } from './server/userAuth';
 import { sendUserTelegramMessage, startTelegramDeliveryWorker } from './server/telegramDelivery';
@@ -130,6 +130,10 @@ async function startServer() {
       const result = { success: true, message: 'Ваші сповіщення перевірено' };
       res.json(result);
     } catch (err: any) {
+      if (err instanceof SurveillanceCheckIncompleteError)
+        return res.status(503).setHeader('Retry-After', '10').json({
+          success: false, error: err.message,
+        });
       if (err instanceof AlertManualQueueBusyError)
         return res.status(503).setHeader('Retry-After', '5').json({
           success: false, error: err.message,
@@ -803,6 +807,10 @@ async function startServer() {
       const updatedList = await checkAllUserCoins(uid);
       res.json({ success: true, data: updatedList });
     } catch (err: any) {
+      if (err instanceof SurveillanceCheckIncompleteError)
+        return res.status(503).setHeader('Retry-After', '10').json({
+          success: false, error: err.message,
+        });
       res.status(500).json({ success: false, error: err.message });
     }
   });
