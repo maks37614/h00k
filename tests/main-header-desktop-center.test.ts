@@ -10,7 +10,7 @@ const brand = source.slice(
 );
 const desktop = source.slice(
   source.indexOf('{/* Navigation Category Tabs */}'),
-  source.indexOf('id="refresh-screener-btn"'),
+  source.indexOf('<SiteNotificationBell'),
 );
 
 test('desktop header centers the existing logo, fullscreen and language controls', () => {
@@ -36,10 +36,12 @@ test('desktop quick formation totals are removed without removing nav formation 
   assert.match(source, /id="nav-category-patterns-btn"/);
 });
 
-
-test('site header action borders remain visible on Screener and Formations', () => {
-  assert.doesNotMatch(css, /\.app-header:is\(\[data-page="screener"\], \[data-page="patterns"\]\) button/);
-  assert.match(source, /id="refresh-screener-btn"[\s\S]*?rounded-lg border text-xs/);
-  assert.match(source, /'border-cyan-400\/40 bg-cyan-600/);
-  assert.match(source, /'border-slate-700 bg-slate-800/);
+test('site header retains icon borders but does not show a manual refresh button', () => {
+  assert.ok(!css.includes('.app-header:is([data-page="screener"], [data-page="patterns"]) button'));
+  assert.ok(!source.includes('id="refresh-screener-btn"'));
+  assert.ok(!source.includes('<RefreshCw'));
+  assert.ok(source.includes('<SiteNotificationBell'));
+  const actions = source.slice(source.indexOf('<SiteNotificationBell'));
+  assert.ok(actions.includes('border-sky-500/40'));
+  assert.ok(actions.includes('border-slate-800'));
 });

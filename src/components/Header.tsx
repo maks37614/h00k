@@ -2,7 +2,6 @@ import React from 'react';
 import { MonitoringMenuIcon } from './MonitoringIcon';
 import { ScreenerIcon, FormationsIcon, TerminalIcon } from './PageIcons';
 import {
-  RefreshCw,
   Bookmark,
   BookOpen,
   Zap,
@@ -58,12 +57,10 @@ interface HeaderProps {
 }
 
 export const Header: React.FC<HeaderProps> = ({
-  isLoading,
   totalCoins,
   formationsCount,
   watchlistCount,
   archiveCount = 0,
-  onRefresh,
   onOpenWatchlist,
   onOpenArchive,
   onOpenGuide,
@@ -246,20 +243,6 @@ export const Header: React.FC<HeaderProps> = ({
 
 
           <div className="flex w-full min-w-0 flex-wrap items-center justify-center gap-1.5 sm:gap-2 xl:w-auto xl:flex-nowrap xl:gap-1.5 [&>button]:shrink-0">
-            <button
-              id="refresh-screener-btn"
-              onClick={onRefresh}
-              disabled={isLoading}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all shadow-sm ${
-                isLoading
-                  ? 'border-slate-700 bg-slate-800 text-slate-400 cursor-not-allowed'
-                  : 'border-cyan-400/40 bg-cyan-600 hover:bg-cyan-500 text-white shadow-cyan-900/30'
-              }`}
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
-             
-            </button>
-
             <SiteNotificationBell onOpenSettings={onOpenNotificationSettings} onOpenChart={onOpenNotificationChart} onLinkNotification={onLinkNotification} canLinkNotification={canLinkNotification} />
 
             <button
