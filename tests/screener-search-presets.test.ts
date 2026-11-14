@@ -100,6 +100,7 @@ test('account switching and failed preset writes cannot leak search settings', (
   assert.match(app, /<CoinScreenerPage\s+key=\{user\?\.uid \|\| 'guest'\}/);
   assert.match(editor, /await updateProfileData\(\{ searchSettings:/);
   assert.match(editor, /if \(saved\) setEditingId\(id\)/);
+  assert.match(editor, /if \(saved && editingId === id\)/);
   assert.match(editor, /return false;/);
   assert.match(screener, /const cachedUi = screenerUiSession\.get\(user\?\.uid \|\| 'guest'\)/);
 });
