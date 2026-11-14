@@ -130,6 +130,7 @@ class CronManager {
       job.isRunning = true;
       const start = Date.now();
       let lastPersistAt = start;
+      let incompleteChecks = 0;
       try {
         const activeItems = getAllActiveSurveillanceCoins();
         const activeKeys = new Set(activeItems.map(({ userId, coin }) =>
@@ -160,16 +161,20 @@ class CronManager {
                   fresh.config, committed.state?.lastProcessedCandleTimes, Date.now())) {
                 // A stale/partial candle snapshot is NOT a completed check.
                 candleCloseCheckPlanner.failed(key, fresh.config, Date.now());
+                incompleteChecks++;
               } else {
                 candleCloseCheckPlanner.succeeded(key, fresh.config, Date.now());
               }
             } catch (coinErr) {
+              incompleteChecks++;
               candleCloseCheckPlanner.failed(key, coin.config, Date.now());
               console.error(`[CRON:surveillance] Error on ${coin.symbol}:`, coinErr);
             }
             if (Date.now() - lastPersistAt >= 5_000) {
-              if (!flushDeferredSurveillanceChecks())
+              if (!flushDeferredSurveillanceChecks()) {
+                incompleteChecks++;
                 console.error('[CRON:surveillance] Failed to flush deferred observations');
+              }
               lastPersistAt = Date.now();
             }
             // Keep the event loop responsive during a large backlog. The next
@@ -181,17 +186,25 @@ class CronManager {
           this.surveillanceCursor = 0;
         }
 
-        job.lastRunAt = new Date().toISOString();
         job.lastDurationMs = Date.now() - start;
         job.runCount++;
-        job.lastError = null;
+        if (incompleteChecks) {
+          job.errorCount++;
+          job.lastError = `24/7 нагляд: ${incompleteChecks} неповних перевірок або помилок запису`;
+        } else {
+          job.lastRunAt = new Date().toISOString();
+          job.lastError = null;
+        }
       } catch (err: any) {
         job.errorCount++;
         job.lastError = err?.message || 'Помилка виконання нагляду';
         console.error('[CRON:surveillance] Error:', err);
       } finally {
-        if (!flushDeferredSurveillanceChecks())
+        if (!flushDeferredSurveillanceChecks()) {
+          job.errorCount++;
+          job.lastError = '24/7 нагляд: не вдалося зберегти перевірки';
           console.error('[CRON:surveillance] Failed to flush final observations');
+        }
         job.isRunning = false;
       }
     };
