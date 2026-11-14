@@ -352,21 +352,22 @@ export const SmartAnalysisBlock: React.FC<SmartAnalysisBlockProps> = ({
                 Контекст BTC (Binance Futures) на 15m → 5m → 1m
               </h5>
             </div>
-            <div className="flex items-center gap-2 text-xs font-mono">
-              <span className="text-slate-400">BTC/USDT:</span>
-              <span className="font-bold text-white">{data.btcContext.btcPrice === null ? 'н/д' : '$' + priceOrNA(data.btcContext.btcPrice)}</span>
-              <span className="font-bold text-slate-200">
-                {data.btcContext.change24h === null ? 'н/д' :
-                  (data.btcContext.change24h >= 0 ? '+' : '') + data.btcContext.change24h.toFixed(2) + '%'}
-              </span>
-            </div>
-            <p className="text-[10px] text-slate-500">
-              {data.btcContext.priceSource === 'closed_1m_candle'
-                ? 'Ціна: закриття останньої підтвердженої 1m свічки; не live-котирування.'
-                : data.btcContext.priceSource === 'binance_ticker'
-                  ? 'Ціна і зміна 24h: Binance Futures / ticker 24hr.'
-                  : 'Ціна BTC недоступна: біржові джерела не відповідають.'}
-            </p>
+            {(visible.btcPrice || visible.btcChange) && (
+              <div className="flex items-center gap-2 text-xs font-mono">
+                <span className="text-slate-400">BTC/USDT:</span>
+                {visible.btcPrice && <span className="font-bold text-white">{'$' + priceOrNA(data.btcContext.btcPrice)}</span>}
+                {visible.btcChange && (
+                  <span className="font-bold text-slate-200">
+                    {(data.btcContext.change24h! >= 0 ? '+' : '') + data.btcContext.change24h!.toFixed(2) + '%'}
+                  </span>
+                )}
+              </div>
+            )}
+            {visible.btcPrice && data.btcContext.priceSource === 'closed_1m_candle' && (
+              <p className="text-[10px] text-slate-500">
+                Ціна: закриття останньої підтвердженої 1m свічки; не live-котирування.
+              </p>
+            )}
           </div>
 
           {/* Sharp impulse alert banner if active */}
@@ -380,8 +381,9 @@ export const SmartAnalysisBlock: React.FC<SmartAnalysisBlockProps> = ({
           )}
 
           {/* Timeframe Cards */}
+          {visible.btcTimeframes.length > 0 && (
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-            {(['15m', '5m', '1m'] as const).map((tf) => {
+            {visible.btcTimeframes.map((tf) => {
               const item = data.btcContext.timeframes[tf];
               const isUp = item.direction === 'up';
               const unknown = item.structure === 'unknown';
@@ -428,25 +430,27 @@ export const SmartAnalysisBlock: React.FC<SmartAnalysisBlockProps> = ({
               );
             })}
           </div>
+          )}
 
-          {/* Overall Structure & Upcoming Macro News */}
+          {/* Render only confirmed contextual signals, never an empty calendar. */}
+          {(visible.btcOverall || visible.btcNews) && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 pt-1 text-xs">
+            {visible.btcOverall && (
             <div className="p-3 rounded-lg bg-slate-900/80 border border-slate-800">
               <span className="text-[11px] text-slate-400 block mb-1 font-medium">Загальна структура BTC:</span>
               <p className="text-slate-200 font-medium leading-relaxed">
                 {data.btcContext.overallStructureLabel}
               </p>
             </div>
+            )}
 
+            {visible.btcNews && (
             <div className="p-3 rounded-lg bg-slate-900/80 border border-slate-800">
               <span className="text-[11px] text-amber-400 flex items-center gap-1 mb-1 font-medium">
                 <Calendar className="w-3.5 h-3.5" />
                 Календар подій (лише підтверджені дані):
               </span>
               <div className="space-y-1">
-                {data.btcContext.upcomingNews.length === 0 && (
-                  <p className="text-[11px] text-slate-400">Календар новин не підключено; час CPI/FED не вгадується.</p>
-                )}
                 {data.btcContext.upcomingNews.map((news, idx) => (
                   <div key={idx} className="flex items-center justify-between text-[11px] text-slate-300">
                     <span className="truncate mr-2">• {news.title}</span>
@@ -455,7 +459,9 @@ export const SmartAnalysisBlock: React.FC<SmartAnalysisBlockProps> = ({
                 ))}
               </div>
             </div>
+            )}
           </div>
+          )}
         </div>
       )}
 
