@@ -175,11 +175,14 @@ export function createSharedKlineSubscriptions(socketFactory: SocketFactory = ur
           if (useRelay && packet?.type === 'status') {
             if (!packet.connected) {
               status(false);
-              // A once-live relay went stale: fail over to direct exchange.
-              if (shared.last) {
+              // Let the shared VPS upstream reconnect first. Otherwise one
+              // exchange hiccup would open hundreds of direct exchange sockets
+              // at once. REST fallback remains active while the relay recovers.
+              if (startupWatch === null) startupWatch = setTimeout(() => {
+                if (shared.closed || shared.socket !== ws) return;
                 shared.relayFallback = true;
-                ws.close();
-              }
+                try { ws.close(); } catch {}
+              }, 10_000 + Math.floor(Math.random() * 2000));
             }
             return;
           }
