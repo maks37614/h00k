@@ -87,6 +87,35 @@ test('duplicate create requests preserve a paused or triggered alert', () => {
   assert.equal(service.createAlert(alert(created.id, 'retry-user')).triggered, true);
 });
 
+
+test('API alert and history snapshots cannot silently change stored user state', () => {
+  const owner = 'immutable-alert-snapshot';
+  const created = service.createAlert(alert('immut-create', owner));
+  created.isActive = false;
+  assert.equal(service.getAllAlerts(owner).find(item => item.id === created.id)?.isActive, true);
+
+  const read = service.getAllAlerts(owner);
+  read[0].targetPrice = 1;
+  read[0].triggered = true;
+  assert.equal(service.getAllAlerts(owner)[0].targetPrice, 110);
+  assert.equal(service.getAllAlerts(owner)[0].triggered, false);
+
+  const batched = service.createAlertsBatch(owner, [alert('immut-batch', owner)]);
+  batched[0].isActive = false;
+  assert.equal(service.getAllAlerts(owner).find(item => item.id === 'immut-batch')?.isActive, true);
+
+  const historyItem = {
+    id: 'immut-history', userId: owner, alertId: 'immut-create',
+    symbol: 'BTCUSDT', exchange: 'binance' as const, marketType: 'futures' as const,
+    condition: 'gte' as const, targetPrice: 110, triggeredPrice: 120,
+    triggeredAt: Date.now(), telegramSent: false,
+  };
+  service.addHistoryItem(historyItem);
+  const history = service.getAlertHistory(owner);
+  history[0].telegramSent = true;
+  assert.equal(service.getAlertHistory(owner)[0].telegramSent, false);
+});
+
 test('deletion before delayed creation prevents POST and batch resurrection', () => {
   service.deleteAlert('deleted-before-create', 'delayed-user');
   assert.throws(() => service.createAlert(alert('deleted-before-create', 'delayed-user')), /видалено/);
