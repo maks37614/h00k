@@ -233,7 +233,9 @@ export class ExchangeStreamClient extends EventEmitter {
       const high24h = parseFloat(msg.h || 0);
       const low24h = parseFloat(msg.l || 0);
       const volume24hUsd = parseFloat(msg.q || 0);
-      if (!isNaN(price) && price > 0) {
+      // Binance event clock must be genuine and recent: a delayed ticker
+      // cannot revive a stale quote after an exchange/network interruption.
+      if (Number.isFinite(price) && price > 0 && isFreshDepthTime(msg.E)) {
         this.emit('price', {
           price,
           high24h,
