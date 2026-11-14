@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { resolve } from 'node:path';
 import type { PoolClient } from 'pg';
 import type { PriceAlert, AlertHistoryItem, SurveillanceCoin } from '../src/types';
@@ -12,6 +13,11 @@ export type PersonalStateSnapshot = {
 export type MigrationCount = { surveillance: number; alerts: number; history: number;
   orphaned: number; invalid: number };
 export const STATE_MIGRATION_CHUNK = 100;
+export const DEFAULT_PERSONAL_STATE_STAGE_KEY = 'legacy-json';
+
+export function personalStateSnapshotDigest(snapshot: PersonalStateSnapshot): string {
+  return createHash('sha256').update(JSON.stringify(snapshot)).digest('hex');
+}
 
 /** Preserve only identities registered in PostgreSQL. Legacy/guest account
  * records remain in the original JSON backup, never resurrected as monitors. */
@@ -78,24 +84,39 @@ async function batchInsert(client: DbClient, table: string,
     });
     const conflict=table==='h00k_alert_history_state'?'history_id':
       table==='h00k_price_alert_state'?'alert_id':'coin_id';
-    const updates=columns.filter(c=>c!=='user_id'&&c!==conflict)
-      .map(c=>c+'=EXCLUDED.'+c).join(',');
+    const nonKeyColumns=columns.filter(c=>c!=='user_id'&&c!==conflict);
+    const updates=nonKeyColumns.map(c=>c+'=EXCLUDED.'+c).join(',');
+    // An older JSON snapshot must NEVER overwrite a different live/staged
+    // PostgreSQL record. Identical replays remain idempotent; conflicting
+    // values return no row, triggering rollback of the entire transaction.
+    const unchanged=nonKeyColumns.map(c=>
+      table+'.'+c+' IS NOT DISTINCT FROM EXCLUDED.'+c).join(' AND ');
     // Table and column names are fixed internal literals, never user input.
     const result=await client.query(
       'INSERT INTO '+table+' ('+columns.join(',')+') VALUES '+tuples.join(',')+
-      ' ON CONFLICT (user_id,'+conflict+') DO UPDATE SET '+updates+' RETURNING 1',values);
+      ' ON CONFLICT (user_id,'+conflict+') DO UPDATE SET '+updates+
+      ' WHERE '+unchanged+' RETURNING 1',values);
     inserted+=result.rowCount || 0;
   }
   return inserted;
 }
 
 export async function stagePersonalStateToPostgres(client:DbClient,snapshot:PersonalStateSnapshot,
-  schema:string) {
+  schema:string,options:{stageKey?:string}={}) {
+  const stageKey=options.stageKey ?? DEFAULT_PERSONAL_STATE_STAGE_KEY;
+  if(!stageKey || stageKey.length>128) throw new Error('Invalid personal state stage key');
+  const snapshotSha256=personalStateSnapshotDigest(snapshot);
   await client.query('BEGIN');
   try {
     // A transaction-wide advisory lock prevents simultaneous migrations.
     await client.query('SELECT pg_advisory_xact_lock(811040027)');
     await client.query(schema);
+    const previous=await client.query(
+      'SELECT snapshot_sha256 FROM h00k_personal_state_staging_runs WHERE stage_key=$1 FOR UPDATE',
+      [stageKey]);
+    if (previous.rows.length && previous.rows[0].snapshot_sha256 !== snapshotSha256)
+      throw new Error('Personal state staging source has changed since the last successful run; '+
+        'stop and reconcile the JSON and PostgreSQL copies before retrying');
     const users = await client.query('SELECT id FROM auth_users');
     const known=new Set<string>(users.rows.map((row:{id:string})=>row.id));
     const prepared=preparePersonalStateRows(snapshot,known);
@@ -111,9 +132,17 @@ export async function stagePersonalStateToPostgres(client:DbClient,snapshot:Pers
       ['user_id','history_id','triggered_at','payload'],
       prepared.history.map(r=>[r.owner,r.id,r.time,JSON.stringify(r.payload)]));
     if (surveillance!==prepared.surveillance.length || alerts!==prepared.alerts.length ||
-      history!==prepared.history.length) throw new Error('PostgreSQL batch verification mismatch');
+      history!==prepared.history.length)
+      throw new Error('PostgreSQL staging conflict: a target row differs from the JSON snapshot; '+
+        'the transaction was rolled back without replacing the newer state');
+    if(!previous.rows.length) {
+      const inserted=await client.query(
+        'INSERT INTO h00k_personal_state_staging_runs(stage_key,snapshot_sha256) VALUES ($1,$2)',
+        [stageKey,snapshotSha256]);
+      if(inserted.rowCount!==1) throw new Error('PostgreSQL staging marker write failed');
+    }
     await client.query('COMMIT');
-    return {surveillance,alerts,history,...prepared.skipped};
+    return {surveillance,alerts,history,...prepared.skipped,stageKey,snapshotSha256};
   } catch(e) { await client.query('ROLLBACK');throw e; }
 }
 export const readPersonalStateSchema=()=>readFileSync(new URL('./migrations/002_personal_state.sql',
