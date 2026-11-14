@@ -280,7 +280,10 @@ test('Terminal sync conflicts are visible outside hidden menus and can be recove
   assert.match(hook, /saveConflictBackup\(uid: string, value: WorkspaceSnapshot\): boolean/);
   assert.match(hook, /localStorage\.setItem\(terminalStorageKey\(CONFLICT_KEY, uid\)/);
   assert.match(hook, /if \(uid && syncConflictRef\.current\) \{\s*const stored = saveConflictBackup\(uid, workspace\)/);
-  assert.match(hook, /if \(revision\.current === 0 && !syncConflictRef\.current\)/);
+  // Cloud hydration now checks the conflict first and only loads the remote
+  // state if there were no local edits; keep the two safety gates explicit.
+  assert.match(hook, /if \(syncConflictRef\.current\) return;/);
+  assert.match(hook, /if \(revision\.current === 0\)\s*setWorkspace\(loadTerminalWorkspace\(uid, profile\.terminalSettings\)\)/);
   assert.match(hook, /window\.confirm\(/);
   assert.match(hook, /window\.location\.reload\(\)/);
 });
