@@ -374,23 +374,37 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
   };
 
   const handleSelectFavoriteCoin = (favCoin: ScannedCoin) => {
-    setActiveCoin(favCoin);
-    setIframeLoading(true);
-    // Update the first block to match the selected coin
+    setIsFavoritesDrawerOpen(false);
     if (blocks.length === 1) {
-      setBlocks([
-        {
-          id: `block-${favCoin.symbol}-${Date.now()}`,
-          symbol: favCoin.symbol,
-          baseAsset: favCoin.baseAsset,
-          quoteAsset: favCoin.quoteAsset,
-          exchange: favCoin.exchange,
-          marketType: favCoin.marketType,
-          timeframe: activeTimeframe,
-          colSpan: 1,
-        },
-      ]);
+      setActiveCoin(favCoin);
+      setIframeLoading(true);
+      // Preserve the existing chart identity, timeframe, span, and drawing
+      // preferences when switching the sole chart to a favorite instrument.
+      setBlocks(previous => previous.map(block => ({
+        ...block, symbol: favCoin.symbol, baseAsset: favCoin.baseAsset, quoteAsset: favCoin.quoteAsset,
+        exchange: favCoin.exchange, marketType: favCoin.marketType,
+        formationId: favCoin.formations?.[0]?.id,
+      })));
+      return;
     }
+    // In a grid, changing activeCoin alone has no visible effect. Reopen an
+    // existing matching chart or add the favorite without replacing other rows.
+    const alreadyOpen = blocks.find(block => coinMarketKey(block) === coinMarketKey(favCoin));
+    if (alreadyOpen) {
+      setMaximizedBlockId(alreadyOpen.id);
+      return;
+    }
+    if (blocks.length >= MAX_TERMINAL_CHARTS) {
+      setIsAddModalOpen(true); // Explains the limit rather than silently doing nothing.
+      return;
+    }
+    const nextBlock: TerminalChartBlock = {
+      id: `favorite-${favCoin.symbol}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+      symbol: favCoin.symbol, baseAsset: favCoin.baseAsset, quoteAsset: favCoin.quoteAsset,
+      exchange: favCoin.exchange, marketType: favCoin.marketType, timeframe,
+      formationId: favCoin.formations?.[0]?.id, colSpan: 1,
+    };
+    setBlocks(previous => previous.length >= MAX_TERMINAL_CHARTS ? previous : [...previous, nextBlock]);
   };
 
   // Build TradingView Embed URL
@@ -1115,7 +1129,9 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
               </div>
             ) : (
               filteredFavorites.map((favCoin, idx) => {
-                const isSelected = favCoin.symbol === activeCoin.symbol;
+                const isSelected = blocks.length === 1
+                  ? coinMarketKey(favCoin) === coinMarketKey(activeCoin)
+                  : blocks.some(block => coinMarketKey(block) === coinMarketKey(favCoin));
                 const isFavPositive = (favCoin.priceChange24h || 0) >= 0;
                 return (
                   <div
