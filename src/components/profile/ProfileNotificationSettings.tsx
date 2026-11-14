@@ -179,7 +179,7 @@ export const ProfileNotificationSettings: React.FC = () => {
             <h3 className="flex items-center gap-2 text-sm font-bold text-white">
               <Bell className="h-4 w-4 text-cyan-300" /> Центр сповіщень
             </h3>
-            <p className="mt-1 text-xs leading-relaxed text-slate-400">
+            <p className="mt-1 text-[13px] leading-relaxed text-slate-400">
               Сповіщення обробляються у вашому браузері з уже доступних даних сайту.
               Додатковий повний пошук монет не запускається. Спочатку увімкніть потрібні категорії.
             </p>
@@ -193,7 +193,7 @@ export const ProfileNotificationSettings: React.FC = () => {
             })} className="h-4 w-4 accent-cyan-400" aria-label="Дозволити сповіщення на сайті" />
           </label>
         </div>
-        <p className="mt-2 text-[11px] text-slate-400">
+        <p className="mt-2 text-xs leading-relaxed text-slate-400">
           Цей перемикач керує тільки сповіщеннями та звуком на відкритому h00k.top.
           Він не впливає на цінові алерти або персональний нагляд, налаштовані в інших розділах.
           Коли сайт закрито, локальні сповіщення не працюють.
@@ -204,7 +204,7 @@ export const ProfileNotificationSettings: React.FC = () => {
         <section key={group} className="overflow-hidden rounded-xl border border-slate-700/75 bg-slate-950/50">
           <header className="border-b border-slate-800 px-3 py-3 sm:px-4">
             <h4 className="text-sm font-bold text-slate-100">{group}</h4>
-            <p className="mt-1 text-[11px] text-slate-400">{groupText[group]}</p>
+            <p className="mt-1 text-xs leading-relaxed text-slate-400">{groupText[group]}</p>
           </header>
           <div className="divide-y divide-slate-800/70">
             {items.map(item => {
@@ -238,7 +238,7 @@ export const ProfileNotificationSettings: React.FC = () => {
 
       <section className="space-y-3 rounded-xl border border-slate-700 bg-slate-950/60 p-3 sm:p-4">
         <h4 className="flex items-center gap-2 text-sm font-bold"><SlidersHorizontal className="h-4 w-4 text-cyan-300"/> Що саме відстежувати</h4>
-        <p className="text-[11px] text-slate-400">
+        <p className="text-xs leading-relaxed text-slate-400">
           Фільтри біржі, ринку, таймфрейму та монет діють для подій із відповідними даними.
           Цінові алерти, ліквідації та WebSocket-імпульси не прив’язані до таймфрейму графіка.
           Технічні попередження можуть надходити незалежно від фільтрів монет.
@@ -274,7 +274,7 @@ export const ProfileNotificationSettings: React.FC = () => {
             placeholder="BTC, ETH, SOL — пусто означає всі" maxLength={250}
             className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white"/>
         </label>
-        <p className="text-[10px] text-slate-500">Використовуються лише вже доступні котирування. Увімкнення сповіщень не запускає додатковий повний скан усіх бірж.</p>
+        <p className="text-xs leading-relaxed text-slate-500">Використовуються лише вже доступні котирування. Увімкнення сповіщень не запускає додатковий повний скан усіх бірж.</p>
       </section>
 
       <section className="space-y-3 rounded-xl border border-slate-700 bg-slate-950/60 p-3 sm:p-4">
@@ -295,7 +295,7 @@ export const ProfileNotificationSettings: React.FC = () => {
 
       <section className="space-y-3 rounded-xl border border-cyan-700/30 bg-slate-950/60 p-3 sm:p-4">
         <h4 className="text-sm font-bold">Імпульси та ліквідації — монета</h4>
-        <p className="text-[11px] text-slate-400">Виберіть одну монету для WebSocket-потоків. Немає зайвих запитів, поки обидва перемикачі вимкнені.</p>
+        <p className="text-xs leading-relaxed text-slate-400">Виберіть одну монету для WebSocket-потоків. Немає зайвих запитів, поки обидва перемикачі вимкнені.</p>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <label className="space-y-1 text-xs">Назва монети
             <input value={symbol} onChange={e => setSymbol(e.target.value.toUpperCase())}
@@ -330,7 +330,7 @@ export const ProfileNotificationSettings: React.FC = () => {
           className="inline-flex items-center gap-2 rounded-lg bg-cyan-600 px-3 py-2 text-xs font-bold text-white disabled:opacity-40">
           <Save className="h-4 w-4"/> Зберегти монету й увімкнути імпульси
         </button>
-        <p className="text-[11px] text-slate-400">Імпульси та великі ліквідації працюють лише з відкритою сторінкою. Для ліквідацій використовується ф’ючерсний потік обраної біржі.</p>
+        <p className="text-xs leading-relaxed text-slate-400">Імпульси та великі ліквідації працюють лише з відкритою сторінкою. Для ліквідацій використовується ф’ючерсний потік обраної біржі.</p>
       </section>
 
       <section className="space-y-3 rounded-xl border border-slate-700 bg-slate-950/60 p-3 sm:p-4">
@@ -380,17 +380,17 @@ export const ProfileNotificationSettings: React.FC = () => {
           </p>
         )}
         {soundError && <p role="alert" className="text-xs text-rose-300">{soundError}</p>}
-        <label className="flex items-center justify-between gap-3 text-xs">
+        <label className="flex items-center justify-between gap-3 text-[13px]">
           <span>Звукове сповіщення (за замовчуванням вимкнено)</span>
           <input type="checkbox" checked={soundEnabled} disabled={!settings.enabled}
             onChange={e => void setSoundEnabled(e.target.checked)} className="h-4 w-4 accent-cyan-400"/>
         </label>
-        <label className="flex items-center justify-between gap-3 text-xs">
+        <label className="flex items-center justify-between gap-3 text-[13px]">
           <span>Сповіщення браузера, якщо вкладка згорнута</span>
           <input type="checkbox" checked={settings.browserPush} disabled={!settings.enabled}
             onChange={e => void enableBrowser(e.target.checked)} className="h-4 w-4 accent-cyan-400"/>
         </label>
-        <p className="text-[11px] text-slate-500">
+        <p className="text-xs leading-relaxed text-slate-500">
           Звук і браузерні повідомлення вимагають відкритого сайту. У фонових вкладках Android та iOS сповіщення можуть призупинятися.
         </p>
       </section>
