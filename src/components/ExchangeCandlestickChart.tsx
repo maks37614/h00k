@@ -13,6 +13,8 @@ interface ExchangeCandlestickChartProps {
   timeframe: string;
   historyLimit?: number;
   terminalMode?: boolean;
+  /** Use only native HookChart regardless of a legacy user provider setting. */
+  forceHookChart?: boolean;
   terminalAutoScale?: boolean;
   terminalInitialView?: VisualChartProfile;
   visualContext?: VisualContextId;
@@ -26,13 +28,14 @@ interface ExchangeCandlestickChartProps {
 
 export const ExchangeCandlestickChart: React.FC<ExchangeCandlestickChartProps> = ({
   symbol, exchange, marketType, timeframe, historyLimit = 1000, onTimeframeChange, onLivePriceUpdate,
-  terminalMode, terminalAutoScale, terminalInitialView, visualContext, terminalToolbarVisibility, hookchartToolbarActions, hookchartToolbarOverlays, formation,
+  terminalMode, forceHookChart, terminalAutoScale, terminalInitialView, visualContext, terminalToolbarVisibility, hookchartToolbarActions, hookchartToolbarOverlays, formation,
 }) => (
   <div className="h-full w-full min-h-0" role="group" aria-label={`Графік ${symbol}`}>
     <TradingViewChart
       key={`${exchange}:${marketType}:${symbol}:${timeframe}`}
       klines={EMPTY_HISTORY}
       terminalMode={terminalMode}
+      forceHookChart={forceHookChart}
       terminalAutoScale={terminalAutoScale}
       terminalInitialView={terminalInitialView}
       visualContext={visualContext}
