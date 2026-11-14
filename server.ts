@@ -30,6 +30,7 @@ import {
   getUserTelegram,
   createSetupAlertsGroup,
 } from './server/alertService';
+import { AlertManualQueueBusyError } from './server/alertCheckScheduler';
 import {
   loadSurveillanceList,
   saveSurveillanceList,
@@ -128,6 +129,10 @@ async function startServer() {
       const result = { success: true, message: 'Ваші сповіщення перевірено' };
       res.json(result);
     } catch (err: any) {
+      if (err instanceof AlertManualQueueBusyError)
+        return res.status(503).setHeader('Retry-After', '5').json({
+          success: false, error: err.message,
+        });
       res.status(500).json({ success: false, error: err?.message || 'Failed to trigger cron job' });
     }
   });
