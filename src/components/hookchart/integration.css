@@ -2625,3 +2625,17 @@
     font-size:12px;
   }
 }
+
+/* HookChart settings: hide native number steppers in all browsers. Numeric
+   values remain editable as plain text with a decimal keyboard on mobile. */
+.hookchart-root .originalSettingsPanel input.numInput[type="number"] {
+  -moz-appearance:textfield;
+  appearance:textfield;
+}
+.hookchart-root .originalSettingsPanel input.numInput[type="number"]::-webkit-inner-spin-button,
+.hookchart-root .originalSettingsPanel input.numInput[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance:none;
+  appearance:none;
+  display:none;
+  margin:0;
+}
