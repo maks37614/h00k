@@ -23,6 +23,10 @@ export function connectHookChartDepth({ exchange, marketType, symbol, onBook, on
   let stopped = false, socket: WebSocket | null = null;
   let retry: ReturnType<typeof setTimeout> | null = null;
   let retryMs = 1000, connectedAt = 0, lastMessage = 0, lastBook = 0;
+  // A socket can keep sending valid status heartbeats without ever delivering
+  // a usable book. Track the wait independently of lastMessage so we can
+  // recover instead of leaving chart liquidity stuck on "syncing" forever.
+  let waitingForBookSince = 0;
   let clockOffset: number | null = null;
   const reconnect = () => {
     if (stopped || retry) return;
@@ -34,7 +38,8 @@ export function connectHookChartDepth({ exchange, marketType, symbol, onBook, on
   };
   const connect = () => {
     if (stopped) return;
-    connectedAt = lastMessage = Date.now(); lastBook = 0; clockOffset = null;
+    connectedAt = lastMessage = waitingForBookSince = Date.now();
+    lastBook = 0; clockOffset = null;
     onStatus('connecting');
     try {
       const current = createSocket(url.href); socket = current;
@@ -55,9 +60,14 @@ export function connectHookChartDepth({ exchange, marketType, symbol, onBook, on
             if (packet.status !== 'LIVE' || !isFreshDepthTime(eventTime, now) || !onBook({ ...packet.update, eventTime })) {
               reconnect(); return;
             }
-            lastBook = now; retryMs = 1000;
+            lastBook = now;
+            waitingForBookSince = 0;
+            retryMs = 1000;
             onStatus('live');
           } else if (packet.status !== 'LIVE') {
+            // Start a *new* wait when an established book is withdrawn, but
+            // never restart the deadline for repeated SYNCING/ERROR statuses.
+            if (lastBook) waitingForBookSince = now;
             lastBook = 0;
             onStatus(packet.status === 'ERROR' ? 'unavailable' : ['STALE', 'RESYNCING'].includes(packet.status) ? 'reconnecting' : 'syncing');
           }
@@ -71,7 +81,13 @@ export function connectHookChartDepth({ exchange, marketType, symbol, onBook, on
   const watchdog = setInterval(() => {
     if (stopped) return;
     const now = Date.now();
-    if ((lastBook && now - lastBook > ORDER_BOOK_MAX_AGE_MS) || now - lastMessage > 15_000) reconnect();
+    // Even status-only LIVE/SYNCING heartbeats cannot indefinitely postpone
+    // the first usable snapshot. Preserve the normal 5s freshness check once
+    // a book is live, and allow a separate 15s window after a resync starts.
+    const bookTimedOut = lastBook
+      ? now - lastBook > ORDER_BOOK_MAX_AGE_MS
+      : waitingForBookSince > 0 && now - waitingForBookSince > 15_000;
+    if (bookTimedOut || now - lastMessage > 15_000) reconnect();
   }, 1000);
   return () => {
     stopped = true;
