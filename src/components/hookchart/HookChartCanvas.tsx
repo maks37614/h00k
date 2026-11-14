@@ -19,7 +19,7 @@ import { fetchSharedAnalysisKlines } from '../../utils/sharedAnalysisKlines';
 import { fetchSharedChartJson } from '../../utils/sharedChartRequests';
 import { candlesBeforeHistoryEnd, clampHookChartHistory, extendHookChartHistory, scopedHookChartHistoryRows, type ScopedHookChartHistory } from '../../utils/hookChartHistory';
 import { createChartCrosshairStore } from './crosshairState';
-import { Chart, ChartTimeAxis, IndicatorDock, buildStructuralChannel, type Alert, type Candle, type Drawing, type HookChartHandle, type Viewport } from './engine';
+import { Chart, MemoChartTimeAxis, IndicatorDock, buildStructuralChannel, type Alert, type Candle, type Drawing, type HookChartHandle, type Viewport } from './engine';
 import { INDICATOR_META, type IndicatorId, type OIPoint } from './indicatorEngine';
 import { captureVisualProfile, getVisualProfile, makeVisualProfileKey, normalizeVisualProfile, patchVisualProfile, visualContextForTerminalWidth, visualDeviceForWidth, type VisualChartProfile, type VisualContextId, type VisualProfileKey } from './visualProfiles';
 import { hookChartPlotWidth } from './priceScale';
@@ -1503,7 +1503,7 @@ const HookChartCanvas = forwardRef<HookChartHandle, HookChartCanvasProps>(functi
     </div>
 
     <IndicatorDock ids={indicators} candles={candles} oi={oi} viewport={viewport} rightPaddingBars={rightPaddingBars} onToggle={toggleIndicator} />
-    <ChartTimeAxis candles={candles} tf={timeframe} timezone={timezone} language={chartLanguage} viewport={viewport} rightPaddingBars={rightPaddingBars} countdownRef={setCountdownContainer} crosshair={crosshair} />
+    <MemoChartTimeAxis candles={candles} tf={timeframe} timezone={timezone} language={chartLanguage} viewport={viewport} rightPaddingBars={rightPaddingBars} countdownRef={setCountdownContainer} crosshair={crosshair} />
 
     <div className="hookchart-footer">
       {!replay && !externalData && settings.showMarketStatsBar !== false && <div ref={statsBarRef} className="marketStatsBar" role="region" aria-label="Показники ринку" tabIndex={0}>
