@@ -130,8 +130,8 @@ test('Terminal keeps each exchange instrument quote currency instead of appendin
 });
 
 test('Terminal displays non-USD quote assets without a misleading dollar sign', () => {
-  assert.equal(formatTerminalQuotedPrice(0.025, 'BTC'), '0.0250 BTC');
-  assert.equal(formatTerminalQuotedPrice(3.5, 'ETH'), '3.5000 ETH');
+  assert.equal(formatTerminalQuotedPrice(0.025, 'BTC'), '0.02500 BTC');
+  assert.equal(formatTerminalQuotedPrice(3.5, 'ETH'), '3.50 ETH');
   assert.equal(formatTerminalQuotedPrice(10, 'USDT'), '$10.00');
   assert.equal(formatTerminalQuotedPrice(10, 'USDC'), '$10.00');
 });
