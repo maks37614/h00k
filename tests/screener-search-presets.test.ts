@@ -110,3 +110,36 @@ test('empty symbol search explains and preserves full-market filtering', () => {
   assert.match(editor, /Якщо залишити поле порожнім, скрінер шукатиме всі монети/);
   assert.match(screener, /if \(searchQuery\.trim\(\) && !matchesExchangeInstrumentSearch/);
 });
+
+test('volume filter direction is included in defaults and saved account presets', () => {
+  assert.equal(DEFAULT_SCREENER_SEARCH_CONFIG.volumeMode, 'to');
+  const oldPreset = normalizeScreenerSearchConfig({ maxVolumeUsd: 1_000_000 });
+  assert.equal(oldPreset.volumeMode, 'to', 'old presets must keep their original upper-limit meaning');
+  const savedSettings = normalizeScreenerSearchSettings({
+    defaultConfig: { ...DEFAULT_SCREENER_SEARCH_CONFIG, volumeMode: 'from', maxVolumeUsd: 5_000_000 },
+    presets: [{
+      id: 'large-volume', name: 'Active big caps',
+      config: { ...DEFAULT_SCREENER_SEARCH_CONFIG, volumeMode: 'from', maxVolumeUsd: 10_000_000 },
+    }],
+    defaultPresetId: 'large-volume',
+  });
+  assert.equal(savedSettings.defaultConfig?.volumeMode, 'from');
+  assert.equal(savedSettings.presets?.[0]?.config.volumeMode, 'from');
+  assert.equal(effectiveScreenerSearchConfig(savedSettings).volumeMode, 'from');
+  assert.equal(effectiveScreenerSearchConfig(savedSettings).maxVolumeUsd, 10_000_000);
+  assert.equal(normalizeScreenerSearchConfig({ volumeMode: 'invalid' }).volumeMode, 'to');
+});
+
+test('Screener volume arrow changes only local filter mode, preserving preset and profile integration', () => {
+  const screener = source('../src/components/CoinScreenerPage.tsx');
+  const dropdown = source('../src/components/ScreenerVolumeDropdown.tsx');
+  const editor = source('../src/components/profile/ProfileScreenerSearchSettings.tsx');
+  assert.match(screener, /Обсяг 24год:/);
+  assert.match(screener, /data-screener-volume-direction/);
+  assert.match(screener, /setVolumeMode\(current => current === 'to' \? 'from' : 'to'\)/);
+  assert.match(screener, /isVolumeWithinCap\(coin\.volumeUsd, maxVolumeUsd, volumeMode\)/);
+  assert.match(screener, /mode=\{volumeMode\}/);
+  assert.match(screener, /volumeMode, sortBy/);
+  assert.match(dropdown, /mode === 'from' \? option\.label\.replace/);
+  assert.match(editor, /setField\('volumeMode', draft\.volumeMode === 'to' \? 'from' : 'to'\)/);
+});
