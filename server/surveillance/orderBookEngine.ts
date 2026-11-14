@@ -3,6 +3,7 @@ import { RawDepthDelta } from './exchangeStream';
 import { DensityItem, OrderBookLevel, OrderBookState, OrderBookStatus } from './types';
 import { ORDER_BOOK_MAX_AGE_MS, isFreshDepthTime, parseDepthLevels, type NormalizedDepthLevels } from '../../src/utils/orderBookValidation';
 import { lowerMedian } from './lowerMedian';
+import { sharedPublicDepthMedian } from './sharedDepthMedian';
 import type { SharedPublicOrderBook } from './sharedExchangeStream';
 
 export interface DensityConfig {
@@ -306,12 +307,19 @@ export class OrderBookEngine {
     if (memo && memo.revision === this.bookRevision &&
       memo.volume === volume24hUsd && memo.mode === this.config.mode &&
       memo.manual === this.config.manualThresholdUsd) return memo.value;
-    const all = [...Array.from(this.bids, ([p,q])=>p*q), ...Array.from(this.asks, ([p,q])=>p*q)];
-    if (!all.length) return this.config.manualThresholdUsd || 1000000;
-    // Exact lower median (including even-length books), without sorting every level.
-    // A large wall must not raise its own detection threshold above itself.
-    const median = lowerMedian(all);
-    this.medianComputations++;
+    // One market median shared by all AUTO/HYBRID subscribers. Their
+    // turnover24h, manual floors and density history still remain private.
+    let median: number | null = null;
+    if (this.sharedBookActive && this.sharedBookRevision !== null) {
+      median = sharedPublicDepthMedian.get(this.bids, this.asks, this.sharedBookRevision);
+    } else {
+      const all = [...Array.from(this.bids, ([p,q])=>p*q), ...Array.from(this.asks, ([p,q])=>p*q)];
+      if (all.length) {
+        median = lowerMedian(all);
+        this.medianComputations++;
+      }
+    }
+    if (median === null) return this.config.manualThresholdUsd || 1000000;
     const turnoverBaseline = volume24hUsd > 0 ? Math.max(1000, volume24hUsd * 0.0001) : 1000;
     const autoVal = Math.max(turnoverBaseline, median * 5);
     // #13: HYBRID takes the maximum so manual threshold is strictly respected and never diluted
