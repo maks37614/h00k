@@ -11,7 +11,7 @@ import { connectSharedHookChartLiquidations } from './sharedLiquidationStream';
 import { HookChartDensityBook, type DensityAutoStats } from './densityBook';
 import { EMPTY_SESSION_LIQUIDATIONS, getSessionLiquidationTotals, recordSessionLiquidation, sessionLiquidationScope, subscribeSessionLiquidations } from './liquidationSession';
 import { canonicalLiquidationId, deduplicateLiquidations, filterVisibleLiquidations } from './liquidationDisplay';
-import { equalDepthAutoStats, shouldPublishDepthView, shouldPublishLiquidationView } from './feedPublishPolicy';
+import { equalDepthAutoStats, nextLiquidationAdaptiveCutExpiry, nextLiquidationCascadeTransition, shouldPublishDepthView, shouldPublishLiquidationView } from './feedPublishPolicy';
 import { LiquidationEventBuffer } from './liquidationEventBuffer';
 
 type BookLevel = { p: number; q: number };
@@ -59,6 +59,7 @@ export function useOriginalHookChartLiveFeed({
   const [densities, setDensities] = useState<Density[]>(EMPTY_DENSITIES);
   const [marketPrints, setMarketPrints] = useState<MarketPrint[]>(EMPTY_MARKET_PRINTS);
   const [liquidations, setLiquidations] = useState<Liquidation[]>(EMPTY_LIQUIDATIONS);
+  const [cascadeClock, setCascadeClock] = useState(() => Date.now());
   const [liquidationCut, setLiquidationCut] = useState(0);
   const [liquidationStreamLive, setLiquidationStreamLive] = useState(false);
   const [liquidationLastEventAt, setLiquidationLastEventAt] = useState<number | null>(null);
@@ -241,6 +242,10 @@ export function useOriginalHookChartLiveFeed({
     const buffered = new LiquidationEventBuffer<Liquidation>();
     let latestEventAt = 0;
     let previouslyHadRows = false;
+    let lastPublishedRows: Liquidation[] | null = null;
+    let nextCascadeTransitionAt = Infinity;
+    let lastAdaptiveRows: Liquidation[] | null = null;
+    let adaptiveExpiresAt = -Infinity;
     let pendingLiquidationPublish: ReturnType<typeof setTimeout> | null = null;
     const publish = () => {
       if (dead) return;
@@ -254,14 +259,28 @@ export function useOriginalHookChartLiveFeed({
       // a brand-new [] into React every two seconds for every idle chart.
       if (!shouldPublishLiquidationView(rows.length, previouslyHadRows)) return;
       previouslyHadRows = rows.length > 0;
-      const values = rows.filter(row => now - row.t <= 15 * 60_000)
-        .map(row => row.usd).filter(value => Number.isFinite(value) && value > 0);
-      const adaptive = !values.length ? 0 : values.length < 6
-        ? quantile(values, .75)
-        : Math.max(quantile(values, .8), adaptiveCut(values, .8, .98, 2.5));
-      setLiquidationCut(values.length ? Math.max(1000, adaptive) : 0);
-      setLiquidationLastEventAt(latestEventAt || null);
-      setLiquidations(rows);
+      // Keep the sorted event array stable while no liquidation has changed.
+      // Cascade risk still needs an update at the exact 1m/5m age boundaries,
+      // so its clock is independent from snapshot reference identity.
+      if (rows !== lastPublishedRows || now >= nextCascadeTransitionAt) {
+        lastPublishedRows = rows;
+        nextCascadeTransitionAt = nextLiquidationCascadeTransition(rows, now);
+        setCascadeClock(now);
+        setLiquidations(rows);
+      }
+      // Percentile calculations also depend only on the event set and its
+      // 15-minute eligibility window, not on every two-second display tick.
+      if (rows !== lastAdaptiveRows || now > adaptiveExpiresAt) {
+        lastAdaptiveRows = rows;
+        adaptiveExpiresAt = nextLiquidationAdaptiveCutExpiry(rows, now);
+        const values = rows.filter(row => now - row.t <= 15 * 60_000)
+          .map(row => row.usd).filter(value => Number.isFinite(value) && value > 0);
+        const adaptive = !values.length ? 0 : values.length < 6
+          ? quantile(values, .75)
+          : Math.max(quantile(values, .8), adaptiveCut(values, .8, .98, 2.5));
+        setLiquidationCut(values.length ? Math.max(1000, adaptive) : 0);
+        setLiquidationLastEventAt(latestEventAt || null);
+      }
     };
     const scheduleLiquidationPublish = () => {
       if (dead || pendingLiquidationPublish !== null) return;
@@ -324,8 +343,10 @@ export function useOriginalHookChartLiveFeed({
     [liquidations, liquidationCut, settings.showLiquidationLong,
       settings.showLiquidationShort, settings.liquidationLongMinUsd, settings.liquidationShortMinUsd]);
   const risk = useMemo(
+    // The clock state invalidates this memo at 1m/5m event boundaries.
+    // On price/cut changes use real wall-clock time too, never a stale tick.
     () => calcCascadeRisk(liquidations, liquidationCut, candles.at(-1)?.c || 0),
-    [liquidations, liquidationCut, candles.at(-1)?.c],
+    [liquidations, liquidationCut, candles.at(-1)?.c, cascadeClock],
   );
   const liquidationSource = marketType === 'futures'
     ? (exchange === 'binance' ? 'BIN forceOrder' : 'BYB allLiq')
