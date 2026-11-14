@@ -4,6 +4,12 @@ concurrency:
   cancel-in-progress: true
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - 'feature/h00k-animated-compact-installer-20261114'
+    paths:
+      - 'desktop/**'
+      - '.github/workflows/h00k-desktop-windows.yml'
   pull_request:
     paths:
       - 'desktop/**'
