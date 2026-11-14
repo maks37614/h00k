@@ -70,6 +70,7 @@ import { AUTHOR_TELEGRAM_CHANNEL_URL, AUTHOR_TELEGRAM_USERNAME } from './utils/a
 import { getStoredPreferences, useAppPreferences } from './utils/userPreferences';
 import { loadMarketCoins } from './utils/marketCoinLoader';
 import { marketQuoteToChartCoin } from './utils/chartPageCoin';
+import { captureChartPageBackdrop } from './utils/chartPageBackdrop';
 import {
   chartPageHash, readChartPageHash, sameChartPageRoute,
   saveChartPageSnapshot, readChartPageSnapshot, saveChartReturnHash, readChartReturnHash,
@@ -110,6 +111,16 @@ export default function App() {
   const [chartRouteLoading, setChartRouteLoading] = useState(false);
   const [chartRouteError, setChartRouteError] = useState<string | null>(null);
   const chartNavigation = useRef({ enteredFromApp: false, scrollY: 0 });
+  // An inert, in-memory visual copy only. The original Screener/Formation
+  // components still unmount; no background React effects or market streams.
+  const chartBackdropSnapshotRef = useRef<HTMLDivElement | null>(null);
+  const chartPageWasActiveRef = useRef(chartPageActive);
+  chartPageWasActiveRef.current = chartPageActive;
+  const attachChartBackdrop = useCallback((container: HTMLDivElement | null) => {
+    if (container && chartBackdropSnapshotRef.current) {
+      container.replaceChildren(chartBackdropSnapshotRef.current);
+    }
+  }, []);
   const scanAbortRef = useRef<AbortController | null>(null);
   const { preferences } = useAppPreferences();
   const { t } = useLanguage();
@@ -774,6 +785,9 @@ export default function App() {
     if (!uid) return;
     const currentHash = window.location.hash;
     if (!readChartPageHash(currentHash)) {
+      chartBackdropSnapshotRef.current = captureChartPageBackdrop(
+        document.querySelector<HTMLElement>('#root > div'),
+      );
       chartNavigation.current = { enteredFromApp: true, scrollY: window.scrollY };
       try {
         saveChartReturnHash(window.sessionStorage, uid, safeReturnHash(currentHash));
@@ -959,8 +973,16 @@ export default function App() {
   useEffect(() => {
     const syncChartLocation = () => {
       const next = readChartPageHash(window.location.hash);
+      // Back/Forward can enter a chart without using openChartPage(). Capture
+      // the page before React unmounts it; never re-capture a live chart.
+      if (next && !chartPageWasActiveRef.current && !chartBackdropSnapshotRef.current) {
+        chartBackdropSnapshotRef.current = captureChartPageBackdrop(
+          document.querySelector<HTMLElement>('#root > div'),
+        );
+      }
       setChartRoute(previous => sameChartPageRoute(previous, next) ? previous : next);
       if (!next) {
+        chartBackdropSnapshotRef.current = null;
         setSelectedPair(null);
         setSelectedEarly(null);
         setSelectedArchivedItem(null);
@@ -1375,7 +1397,9 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-[#070a12] text-slate-100 flex flex-col selection:bg-cyan-500/20 selection:text-cyan-300">
+    <div className={`min-h-screen bg-[#070a12] text-slate-100 flex flex-col selection:bg-cyan-500/20 selection:text-cyan-300 ${chartPageActive ? 'relative isolate' : ''}`}>
+      {chartPageActive && <div ref={attachChartBackdrop} className="chart-page-backdrop"
+        aria-hidden="true" inert data-chart-page-backdrop="static" />}
       {/* First-visit installation tip remains available to guests on all devices. */}
       {!desktopPanel && <InstallAppButton variant="tip" />}
       {/* Header */}
@@ -1442,7 +1466,7 @@ export default function App() {
 
       {/* Main Content Area */}
       <main className={chartPageActive
-        ? 'w-full min-w-0 flex-1'
+        ? 'relative z-10 w-full min-w-0 flex-1'
         : desktopPanel
           ? 'flex-1 min-w-0 w-full px-2 py-2 space-y-3'
           : 'flex-1 max-w-[2560px] 3xl:max-w-[3440px] w-full mx-auto px-2 sm:px-4 lg:px-6 2xl:px-8 py-2 sm:py-4 space-y-3 sm:space-y-4'}>
