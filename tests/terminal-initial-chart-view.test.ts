@@ -205,3 +205,19 @@ test('Terminal favorites prefer the exact open exchange and market, not arbitrar
   assert.match(resolver, /marketType: open\?\.marketType \|\| preferredMarket/);
   assert.doesNotMatch(resolver, /if \(!coinsMap\.has\(c\.symbol\)\)/);
 });
+
+test('legacy workspaces with over 50 charts paginate without discarding saved charts', () => {
+  const page = source('../src/components/TerminalPage.tsx');
+  assert.match(page, /const visibleWorkspaceBlocks = useMemo\(\(\) => blocks\.slice\(/);
+  assert.match(page, /visibleWorkspaceStart \+ MAX_TERMINAL_CHARTS/);
+  assert.match(page, /\{visibleWorkspaceBlocks\.map\(\(block, index\) => \{/);
+  assert.match(page, /handleDragStart\(visibleWorkspaceStart \+ index\)/);
+  assert.match(page, /handleDrop\(visibleWorkspaceStart \+ index\)/);
+  assert.match(page, /aria-label="Сторінки великої робочої області"/);
+  assert.match(page, /setWorkspacePage\(Math\.floor\(blockIndex \/ MAX_TERMINAL_CHARTS\)\)/);
+  assert.match(page, /blocks\.length < MAX_TERMINAL_CHARTS && <div/);
+  const gridStart = page.indexOf('/* Multi-chart Grid Layout */');
+  const gridEnd = page.indexOf('{/* Add Chart Modal */}', gridStart);
+  assert.ok(gridStart >= 0 && gridEnd > gridStart);
+  assert.doesNotMatch(page.slice(gridStart, gridEnd), /\{blocks\.map\(/);
+});
