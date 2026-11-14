@@ -477,6 +477,7 @@ export const SmartAnalysisBlock: React.FC<SmartAnalysisBlockProps> = ({
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 text-xs">
             {/* RSI */}
+            {visible.rsi && (
             <div className="p-3 rounded-lg bg-slate-900/80 border border-slate-800 space-y-2">
               <div className="flex items-center justify-between text-slate-400">
                 <span>RSI (14)</span>
@@ -496,21 +497,24 @@ export const SmartAnalysisBlock: React.FC<SmartAnalysisBlockProps> = ({
               </div>
               <span className="text-[11px] text-slate-300 block">{data.trend.rsiLabel}</span>
             </div>
+            )}
 
             {/* EMA Cross & Status */}
+            {visible.emas && (
             <div className="p-3 rounded-lg bg-slate-900/80 border border-slate-800 space-y-1.5">
               <span className="text-slate-400 block">Сигнал ковзних середніх</span>
-              <span className="font-bold text-white block truncate">{data.trend.crossSignalLabel}</span>
+              <span className="font-bold text-white block truncate">{visible.ema200 ? data.trend.crossSignalLabel : 'Ковзні середні EMA20 / EMA50'}</span>
               <div className="flex items-center gap-2 text-[10px] font-mono text-slate-400">
                 <span>EMA20: {data.trend.ema20}</span>
                 <span>•</span>
                 <span>EMA50: {data.trend.ema50}</span>
-                <span>•</span>
-                <span>EMA200: {data.trend.ema200 ?? 'н/д'}</span>
+                {visible.ema200 && <><span>•</span><span>EMA200: {data.trend.ema200}</span></>}
               </div>
             </div>
+            )
 
             {/* 1h Volume & Spike */}
+            {(visible.volume1h || visible.volume24h) && (
             <div className="p-3 rounded-lg bg-slate-900/80 border border-slate-800 space-y-1.5">
               <div className="flex items-center justify-between text-slate-400">
                 <span>Обсяг останньої закритої 1h свічки (≈ USD)</span>
@@ -520,23 +524,25 @@ export const SmartAnalysisBlock: React.FC<SmartAnalysisBlockProps> = ({
                   </span>
                 )}
               </div>
-              <span className="font-bold text-white text-sm font-mono block">
-                {volumeOrNA(data.volumeMetrics.volume1hUsd)}
-              </span>
-              <span className="text-[10px] text-slate-400 block font-sans">
-                Обсяг 24 закритих 1h свічок (≈ USD): {volumeOrNA(data.volumeMetrics.volume24hUsd)}
-              </span>
+              {visible.volume1h && <span className="font-bold text-white text-sm font-mono block">
+                {formatVolume(data.volumeMetrics.volume1hUsd!)}
+              </span>}
+              {visible.volume24h && <span className="text-[10px] text-slate-400 block font-sans">
+                Обсяг 24 закритих 1h свічок (≈ USD): {formatVolume(data.volumeMetrics.volume24hUsd!)}
+              </span>}
             </div>
+            )
 
             {/* Spread & Quality */}
+            {visible.spread && (
             <div className="p-3 rounded-lg bg-slate-900/80 border border-slate-800 space-y-1.5">
               <span className="text-slate-400 block">Поточний Спред (Spread)</span>
               <div className="flex items-baseline gap-2">
                 <span className="font-bold text-white text-sm font-mono">
-                  {data.spread.spreadPct === null ? 'н/д' : data.spread.spreadPct + '%'}
+                  {data.spread.spreadPct}%
                 </span>
                 <span className="text-[10px] text-slate-400 font-mono">
-                  {data.spread.spreadUsd === null ? '' : '($' + data.spread.spreadUsd + ')'}
+                  {data.spread.spreadUsd !== null && '($' + data.spread.spreadUsd + ')'}
                 </span>
               </div>
               <span className="text-[10px] text-emerald-400 block font-medium">
@@ -544,19 +550,21 @@ export const SmartAnalysisBlock: React.FC<SmartAnalysisBlockProps> = ({
                   ? 'Ультра-вузький (найвища ліквідність)'
                   : data.spread.quality === 'normal'
                   ? 'Звичайний робочий спред'
-                  : data.spread.quality === 'wide' ? 'Широкий спред (ризик прослизання)' : 'Дані стакана недоступні'}
+                  : 'Широкий спред (ризик прослизання)'}
               </span>
             </div>
+            )}
           </div>
 
           {/* Position in Day Range */}
+          {visible.dayRange && (
           <div className="p-3 rounded-lg bg-slate-900/80 border border-slate-800 space-y-1.5 text-xs">
             <div className="flex items-center justify-between text-slate-300">
               <span className="font-medium">
                 Де знаходиться ціна відносно денного High/Low:
               </span>
               <span className="font-mono font-bold text-cyan-400">
-                {data.volatility.positionInDayRangePct === null ? 'н/д' : data.volatility.positionInDayRangePct + '% від мінімуму 24 закритих 1h'}
+                {data.volatility.positionInDayRangePct}% від мінімуму 24 закритих 1h
               </span>
             </div>
 
@@ -568,10 +576,11 @@ export const SmartAnalysisBlock: React.FC<SmartAnalysisBlockProps> = ({
             </div>
 
             <div className="flex justify-between text-[10px] font-mono text-slate-400">
-              <span>24h Low: {data.volatility.low24h === null ? 'н/д' : '$' + priceOrNA(data.volatility.low24h)}</span>
-              <span>24h High: {data.volatility.high24h === null ? 'н/д' : '$' + priceOrNA(data.volatility.high24h)}</span>
+              <span>24h Low: {'$' + priceOrNA(data.volatility.low24h)}</span>
+              <span>24h High: {'$' + priceOrNA(data.volatility.high24h)}</span>
             </div>
           </div>
+          )}
         </div>
       )}
 
