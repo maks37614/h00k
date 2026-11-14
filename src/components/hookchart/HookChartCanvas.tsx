@@ -28,6 +28,7 @@ import { DEFAULT_HOOKCHART_HOTKEYS, OriginalHookChartSettings, hotkeyMatches, no
 import { evaluateStrategy, strategyPreset, strategyPreferencePatch } from './strategyEngine';
 import { atr, deriveAutoLevels, formatUsd, normalizeDensityDistance, type LevelTf } from './marketAnalytics';
 import { useOriginalHookChartLiveFeed } from './useOriginalHookChartLiveFeed';
+import { connectChartDiagnostics } from './chartDiagnostics';
 import { visibleChartDensities } from './reactionPotential';
 import { btcBenchmarkSymbol, calculateBtcCorrelation } from '../../utils/chartCorrelation';
 import type { HookTimeMarker } from './timeMarkers';
@@ -144,6 +145,7 @@ const HookChartCanvas = forwardRef<HookChartHandle, HookChartCanvasProps>(functi
   const { language: siteLanguage } = useLanguage();
   const preferences = profile?.uid === user?.uid ? profile?.hookChartPreferences : undefined;
   const scope = `${replay ? 'replay' : 'live'}:${exchange}:${marketType}:${symbol}`;
+  useEffect(() => replay ? undefined : connectChartDiagnostics(), [replay]);
   const sharedScope = `shared:${symbol}`;
   const [settings, setSettings] = useState<HookChartPreferences>(() => normalizeOriginalHookChartPreferences(preferences));
   const chartLanguage = resolveHookChartLanguage(settings, siteLanguage);
