@@ -358,3 +358,11 @@ are treated as configured and retained.
 Important: visually test Win10/11 frameless-window resizing, keyboard shortcut,
 site navigation/authentication, multi-DPI/monitors, docking modes and sleep/resume
 before publishing a final installer.
+
+## Unreleased: branded floating windows
+
+Floating h00k panels now reuse the same local 54 px titlebar, robot emblem,
+window controls and top-right docking gear as the main app. A separate sandboxed
+website view loads below the titlebar only when layout permits. Docked (seamless)
+panels keep their minimal overlay gear and do not acquire the extra 54 px strip;
+this maintains their existing gapless terminal alignment.

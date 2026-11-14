@@ -27,7 +27,8 @@ test('remote h00k site is sandboxed and cannot access the toolbar IPC', () => {
   const contentWindow = main.slice(start, end);
   assert.ok(start >= 0 && end > start);
   assert.match(contentWindow, /nodeIntegration: false, contextIsolation: true, sandbox: true/);
-  assert.doesNotMatch(contentWindow, /preload:/);
+  const site = contentWindow.slice(contentWindow.indexOf('const site = new WebContentsView('),contentWindow.indexOf('site.setBackgroundColor('));
+  assert.doesNotMatch(site, /preload:/);
   assert.match(main, /const owner = toolbarOwners\.get\(event\.sender\.id\)/);
   assert.match(main, /ipcMain\.on\('desktop:toolbar-menu', openToolbarMenu\)/);
 });
@@ -38,7 +39,7 @@ test('all dock layout options are available from local native menu', () => {
     'Увесь h00k', 'Вибрані блоки', 'Плаваючі вікна', 'Відкріпити']) {
     assert.ok(main.includes(text), 'Missing quick action: ' + text);
   }
-  assert.match(main, /frame: mode === 'floating'/); // no native frame on the dock seam
+  assert.match(main, /frame: false/); // dock seam unchanged; floating uses local titlebar
   assert.match(main, /hasShadow: mode === 'floating'/);
   assert.match(main, /toolbarOwners\.delete\(toolbarId\)/);
   assert.match(main, /openSettingsWindow\(provider\)/);
@@ -70,8 +71,19 @@ test('quick menu exposes auto-attach, follow and always-on-top toggles', () => {
 
 test('local shell is the sole owner of window control IPC', () => {
   const main = read('main.cjs'), preload = read('window-shell-preload.cjs');
-  assert.match(main, /event\.sender !== standalone\.webContents/);
+  assert.match(main, /event\.sender !== owner\.win\.webContents/);
   assert.match(main, /ipcMain\.on\('desktop:shell-command'/);
   assert.match(preload, /contextBridge\.exposeInMainWorld\('h00kShell'/);
   assert.doesNotMatch(preload, /desktop:save|desktop:pick|desktop:attach/);
+});
+
+test('floating panels use branded shell without covering remote site or adding remote IPC', () => {
+  const main = read('main.cjs');
+  assert.match(main,/registerShell\(win, provider\)/);
+  assert.match(main,/showProviderMenu\(win, provider\)/);
+  assert.match(main,/win\.__remoteContents = site\.webContents/);
+  assert.match(main,/win\.loadFile\(path\.join\(__dirname, 'window-shell\.html'\)/);
+  assert.match(main,/\(win\.__remoteContents \|\| win\.webContents\)\.loadURL/);
+  assert.match(main,/site\.setBounds\(\{ x: 0, y: SHELL_HEIGHT/);
+  assert.match(main,/if \(win\.__remoteContents\) win\.__remoteContents\.on\('before-input-event'/);
 });

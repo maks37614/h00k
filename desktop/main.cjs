@@ -28,6 +28,7 @@ let lastDockStatus = {};
 let standalone = null;
 const SHELL_HEIGHT = 54; // Local chrome never overlaps the remote website.
 const toolbarOwners = new Map(); // local-only WebContentsView IDs, never exposed to h00k.top
+const shellOwners = new Map(); // local titlebars for full and floating windows only
 const lastLayoutKeys = new Map(); // detect explicit side/mode/size changes, even when follow is off
 const hiddenProviders = new Map(); // reclaim hidden webviews after prolonged terminal absence
 const HIDDEN_RECLAIM_MS = 30_000;
@@ -104,20 +105,35 @@ function attachDockToolbar(win, provider) {
   });
 }
 
+function registerShell(win, provider = null) {
+  shellOwners.set(win.webContents.id, { win, provider });
+  const publishState = () => {
+    if (!win.isDestroyed() && !win.webContents.isLoading())
+      win.webContents.send('desktop:window-state', { maximized: win.isMaximized() });
+  };
+  win.webContents.on('did-finish-load', publishState);
+  win.on('maximize', publishState);
+  win.on('unmaximize', publishState);
+  win.on('closed', () => shellOwners.delete(win.webContents.id));
+}
+
 function makeContentWindow(provider, id, mode = 'full') {
   const win = new BrowserWindow({
     title: 'h00k • ' + LABELS[provider] + ' • ' + (id === 'full' ? 'Desktop' : PANELS.find(x=>x.id===id)?.name),
     x: 100, y: 100, width: 480, height: 470,
-    minWidth: 200, minHeight: 140, show: false, backgroundColor: '#070a12',
-    // Docked windows have no shadow/invisible Windows resize border at their seam.
-    frame: mode === 'floating',
+    minWidth: 200, minHeight: mode === 'floating' ? 230 : 140,
+    show: false, backgroundColor: '#070d18',
+    // Docked panels remain pixel-perfect and frameless; floating panels now
+    // use the SAME local h00k titlebar as the full Desktop window.
+    frame: false,
     hasShadow: mode === 'floating',
     thickFrame: mode === 'floating',
     roundedCorners: false,
     autoHideMenuBar: true,
     webPreferences: {
+      preload: mode === 'floating' ? path.join(__dirname, 'window-shell-preload.cjs') : undefined,
       nodeIntegration: false, contextIsolation: true, sandbox: true,
-      webSecurity: true, partition: 'persist:h00k',
+      webSecurity: true, partition: mode === 'floating' ? undefined : 'persist:h00k',
     },
   });
   win.__h00kMode = mode === 'floating' ? 'floating' : 'docked';
@@ -125,8 +141,34 @@ function makeContentWindow(provider, id, mode = 'full') {
   win.__h00kLoaded = false; // Never load a scanner for a panel without display space.
   win.__nextLoadAt = 0;
   win.__autoPlacing = false;
-  guardWebsite(win);
-  attachDockToolbar(win, provider);
+  if (mode === 'floating') {
+    const site = new WebContentsView({
+      webPreferences: {
+        partition: 'persist:h00k',
+        nodeIntegration: false, contextIsolation: true, sandbox: true, webSecurity: true,
+      },
+    });
+    site.setBackgroundColor('#070d18');
+    win.__remoteContents = site.webContents;
+    win.contentView.addChildView(site);
+    const placeSite = () => {
+      if (win.isDestroyed()) return;
+      const { width, height } = win.getContentBounds();
+      site.setBounds({ x: 0, y: SHELL_HEIGHT, width, height: Math.max(0, height - SHELL_HEIGHT) });
+    };
+    placeSite();
+    win.on('resize', placeSite);
+    guardWebsite(site);
+    registerShell(win, provider);
+    win.loadFile(path.join(__dirname, 'window-shell.html'), { query: { provider: LABELS[provider] } })
+      .catch(error => console.error('Floating h00k chrome error:', error.message));
+    win.on('closed', () => {
+      if (!site.webContents.isDestroyed()) site.webContents.close();
+    });
+  } else {
+    guardWebsite(win);
+    attachDockToolbar(win, provider);
+  }
   let persistTimer = null;
   const persistManualBounds = () => {
     if (win.isDestroyed() || win.__autoPlacing || !win.isVisible()) return;
@@ -149,12 +191,14 @@ function makeContentWindow(provider, id, mode = 'full') {
   win.on('moved', persistManualBounds);
   win.on('resized', persistManualBounds);
   win.on('closed', () => clearTimeout(persistTimer));
-  win.webContents.on('before-input-event', (event, input) => {
+  const settingsHotkey = (event, input) => {
     if (input.type === 'keyDown' && (input.control || input.meta) && input.key === ',') {
       event.preventDefault();
       openSettingsWindow(provider);
     }
-  });
+  };
+  win.webContents.on('before-input-event', settingsHotkey);
+  if (win.__remoteContents) win.__remoteContents.on('before-input-event', settingsHotkey);
   win.on('closed', () => {
     const collection = windows.get(provider);
     if (collection?.get(id) === win) collection.delete(id);
@@ -199,9 +243,10 @@ function openToolbarMenu(event) {
   const owner = toolbarOwners.get(event.sender.id);
   if (!owner || event.sender.isDestroyed() || owner.win.isDestroyed()) return;
   const { provider, win } = owner;
-  // The independent h00k window has no external terminal profile, but its local gear
-  // still offers full settings and a direct shortcut to each terminal configuration.
   if (!provider) { showStandaloneMenu(win); return; }
+  showProviderMenu(win, provider);
+}
+function showProviderMenu(win, provider) {
   const profile = settings.profiles[provider];
   const label = LABELS[provider];
   const sides = [
@@ -288,6 +333,7 @@ function openStandaloneWindow() {
     },
   });
   standalone = win;
+  registerShell(win);
   const site = new WebContentsView({
     webPreferences: {
       partition: 'persist:h00k',
@@ -313,14 +359,6 @@ function openStandaloneWindow() {
   };
   site.webContents.on('before-input-event', onSettingsShortcut);
   win.webContents.on('before-input-event', onSettingsShortcut);
-  const sendWindowState = () => {
-    if (!win.isDestroyed() && !win.webContents.isLoading()) {
-      win.webContents.send('desktop:window-state', { maximized: win.isMaximized() });
-    }
-  };
-  win.on('maximize', sendWindowState);
-  win.on('unmaximize', sendWindowState);
-  win.webContents.on('did-finish-load', sendWindowState);
   win.loadFile(path.join(__dirname, 'window-shell.html'))
     .catch(error => console.error('h00k Desktop chrome error:', error.message));
   site.webContents.loadURL(WEBSITE)
@@ -407,7 +445,7 @@ function applyBounds(win, bounds, alwaysOnTop) {
   if (win.isAlwaysOnTop() !== alwaysOnTop) win.setAlwaysOnTop(alwaysOnTop);
   if (!win.__h00kLoaded && Date.now() >= win.__nextLoadAt) {
     win.__h00kLoaded = true;
-    win.loadURL(win.__h00kUrl).catch(err => {
+    (win.__remoteContents || win.webContents).loadURL(win.__h00kUrl).catch(err => {
       if (win.isDestroyed()) return;
       win.__h00kLoaded = false;
       win.__nextLoadAt = Date.now() + 15_000; // bounded retry; never flood h00k.top on outage
@@ -610,13 +648,17 @@ function registerIpc() {
   ipcMain.on('desktop:shell-command', (event, action) => {
     // Only the local shell may manage windows: the unprivileged remote website
     // is in a DIFFERENT WebContentsView and never gets this preload.
-    if (!standalone || standalone.isDestroyed() || event.sender !== standalone.webContents) return;
-    if (action === 'settings') showStandaloneMenu(standalone);
-    else if (action === 'minimize') standalone.minimize();
+    const owner = shellOwners.get(event.sender.id);
+    if (!owner || owner.win.isDestroyed() || event.sender !== owner.win.webContents) return;
+    const { win, provider } = owner;
+    if (action === 'settings') {
+      if (provider) showProviderMenu(win, provider);
+      else showStandaloneMenu(win);
+    } else if (action === 'minimize') win.minimize();
     else if (action === 'toggle-maximize') {
-      if (standalone.isMaximized()) standalone.unmaximize();
-      else standalone.maximize();
-    } else if (action === 'close') standalone.close();
+      if (win.isMaximized()) win.unmaximize();
+      else win.maximize();
+    } else if (action === 'close') win.close();
   });
 }
 if(!app.requestSingleInstanceLock()) app.quit();

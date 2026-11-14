@@ -37,5 +37,6 @@ test('first launch config then later app launch; settings remain reachable by ge
   const m=read('main.cjs');
   assert.match(m,/if \(settings\.setupComplete\) openStandaloneWindow\(\);\s*else createSettingsWindow\(\);/);
   assert.match(m,/if \(firstRun\) finishInitialSetup\(\)/);
-  assert.match(m,/if \(action === 'settings'\) showStandaloneMenu\(standalone\)/);
+  assert.match(m,/showStandaloneMenu\(win\)/);
+  assert.match(m,/showProviderMenu\(win, provider\)/);
 });

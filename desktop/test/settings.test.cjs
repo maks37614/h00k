@@ -25,7 +25,10 @@ test('desktop remote content does not load a privileged bridge', () => {
   assert.ok(remote.includes('nodeIntegration: false'));
   assert.ok(remote.includes('contextIsolation: true'));
   assert.ok(remote.includes('sandbox: true'));
-  assert.ok(!remote.includes('preload:'));
+  // Only the LOCAL shell gets the narrow preload. The actual website view has none.
+  const site = remote.slice(remote.indexOf('const site = new WebContentsView('),remote.indexOf('site.setBackgroundColor('));
+  assert.ok(site.includes("partition: 'persist:h00k'"));
+  assert.ok(!site.includes('preload:'));
 });
 
 test('first-run welcome and branded assets are bundled for the settings window', () => {

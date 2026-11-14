@@ -1,5 +1,8 @@
 'use strict';
 const actions = new Set(['settings', 'minimize', 'toggle-maximize', 'close']);
+const provider = new URLSearchParams(window.location.search).get('provider');
+if (['MetaScalp', 'Tiger.Trade', 'Vataga'].includes(provider))
+  document.querySelector('.desktop-title').textContent = provider;
 document.querySelectorAll('[data-action]').forEach(button => {
   button.addEventListener('click', () => {
     const action = button.dataset.action;

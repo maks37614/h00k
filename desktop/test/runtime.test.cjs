@@ -30,6 +30,7 @@ function simulateDesktop() {
     }
     on(name, listener) { const list=this.events.get(name)||[];list.push(listener);this.events.set(name,list); }
     loadURL(url){return this.webContents.loadURL(url);}
+    loadFile(){return Promise.resolve();}
     emit(name) { for(const callback of this.events.get(name)||[]) callback(); }
     isDestroyed(){return this.dead;}
     getBounds(){return {...this.bounds};}
@@ -114,6 +115,10 @@ test('dragged floating pane is saved and restored after it is recreated',async()
   engine.acceptWindows([meta]);
   const win=engine.getWindows().get('metascalp').get('screener');
   assert.ok(win && win.isVisible());
+  assert.equal(win.options.frame, false);
+  assert.ok(win.__remoteContents);
+  assert.equal(win.__remoteContents.urls.length, 1, 'floating website loaded in isolated view');
+  assert.equal(win.webContents.urls.length, 0, 'local floating chrome is not a remote page');
   await tick(370); // auto-layout move events must not count as user drag
   win.bounds={x:310,y:90,width:475,height:370};
   win.emit('moved');
