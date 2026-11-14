@@ -171,6 +171,16 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
   // own settingsRef synchronously in updateSettings.
   useEffect(() => {
     const onStorage = (event: StorageEvent) => {
+      if (event.key === siteNotificationSeenKey(uid)) {
+        // Keep already delivered IDs synchronized across tabs so a second
+        // screener tab does not replay the same notification on its next scan.
+        const saved = loadSeen(uid);
+        if (deliveredSeen.current.uid !== uid)
+          deliveredSeen.current = { uid, ids: saved };
+        else
+          for (const id of saved) deliveredSeen.current.ids.add(id);
+        return;
+      }
       if (event.key !== siteNotificationMuteKey(uid)
         && event.key !== siteNotificationSettingsKey(uid)) return;
       const fromStorage = loadSettings(uid, null);
@@ -284,6 +294,14 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
           body: event.description, icon: '/favicon.ico',
         });
         visibleBrowserNotificationsRef.current.add(visible);
+        // Avoid an unbounded pile of native notifications during a volatility
+        // burst; the in-site history still retains the full bounded event list.
+        while (visibleBrowserNotificationsRef.current.size > 3) {
+          const oldest = visibleBrowserNotificationsRef.current.values().next().value;
+          if (!oldest) break;
+          visibleBrowserNotificationsRef.current.delete(oldest);
+          try { oldest.close(); } catch {}
+        }
         visible.onclose = () => { visibleBrowserNotificationsRef.current.delete(visible); };
       } catch { /* Browser may forbid native notification displays. */ }
     }
@@ -530,14 +548,20 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
             });
           } catch { /* Ignore malformed live frames. */ }
         };
-        socket.onclose = () => {
+        socket.onclose = (closeEvent) => {
           if (!stopped) {
             if (attempt >= 3) emit({
               id: 'system:liq-stream:' + exchange + ':' + symbol + ':' + Math.floor(Date.now() / 300000),
               kind: 'system', title: 'Потік ліквідацій недоступний · ' + symbol,
               description: 'З’єднання з потоком ліквідацій перерване; триває повторне підключення.',
             });
-            retry = setTimeout(connect, Math.min(30_000, 2000 * 2 ** Math.min(attempt++, 4)));
+            // Capacity rejections must not become a reconnect storm against
+            // this VPS. Add jitter so thousands of clients do not retry together.
+            const capacityRejected = closeEvent.code === 1013;
+            const baseDelay = capacityRejected
+              ? 60_000 : Math.min(30_000, 2000 * 2 ** Math.min(attempt, 4));
+            attempt++;
+            retry = setTimeout(connect, baseDelay + Math.floor(Math.random() * 5_000));
           }
         };
         socket.onerror = () => socket?.close();
@@ -552,7 +576,7 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
       if (socket) { socket.onmessage = null; socket.onclose = null; socket.close(); }
     };
   }, [uid, settings.optedIn, settings.enabled, settings.liquidations,
-    settings.impulseSymbol, settings.impulseExchange, settings.liquidationMinUsd, emit]);
+    settings.impulseSymbol, settings.impulseExchange, emit]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
