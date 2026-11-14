@@ -122,12 +122,13 @@ export function saveSurveillanceStore(store: UserSurveillanceStore): boolean {
         }
       }
     }
-    storeCache = safeStore;
     const temporaryFile = `${SURVEILLANCE_FILE}.tmp`;
     const payload = JSON.stringify(safeStore);
     bytes = Buffer.byteLength(payload);
     fs.writeFileSync(temporaryFile, payload, 'utf-8');
     fs.renameSync(temporaryFile, SURVEILLANCE_FILE);
+    // A failed disk write must never replace the authoritative in-memory copy.
+    storeCache = safeStore;
     persistenceMetrics.record('surveillance', performance.now() - started, bytes, true);
     return true;
   } catch (err) {
@@ -142,7 +143,10 @@ export function loadSurveillanceList(userId?: string): SurveillanceCoin[] {
   const uid = (userId && userId.trim() !== '') ? userId.trim() : 'guest';
   const list = store[uid] || [];
 
-  return list.map((coin) => {
+  return list.map((storedCoin) => {
+    // Worker snapshots and legacy defaults are view-only. A GET must not
+    // mutate the durable store or turn transient order-book data into JSON.
+    const coin: SurveillanceCoin = structuredClone(storedCoin);
     if (!coin.config.triggerModes) {
       coin.config.triggerModes = coin.config.triggerMode ? [coin.config.triggerMode] : ['bar_close'];
     }
@@ -250,16 +254,18 @@ export function flushDeferredSurveillanceChecks(): boolean {
 export function saveSurveillanceList(userId: string, list: SurveillanceCoin[]): boolean {
   const store = loadSurveillanceStore();
   const uid = (userId && userId.trim() !== '') ? userId.trim() : 'guest';
-  for (const coin of store[uid] || []) {
-    if (!list.some(item => item.id === coin.id)) surveillanceManager.stopWorkerForCoin(coin.id, uid);
+  // Stage a fresh account list; never mutate the in-memory account or stop
+  // workers until the new state is safely renamed into place on disk.
+  const previous = store[uid] || [];
+  const nextList = structuredClone(list);
+  if (!saveSurveillanceStore({ ...store, [uid]: nextList })) return false;
+  const nextIds = new Set(nextList.map(item => item.id));
+  for (const coin of previous) {
+    if (!nextIds.has(coin.id)) surveillanceManager.stopWorkerForCoin(coin.id, uid);
   }
-  store[uid] = list;
-  const saved = saveSurveillanceStore(store);
-  if (saved) {
-    pendingSurveillanceUsers.delete(uid);
-    publishSurveillance(uid, true);
-  }
-  return saved;
+  pendingSurveillanceUsers.delete(uid);
+  publishSurveillance(uid, true);
+  return true;
 }
 
 // An async check must never restore a deleted coin or overwrite a user's edits.
@@ -272,15 +278,18 @@ export function commitSurveillanceCheck(
   if (current.isActive !== checked.isActive || JSON.stringify(current.config) !== JSON.stringify(checked.config)) return current;
   const updated = { ...current, state: checked.state, lastCheckedAt: checked.lastCheckedAt,
     lastNotifiedAt: checked.lastNotifiedAt || current.lastNotifiedAt };
-  found.list[found.index] = updated;
   // A real Telegram dispatch updates lastNotifiedAt and must be written
   // durably before the next monitor pass, never buffered with routine metrics.
   const newNotification = !!checked.lastNotifiedAt
     && checked.lastNotifiedAt !== current.lastNotifiedAt;
   if (options.deferPersist && !newNotification) {
+    found.list[found.index] = updated;
     pendingSurveillanceUsers.add(found.userId);
   } else {
-    saveSurveillanceList(found.userId, found.list);
+    const next = found.list.slice();
+    next[found.index] = updated;
+    if (!saveSurveillanceList(found.userId, next))
+      throw new Error('Не вдалося зберегти стан 24/7-нагляду');
   }
   surveillanceManager.updateWorkerCoin(updated);
   return updated;
@@ -301,14 +310,15 @@ export function updateSurveillanceCoinActive(
     updatedAt: new Date().toISOString(),
   };
 
+  const next = found.list.slice();
+  next[found.index] = updatedCoin;
+  if (!saveSurveillanceList(found.userId, next))
+    throw new Error('Не вдалося зберегти зміну активності нагляду');
   if (Boolean(isActive)) {
     surveillanceManager.startWorkerForCoin(updatedCoin);
   } else {
     surveillanceManager.stopWorkerForCoin(id, found.userId);
   }
-
-  found.list[found.index] = updatedCoin;
-  saveSurveillanceList(found.userId, found.list);
   return updatedCoin;
 }
 
@@ -322,15 +332,14 @@ export function setAllSurveillanceCoinsActive(userId: string, isActive: boolean)
       isActive: Boolean(isActive),
       updatedAt: new Date().toISOString(),
     };
-    if (Boolean(isActive)) {
-      surveillanceManager.startWorkerForCoin(updated);
-    } else {
-      surveillanceManager.stopWorkerForCoin(coin.id, uid);
-    }
     return updated;
   });
-  store[uid] = updatedList;
-  if (saveSurveillanceStore(store)) publishSurveillance(uid, true);
+  if (!saveSurveillanceList(uid, updatedList))
+    throw new Error('Не вдалося зберегти групову зміну нагляду');
+  for (const updated of updatedList) {
+    if (Boolean(isActive)) surveillanceManager.startWorkerForCoin(updated);
+    else surveillanceManager.stopWorkerForCoin(updated.id, uid);
+  }
   return updatedList;
 }
 
