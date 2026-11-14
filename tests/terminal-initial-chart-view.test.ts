@@ -87,3 +87,30 @@ test('terminal chart initial view is passed only through terminal widgets to Hoo
   assert.doesNotMatch(source('../src/components/replay/ReplayChart.tsx'), /terminalInitialView/);
   assert.doesNotMatch(source('../src/components/ScreenerTable.tsx'), /terminalInitialView/);
 });
+
+test('single-chart Terminal renders the timeframe saved on its block instead of stale global selection', () => {
+  const page = source('../src/components/TerminalPage.tsx');
+  assert.match(page, /const activeTimeframe = blocks\.length === 1 \? blocks\[0\]\.timeframe : timeframe/);
+  assert.match(page, /switch \(activeTimeframe\)/);
+  assert.match(page, /timeframe=\{activeTimeframe\}/);
+  assert.match(page, /activeTimeframe === tf/);
+  assert.match(page, /Таймфрейм: <strong[^>]*>\{activeTimeframe\}<\/strong>/);
+});
+
+test('maximizing one Terminal chart suspends other visible charts without changing their settings', () => {
+  const page = source('../src/components/TerminalPage.tsx');
+  const widget = source('../src/components/terminal/TerminalChartWidget.tsx');
+  assert.match(page, /isSuspended=\{maximizedBlockId !== null && !isMaximized\}/);
+  assert.match(widget, /const shouldLoadWidgets = !isSuspended && \(isSingleBlock \|\| isMaximized \|\| isNearViewport\)/);
+  assert.match(widget, /if \(!shouldLoadWidgets \|\| useIntegratedHookChartToolbar\) return;/);
+  assert.match(widget, /\{shouldLoadWidgets \? \(/);
+});
+
+test('Terminal coin changes clear pending prices from a prior instrument', () => {
+  const widget = source('../src/components/terminal/TerminalChartWidget.tsx');
+  assert.match(widget, /previousInstrumentRef\.current === instrumentKey/);
+  assert.match(widget, /clearTimeout\(headerPriceTimerRef\.current\)/);
+  assert.match(widget, /pendingHeaderPriceRef\.current = null/);
+  assert.match(widget, /setCurrentPrice\(nextPrice\)/);
+  assert.match(widget, /setLivePrice\(nextPrice \?\? 0\)/);
+});
