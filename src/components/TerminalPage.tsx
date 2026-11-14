@@ -102,8 +102,14 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
   useEffect(() => {
     const controller = new AbortController();
     let busy = false;
+    let lastRequestAt = 0;
     const load = async () => {
-      if (busy) return;
+      // A background Terminal tab must not keep polling every exchange.
+      // Also avoid a double refresh when visibilitychange and the timer coincide.
+      if (busy || controller.signal.aborted || document.visibilityState === 'hidden') return;
+      const now = Date.now();
+      if (now - lastRequestAt < 25_000) return;
+      lastRequestAt = now;
       busy = true;
       setMarketLoading(true);
       try {
@@ -118,9 +124,17 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
         if (!controller.signal.aborted) setMarketLoading(false);
       }
     };
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') void load();
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
     void load();
     const timer = setInterval(() => { void load(); }, 30_000);
-    return () => { controller.abort(); clearInterval(timer); };
+    return () => {
+      controller.abort();
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
   }, []);
 
   const coinPresetSelection = useMemo(() => ({
