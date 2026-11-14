@@ -31,6 +31,8 @@ interface AuthContextType {
   resetPassword: (password: string) => Promise<void>;
   resetToken: string | null;
   updateProfileData: (updates: Partial<UserProfile>) => Promise<void>;
+  /** Atomic per-workspace write: a stale device receives a 409 instead of overwriting new charts. */
+  updateTerminalWorkspace: (workspace: NonNullable<UserProfile['terminalSettings']>, expectedVersion: string | null) => Promise<string | null>;
   logout: () => Promise<void>;
   logoutAll: () => Promise<void>;
   listSessions: () => Promise<AuthSessionSummary[]>;
@@ -227,7 +229,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
       });
       const result = await response.json();
-      if (!response.ok || !result.success) throw new Error(result.error || 'Не вдалося зберегти профіль.');
+      if (!response.ok || !result.success) {
+        const failure = new Error(result.error || 'Не вдалося зберегти профіль.') as Error & { code?: string };
+        failure.code = result.code;
+        throw failure;
+      }
       if (userRef.current?.uid !== account.uid) throw new Error('Обліковий запис змінився.');
       const nextProfile = stripLegacySecrets(result.profile as UserProfile);
       profileRef.current = nextProfile;
@@ -237,6 +243,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
     writeQueue.current = write;
     await write;
+  };
+  const updateTerminalWorkspace = async (
+    workspace: NonNullable<UserProfile['terminalSettings']>, expectedVersion: string | null,
+  ): Promise<string | null> => {
+    // The expected version travels inside the workspace PATCH but is discarded
+    // by the server before JSONB persistence. Never trust a version from the UI.
+    await updateProfileData({
+      terminalSettings: { ...workspace, _expectedVersion: expectedVersion } as NonNullable<UserProfile['terminalSettings']>,
+    });
+    return profileRef.current?.terminalSettings?.version ?? null;
   };
   const logout = async () => {
     if (userRef.current) {
@@ -268,7 +284,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   return <AuthContext.Provider value={{
     user, profile, loading, signInWithEmail, registerWithEmail,
     resendVerification, requestPasswordReset, resetPassword, resetToken,
-    updateProfileData, logout, logoutAll, listSessions, revokeSession,
+    updateProfileData, updateTerminalWorkspace, logout, logoutAll, listSessions, revokeSession,
     authError, authErrorCode, authNotice, clearAuthError,
   }}>{children}</AuthContext.Provider>;
 };
