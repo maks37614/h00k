@@ -24,6 +24,13 @@ test('corrupt surveillance JSON never gets replaced with an empty account store'
     assert.equal(fs.readFileSync(storePath, 'utf8'), broken,
       'an unreadable 24/7 store must not be truncated by a user edit');
 
+    // I/O failures (including a directory in place of the JSON file) are
+    // not equivalent to a missing store and cannot be silently discarded.
+    fs.rmSync(storePath);
+    fs.mkdirSync(storePath);
+    assert.throws(() => service.loadSurveillanceStore(), /EISDIR/);
+    fs.rmSync(storePath, { recursive: true });
+
     // Valid JSON with invalid shape is just as unsafe as malformed syntax.
     const invalidAccount = JSON.stringify({ 'user-a': { invalid: 'not a list' } });
     fs.writeFileSync(storePath, invalidAccount);
@@ -46,6 +53,7 @@ test('corrupt surveillance JSON never gets replaced with an empty account store'
     const original = JSON.stringify({
       'user-a': [coin('old-guest', 'BTCUSDT')],
       'user-b': [coin('user-b', 'ETHUSDT')],
+      ['__proto__']: [coin('legacy-owner', 'SOLUSDT')],
     });
     fs.writeFileSync(storePath, original);
 
@@ -61,14 +69,17 @@ test('corrupt surveillance JSON never gets replaced with an empty account store'
     const restored = service.loadSurveillanceStore();
     assert.equal(restored['user-a'].length, 1);
     assert.equal(restored['user-b'].length, 1);
+    assert.equal(restored['__proto__'].length, 1);
+    assert.equal(restored['__proto__'][0].userId, '__proto__');
     assert.equal(restored['user-a'][0].userId, 'user-a');
     assert.notEqual(restored['user-a'][0].id, restored['user-b'][0].id);
     assert.equal(restored['user-a'][0].symbol, 'BTCUSDT');
     assert.equal(restored['user-b'][0].symbol, 'ETHUSDT');
     const saved = JSON.parse(fs.readFileSync(storePath, 'utf8'));
-    assert.deepEqual(Object.keys(saved).sort(), ['user-a', 'user-b']);
+    assert.deepEqual(Object.keys(saved).sort(), ['__proto__', 'user-a', 'user-b']);
     assert.equal(saved['user-a'][0].userId, 'user-a');
     assert.notEqual(saved['user-a'][0].id, saved['user-b'][0].id);
+    assert.equal(saved['__proto__'][0].userId, '__proto__');
 
     // Once the repaired source is loaded, explicit edits still work.
     const updated = service.loadSurveillanceList('user-a');
