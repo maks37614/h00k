@@ -24,8 +24,11 @@ export function normalizeTerminalMarketPair(symbolInput: string, quoteInput?: st
 export function formatTerminalQuotedPrice(price: number | null | undefined, quoteAsset?: string): string {
   const quote = (quoteAsset || 'USDT').toUpperCase();
   const formatted = formatCryptoPrice(price);
-  return ['USDT', 'USDC', 'BUSD', 'FDUSD', 'USD'].includes(quote)
-    ? `$${formatted}`
+  // Only a real USD quote receives a dollar sign. Stablecoins are quoted in
+  // their own assets; the chart toolbar displays that asset separately.
+  if (quote === 'USD') return `$${formatted}`;
+  return ['USDT', 'USDC', 'BUSD', 'FDUSD'].includes(quote)
+    ? formatted
     : `${formatted} ${quote}`;
 }
 
