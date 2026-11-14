@@ -12,6 +12,7 @@ import { installFullEarlyScanRoutes } from './server/earlyScanRoutes';
 import { fetch24hTradeCount } from './server/chartMarketStats';
 import { analyzeFormationWithAI, evaluateFormationScoreWithAI } from './server/geminiService';
 import { generateSmartAnalysis } from './server/smartAnalysisService';
+import { coingeckoHolders } from './server/coingeckoHolders';
 import { calculateMarketSentiment, SentimentDataUnavailableError } from './server/sentimentService';
 import { installTelegramRoutes } from './server/telegramRoutes';
 import { startSharedTelegramBot } from './server/telegramLinkService';
@@ -235,6 +236,39 @@ async function startServer() {
       }
       console.error('Error calculating market sentiment:', err);
       res.status(500).json({ success: false, error: 'Не вдалося обчислити індекс настрою' });
+    }
+  });
+
+  // Free CoinGecko Demo Holders. Never expose the API key in a browser and
+  // never accept a user-supplied URL, blockchain path or arbitrary contract.
+  // Exact symbol resolution lives in coingeckoHolders, not the browser.
+  const holderCallerWindow = new Map<string, { since: number; count: number }>();
+  app.get('/api/market/holders', async (req, res) => {
+    const symbol = typeof req.query.symbol === 'string' ? req.query.symbol : '';
+    if (!/^[a-zA-Z0-9]{2,36}$/.test(symbol)) {
+      res.status(400).json({ success: false, error: 'Некоректний символ монети' });
+      return;
+    }
+    const now = Date.now();
+    const caller = req.ip || 'unknown';
+    let rate = holderCallerWindow.get(caller);
+    if (!rate || now - rate.since >= 60_000) rate = { since: now, count: 0 };
+    rate.count += 1;
+    holderCallerWindow.set(caller, rate);
+    if (holderCallerWindow.size > 2000) {
+      for (const [ip, value] of holderCallerWindow) {
+        if (now - value.since >= 60_000) holderCallerWindow.delete(ip);
+      }
+    }
+    if (rate.count > 30) {
+      res.status(429).json({ success: false, error: 'Забагато запитів до Holders' });
+      return;
+    }
+    try {
+      res.set('Cache-Control', 'private, max-age=60');
+      res.json({ success: true, data: await coingeckoHolders.get(symbol) });
+    } catch {
+      res.status(503).json({ success: false, error: 'Дані Holders зараз недоступні' });
     }
   });
 
