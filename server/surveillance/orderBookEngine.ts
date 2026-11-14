@@ -1,7 +1,7 @@
 import { ExchangeId, MarketType } from '../../src/types';
 import { RawDepthDelta } from './exchangeStream';
 import { DensityItem, OrderBookLevel, OrderBookState, OrderBookStatus } from './types';
-import { isFreshDepthTime, parseDepthLevels } from '../../src/utils/orderBookValidation';
+import { ORDER_BOOK_MAX_AGE_MS, isFreshDepthTime, parseDepthLevels } from '../../src/utils/orderBookValidation';
 import { lowerMedian } from './lowerMedian';
 
 export interface DensityConfig {
@@ -85,6 +85,9 @@ export class OrderBookEngine {
     this.status = newStatus;
     if (newStatus !== 'LIVE') {
       this.dataValid = false;
+      // A reconnect/STALE status invalidates incremental continuity. Another
+      // delta alone must never make the old book LIVE without a fresh snapshot.
+      this.sequenceGap = true;
       this.activeDensities.clear();
       this.densityStats.clear();
       this.newlyAppearedDensities = [];
@@ -105,13 +108,20 @@ export class OrderBookEngine {
       this.setStatus(delta.eventTime !== undefined && !isFreshDepthTime(delta.eventTime, now) ? 'STALE' : 'RESYNCING');
       return;
     }
-    if (this.lastReceivedAt && now - this.lastReceivedAt > 5000) {
-      this.activeDensities.clear(); this.densityStats.clear(); this.newlyAppearedDensities = [];
+    // Even a fresh incremental update cannot repair a book whose previous
+    // observation expired during a socket/REST pause. Require a new snapshot,
+    // including when getState() was never called during the outage.
+    const previousBookExpired = this.lastReceivedAt > 0 &&
+      (now - this.lastReceivedAt > ORDER_BOOK_MAX_AGE_MS || !isFreshDepthTime(this.lastReceivedAt, now) ||
+       (this.lastExchangeTimestamp > 0 && !isFreshDepthTime(this.lastExchangeTimestamp, now)));
+    if (previousBookExpired) {
+      this.setStatus('STALE');
+      if (!delta.isSnapshot) return;
     }
     const seq = delta.sequence!;
     // Old/duplicate deltas are harmless; never invalidate a good book for them.
     if (!delta.isSnapshot && this.lastUpdateId > 0 && seq <= this.lastUpdateId) return;
-    if (!delta.isSnapshot && (this.lastUpdateId === 0 || this.sequenceGap)) {
+    if (!delta.isSnapshot && (this.lastUpdateId === 0 || this.sequenceGap || !this.dataValid)) {
       this.status = 'SYNCING';
       return;
     }
