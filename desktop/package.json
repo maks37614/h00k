@@ -23,6 +23,7 @@
     "productName": "h00k Desktop",
     "files": [
       "main.cjs",
+      "standalone-chrome.cjs",
       "preload.cjs",
       "profiles.cjs",
       "layout.cjs",

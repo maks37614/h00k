@@ -58,3 +58,30 @@ test('independent full h00k window gets the same isolated settings gear', () => 
   assert.match(main, /PROVIDERS\.map\(id =>/);
   assert.match(main, /settings\.setupComplete && profile\.enabled/);
 });
+
+test('standalone app uses the live site menu under native Windows window controls', () => {
+  const chrome = require('../standalone-chrome.cjs');
+  const win = chrome.standaloneWindowChrome('win32');
+  assert.equal(win.titleBarStyle, 'hidden');
+  assert.equal(win.titleBarOverlay.height, 38);
+  assert.deepEqual(chrome.standaloneWindowChrome('linux'), {});
+  assert.equal(chrome.standaloneToolbarInset('win32'), chrome.WINDOW_BUTTONS_WIDTH);
+  assert.equal(chrome.standaloneToolbarInset('darwin'), 0);
+  assert.ok(chrome.HEADER_SAFE_WIDTH > chrome.WINDOW_BUTTONS_WIDTH + 41);
+  const css = chrome.standaloneHeaderCSS();
+  for (const token of ['.app-header { -webkit-app-region: drag; }',
+    '-webkit-app-region: no-drag !important',
+    'padding-right: 198px !important',
+    '@media (max-width: 700px)',
+    'padding-top: 48px !important']) assert.ok(css.includes(token), token);
+  const main = read('main.cjs');
+  for (const token of ['...standaloneWindowChrome(process.platform)',
+    'provider === null ? standaloneToolbarInset(process.platform) : 0',
+    'isTrustedWebURL(siteWindow.webContents.getURL())',
+    'webContents.insertCSS(standaloneHeaderCSS())']) assert.ok(main.includes(token), token);
+  const pkg = JSON.parse(read('package.json'));
+  assert.ok(pkg.build.files.includes('standalone-chrome.cjs'));
+  // The remote page must never receive the local toolbar's privileged preload.
+  const site = main.slice(main.indexOf("ipcMain.handle('desktop:standalone'"));
+  assert.doesNotMatch(site, /preload:/);
+});

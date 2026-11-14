@@ -6,6 +6,7 @@ const fs = require('node:fs');
 const readline = require('node:readline');
 const { dockRects, floatingRects } = require('./layout.cjs');
 const { normalizeFloatingBounds, restoreFloatingBounds, floatingLayoutKey } = require('./workspace.cjs');
+const { standaloneWindowChrome, standaloneToolbarInset, standaloneHeaderCSS } = require('./standalone-chrome.cjs');
 const { PROVIDERS, PANELS, normalizeSettings, normalizeProfile, matchesTerminal, availablePanels } = require('./profiles.cjs');
 
 const WEBSITE = 'https://h00k.top/';
@@ -86,7 +87,9 @@ function attachDockToolbar(win, provider) {
   const place = () => {
     if (win.isDestroyed()) return;
     const width = win.getContentBounds().width;
-    toolbar.setBounds({ x: Math.max(0, width - 47), y: 6, width: 41, height: 41 });
+    // Keep the isolated Desktop settings gear left of native Windows caption buttons.
+    const nativeInset = provider === null ? standaloneToolbarInset(process.platform) : 0;
+    toolbar.setBounds({ x: Math.max(0, width - 47 - nativeInset), y: 6, width: 41, height: 41 });
   };
   place();
   win.on('resize', place);
@@ -498,10 +501,21 @@ function registerIpc() {
       standalone = new BrowserWindow({
         title:'h00k Desktop', width:1280,height:850,minWidth:400,minHeight:300,
         backgroundColor:'#070d18',autoHideMenuBar:true,
+        ...standaloneWindowChrome(process.platform),
         webPreferences:{sandbox:true,nodeIntegration:false,contextIsolation:true,
           partition:'persist:h00k',webSecurity:true},
       });
       guardWebsite(standalone);
+      // Merge native window controls with the site's existing menu without
+      // allowing remote content access to local Desktop IPC.
+      if (process.platform === 'win32') {
+        const siteWindow = standalone;
+        siteWindow.webContents.on('did-finish-load', () => {
+          if (siteWindow.isDestroyed() || !isTrustedWebURL(siteWindow.webContents.getURL())) return;
+          void siteWindow.webContents.insertCSS(standaloneHeaderCSS())
+            .catch(error => console.warn('h00k Desktop header styling failed:', error.message));
+        });
+      }
       attachDockToolbar(standalone, null); // A persistent right-hand quick-settings gear, isolated from h00k.top.
       standalone.loadURL(WEBSITE).catch(err=>console.warn('h00k load error:',err.message));
       standalone.on('closed',()=>{standalone=null;});
