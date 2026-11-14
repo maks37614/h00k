@@ -35,5 +35,7 @@ jobs:
       - run: npm ci
       - name: TypeScript validation
         run: npm run lint
+      - name: Frontend bundle
+        run: npm run build
       - name: Liquidation protocol, pooling and existing HookChart regression
         run: node --import ./tests/fixtures/offline-network.mjs --import tsx --test tests/liquidation-feed.test.ts tests/liquidation-upstream-pool.test.ts tests/liquidation-multi-client-relay.test.ts tests/liquidation-browser-multiplex.test.ts tests/liquidation-archive.test.ts tests/hookchart-shared-liquidation-view.test.ts tests/hookchart-liquidation-socket-lifecycle.test.ts
