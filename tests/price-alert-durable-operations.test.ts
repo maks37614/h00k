@@ -36,6 +36,24 @@ test('price alert edits, deletion and history survive simulated disk failures', 
       fs.renameSync = failingRename;
     };
 
+    // Spy on the write itself: a stale permissive .tmp must be secured
+    // before bytes containing user data are written, not only at rename.
+    const assertPrivateDuringWrite = (destination: string, operation: () => void) => {
+      const previousWrite = fs.writeFileSync;
+      let inspected = 0;
+      fs.writeFileSync = ((target: fs.PathOrFileDescriptor, ...args: any[]) => {
+        if (String(target) === `${destination}.tmp`) {
+          inspected++;
+          assert.equal(fs.statSync(String(target)).mode & 0o777, 0o600,
+            'temporary file must already be private before personal data is written');
+        }
+        return (previousWrite as any)(target, ...args);
+      }) as typeof fs.writeFileSync;
+      try { operation(); }
+      finally { fs.writeFileSync = previousWrite; }
+      assert.ok(inspected > 0, 'expected to inspect a personal JSON write');
+    };
+
     // A failed update, creation or batch creation changes neither memory
     // nor the persisted source of truth.
     blockRename(alertFile);
@@ -52,7 +70,9 @@ test('price alert edits, deletion and history survive simulated disk failures', 
     // overwriting it must not expose the next alerts.json snapshot.
     fs.writeFileSync(`${alertFile}.tmp`, 'old temp', { mode: 0o644 });
     fs.chmodSync(`${alertFile}.tmp`, 0o644);
-    assert.equal(svc.toggleAlert(data.id, owner, false)?.isActive, false);
+    assertPrivateDuringWrite(alertFile, () => {
+      assert.equal(svc.toggleAlert(data.id, owner, false)?.isActive, false);
+    });
     assert.equal(svc.getAllAlerts(owner)[0].isActive, false);
     assert.equal(fs.statSync(alertFile).mode & 0o777, 0o600);
 
@@ -69,7 +89,7 @@ test('price alert edits, deletion and history survive simulated disk failures', 
     fs.renameSync = originalRename;
     fs.writeFileSync(`${historyFile}.tmp`, 'old temp', { mode: 0o644 });
     fs.chmodSync(`${historyFile}.tmp`, 0o644);
-    svc.addHistoryItem(item);
+    assertPrivateDuringWrite(historyFile, () => svc.addHistoryItem(item));
     assert.equal(svc.getAlertHistory(owner).some(row => row.id === item.id), true);
     assert.equal(fs.statSync(historyFile).mode & 0o777, 0o600,
       'alert_history.json must be private after atomic rename');
@@ -81,7 +101,9 @@ test('price alert edits, deletion and history survive simulated disk failures', 
     fs.writeFileSync(`${deletedFile}.tmp`, 'old temp', { mode: 0o644 });
     fs.chmodSync(`${deletedFile}.tmp`, 0o644);
     blockRename(alertFile);
-    assert.equal(svc.deleteAlert(deletedId, owner), true);
+    assertPrivateDuringWrite(deletedFile, () => {
+      assert.equal(svc.deleteAlert(deletedId, owner), true);
+    });
     assert.equal(svc.getAllAlerts(owner).some(row => row.id === deletedId), false);
     assert.throws(() => svc.createAlert({ ...data, id: deletedId }), /Сповіщення вже видалено/);
     const tombstones = JSON.parse(fs.readFileSync(deletedFile, 'utf8'));
