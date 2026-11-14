@@ -164,7 +164,10 @@ test('Screener, Formations, Terminal carry visual contexts, Replay passes none',
   assert.match(fullscreen,/visualContext=\{visualContext \?\? \(formation \|\| earlyCandidate \? 'formationsFull' : 'screenerFull'\)\}/);
   assert.match(trading,/visualContext=\{visualContext\}/);
   assert.match(terminal,/terminalMode=\{useIntegratedHookChartToolbar\}/);
-  assert.match(terminalPage, /<ExchangeCandlestickChart\s+visualContext="terminalLarge"\s+symbol=\{activeCoin\.symbol\}/);
+  // Extra HookChart-only options may be passed by Terminal; preserve the
+  // intended visual context and symbol without depending on JSX prop order.
+  assert.match(terminalPage,
+    /<ExchangeCandlestickChart[\s\S]{0,240}visualContext="terminalLarge"[\s\S]{0,240}symbol=\{activeCoin\.symbol\}/);
   assert.match(src('../src/components/ExchangeCandlestickChart.tsx'),/visualContext=\{visualContext\}/);
   assert.match(src('../src/components/TradingViewChart.tsx'),/visualContext=\{visualContext\}/);
   assert.doesNotMatch(replay,/visualContext=|visualProfiles/);
