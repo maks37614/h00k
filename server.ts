@@ -11,7 +11,7 @@ import { installFavoriteQuoteRoutes } from './server/favoriteQuotes';
 import { installFullEarlyScanRoutes } from './server/earlyScanRoutes';
 import { fetch24hTradeCount } from './server/chartMarketStats';
 import { analyzeFormationWithAI, evaluateFormationScoreWithAI } from './server/geminiService';
-import { generateSmartAnalysis } from './server/smartAnalysisService';
+import { generateSmartAnalysis, SmartAnalysisDataUnavailableError } from './server/smartAnalysisService';
 import { coingeckoHolders } from './server/coingeckoHolders';
 import { calculateMarketSentiment, SentimentDataUnavailableError } from './server/sentimentService';
 import { installTelegramRoutes } from './server/telegramRoutes';
@@ -291,8 +291,13 @@ async function startServer() {
 
       res.json({ success: true, data: analysis });
     } catch (err: any) {
+      if (err instanceof SmartAnalysisDataUnavailableError) {
+        res.status(503).json({ success: false, code: err.code, error: err.message });
+        return;
+      }
       console.error('Error generating smart analysis:', err);
-      res.status(500).json({ success: false, error: err.message || 'Failed to generate smart analysis' });
+      res.status(500).json({ success: false, code: 'SMART_ANALYSIS_ERROR',
+        error: 'Внутрішня помилка розумного аналізу. Спробуйте пізніше.' });
     }
   });
 
