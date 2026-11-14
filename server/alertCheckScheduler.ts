@@ -4,6 +4,13 @@
  * an authenticated manual request must run (or fail explicitly), never return
  * an immediate "success" merely because the background pass was busy.
  */
+export class AlertManualQueueBusyError extends Error {
+  constructor() {
+    super('Черга ручних перевірок зайнята. Спробуйте пізніше.');
+    this.name = 'AlertManualQueueBusyError';
+  }
+}
+
 export class AlertCheckScheduler {
   private active: Promise<void> | null = null;
   private manualTail: Promise<void> = Promise.resolve();
@@ -38,7 +45,7 @@ export class AlertCheckScheduler {
     }
     if (this.pendingByOwner.size >= this.maxPendingManual) {
       this.manualRejected++;
-      return Promise.reject(new Error('Черга ручних перевірок зайнята. Спробуйте пізніше.'));
+      return Promise.reject(new AlertManualQueueBusyError());
     }
 
     // The per-owner map is updated synchronously before any asynchronous
