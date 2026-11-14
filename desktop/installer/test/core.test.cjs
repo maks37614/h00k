@@ -79,3 +79,17 @@ test('portable manifest is generated from an existing NSIS .exe and actual unpac
   assert.match(prepare,/expectedInstalledBytes/);
   assert.match(prepare,/guide.json/);
 });
+
+test('Quick Start begins directly with steps and keeps compact spacing in the packaged installer',()=>{
+  const read=f=>fs.readFileSync(path.join(__dirname,'..',f),'utf8');
+  const html=read('guide.html'),css=read('guide.css'),js=read('guide.js');
+  assert.match(html,/<\/header>\s*<div class="steps-head">/);
+  assert.doesNotMatch(html,/class="intro"|class="eyemark"|id="guideTitle"|id="guideIntro"|h00k robot logo/);
+  assert.doesNotMatch(js,/find\('guideTitle'\)|find\('guideIntro'\)/);
+  assert.match(css,/\.guide\{[^}]*gap:8px/);
+  assert.match(css,/header\{padding-bottom:10px;/);
+  assert.match(css,/\.steps-head\{padding:2px 0;/);
+  assert.match(css,/#steps\{[^}]*padding:5px 0;/);
+  for(const id of ['lang','page','steps','safety','back','next','website','launch'])
+    assert.ok(html.includes('id="'+id+'"'),'keep Quick Start control '+id);
+});

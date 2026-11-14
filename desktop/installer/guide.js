@@ -11,8 +11,6 @@ function draw(){
   const h=help();
   find('lang').value=language;
   find('langLabel').textContent=t('guideSelect');
-  find('guideTitle').textContent=t('guideTitle');
-  find('guideIntro').textContent=t('guideIntro');
   find('safety').textContent=t('security');
   find('page').textContent=t('step')+' '+(page+1)+' '+t('of')+' '+screens.length;
   const nodes=[];
