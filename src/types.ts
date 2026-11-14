@@ -816,6 +816,8 @@ export interface SmartAnalysisData {
     /** No invented quotes. Null means BTC quote unavailable. */
     btcPrice: number | null;
     change24h: number | null;
+    /** A candle close is historical, and must not be represented as a live ticker. */
+    priceSource: 'binance_ticker' | 'closed_1m_candle' | null;
     available: boolean;
     timeframes: {
       '15m': { direction: 'up' | 'down' | 'sideways'; structure: 'HH_HL' | 'LH_LL' | 'range' | 'unknown'; label: string };
