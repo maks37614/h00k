@@ -150,7 +150,10 @@ test('visual chart editor moves descriptions into accessible question-mark help 
   ]) {
     assert.match(editor, new RegExp('label="' + label + '"'));
   }
-  assert.equal((editor.match(/help="/g) || []).length, 7, 'six controls and one general help');
+  // One help message is conditional on whether Terminal contexts are
+  // available; count both JSX string and expression-valued help props.
+  assert.equal((editor.match(/\\bhelp=(?:"|\\{)/g) || []).length, 7,
+    'six controls and one general help, including context-sensitive help');
   assert.doesNotMatch(editor, /desc="/, 'long descriptions should no longer occupy the settings screen');
   assert.match(help, /aria-label=\{\`Пояснення: \$\{label\}\`\}/);
   assert.match(help, /aria-expanded=\{open\}/);
