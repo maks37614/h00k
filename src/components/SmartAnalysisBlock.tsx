@@ -191,8 +191,12 @@ export const SmartAnalysisBlock: React.FC<SmartAnalysisBlockProps> = ({
         </p>
       </div>
 
-      {/* Replace ONLY the two upper ratings (market score + generated summary)
-          with the detected formation. Retain every AI + Quant module below. */}
+      <p className="text-[10px] text-slate-500">
+        Біржові дані: {data.exchange} · {data.marketType}. Стакан: {data.orderbook.source}.
+        Оновлено: {new Date(data.lastUpdated).toLocaleTimeString('uk-UA')}.
+        Відсутні джерела позначаються н/д; свічкові рівні є оцінками, не підтвердженими стоп-ордерами.
+      </p>
+      {/* Replace ONLY the two upper ratings with the detected formation. */}
       {/* Canonical detected setup: includes real formation Entry/TP/SL and Telegram alerts. */}
       {tradeSetup}
 
@@ -312,7 +316,7 @@ export const SmartAnalysisBlock: React.FC<SmartAnalysisBlockProps> = ({
           }`}
         >
           <Fingerprint className="w-3.5 h-3.5 text-cyan-400" />
-          <span>Holders, Whales, ММ та Маніпуляції</span>
+          <span>Holders / Заявки / ММ / Ризики</span>
         </button>
       </div>
 
@@ -323,7 +327,7 @@ export const SmartAnalysisBlock: React.FC<SmartAnalysisBlockProps> = ({
             <div className="flex items-center gap-2">
               <Activity className="w-4 h-4 text-amber-400" />
               <h5 className="text-xs font-bold text-white uppercase tracking-wider">
-                Контекст BTC на 15m → 5m → 1m
+                Контекст BTC (Binance Futures) на 15m → 5m → 1m
               </h5>
             </div>
             <div className="flex items-center gap-2 text-xs font-mono">
@@ -377,7 +381,7 @@ export const SmartAnalysisBlock: React.FC<SmartAnalysisBlockProps> = ({
                           : 'bg-slate-700/40 text-slate-300'
                       }`}
                     >
-                      {item.structure}
+                      {unknown ? 'н/д' : item.structure}
                     </span>
                   </div>
 
