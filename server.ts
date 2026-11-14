@@ -643,7 +643,8 @@ async function startServer() {
         if (config) {
           existing.config = { ...existing.config, ...config };
         }
-        saveSurveillanceList(uid, list);
+        if (!saveSurveillanceList(uid, list))
+          return res.status(503).json({ success: false, error: 'Не вдалося зберегти нагляд. Спробуйте пізніше.' });
         surveillanceManager.startWorkerForCoin(existing);
         const { coin: checked } = await checkCoinSurveillance(existing, true);
         const committed = commitSurveillanceCheck(checked);
@@ -673,7 +674,8 @@ async function startServer() {
       };
 
       list.unshift(newCoin);
-      saveSurveillanceList(uid, list);
+      if (!saveSurveillanceList(uid, list))
+        return res.status(503).json({ success: false, error: 'Не вдалося зберегти монету. Спробуйте пізніше.' });
       surveillanceManager.startWorkerForCoin(newCoin);
       const { coin: checkedCoin } = await checkCoinSurveillance(newCoin, true);
       const committed = commitSurveillanceCheck(checkedCoin);
@@ -709,8 +711,10 @@ async function startServer() {
         updatedAt: new Date().toISOString(),
       };
 
-      found.list[found.index] = updatedCoin;
-      saveSurveillanceList(found.userId, found.list);
+      const nextList = found.list.slice();
+      nextList[found.index] = updatedCoin;
+      if (!saveSurveillanceList(found.userId, nextList))
+        return res.status(503).json({ success: false, error: 'Зміни не збережено. Спробуйте пізніше.' });
 
       // Keep 24/7 worker synced with updated coin config & active state (#4)
       if (updatedCoin.isActive) {
@@ -751,7 +755,8 @@ async function startServer() {
       }
 
       const filtered = found.list.filter((c) => c.id !== id);
-      saveSurveillanceList(found.userId, filtered);
+      if (!saveSurveillanceList(found.userId, filtered))
+        return res.status(503).json({ success: false, error: 'Не вдалося видалити монету. Спробуйте пізніше.' });
       surveillanceManager.stopWorkerForCoin(id, found.userId);
       res.json({ success: true });
     } catch (err: any) {
