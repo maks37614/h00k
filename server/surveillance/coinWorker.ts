@@ -280,6 +280,8 @@ export class CoinWorker {
     for (const [tf, struct] of Object.entries(this.structures)) {
       if (struct.lastBreak && struct.lastBreak.confirmed) {
         const breakIdentity = `${tf}_${struct.lastBreak.type}_${struct.lastBreak.direction}_${struct.lastBreak.time}`;
+        // Skip message formatting and router I/O when realtime Telegram is disabled.
+        if (this.canDispatchTelegramAlert('STRUCTURE')) {
         const alertHtml = this.alertManager.formatStructureMessage(
           this.coin.symbol,
           tf,
@@ -302,6 +304,7 @@ export class CoinWorker {
           htmlMessage: alertHtml,
           coin: this.coin,
         });
+        }
 
         this.addEvent({
           eventId: `${this.coin.symbol}_${breakIdentity}`,
@@ -329,6 +332,8 @@ export class CoinWorker {
     for (const tt of this.thirdTouches) {
       if (tt.state === 'APPROACHING' || tt.state === 'ACTIVE') {
         const ttIdentity = `${tt.levelId}_${tt.touchCount}`;
+        // Skip message formatting and router I/O when realtime Telegram is disabled.
+        if (this.canDispatchTelegramAlert('THIRD_TOUCH')) {
         const msg = this.alertManager.formatThirdTouchMessage(
           tt,
           this.coin.symbol,
@@ -351,6 +356,7 @@ export class CoinWorker {
           htmlMessage: msg,
           coin: this.coin,
         });
+        }
 
         this.addEvent({
           eventId: `${this.coin.symbol}_TT_${ttIdentity}`,
@@ -382,6 +388,8 @@ export class CoinWorker {
     // Check OI Anomaly alert
     if (oiSnapshot.isAnomaly) {
       const oiIdentity = `${Math.floor(Date.now() / 600000)}`;
+      // Skip message formatting and router I/O when realtime Telegram is disabled.
+      if (this.canDispatchTelegramAlert('OI_ANOMALY')) {
       const oiMsg = this.alertManager.formatOIMessage(
         oiSnapshot,
         this.coin.symbol,
@@ -403,6 +411,7 @@ export class CoinWorker {
         htmlMessage: oiMsg,
         coin: this.coin,
       });
+      }
     }
 
     // 6. Significant Densities (#14: DENSITY_APPEARED and DENSITY_PERSISTENT)
@@ -410,6 +419,8 @@ export class CoinWorker {
     const newlyAppeared = this.orderBookEngine.pollNewlyAppearedDensities();
     for (const d of newlyAppeared) {
       const dKey = `${d.side}_${d.price}`;
+      // Skip message formatting and router I/O when realtime Telegram is disabled.
+      if (this.canDispatchTelegramAlert('DENSITY')) {
       const msg = this.alertManager.formatDensityAppearedMessage(
         d,
         this.coin.symbol,
@@ -431,6 +442,7 @@ export class CoinWorker {
         htmlMessage: msg,
         coin: this.coin,
       });
+      }
 
       this.addEvent({
         eventId: `${this.coin.symbol}_DENSITY_APP_${dKey}`,
@@ -456,6 +468,8 @@ export class CoinWorker {
     for (const d of significantDensities) {
       if (d.classification === 'PERSISTENT_LIQUIDITY' && d.ageSeconds >= 60) {
         const dKey = `${d.side}_${d.price}`;
+        // Skip message formatting and router I/O when realtime Telegram is disabled.
+        if (this.canDispatchTelegramAlert('DENSITY')) {
         const dMsg = this.alertManager.formatDensityMessage(
           d,
           this.coin.symbol,
@@ -476,6 +490,7 @@ export class CoinWorker {
           htmlMessage: dMsg,
           coin: this.coin,
         });
+        }
       }
     }
 
@@ -529,6 +544,8 @@ export class CoinWorker {
         }
 
         const setupIdentity = `${setup.id}_${setup.stage}`;
+        // Skip message formatting and router I/O when realtime Telegram is disabled.
+        if (this.canDispatchTelegramAlert('SETUP')) {
         const setupMsg = this.alertManager.formatSetupAlertMessage(
           setup,
           price,
@@ -550,6 +567,7 @@ export class CoinWorker {
           htmlMessage: setupMsg,
           coin: this.coin,
         });
+        }
 
         // 3. Optional automatic 3-alert group creation if configured
         if (this.coin.config?.autoSetupsAlerts) {
