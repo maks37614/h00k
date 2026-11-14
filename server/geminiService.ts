@@ -107,3 +107,66 @@ ${recentCandles.slice(-5).map((c, i) => `Свічка ${i + 1}: O:${c.open.toFix
     ],
   };
 }
+
+/** A distinct, on-demand AI-only score; never substitute the scanner score
+ * or a deterministic fallback when the Gemini provider is not available. */
+export function parseAISetupScore(raw: string): number {
+  const cleaned = String(raw || '').trim().replace(/^\x60\x60\x60(?:json)?\s*/i, '').replace(/\s*\x60\x60\x60$/, '');
+  const parsed: unknown = JSON.parse(cleaned);
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('Некоректна оцінка AI');
+  const score = (parsed as Record<string, unknown>).score;
+  if (typeof score !== 'number' || !Number.isInteger(score) || score < 0 || score > 100) {
+    throw new Error('AI повернув некоректний бал');
+  }
+  return score;
+}
+
+export async function evaluateFormationScoreWithAI(input: {
+  symbol: string; exchange: string; marketType: string; timeframe: string;
+  formation: DetectedFormation; currentPrice: number; recentCandles: Kline[];
+}): Promise<number> {
+  const ai = getGeminiClient();
+  if (!ai) throw new Error('GEMINI_API_KEY_NOT_CONFIGURED');
+
+  const formation = input.formation;
+  const quality = formation.validation?.confluence;
+  const factors = Object.entries(quality?.components || {})
+    .filter(([key]) => key !== 'density')
+    .slice(0, 18)
+    .map(([key, value]) => ({
+      factor: key, score: value.score, max: value.max,
+      available: value.available !== false,
+      status: value.status,
+    }));
+  // Client values are untrusted evidence. The LLM provides a separate opinion,
+  // but must not invent market quotes or treat missing signals as confirmed.
+  const payload = {
+    symbol: input.symbol, exchange: input.exchange,
+    marketType: input.marketType, timeframe: input.timeframe,
+    pattern: formation.patternKey, bias: formation.bias,
+    status: formation.status, currentPrice: input.currentPrice,
+    entry: formation.levels.entryPrice, target: formation.levels.targetPrice,
+    stop: formation.levels.stopLossPrice, rr: formation.riskRewardRatio,
+    scannerQuality: formation.confidence,
+    checks: factors,
+    candles: input.recentCandles.slice(-10).map(c => ({
+      time: c.time, open: c.open, high: c.high,
+      low: c.low, close: c.close, volume: c.volume,
+    })),
+  };
+  const prompt = `Ти — незалежний AI-оцінювач технічної формації криптовалюти.
+Оціни якість сетапу числом 0–100, використовуючи ТІЛЬКИ фактичні дані нижче.
+Не підмінюй відсутні OI, дельту, CVD або обсяги підтвердженнями.
+Перевір геометрію, статус підтвердження пробою й ретесту, R:R, обсяг, волатильність,
+структурні рівні та якість даних. Бал сканера — контекст, не обов’язкова відповідь.
+За відсутності доказів будь консервативним. Це оцінка якості, а не ймовірність прибутку.
+Відповідай лише валідним JSON: {"score": 0}, замінивши 0 на ціле число від 0 до 100.
+Без пояснень, назв позицій, цілей чи додаткових полів.
+Дані: ${JSON.stringify(payload)}`;
+  const response = await ai.models.generateContent({
+    model: 'gemini-2.5-flash',
+    contents: prompt,
+    config: { responseMimeType: 'application/json', temperature: 0.1 },
+  });
+  return parseAISetupScore(response.text || '');
+}
