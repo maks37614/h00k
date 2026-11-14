@@ -249,7 +249,7 @@ export function getAlertHistory(userId?: string): AlertHistoryItem[] {
   }
   return (historyByUser.get(userId) || []).map(item => {
     const delivery = item.telegramDeliveryId ? getTelegramDelivery(userId, item.telegramDeliveryId) : undefined;
-    return delivery ? { ...item, telegramSent: delivery.status === 'sent', telegramPending: delivery.status === 'pending', telegramError: delivery.error, telegramMessageIds: delivery.messageIds } : item;
+    return delivery ? { ...item, telegramSent: delivery.status === 'sent', telegramPending: delivery.status === 'pending', telegramError: delivery.error, telegramMessageIds: delivery.messageIds } : { ...item };
   });
 }
 
@@ -300,7 +300,9 @@ export function getAllAlerts(userId?: string): PriceAlert[] {
     alertsByUser = next;
   }
   // Never return the mutable indexed collection to caller code.
-  return alertsByUser.get(userId)?.slice() ?? [];
+  // Returned snapshots must never grant a reader a mutable reference to
+  // the source of truth. Only explicit persisted operations may change it.
+  return alertsByUser.get(userId)?.map(alert => ({ ...alert })) ?? [];
 }
 
 // Create alert
@@ -345,7 +347,7 @@ export function createAlert(
   };
 
   persistAlertEdit([newAlert, ...alerts]);
-  return newAlert;
+  return { ...newAlert };
 }
 
 // Create batch of alerts (e.g. 3 levels: Entry, Take-Profit, Stop-Loss)
@@ -404,7 +406,7 @@ export function createAlertsBatch(
   }
 
   if (createdAlerts.some(alert => !alerts.includes(alert))) persistAlertEdit(staged);
-  return createdAlerts;
+  return createdAlerts.map(alert => ({ ...alert }));
 }
 
 /**
@@ -531,7 +533,7 @@ export function createSetupAlertsGroup(
   }
 
   if (staged.length !== alerts.length) persistAlertEdit(staged);
-  return { success: true, alerts: alertsToCreate.filter(a => !deletedAlertIds.has(alertIdentity(userId, a.id))) };
+  return { success: true, alerts: alertsToCreate.filter(a => !deletedAlertIds.has(alertIdentity(userId, a.id))).map(alert => ({ ...alert })) };
 }
 
 // Sync user alerts batch from the signed-in client with smart merge
@@ -606,7 +608,7 @@ export function syncUserAlerts(
     persistAlertEdit([...mergedUserAlerts, ...otherAlerts]);
   }
 
-  return mergedUserAlerts;
+  return mergedUserAlerts.map(alert => ({ ...alert }));
 }
 
 // Delete alert
@@ -638,7 +640,7 @@ export function toggleAlert(id: string, userId?: string, isActive?: boolean): Pr
     const staged = alerts.slice();
     staged[index] = alert;
     persistAlertEdit(staged);
-    return alert;
+    return { ...alert };
   }
   return null;
 }
