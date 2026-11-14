@@ -757,8 +757,8 @@ export interface ArchivedFormation {
 export interface CoinGeckoHolderSnapshot {
   source: 'CoinGecko Demo';
   symbol: string;
-  status: 'available' | 'not_configured' | 'unmapped' | 'ambiguous' |
-    'unavailable' | 'rate_limited' | 'upstream_error';
+  status: 'available' | 'not_configured' | 'native_unsupported' |
+    'unmapped' | 'ambiguous' | 'unavailable' | 'rate_limited' | 'upstream_error';
   count: number | null;
   /** Raw provider buckets (top_10, 11_20/11_30 etc.), never guessed. */
   distribution: Record<string, number> | null;
