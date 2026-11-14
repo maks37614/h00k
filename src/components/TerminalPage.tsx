@@ -40,7 +40,7 @@ import { formatCryptoPrice, formatVolume } from '../utils/formatters';
 import { getStoredPreferences, useAppPreferences } from '../utils/userPreferences';
 import { useAuth } from '../context/AuthContext';
 import { useTerminalWorkspace } from '../utils/useTerminalWorkspace';
-import { blocksForMarketPreset, normalizeTerminalMarketPair } from '../utils/terminalPresets';
+import { blocksForMarketPreset, normalizeTerminalMarketPair, MAX_TERMINAL_CHARTS } from '../utils/terminalPresets';
 import { getTerminalPresetPage, pageAfterLimitChange, resolveTerminalPresetPageSize } from '../utils/terminalPresetPaging';
 import { MARKET_PRESETS, coinMarketKey, type TerminalMarketPreset } from '../utils/marketPresets';
 import { loadMarketCoins, type MarketCoinSnapshot } from '../utils/marketCoinLoader';
@@ -448,7 +448,10 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
       formationId,
       colSpan: 1,
     };
-    setBlocks((prev) => [...prev, newBlock]);
+    // At most 50 simultaneous live charts. Guard inside the updater as well:
+    // two rapid click events must not exceed the limit before React rerenders.
+    if (blocks.length >= MAX_TERMINAL_CHARTS) return;
+    setBlocks((prev) => prev.length >= MAX_TERMINAL_CHARTS ? prev : [...prev, newBlock]);
   };
 
   const handleUpdateBlock = (blockId: string, updated: Partial<TerminalChartBlock>) => {
@@ -1334,6 +1337,7 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
         onClose={() => setIsAddModalOpen(false)}
         coins={coins}
         terminalMarketCoins={marketCoins}
+        atChartLimit={blocks.length >= MAX_TERMINAL_CHARTS}
         watchlist={localWatchlist}
         onAddChart={handleAddChart}
       />
