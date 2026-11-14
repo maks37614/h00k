@@ -9,6 +9,7 @@ on:
       - 'server/liquidationArchiveRoutes.ts'
       - 'server/migrations/003_liquidation_events.sql'
       - 'tests/liquidation-archive.test.ts'
+      - 'tests/liquidation-archive-postgres.test.ts'
       - 'server/liquidationUpstreamPool.ts'
       - 'src/components/hookchart/liquidationStream.ts'
       - 'src/components/hookchart/liquidationMultiplexClient.ts'
@@ -26,6 +27,20 @@ jobs:
   liquidation:
     runs-on: ubuntu-latest
     timeout-minutes: 8
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: liq_test
+          POSTGRES_USER: liq_tester
+          POSTGRES_PASSWORD: ci_ephemeral_liq_only_2026
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U liq_tester -d liq_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -37,5 +52,14 @@ jobs:
         run: npm run lint
       - name: Frontend bundle
         run: npm run build
+      - name: Real PostgreSQL archive integrity
+        env:
+          LIQ_TEST_PG: '1'
+          PGHOST: 127.0.0.1
+          PGDATABASE: liq_test
+          PGUSER: liq_tester
+          PGPASSWORD: ci_ephemeral_liq_only_2026
+        run: node --import tsx --test tests/liquidation-archive-postgres.test.ts
+
       - name: Liquidation protocol, pooling and existing HookChart regression
         run: node --import ./tests/fixtures/offline-network.mjs --import tsx --test tests/liquidation-feed.test.ts tests/liquidation-upstream-pool.test.ts tests/liquidation-multi-client-relay.test.ts tests/liquidation-browser-multiplex.test.ts tests/liquidation-archive.test.ts tests/hookchart-shared-liquidation-view.test.ts tests/hookchart-liquidation-socket-lifecycle.test.ts
