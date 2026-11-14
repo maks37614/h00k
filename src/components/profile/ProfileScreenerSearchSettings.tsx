@@ -176,7 +176,8 @@ export function ProfileScreenerSearchSettings() {
             <option value="all">Усі ринки</option><option value="futures">Ф’ючерси</option><option value="spot">Спот</option>
           </select>
         </label>
-        <label className={label}>Обсяг 24год:
+        <div className={label}>
+          <span>Обсяг 24год:</span>
           <div className="flex min-w-0 items-center gap-2">
             <button type="button"
               aria-label={draft.volumeMode === 'to' ? 'Змінити обсяг на Від' : 'Змінити обсяг на До'}
@@ -194,7 +195,7 @@ export function ProfileScreenerSearchSettings() {
               </option>)}
             </select>
           </div>
-        </label>
+        </div>
         <div className="hidden sm:block" aria-hidden="true" />
         <label className={label}>Основний показник сортування
           <select className={control} value={draft.sortBy} onChange={event => setField('sortBy', event.target.value as ScreenerSearchConfig['sortBy'])}>
