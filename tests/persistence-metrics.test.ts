@@ -22,7 +22,11 @@ test('durable alert history writes a temp file before an atomic rename', () => {
   const source = readFileSync(new URL('../server/alertService.ts', import.meta.url), 'utf8');
   const history = source.slice(source.indexOf('export function saveHistory('),
     source.indexOf('/** Completed alert cycles'));
-  assert.match(history, /fs\.writeFileSync\(temp, payload, 'utf-8'\)/);
+  assert.match(history, /protectExistingAlertTemp\(temp\)/);
+  assert.match(history, /fs\.writeFileSync\(temp, payload, \{ encoding: 'utf-8', mode: 0o600 \}\)/);
+  assert.match(history, /fs\.chmodSync\(temp, 0o600\)/);
+  assert.ok(history.indexOf('protectExistingAlertTemp(temp)') < history.indexOf('fs.writeFileSync(temp, payload'),
+    'a stale temp file must be made private before any personal history data is written');
   assert.match(history, /fs\.renameSync\(temp, HISTORY_FILE\)/);
   assert.ok(history.indexOf('fs.renameSync') < history.indexOf('historyCache = items'),
     'memory must not claim the alert has been persisted before rename succeeds');
