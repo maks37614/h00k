@@ -1,7 +1,7 @@
 import type { ExchangeId, MarketType } from '../../src/types';
 import { normalizeExchangeSymbol } from '../../src/utils/marketSymbols';
 import { ExchangeStreamClient, type RawDepthDelta } from './exchangeStream';
-import { isFreshDepthTime, parseDepthLevels } from '../../src/utils/orderBookValidation';
+import { ORDER_BOOK_MAX_AGE_MS, isFreshDepthTime, parseDepthLevels } from '../../src/utils/orderBookValidation';
 
 type Listener = (...args: any[]) => void;
 
@@ -100,12 +100,26 @@ export class SharedExchangeStreamHandle {
       });
       source.on('depth', (delta: RawDepthDelta) => {
         const bids = parseDepthLevels(delta.bids), asks = parseDepthLevels(delta.asks);
-        const time = delta.eventTime ?? Date.now();
+        const now = Date.now();
+        const time = delta.eventTime ?? now;
         if (!bids || !asks || !Number.isSafeInteger(delta.sequence) ||
-            delta.sequence! <= 0 || !isFreshDepthTime(time)) {
+            delta.sequence! <= 0 || !isFreshDepthTime(time, now)) {
           shared.depthSequence = 0;
+          shared.depthReceivedAt = 0;
+          shared.depthEventTime = 0;
           shared.bids.clear(); shared.asks.clear();
           return;
+        }
+        // Never build a late-joiner's "fresh" snapshot by applying new
+        // deltas to a stale pre-outage book. The source must re-snapshot first.
+        if (shared.depthSequence > 0 &&
+            (now - shared.depthReceivedAt > ORDER_BOOK_MAX_AGE_MS ||
+             !isFreshDepthTime(shared.depthEventTime, now))) {
+          shared.depthSequence = 0;
+          shared.depthReceivedAt = 0;
+          shared.depthEventTime = 0;
+          shared.bids.clear(); shared.asks.clear();
+          if (!delta.isSnapshot) return;
         }
         if (delta.isSnapshot) {
           shared.bids.clear(); shared.asks.clear();
@@ -119,7 +133,7 @@ export class SharedExchangeStreamHandle {
         for (const [p, q] of asks) q > 0 ? shared.asks.set(p, q) : shared.asks.delete(p);
         shared.depthSequence = delta.sequence!;
         shared.depthEventTime = time;
-        shared.depthReceivedAt = Date.now();
+        shared.depthReceivedAt = now;
       });
     }
     entry.refs++;
