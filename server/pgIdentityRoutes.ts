@@ -29,15 +29,15 @@ function wrap(handler: (req: Request, res: Response) => Promise<void>) {
 // Small bounded in-process abuse budget. One app replica; for horizontal scaling
 // move this to Redis/PG with the same quotas. Never rate-limit market feed endpoints.
 const buckets = new Map<string, { count: number; resetAt: number }>();
-export function rateLimit(req: Request, kind: string, max: number, durationMs: number) {
+export function rateLimit(req: Request, kind: string, max: number, durationMs: number, includeEmail = true) {
   const now = Date.now();
   if (buckets.size > 12000) {
     for (const [k, v] of buckets) { if (v.resetAt <= now) buckets.delete(k); }
     if (buckets.size > 12000) buckets.clear();
   }
   const identity = String(req.body?.email || '').trim().toLowerCase().slice(0, 254);
-  const keys = [kind + ':ip:' + req.ip, kind + ':email:' + identity];
-  if (!identity) keys.pop();
+  const keys = [kind + ':ip:' + req.ip];
+  if (includeEmail && identity) keys.push(kind + ':email:' + identity);
   for (const key of keys) {
     const record = buckets.get(key);
     if (record && record.resetAt > now && record.count >= max) throw new AuthFailure(429, 'Забагато спроб. Спробуйте пізніше.', 'RATE_LIMITED');
@@ -94,23 +94,30 @@ export function installPostgresIdentityRoutes(app: Express) {
     backend: 'postgres', captcha: captchaConfig(),
   }));
 
-  // Verify CAPTCHA and apply IP/email quotas BEFORE PostgreSQL schema initialization:
-  // malicious or automated POSTs must never trigger expensive account queries or SMTP.
-  const captchaRoutes: Record<string, { kind: string; max: number; durationMs: number }> = {
-    '/register': { kind: 'signup', max: 4, durationMs: 60 * 60 * 1000 },
-    '/login': { kind: 'login', max: 10, durationMs: 15 * 60 * 1000 },
-    '/forgot-password': { kind: 'forgot', max: 4, durationMs: 60 * 60 * 1000 },
-    '/resend-verification': { kind: 'verify', max: 3, durationMs: 60 * 60 * 1000 },
-  };
-  app.use('/api/auth', (req, res, next) => {
-    const limit = req.method === 'POST' ? captchaRoutes[req.path] : undefined;
-    if (!limit) { next(); return; }
-    try {
-      checkOrigin(req);
-      rateLimit(req, limit.kind, limit.max, limit.durationMs);
-      void verifyAuthCaptcha(req).then(() => next(), error => failed(res, error));
-    } catch (error) { failed(res, error); }
-  });
+  // Register preflight middleware using the EXACT SAME Express route matching
+  // rules as the handlers below. A mounted req.path string comparison misses
+  // mixed-case and trailing-slash URLs under Express's default routing settings.
+  // Keep this ahead of schema initialization so bots do not trigger PostgreSQL/SMTP.
+  function guardAuthAction(kind: string, max: number, durationMs: number) {
+    return (req: Request, res: Response, next: NextFunction) => {
+      try {
+        checkOrigin(req);
+        // Before CAPTCHA succeeds, count only the client IP, not an unverified
+        // email supplied by an attacker (otherwise anyone can lock out a victim).
+        rateLimit(req, 'captcha-preflight', 60, 5 * 60 * 1000, false);
+        void verifyAuthCaptcha(req).then(() => {
+          try {
+            rateLimit(req, kind, max, durationMs);
+            next();
+          } catch (error) { failed(res, error); }
+        }, error => failed(res, error));
+      } catch (error) { failed(res, error); }
+    };
+  }
+  app.post('/api/auth/register', guardAuthAction('signup', 4, 60 * 60 * 1000));
+  app.post('/api/auth/login', guardAuthAction('login', 10, 15 * 60 * 1000));
+  app.post('/api/auth/forgot-password', guardAuthAction('forgot', 4, 60 * 60 * 1000));
+  app.post('/api/auth/resend-verification', guardAuthAction('verify', 3, 60 * 60 * 1000));
   app.use(['/api/auth', '/api/account'], (_req, res, next) => {
     res.setHeader('Cache-Control', 'no-store');
     next();
