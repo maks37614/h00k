@@ -10,7 +10,7 @@ const brand = source.slice(
 );
 const desktop = source.slice(
   source.indexOf('{/* Navigation Category Tabs */}'),
-  source.indexOf('id="refresh-screener-btn"'),
+  source.indexOf('<SiteNotificationBell'),
 );
 
 test('desktop header centers the existing logo, fullscreen and language controls', () => {
@@ -37,9 +37,10 @@ test('desktop quick formation totals are removed without removing nav formation 
 });
 
 
-test('site header action borders remain visible on Screener and Formations', () => {
-  assert.doesNotMatch(css, /\.app-header:is\(\[data-page="screener"\], \[data-page="patterns"\]\) button/);
-  assert.match(source, /id="refresh-screener-btn"[\s\S]*?rounded-lg border text-xs/);
-  assert.match(source, /'border-cyan-400\/40 bg-cyan-600/);
-  assert.match(source, /'border-slate-700 bg-slate-800/);
+test('site header retains icon borders but does not show a manual refresh button', () => {
+  assert.doesNotMatch(css, /\\.app-header:is\\(\\[data-page="screener"\\], \\[data-page="patterns"\\]\\) button/);
+  assert.doesNotMatch(source, /id="refresh-screener-btn"|<RefreshCw/);
+  assert.match(source, /<SiteNotificationBell/);
+  assert.match(source, /id="open-telegram-btn"[\\s\\S]*?border-sky-500\\/40/);
+  assert.match(source, /id="open-watchlist-btn"[\\s\\S]*?border-slate-800/);
 });
