@@ -52,6 +52,7 @@ import { matchesExchangeInstrumentSearch } from '../utils/marketSymbols';
 import { isVolumeWithinCap } from '../utils/screenerVolume';
 import { ScreenerVolumeDropdown } from './ScreenerVolumeDropdown';
 import { ScreenerSortDropdown } from './ScreenerSortDropdown';
+import { compareScreenerSearchCoins, effectiveScreenerSearchConfig, normalizeScreenerSearchSettings } from '../utils/screenerSearchSettings';
 import { ScreenerCopySymbolButton } from './ScreenerCopySymbolButton';
 import { isCoinInWatchlist, type CoinIdentifier } from '../utils/watchlistUtils';
 
@@ -105,6 +106,8 @@ const screenerUiSession = new Map<string, {
   maxVolumeUsd: number;
   sortBy: ScreenerSortBy;
   sortOrder: 'asc' | 'desc';
+  secondarySortBy: ScreenerSortBy | 'none';
+  secondarySortOrder: 'asc' | 'desc';
   viewMode: 'table' | 'cards';
   displayLimit: number;
 }>();
@@ -121,9 +124,17 @@ export const CoinScreenerPage: React.FC<CoinScreenerPageProps> = ({
   onOpenAuthModal,
 }) => {
   const { t } = useLanguage();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const isGuest = !user;
   const cachedUi = screenerUiSession.get(user?.uid || 'guest');
+  const searchSettings = useMemo(() => normalizeScreenerSearchSettings(
+    user && profile?.uid === user.uid ? profile.searchSettings : undefined,
+    { exchange: getStoredPreferences().defaultExchange, marketType: getStoredPreferences().defaultMarketType },
+  ), [user?.uid, profile?.uid, profile?.searchSettings]);
+  const initialSearch = useMemo(() => effectiveScreenerSearchConfig(searchSettings,
+    { exchange: getStoredPreferences().defaultExchange, marketType: getStoredPreferences().defaultMarketType }),
+    [searchSettings]);
+  const cacheAtMount = useRef({ uid: user?.uid || 'guest', existed: !!cachedUi });
   const [coins, setCoins] = useState<MarketCoin[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -132,19 +143,21 @@ export const CoinScreenerPage: React.FC<CoinScreenerPageProps> = ({
   const { preferences } = useAppPreferences();
 
   // Search & Filter state
-  const [presetFilter, setPresetFilter] = useState<ScreenerPresetFilter>(() => cachedUi?.presetFilter ?? 'all');
-  const [searchQuery, setSearchQuery] = useState<string>(() => cachedUi?.searchQuery ?? '');
-  const [exchange, setExchange] = useState<'all' | ExchangeId>(() => cachedUi?.exchange ?? getStoredPreferences().defaultExchange);
-  const [marketType, setMarketType] = useState<'all' | MarketType>(() => cachedUi?.marketType ?? getStoredPreferences().defaultMarketType);
+  const [presetFilter, setPresetFilter] = useState<ScreenerPresetFilter>(() => cachedUi?.presetFilter ?? initialSearch.presetFilter);
+  const [searchQuery, setSearchQuery] = useState<string>(() => cachedUi?.searchQuery ?? initialSearch.searchQuery);
+  const [exchange, setExchange] = useState<'all' | ExchangeId>(() => cachedUi?.exchange ?? initialSearch.exchange);
+  const [marketType, setMarketType] = useState<'all' | MarketType>(() => cachedUi?.marketType ?? initialSearch.marketType);
 
   useEffect(() => {
     setExchange((prev) => (prev === preferences.defaultExchange ? prev : preferences.defaultExchange));
     setMarketType((prev) => (prev === preferences.defaultMarketType ? prev : preferences.defaultMarketType));
   }, [preferences.defaultExchange, preferences.defaultMarketType]);
   // 0 means no upper limit; thresholds include the selected value.
-  const [maxVolumeUsd, setMaxVolumeUsd] = useState<number>(() => cachedUi?.maxVolumeUsd ?? 0);
-  const [sortBy, setSortBy] = useState<ScreenerSortBy>(() => cachedUi?.sortBy ?? 'volume');
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>(() => cachedUi?.sortOrder ?? 'desc');
+  const [maxVolumeUsd, setMaxVolumeUsd] = useState<number>(() => cachedUi?.maxVolumeUsd ?? initialSearch.maxVolumeUsd);
+  const [sortBy, setSortBy] = useState<ScreenerSortBy>(() => cachedUi?.sortBy ?? initialSearch.sortBy);
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>(() => cachedUi?.sortOrder ?? initialSearch.sortOrder);
+  const [secondarySortBy, setSecondarySortBy] = useState<ScreenerSortBy | 'none'>(() => cachedUi?.secondarySortBy ?? initialSearch.secondarySortBy);
+  const [secondarySortOrder, setSecondarySortOrder] = useState<'asc' | 'desc'>(() => cachedUi?.secondarySortOrder ?? initialSearch.secondarySortOrder);
   const [viewMode, setViewMode] = useState<'table' | 'cards'>(() => cachedUi?.viewMode ?? 'table');
 
   const { coins: surveillanceCoins, addCoinToSurveillance, removeCoinFromSurveillance, isCoinMonitored, isCoinOnSurveillance } = useSurveillance();
@@ -179,13 +192,38 @@ export const CoinScreenerPage: React.FC<CoinScreenerPageProps> = ({
   };
   const [displayLimit, setDisplayLimit] = useState<number>(() => cachedUi?.displayLimit ?? 50);
 
+  const applySearchConfig = useCallback((config: ReturnType<typeof effectiveScreenerSearchConfig>) => {
+    setPresetFilter(config.presetFilter);
+    setSearchQuery(config.searchQuery);
+    setExchange(config.exchange);
+    setMarketType(config.marketType);
+    setMaxVolumeUsd(config.maxVolumeUsd);
+    setSortBy(config.sortBy);
+    setSortOrder(config.sortOrder);
+    setSecondarySortBy(config.secondarySortBy);
+    setSecondarySortOrder(config.secondarySortOrder);
+    setDisplayLimit(50);
+  }, []);
+
+  // Auth may hydrate after the Screener first mounts. Apply account defaults once,
+  // but keep the user's active in-session filters when returning from a chart page.
+  const initializedSearchOwner = useRef<string | null>(null);
+  useEffect(() => {
+    if (!user?.uid || profile?.uid !== user.uid || initializedSearchOwner.current === user.uid) return;
+    initializedSearchOwner.current = user.uid;
+    if (cacheAtMount.current.uid === user.uid && cacheAtMount.current.existed) return;
+    applySearchConfig(effectiveScreenerSearchConfig(profile.searchSettings, {
+      exchange: getStoredPreferences().defaultExchange, marketType: getStoredPreferences().defaultMarketType,
+    }));
+  }, [user?.uid, profile?.uid, applySearchConfig]);
+
   useEffect(() => {
     screenerUiSession.set(user?.uid || 'guest', {
       presetFilter, searchQuery, exchange, marketType, maxVolumeUsd, sortBy,
-      sortOrder, viewMode, displayLimit,
+      sortOrder, secondarySortBy, secondarySortOrder, viewMode, displayLimit,
     });
   }, [user?.uid, presetFilter, searchQuery, exchange, marketType, maxVolumeUsd,
-    sortBy, sortOrder, viewMode, displayLimit]);
+    sortBy, sortOrder, secondarySortBy, secondarySortOrder, viewMode, displayLimit]);
 
   const currentRequest = useRef<{ key: string; controller: AbortController } | null>(null);
   const loadedSelection = useRef<string | null>(null);
@@ -294,28 +332,13 @@ export const CoinScreenerPage: React.FC<CoinScreenerPageProps> = ({
       return matchesMarketPreset(coin, presetFilter);
     });
 
-    // Sorting
-    result.sort((a, b) => {
-      let comparison = 0;
-      if (sortBy === 'volume') {
-        comparison = b.volumeUsd - a.volumeUsd;
-      } else if (sortBy === 'priceChange') {
-        comparison = b.change24h - a.change24h;
-      } else if (sortBy === 'price') {
-        comparison = b.price - a.price;
-      } else if (sortBy === 'volatility') {
-        comparison = getCoinVol5m(b) - getCoinVol5m(a);
-      } else if (sortBy === 'distanceToHigh') {
-        comparison = getCoinDistanceToHigh(b) - getCoinDistanceToHigh(a);
-      } else if (sortBy === 'distanceToLow') {
-        comparison = getCoinDistanceToLow(b) - getCoinDistanceToLow(a);
-      }
-
-      return sortOrder === 'asc' ? -comparison : comparison;
-    });
+    // Multi-priority sorting uses only the quotes already in memory.
+    result.sort((a, b) => compareScreenerSearchCoins(a, b, {
+      sortBy, sortOrder, secondarySortBy, secondarySortOrder,
+    }));
 
     return result;
-  }, [coins, searchQuery, exchange, marketType, maxVolumeUsd, presetFilter, sortBy, sortOrder]);
+  }, [coins, searchQuery, exchange, marketType, maxVolumeUsd, presetFilter, sortBy, sortOrder, secondarySortBy, secondarySortOrder]);
 
   // Market stats calculated from all coins
   const marketStats = useMemo(() => {
@@ -617,6 +640,20 @@ export const CoinScreenerPage: React.FC<CoinScreenerPageProps> = ({
             </span>
           </button>
         </div>
+
+        {user && !!searchSettings.presets?.length && <div className="flex flex-wrap items-center gap-2">
+          <label htmlFor="screener-custom-search-preset" className="text-xs font-semibold text-cyan-300">Мої пресети пошуку:</label>
+          <select id="screener-custom-search-preset" defaultValue="" aria-label="Застосувати мій пресет пошуку"
+            onChange={event => {
+              const selected = searchSettings.presets?.find(item => item.id === event.target.value);
+              if (selected) applySearchConfig(selected.config);
+              event.currentTarget.value = '';
+            }}
+            className="max-w-full rounded-lg border border-cyan-500/30 bg-slate-950 px-3 py-2 text-xs text-slate-100 focus:border-cyan-400 focus:outline-none">
+            <option value="">Вибрати збережений пресет</option>
+            {searchSettings.presets.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+          </select>
+        </div>}
 
         {/* Secondary controls: Search, Exchange, Market, Min Volume, View mode */}
         <div className="flex flex-wrap items-center justify-between gap-2.5 pt-2 border-t border-slate-800/60">
