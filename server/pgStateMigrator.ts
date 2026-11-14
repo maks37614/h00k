@@ -4,8 +4,9 @@
  *   node --import tsx server/pgStateMigrator.ts --apply
  */
 import { identityPool, initializeIdentity } from './pgIdentity';
-import { preparePersonalStateRows, readJsonSnapshot,
-  readPersonalStateSchema, stagePersonalStateToPostgres } from './pgPersonalState';
+import { DEFAULT_PERSONAL_STATE_STAGE_KEY, personalStateSnapshotDigest,
+  preparePersonalStateRows, readJsonSnapshot, readPersonalStateSchema,
+  stagePersonalStateToPostgres } from './pgPersonalState';
 
 async function main() {
   const args=process.argv.slice(2);
@@ -20,9 +21,24 @@ async function main() {
       const r=await connection.query('SELECT id FROM auth_users');
       const prepared=preparePersonalStateRows(snapshot,
         new Set<string>(r.rows.map((u:{id:string})=>u.id)));
+      let previousHash: string | null = null;
+      try {
+        const previous=await connection.query(
+          'SELECT snapshot_sha256 FROM h00k_personal_state_staging_runs WHERE stage_key=$1',
+          [DEFAULT_PERSONAL_STATE_STAGE_KEY]);
+        previousHash=previous.rows[0]?.snapshot_sha256 ?? null;
+      } catch(error) {
+        // A first-time dry-run must also work before 002_personal_state.sql
+        // creates the staging tables; other PostgreSQL errors still fail.
+        if ((error as {code?:string}).code !== '42P01') throw error;
+      }
+      const snapshotSha256=personalStateSnapshotDigest(snapshot);
       console.log(JSON.stringify({mode:'dry-run',surveillance:prepared.surveillance.length,
         alerts:prepared.alerts.length,history:prepared.history.length,
-        skipped:prepared.skipped,changesApplied:false},null,2));
+        skipped:prepared.skipped,stageKey:DEFAULT_PERSONAL_STATE_STAGE_KEY,
+        snapshotSha256,stagedSnapshotMatches:previousHash===null ? null :
+          previousHash===snapshotSha256,
+        changesApplied:false},null,2));
       return;
     }
     const count=await stagePersonalStateToPostgres(connection,snapshot,readPersonalStateSchema());
