@@ -230,7 +230,10 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
             <ProfileTerminalLinkingSettings />
           ) : activeProfileSection === 'notifications' ? (
             <ProfileNotificationsErrorBoundary onClose={onClose}>
-              <ProfileNotificationSettings />
+              <div className="space-y-4">
+                <TelegramConnectionCard />
+                <ProfileNotificationSettings />
+              </div>
             </ProfileNotificationsErrorBoundary>
           ) : <div className="space-y-5">
           {/* Install guide lives in the user's profile, not in the main header. */}
@@ -390,8 +393,6 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                 </div>
               </div>
             </div>
-
-            <TelegramConnectionCard />
 
             {/* Section 3: User Default Preferences */}
             <div className="space-y-3">
