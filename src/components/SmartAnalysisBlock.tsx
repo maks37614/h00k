@@ -111,8 +111,10 @@ export const SmartAnalysisBlock: React.FC<SmartAnalysisBlockProps> = ({
       const res = await fetch(`/api/market/smart-analysis?${queryParams.toString()}`, {
         signal: controller.signal,
       });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const json = await res.json();
+      const json = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(
+        typeof json?.error === 'string' ? json.error : `HTTP ${res.status}`);
+      if (!json) throw new Error('Сервер не повернув коректну відповідь розумного аналізу');
       if (controller.signal.aborted) return;
       if (json.success && json.data) {
         setData(json.data);
@@ -183,6 +185,14 @@ export const SmartAnalysisBlock: React.FC<SmartAnalysisBlockProps> = ({
           </button>
           {collapseControl}
         </div>
+        {!holdersLoading && (
+          <div className="w-full rounded-md border border-slate-700/50 bg-slate-950/60 px-3 py-2 text-slate-300">
+            <span className="font-semibold">CoinGecko · Holders: {holderCountDisplay}</span>
+            <span className="block mt-1 text-[11px] text-slate-400">
+              {holderSnapshot?.detail || 'Ончейн-дані не повернуто'}
+            </span>
+          </div>
+        )}
       </div>
       </>
     );
@@ -509,6 +519,8 @@ export const SmartAnalysisBlock: React.FC<SmartAnalysisBlockProps> = ({
                 <span>EMA20: {data.trend.ema20}</span>
                 <span>•</span>
                 <span>EMA50: {data.trend.ema50}</span>
+                <span>•</span>
+                <span>EMA200: {data.trend.ema200 ?? 'н/д'}</span>
               </div>
             </div>
 
