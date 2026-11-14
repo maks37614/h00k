@@ -38,7 +38,11 @@ test('installer and settings consistently present the h00k Desktop name', () => 
   assert.match(settings, /h00k Desktop/);
   assert.match(settings, /Налаштування прикріплення/);
   assert.match(main, /h00k Desktop • Налаштування прикріплення/);
-  assert.match(nsis, /MUI_WELCOMEPAGE_TEXT "h00k Desktop/);
+  assert.match(nsis, /MUI_WELCOMEPAGE_TEXT "\\$\\(h00kWelcome\\)"/);
+  const translations = JSON.parse(fs.readFileSync(path.join(desktopRoot, 'i18n', 'installer.json'), 'utf8'));
+  for (const strings of Object.values(translations)) {
+    assert.match(strings.welcome, /h00k Desktop/);
+  }
   assert.match(assets, /WINDOWS<\/text>/);
   assert.equal(pkg.build.productName, 'h00k Desktop');
 });
