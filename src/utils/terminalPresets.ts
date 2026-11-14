@@ -8,7 +8,8 @@ export function terminalStorageKey(key: string, uid?: string): string {
 
 export function normalizeTerminalBlocks(value: unknown): TerminalChartBlock[] {
   if (!Array.isArray(value)) return [];
-  return value.flatMap((entry): TerminalChartBlock[] => {
+  const usedIds = new Set<string>();
+  return value.flatMap((entry, index): TerminalChartBlock[] => {
     if (!entry || typeof entry !== 'object') return [];
     const block = entry as Record<string, unknown>;
     if (typeof block.id !== 'string' || typeof block.symbol !== 'string' || !block.symbol.length
@@ -18,7 +19,15 @@ export function normalizeTerminalBlocks(value: unknown): TerminalChartBlock[] {
 
     // Older saved workspaces included orderbook blocks; retain their symbol as a chart.
     const { mode: _legacyMode, domSettings: _legacyDomSettings, ...chartBlock } = block;
-    return [chartBlock as unknown as TerminalChartBlock];
+    // Old/imported workspaces can contain duplicate block IDs. Keeping duplicate
+    // React keys would swap chart state between instruments after reordering.
+    let id = block.id as string;
+    if (usedIds.has(id)) {
+      id = `${id}-restored-${index}`;
+      while (usedIds.has(id)) id += '-1';
+    }
+    usedIds.add(id);
+    return [{ ...chartBlock, id } as unknown as TerminalChartBlock];
   });
 }
 
