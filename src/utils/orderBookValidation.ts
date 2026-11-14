@@ -18,6 +18,14 @@ export function isLiveOrderBookView(snapshot: {
   return sourceAge + (now - requestedAt) <= ORDER_BOOK_MAX_AGE_MS;
 }
 
+/** Numeric, validated public exchange depth levels. Sharing these arrays is
+ * safe between readers: personal book mutation/config remains in each worker.
+ * The arrays must be treated as read-only after validation. */
+export interface NormalizedDepthLevels {
+  readonly bids: ReadonlyArray<readonly [number, number]>;
+  readonly asks: ReadonlyArray<readonly [number, number]>;
+}
+
 export function parseDepthLevels(input: unknown): [number, number][] | null {
   if (!Array.isArray(input)) return null;
   const levels: [number, number][] = [];

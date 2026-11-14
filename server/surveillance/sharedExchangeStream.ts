@@ -1,7 +1,7 @@
 import type { ExchangeId, MarketType } from '../../src/types';
 import { normalizeExchangeSymbol } from '../../src/utils/marketSymbols';
 import { ExchangeStreamClient, type RawDepthDelta } from './exchangeStream';
-import { ORDER_BOOK_MAX_AGE_MS, isFreshDepthTime, parseDepthLevels } from '../../src/utils/orderBookValidation';
+import { ORDER_BOOK_MAX_AGE_MS, isFreshDepthTime, parseDepthLevels, type NormalizedDepthLevels } from '../../src/utils/orderBookValidation';
 
 type Listener = (...args: any[]) => void;
 
@@ -25,6 +25,8 @@ type Entry = {
   depthSequence: number;
   depthEventTime: number;
   depthReceivedAt: number;
+  /** The most recently validated public packet; never private user data. */
+  normalizedDepth: { packet: RawDepthDelta; levels: NormalizedDepthLevels } | null;
 };
 
 const entries = new Map<string, Entry>();
@@ -55,7 +57,8 @@ export class SharedExchangeStreamHandle {
       source.setMaxListeners(0);
       entry = { key, source, refs: 0, lastResyncAt: 0, lastErrorLoggedAt: 0,
         ticker: { price: 0, high24h: 0, low24h: 0, change24h: 0, volume24hUsd: 0 },
-        bids: new Map(), asks: new Map(), depthSequence: 0, depthEventTime: 0, depthReceivedAt: 0 };
+        bids: new Map(), asks: new Map(), depthSequence: 0, depthEventTime: 0, depthReceivedAt: 0,
+        normalizedDepth: null };
       entries.set(key, entry);
       // Maintain an instrument-level snapshot so a subscriber joining an
       // already-running WS can initialize its own book without reconnecting
@@ -93,15 +96,20 @@ export class SharedExchangeStreamHandle {
       });
       source.on('status', (status: string) => {
         if (status !== 'LIVE') {
+          shared.normalizedDepth = null;
           shared.depthSequence = 0;
           shared.depthReceivedAt = 0;
           shared.bids.clear(); shared.asks.clear();
         }
       });
       source.on('depth', (delta: RawDepthDelta) => {
+        // Parse an exchange packet once per instrument, not once per owner.
+        // Personal OrderBookEngine instances still verify sequence, time and
+        // their own continuity before accepting these numeric levels.
         const bids = parseDepthLevels(delta.bids), asks = parseDepthLevels(delta.asks);
         const now = Date.now();
         const time = delta.eventTime ?? now;
+        shared.normalizedDepth = null;
         if (!bids || !asks || !Number.isSafeInteger(delta.sequence) ||
             delta.sequence! <= 0 || !isFreshDepthTime(time, now)) {
           shared.depthSequence = 0;
@@ -110,6 +118,17 @@ export class SharedExchangeStreamHandle {
           shared.bids.clear(); shared.asks.clear();
           return;
         }
+        // Keep validated arrays available to synchronous per-owner listeners
+        // of this exact EventEmitter packet. A new event replaces this record,
+        // even if its object identity is reused by an upstream adapter.
+        const validated = { packet: delta, levels: { bids, asks } };
+        shared.normalizedDepth = validated;
+        // Cached data exists only for this synchronous EventEmitter fanout.
+        // A delayed consumer or a reused/mutated upstream packet must parse
+        // again rather than trust the previous event's numeric values.
+        queueMicrotask(() => {
+          if (shared.normalizedDepth === validated) shared.normalizedDepth = null;
+        });
         // Never build a late-joiner's "fresh" snapshot by applying new
         // deltas to a stale pre-outage book. The source must re-snapshot first.
         if (shared.depthSequence > 0 &&
@@ -142,6 +161,16 @@ export class SharedExchangeStreamHandle {
 
   get status() { return this.entry.source.status; }
   get marketTicker(): Readonly<SharedMarketTicker> { return this.entry.ticker; }
+
+  /** Only synchronous listeners of the same validated source packet can
+   * reuse the parsed numeric arrays. Replay and invalid packets are rechecked
+   * normally by each book; no owner-specific state is shared.
+   */
+  validatedDepth(delta: RawDepthDelta): NormalizedDepthLevels | null {
+    if (this.disposed) return null;
+    const candidate = this.entry.normalizedDepth;
+    return candidate?.packet === delta ? candidate.levels : null;
+  }
 
   on(event: string, listener: Listener): this {
     if (this.disposed) return this;

@@ -179,7 +179,9 @@ export class CoinWorker {
     // 3. Depth Updates for Local Order Book & Densities (Fast Path)
     this.streamClient.on('depth', (delta: RawDepthDelta) => {
       this.orderBookEngine.setVolume24hUsd(this.volume24hUsd);
-      this.orderBookEngine.applyDepth(delta);
+      // Reuse publicly validated numeric levels for the exact same WS
+      // emission. The personal book still checks freshness and sequencing.
+      this.orderBookEngine.applyDepth(delta, this.streamClient.validatedDepth(delta));
       if (this.orderBookEngine.sequenceGap) this.streamClient.resyncOrderBook();
     });
 
