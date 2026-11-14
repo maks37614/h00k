@@ -333,6 +333,9 @@ async function startServer() {
 
   // On-demand independent AI setup score. Authenticated, rate-limited, never
   // performs any market scan or substitutes a deterministic score for Gemini.
+  // Bound simultaneous external AI calls regardless of logged-in user count.
+  let activeFormationScoreRequests = 0;
+  const maxActiveFormationScoreRequests = 4;
   app.post('/api/ai/setup-score', requireUserAuth, async (req, res) => {
     const data = req.body || {};
     const symbol = typeof data.symbol === 'string' ? data.symbol.toUpperCase() : '';
@@ -362,6 +365,11 @@ async function startServer() {
     if (!process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEY === 'MY_GEMINI_API_KEY') {
       return res.status(503).json({ success: false, error: 'AI недоступний: Gemini не налаштовано' });
     }
+    if (activeFormationScoreRequests >= maxActiveFormationScoreRequests) {
+      return res.status(503).setHeader('Retry-After', '10').json({
+        success: false, error: 'AI зайнятий, спробуйте пізніше',
+      });
+    }
     const userId = res.locals.userId as string;
     if (!userWorkQuota.allow(userId, 'formation-ai-score', 10, 60 * 60_000) ||
         !userWorkThrottle.allow(userId, 'formation-ai-score', 20_000)) {
@@ -369,6 +377,7 @@ async function startServer() {
         success: false, error: 'Повторну оцінку AI можна виконати пізніше',
       });
     }
+    activeFormationScoreRequests++;
     try {
       const score = await evaluateFormationScoreWithAI({
         symbol, exchange: data.exchange, marketType: data.marketType,
@@ -380,6 +389,8 @@ async function startServer() {
     } catch (error) {
       console.warn('AI setup score unavailable:', error instanceof Error ? error.message : 'unknown');
       return res.status(503).json({ success: false, error: 'AI недоступний, спробуйте пізніше' });
+    } finally {
+      activeFormationScoreRequests--;
     }
   });
 
