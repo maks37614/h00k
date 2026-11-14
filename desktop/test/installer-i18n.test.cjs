@@ -93,3 +93,21 @@ test('language radio buttons form exactly one exclusive Windows group',()=>{
   assert.ok(nsis.indexOf('NSD_AddStyle') > nsis.indexOf('Pop $h00kRadioEn'));
   assert.ok(nsis.indexOf('NSD_AddStyle') < nsis.indexOf('Pop $h00kRadioPl'));
 });
+
+test('uninstall choice has four localized labels and safe silent opt-in flag',()=>{
+  const fs=require('node:fs'),path=require('node:path');
+  const root=path.join(__dirname,'..');
+  const langs=require('../i18n/installer.json');
+  const keys=['uninstallWelcome','uninstallDataTitle','uninstallDataSubtitle',
+    'uninstallDataPrompt','uninstallDataOption','uninstallDataWarning'];
+  for(const code of ['en','pl','ru','uk'])for(const key of keys)
+    assert.ok(langs[code][key].trim(),code+' '+key);
+  const nsis=fs.readFileSync(path.join(root,'build','installer.nsh'),'utf8');
+  assert.match(nsis,/!macro customUnWelcomePage/);
+  assert.match(nsis,/UninstPage custom un\.h00kDataPageCreate un\.h00kDataPageLeave/);
+  assert.match(nsis,/StrCpy \$h00kRemoveData "0"/);
+  assert.match(nsis,/\/DELETE_H00K_DATA/);
+  assert.match(nsis,/!macro customUnInstall/);
+  assert.match(nsis,/\$APPDATA\\\$\{APP_PACKAGE_NAME\}/);
+  assert.match(nsis,/\$\{IfNot\} \$\{isUpdated\}/);
+});

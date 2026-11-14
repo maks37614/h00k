@@ -90,3 +90,54 @@ foreach ($testCase in @(
   }
   Write-Host "PASS: installer locale $($testCase.Code) / LCID $actual persisted"
 }
+
+# Exercise both deletion choices using the actual installed NSIS uninstaller.
+# This runs only on the disposable GitHub-hosted Windows CI user.
+function Get-Uninstaller([string]$InstallRoot) {
+  $exe = @(Get-ChildItem -LiteralPath $InstallRoot -Filter 'Uninstall*.exe' -File -ErrorAction Stop)
+  if ($exe.Count -ne 1) { throw "Expected one registered NSIS uninstaller in $InstallRoot; found $($exe.Count)" }
+  return $exe[0].FullName
+}
+function Uninstall-H00k([string]$Executable, [string[]]$Arguments) {
+  $proc = Start-Process -FilePath $Executable -ArgumentList $Arguments -PassThru -Wait
+  if ($proc.ExitCode -ne 0) { throw "NSIS uninstall failed: exit $($proc.ExitCode)" }
+  Start-Sleep -Milliseconds 600 # NSIS can remove its own exe asynchronously
+}
+$installRoot = Split-Path -Parent $shortcut.TargetPath
+$profilePaths = @(
+  (Join-Path $env:APPDATA 'h00k Desktop'),
+  (Join-Path $env:APPDATA 'h00k-desktop'),
+  (Join-Path $env:LOCALAPPDATA 'h00k Desktop'),
+  (Join-Path $env:LOCALAPPDATA 'h00k-desktop')
+)
+foreach ($profilePath in $profilePaths) {
+  New-Item -ItemType Directory -Path $profilePath -Force | Out-Null
+  Set-Content -LiteralPath (Join-Path $profilePath 'h00k-uninstall-smoke-marker.txt') -Value 'ci-owned-marker'
+}
+$uninstall = Get-Uninstaller $installRoot
+Uninstall-H00k $uninstall @('/S')
+if (@(DesktopLinks).Count -ne 0) { throw 'Standard uninstall left desktop shortcut' }
+if (@(StartMenuLinks).Count -ne 0) { throw 'Standard uninstall left Start menu shortcut' }
+if (Test-Path -LiteralPath $shortcut.TargetPath) { throw 'Standard uninstall left executable' }
+foreach ($profilePath in $profilePaths) {
+  if (-not (Test-Path -LiteralPath (Join-Path $profilePath 'h00k-uninstall-smoke-marker.txt'))) {
+    throw "Standard uninstall deleted opted-out user data: $profilePath"
+  }
+}
+Write-Host 'PASS: normal uninstall removes app and shortcuts but preserves user data'
+
+Install-H00k @('/S','/DESKTOP_SHORTCUT')
+$installedLinks = @(DesktopLinks)
+if ($installedLinks.Count -ne 1) { throw 'Reinstall did not restore desktop shortcut' }
+$reinstallShortcut = (New-Object -ComObject WScript.Shell).CreateShortcut($installedLinks[0].FullName)
+$uninstall = Get-Uninstaller (Split-Path -Parent $reinstallShortcut.TargetPath)
+Uninstall-H00k $uninstall @('/S','/DELETE_H00K_DATA')
+if (@(DesktopLinks).Count -ne 0) { throw 'Full uninstall left desktop shortcut' }
+if (@(StartMenuLinks).Count -ne 0) { throw 'Full uninstall left Start menu shortcut' }
+if (Test-Path -LiteralPath $reinstallShortcut.TargetPath) { throw 'Full uninstall left executable' }
+foreach ($profilePath in $profilePaths) {
+  if (Test-Path -LiteralPath (Join-Path $profilePath 'h00k-uninstall-smoke-marker.txt')) {
+    throw "Full uninstall left local data: $profilePath"
+  }
+}
+Write-Host 'PASS: full uninstall removes app, shortcuts and this user local data'

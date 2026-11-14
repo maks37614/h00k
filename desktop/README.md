@@ -398,3 +398,25 @@ exact window closes; it does not jump to a different instance. On a later
 relaunch, only the persisted executable/title hint survives, and automatic
 recovery is allowed only when the match is unique. With multiple same-process
 windows and changed titles, the user must select the correct window again.
+
+## Uninstall / clean removal
+
+The installed Windows program registers a native h00k-branded NSIS uninstaller
+in Windows Apps > Installed apps. The uninstall wizard uses the original h00k
+robot on the sidebar, a dark header and a localized checkbox asking whether to
+erase local settings, cached website sessions and login state. By default the
+checkbox is **off** to preserve user data for a later reinstall. With the box
+checked, data in this Windows account's h00k Desktop AppData directories is
+also deleted. The user's h00k.top cloud account is not deleted. The custom
+cleanup is skipped during in-place upgrades.
+
+For unattended automation use the *installed uninstaller* with
+`/S /DELETE_H00K_DATA` to remove that user's local state; plain `/S` preserves
+data. Full removal has no effect on other Windows user accounts' profiles.
+No arbitrary parent folders or unrelated exchange/broker data are touched.
+
+The Windows CI smoke test installs/uninstalls/reinstalls h00k and asserts that
+program executable, Start Menu/Desktop shortcuts and the explicit local-data
+choice behave as expected. Real Windows visual acceptance is still required
+for the native uninstaller's branding; the robot on the NSIS uninstaller is
+a static illustration, not the animated installation walker.

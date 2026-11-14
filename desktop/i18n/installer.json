@@ -24,7 +24,13 @@
     "api5": "10. h00k Desktop never requires API keys. For issues, check window selection, terminal state and free monitor space.",
     "guideFooter": "Website: h00k.top. Never share your API secrets.",
     "layoutTitle": "Placement and controls",
-    "layoutSubtitle": "Configure panels, layout and ticker linking."
+    "layoutSubtitle": "Configure panels, layout and ticker linking.",
+    "uninstallWelcome": "Remove h00k Desktop from this computer.$\\r$\\n$\\r$\\nThe robot guides you through removal. Program files and shortcuts will be removed. You can choose separately whether to delete saved settings and login data.",
+    "uninstallDataTitle": "Remove local h00k data?",
+    "uninstallDataSubtitle": "Choose whether to preserve settings and your h00k session.",
+    "uninstallDataPrompt": "By default, h00k keeps your personal settings and website login on this Windows account for a future reinstall.",
+    "uninstallDataOption": "Also erase h00k Desktop settings, cache and login session (irreversible)",
+    "uninstallDataWarning": "This affects only the current Windows user's local h00k Desktop data. It does not delete cloud account data or anything on h00k.top. Close h00k before continuing."
   },
   "pl": {
     "languageTitle": "Język instalatora",
@@ -51,7 +57,13 @@
     "api5": "10. h00k Desktop nie wymaga kluczy API. W razie problemu sprawdź wybrane okno, terminal i wolne miejsce na ekranie.",
     "guideFooter": "Strona: h00k.top. Nigdy nie udostępniaj sekretów API.",
     "layoutTitle": "Położenie i sterowanie",
-    "layoutSubtitle": "Skonfiguruj panele, układ i łączenie tickerów."
+    "layoutSubtitle": "Skonfiguruj panele, układ i łączenie tickerów.",
+    "uninstallWelcome": "Usuń h00k Desktop z tego komputera.$\\r$\\n$\\r$\\nRobot przeprowadzi Cię przez usuwanie. Pliki programu i skróty zostaną usunięte. Osobno zdecyduj o usunięciu ustawień i sesji logowania.",
+    "uninstallDataTitle": "Usunąć lokalne dane h00k?",
+    "uninstallDataSubtitle": "Wybierz, czy zachować ustawienia i sesję h00k.",
+    "uninstallDataPrompt": "Domyślnie ustawienia i sesja logowania są zachowywane na tym koncie Windows na wypadek ponownej instalacji.",
+    "uninstallDataOption": "Usuń także ustawienia, pamięć podręczną i sesję logowania h00k Desktop (nieodwracalne)",
+    "uninstallDataWarning": "Dotyczy tylko danych h00k Desktop bieżącego użytkownika Windows. Konto i dane w h00k.top nie zostaną usunięte. Zamknij h00k przed kontynuacją."
   },
   "ru": {
     "languageTitle": "Язык установщика",
@@ -78,7 +90,13 @@
     "api5": "10. h00k Desktop не требует API-ключей. При проблемах проверьте выбранное окно, состояние терминала и свободное место на экране.",
     "guideFooter": "Сайт: h00k.top. Никому не передавайте секретные API-ключи.",
     "layoutTitle": "Размещение и управление",
-    "layoutSubtitle": "Настройте панели, расположение и связь тикеров."
+    "layoutSubtitle": "Настройте панели, расположение и связь тикеров.",
+    "uninstallWelcome": "Удаление h00k Desktop с компьютера.$\\r$\\n$\\r$\\nРобот поможет завершить удаление. Файлы программы и ярлыки будут удалены. Настройки и данные входа можно удалить отдельно.",
+    "uninstallDataTitle": "Удалить локальные данные h00k?",
+    "uninstallDataSubtitle": "Выберите, сохранять ли настройки и сеанс h00k.",
+    "uninstallDataPrompt": "По умолчанию настройки и сеанс входа сохраняются в этой учетной записи Windows для возможной повторной установки.",
+    "uninstallDataOption": "Также удалить настройки, кеш и сеанс входа h00k Desktop (необратимо)",
+    "uninstallDataWarning": "Удаляются только локальные данные h00k Desktop текущего пользователя Windows. Облачная учетная запись h00k.top остается. Закройте h00k перед продолжением."
   },
   "uk": {
     "languageTitle": "Мова інсталятора",
@@ -105,6 +123,12 @@
     "api5": "10. h00k Desktop не потребує API-ключів. У разі проблем перевірте вибір вікна, стан термінала й вільне місце на моніторі.",
     "guideFooter": "Сайт: h00k.top. Нікому не передавайте секрети API.",
     "layoutTitle": "Розташування та керування",
-    "layoutSubtitle": "Налаштуйте панелі, компонування та лінковку тікерів."
+    "layoutSubtitle": "Налаштуйте панелі, компонування та лінковку тікерів.",
+    "uninstallWelcome": "Видалення h00k Desktop із комп'ютера.$\\r$\\n$\\r$\\nРобот допоможе завершити видалення. Файли програми та ярлики буде прибрано. Налаштування і сеанс входу можна видалити окремо.",
+    "uninstallDataTitle": "Видалити локальні дані h00k?",
+    "uninstallDataSubtitle": "Виберіть, чи залишати налаштування та сеанс h00k.",
+    "uninstallDataPrompt": "За замовчуванням налаштування і сеанс входу зберігаються в обліковому записі Windows для повторного встановлення.",
+    "uninstallDataOption": "Також видалити налаштування, кеш і сеанс входу h00k Desktop (безповоротно)",
+    "uninstallDataWarning": "Видаляються тільки локальні дані h00k Desktop поточного користувача Windows. Обліковий запис і дані на h00k.top залишаться. Закрийте h00k перед продовженням."
   }
 }

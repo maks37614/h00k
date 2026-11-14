@@ -21,6 +21,10 @@ Var /GLOBAL h00kRadioEn
 Var /GLOBAL h00kRadioPl
 Var /GLOBAL h00kRadioRu
 Var /GLOBAL h00kRadioUk
+!else
+; Uninstall state belongs only to the NSIS uninstaller executable.
+Var /GLOBAL h00kRemoveData
+Var /GLOBAL h00kUninstallCleanupCheck
 !endif
 
 !macro customWelcomePage
@@ -74,6 +78,14 @@ Var /GLOBAL h00kRadioUk
 !macroend
 
 !macro customUnInit
+  ; Preserve local account data by default, including silent uninstall and upgrades.
+  ; Dedicated opt-in switch is intended for a deliberate full removal or CI test.
+  StrCpy $h00kRemoveData "0"
+  ${GetParameters} $R8
+  ${GetOptions} $R8 "/DELETE_H00K_DATA" $R9
+  ${IfNot} ${Errors}
+    StrCpy $h00kRemoveData "1"
+  ${EndIf}
   ReadRegStr $R8 SHELL_CONTEXT "${INSTALL_REGISTRY_KEY}" "H00kInstallerLanguage"
   ${If} $R8 == "1033"
     StrCpy $LANGUAGE 1033
@@ -85,6 +97,42 @@ Var /GLOBAL h00kRadioUk
     StrCpy $LANGUAGE 1058
   ${EndIf}
 !macroend
+
+!macro customUnWelcomePage
+  !define MUI_WELCOMEPAGE_TITLE "h00k Desktop"
+  !define MUI_WELCOMEPAGE_TEXT "$(h00kUninstallWelcome)"
+  !insertmacro MUI_UNPAGE_WELCOME
+  ; This choice must come BEFORE MUI_UNPAGE_INSTFILES, not after removal.
+  UninstPage custom un.h00kDataPageCreate un.h00kDataPageLeave
+!macroend
+
+!ifdef BUILD_UNINSTALLER
+Function un.h00kDataPageCreate
+  ${If} ${Silent}
+    Abort
+  ${EndIf}
+  !insertmacro h00kSetHeader "$(h00kUninstallDataTitle)" "$(h00kUninstallDataSubtitle)"
+  nsDialogs::Create 1018
+  Pop $0
+  ${If} $0 == error
+    Abort
+  ${EndIf}
+  ${NSD_CreateLabel} 0 6u 100% 47u "$(h00kUninstallDataPrompt)"
+  Pop $1
+  ${NSD_CreateCheckbox} 0 70u 100% 25u "$(h00kUninstallDataOption)"
+  Pop $h00kUninstallCleanupCheck
+  ${If} $h00kRemoveData == "1"
+    ${NSD_Check} $h00kUninstallCleanupCheck
+  ${EndIf}
+  ${NSD_CreateLabel} 0 115u 100% 70u "$(h00kUninstallDataWarning)"
+  Pop $1
+  nsDialogs::Show
+FunctionEnd
+
+Function un.h00kDataPageLeave
+  ${NSD_GetState} $h00kUninstallCleanupCheck $h00kRemoveData
+FunctionEnd
+!endif
 
 !ifndef BUILD_UNINSTALLER
 
@@ -235,6 +283,31 @@ Function h00kGuideApiCreate
 FunctionEnd
 
 !endif ; BUILD_UNINSTALLER
+
+!macro customUnInstall
+  ; Never touch user data during upgrades: installed settings and login must persist.
+  ${IfNot} ${isUpdated}
+    ${If} $h00kRemoveData == "1"
+      ; Deletion is restricted to h00k Desktop's known per-user directories.
+      ; Do not delete other profiles, exchange data, Desktop/Documents or parent folders.
+      ${If} $installMode == "all"
+        SetShellVarContext current
+      ${EndIf}
+      RMDir /r "$APPDATA\${APP_FILENAME}"
+      !ifdef APP_PRODUCT_FILENAME
+        RMDir /r "$APPDATA\${APP_PRODUCT_FILENAME}"
+      !endif
+      !ifdef APP_PACKAGE_NAME
+        RMDir /r "$APPDATA\${APP_PACKAGE_NAME}"
+      !endif
+      RMDir /r "$LOCALAPPDATA\h00k Desktop"
+      RMDir /r "$LOCALAPPDATA\h00k-desktop"
+      ${If} $installMode == "all"
+        SetShellVarContext all
+      ${EndIf}
+    ${EndIf}
+  ${EndIf}
+!macroend
 
 !macro customInstall
   ${If} $h00kShortcutWanted != "1"
