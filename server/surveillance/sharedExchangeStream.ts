@@ -66,13 +66,13 @@ export class SharedExchangeStreamHandle {
       // unhandled 'error', potentially terminating the entire h00k process.
       // Keep one lifetime-bound fallback listener per underlying connection.
       source.on('error', (error: unknown) => {
-        // Individual workers log their own errors when already subscribed.
-        // Rate-limit only the otherwise unobserved bootstrap case.
-        if (source.listenerCount('error') > 1) return;
+        // Log at most once per market/30s, regardless of how many owners
+        // subscribe. This handler also prevents unhandled EventEmitter errors
+        // while the stream is being created or has no consumers yet.
         const now = Date.now();
         if (now - shared.lastErrorLoggedAt < 30_000) return;
         shared.lastErrorLoggedAt = now;
-        console.warn(`[SharedExchangeStream] ${shared.key}: initial stream error:`,
+        console.warn(`[SharedExchangeStream] ${shared.key}: public stream error:`,
           error instanceof Error ? error.message : 'unknown exchange stream error');
       });
       // Update price once per market rather than once for every owner.
