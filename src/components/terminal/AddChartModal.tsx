@@ -27,6 +27,8 @@ interface AddChartModalProps {
   coins: ScannedCoin[];
   /** Already loaded by TerminalPage; avoids a duplicate full-market request. */
   terminalMarketCoins?: MarketCoin[];
+  /** Existing workspaces are preserved, but new additions stop at the chart limit. */
+  atChartLimit?: boolean;
   watchlist: string[];
   onAddChart: (
     coin: ScannedCoin | MarketCoin | { symbol: string; baseAsset: string; quoteAsset: string; exchange: ExchangeId; marketType: MarketType },
@@ -45,6 +47,7 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({
   onClose,
   coins,
   terminalMarketCoins,
+  atChartLimit = false,
   watchlist,
   onAddChart,
 }) => {
@@ -136,15 +139,17 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({
   // Create unified lookup map from ScannedCoins (contains detected formations)
   const formationsMap = useMemo(() => {
     const map = new Map<string, ScannedCoin>();
+    if (!isOpen) return map;
     for (const c of coins) {
       const key = `${c.exchange}_${c.symbol}_${c.marketType}`.toUpperCase();
       map.set(key, c);
     }
     return map;
-  }, [coins]);
+  }, [coins, isOpen]);
 
   // Unified coins list: merges all market coins with formation metadata
   const unifiedCoins = useMemo(() => {
+    if (!isOpen) return [];
     if (availableMarketCoins.length > 0) {
       // Keep the modal's existing $50k–$10B catalog constraint.
       return availableMarketCoins.filter(mc => mc.volumeUsd >= 50_000 && mc.volumeUsd <= 10_000_000_000).map((mc) => {
@@ -180,10 +185,11 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({
       lowPrice24h: c.lowPrice24h || c.currentPrice,
       formations: c.formations || [],
     }));
-  }, [availableMarketCoins, coins, formationsMap]);
+  }, [availableMarketCoins, coins, formationsMap, isOpen]);
 
   // Filter and sort coins
   const filteredCoins = useMemo(() => {
+    if (!isOpen) return [];
     let result = unifiedCoins;
 
     // Exchange filter
@@ -229,7 +235,7 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({
     }
 
     return result;
-  }, [unifiedCoins, filterTab, selectedExchange, selectedMarket, selectedMinVolume, watchlist, search]);
+  }, [unifiedCoins, filterTab, selectedExchange, selectedMarket, selectedMinVolume, watchlist, search, isOpen]);
 
   // The modal is portaled to body, and the underlying Terminal should not scroll.
   useEffect(() => {
@@ -264,6 +270,7 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({
     c.symbol === cleanSearchSymbol || c.symbol === quickAddInstrument.symbol);
 
   const handleQuickAddCustom = (ex: ExchangeId, mt: MarketType) => {
+    if (atChartLimit) return;
     const exactMarket = unifiedCoins.find(c => c.symbol === cleanSearchSymbol && c.exchange === ex && c.marketType === mt);
     const { symbol, quoteAsset } = normalizeTerminalMarketPair(
       cleanSearchSymbol, exactMarket?.quoteAsset || inferredQuote,
@@ -312,6 +319,13 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({
           </button>
         </div>
 
+        {atChartLimit && (
+          <p role="status" className="border-b border-amber-500/30 bg-amber-950/40 px-4 py-2 text-xs text-amber-200">
+            Досягнуто ліміт 50 графіків. Видаліть один із поточних графіків, щоб додати інший.
+            Збережені графіки не видаляються автоматично.
+          </p>
+        )}
+
         {/* Bounded scroll area: filters plus coin list. */}
         <div className="terminal-add-chart-body flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
         {/* Toolbar & Filter Parameters */}
@@ -351,18 +365,21 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({
               <div className="flex items-center gap-1.5 flex-wrap">
                 <button
                   onClick={() => handleQuickAddCustom('binance', 'futures')}
+                  disabled={atChartLimit}
                   className="px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 text-xs font-bold transition-all active:scale-95 cursor-pointer"
                 >
                   + Binance Futures
                 </button>
                 <button
                   onClick={() => handleQuickAddCustom('bybit', 'futures')}
+                  disabled={atChartLimit}
                   className="px-2.5 py-1 rounded-lg bg-orange-500/20 hover:bg-orange-500/30 text-orange-300 border border-orange-500/30 text-xs font-bold transition-all active:scale-95 cursor-pointer"
                 >
                   + Bybit Linear
                 </button>
                 <button
                   onClick={() => handleQuickAddCustom('binance', 'spot')}
+                  disabled={atChartLimit}
                   className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs transition-all active:scale-95 cursor-pointer"
                 >
                   + Binance Spot
@@ -580,7 +597,9 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({
                 return (
                   <div
                     key={`${coin.exchange}-${coin.symbol}-${coin.marketType}`}
+                    aria-disabled={atChartLimit}
                     onClick={() => {
+                      if (atChartLimit) return;
                       onAddChart(coin, selectedTimeframe, firstFormation?.id);
                       onClose();
                     }}
@@ -650,6 +669,7 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({
 
                       <button
                         type="button"
+                        disabled={atChartLimit}
                         className="px-3 py-1.5 rounded-xl bg-cyan-600/20 hover:bg-cyan-600 text-cyan-300 hover:text-white border border-cyan-500/40 text-xs font-bold transition-all shadow-sm flex items-center gap-1 cursor-pointer group-hover:bg-cyan-600 group-hover:text-white"
                       >
                         <Plus className="w-3.5 h-3.5" />
