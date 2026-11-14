@@ -10,6 +10,7 @@ test('Telegram account migration is retryable after disk failure, with private a
   const rename = fs.renameSync;
   const write = fs.writeFileSync;
   const chmod = fs.chmodSync;
+  const fsync = fs.fsyncSync;
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'h00k-user-telegram-durable-'));
   const dir = path.join(tmp, 'server/data');
   const config = path.join(dir, 'user_telegram.json');
@@ -55,15 +56,15 @@ test('Telegram account migration is retryable after disk failure, with private a
     assert.ok(!sanitized.includes('123:stale'));
     assert.equal(fs.statSync(config).mode & 0o777, 0o600);
 
-    // A leftover 0644 temp file is made private *before* writing the next
-    // list of user chat IDs. Verify permissions at the actual write call.
+    // The old predictable 0644 temp is removed before personal data is
+    // written to an exclusive 0600 file descriptor.
     fs.writeFileSync(`${config}.tmp`, 'leftover', { mode: 0o644 });
     fs.chmodSync(`${config}.tmp`, 0o644);
     let writes = 0;
     fs.writeFileSync = ((target: fs.PathOrFileDescriptor, ...args: any[]) => {
-      if (String(target) === `${config}.tmp`) {
+      if (typeof target === 'number') {
         writes++;
-        assert.equal(fs.statSync(String(target)).mode & 0o777, 0o600);
+        assert.equal(fs.fstatSync(target).mode & 0o777, 0o600);
       }
       return (write as any)(target, ...args);
     }) as typeof fs.writeFileSync;
@@ -85,25 +86,23 @@ test('Telegram account migration is retryable after disk failure, with private a
     assert.equal(fs.readFileSync(config, 'utf8'), connected);
     fs.renameSync = rename;
 
-    // An inability to tighten an old temp file must also fail closed.
-    fs.writeFileSync(`${config}.tmp`, 'leftover', { mode: 0o644 });
-    fs.chmodSync(`${config}.tmp`, 0o644);
-    fs.chmodSync = ((target, mode) => {
-      if (String(target) === `${config}.tmp`)
-        throw new Error('simulated permission failure');
-      return chmod(target, mode);
-    }) as typeof fs.chmodSync;
+    // Failure to fsync the new temp before rename must fail closed.
+    fs.fsyncSync = ((fd) => {
+      if (fs.fstatSync(fd).isFile()) throw new Error('simulated fsync failure');
+      return fsync(fd);
+    }) as typeof fs.fsyncSync;
     assert.throws(() => users.saveUserTelegram('carol', { language: 'ru' }),
-      /simulated permission failure/);
+      /simulated fsync failure/);
     assert.equal(users.getUserTelegram('carol')?.language, 'en');
     assert.equal(fs.readFileSync(config, 'utf8'), connected);
-    fs.chmodSync = chmod;
+    fs.fsyncSync = fsync;
     users.disconnectUserTelegram('carol');
     assert.equal(users.getUserTelegram('carol')?.chatId, undefined);
   } finally {
     fs.renameSync = rename;
     fs.writeFileSync = write;
     fs.chmodSync = chmod;
+    fs.fsyncSync = fsync;
     if (originalBot === undefined) delete process.env.TELEGRAM_BOT_TOKEN;
     else process.env.TELEGRAM_BOT_TOKEN = originalBot;
     process.chdir(previousCwd);
