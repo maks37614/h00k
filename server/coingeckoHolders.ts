@@ -1,5 +1,6 @@
 import { readFileSync, mkdirSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
+import type { CoinGeckoHolderSnapshot } from '../src/types';
 
 // CoinGecko Demo: https://docs.coingecko.com/demo/reference/token-info-contract-address
 // No paid /top_holders or historical endpoints. All requests are server-side.
@@ -32,22 +33,10 @@ export type HolderStatus =
   'available' | 'not_configured' | 'unmapped' | 'ambiguous' |
   'unavailable' | 'rate_limited' | 'upstream_error';
 
-export interface CoinGeckoHoldersSnapshot {
-  source: 'CoinGecko Demo';
-  symbol: string;
-  status: HolderStatus;
-  count: number | null;
-  // Exact provider field, not a claim about top 10 individual people.
-  distribution: Record<string, number> | null;
-  lastUpdated: string | null;
-  network: string | null;
-  contractAddress: string | null;
-  detail: string;
-}
 
 type Contract = { network: string; address: string };
 type CatalogEntry = { symbol?: unknown; platforms?: unknown };
-type CacheEntry = { expires: number; result: CoinGeckoHoldersSnapshot };
+type CacheEntry = { expires: number; result: CoinGeckoHolderSnapshot };
 type BudgetState = { month: string; count: number };
 
 export function getBaseTicker(symbol: unknown): string | null {
@@ -86,7 +75,7 @@ function monthOf(now: number) {
 
 export function parseCoinGeckoHolders(
   raw: unknown, symbol: string, contract: Contract, now: number,
-): CoinGeckoHoldersSnapshot {
+): CoinGeckoHolderSnapshot {
   const payload = raw && typeof raw === 'object' ? raw as Record<string, any> : {};
   const a = payload.data?.attributes;
   const base = getBaseTicker(symbol);
@@ -149,7 +138,7 @@ export function createCoinGeckoHoldersService(options: {
     }
   }
   const cached = new Map<string, CacheEntry>();
-  const inflight = new Map<string, Promise<CoinGeckoHoldersSnapshot>>();
+  const inflight = new Map<string, Promise<CoinGeckoHolderSnapshot>>();
   let catalog: Map<string, { match: Contract | null; ambiguous: boolean }> | null = null;
   let catalogUntil = 0;
   let catalogTask: Promise<typeof catalog> | null = null;
@@ -241,12 +230,12 @@ export function createCoinGeckoHoldersService(options: {
   };
 
   const unavailable = (symbol: string, status: HolderStatus, detail: string,
-    contract: Contract | null = null): CoinGeckoHoldersSnapshot => ({
+    contract: Contract | null = null): CoinGeckoHolderSnapshot => ({
     source: 'CoinGecko Demo', symbol, status, count: null, distribution: null,
     lastUpdated: null, network: contract?.network || null,
     contractAddress: contract?.address || null, detail,
   });
-  const get = async (rawSymbol: unknown): Promise<CoinGeckoHoldersSnapshot> => {
+  const get = async (rawSymbol: unknown): Promise<CoinGeckoHolderSnapshot> => {
     const symbol = getBaseTicker(rawSymbol);
     if (!symbol) return unavailable('', 'unmapped', 'Некоректний символ монети.');
     if (!key) return unavailable(symbol, 'not_configured',
@@ -255,7 +244,7 @@ export function createCoinGeckoHoldersService(options: {
     if (hit && hit.expires > nowFn()) return hit.result;
     if (inflight.has(symbol)) return inflight.get(symbol)!;
     const task = (async () => {
-      let result: CoinGeckoHoldersSnapshot;
+      let result: CoinGeckoHolderSnapshot;
       let ttl = NEGATIVE_TTL;
       let location = overrides.get(symbol) || null;
       try {
