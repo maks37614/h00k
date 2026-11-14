@@ -76,6 +76,11 @@ test('price alert service uses gate and operator stats expose no user identifier
   assert.match(service, /new AlertCheckScheduler\(checkAlertsInternal\)/);
   assert.match(service, /alertCheckScheduler\.check\(userId\)/);
   assert.match(ops, /priceAlertChecks: priceAlertCheckStats\(\)/);
+  const routes = readFileSync(new URL('../server.ts', import.meta.url), 'utf8');
+  const manual = routes.slice(routes.indexOf("app.post('/api/cron/run'"),
+    routes.indexOf("app.post('/api/cron/test-alert'"));
+  assert.match(manual, /err instanceof AlertManualQueueBusyError/);
+  assert.match(manual, /status\(503\)\.setHeader\('Retry-After', '5'\)/);
   const gate = new AlertCheckScheduler(async () => {});
   assert.deepEqual(Object.keys(gate.stats()).sort(), [
     'backgroundSkipped', 'backgroundStarted', 'manualCoalesced',
