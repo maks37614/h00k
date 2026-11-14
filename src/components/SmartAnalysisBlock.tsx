@@ -187,7 +187,7 @@ export const SmartAnalysisBlock: React.FC<SmartAnalysisBlockProps> = ({
           {collapseControl}
         </div>
         <p className="col-span-3 min-w-0 text-[11px] leading-relaxed text-slate-400 sm:col-start-2 sm:col-span-1">
-          Повний аудит: BTC контекст, стакан ордерів, зона POC, деривативи, ризик маніпуляцій та рекомендації
+          Автоматичні кількісні розрахунки з біржових даних, не генеративний AI. Стакан — лише знімок, POC — оцінка за свічками; непідтверджені показники позначені н/д.
         </p>
       </div>
 
