@@ -128,6 +128,7 @@ export const SurveillanceProvider: React.FC<{ children: React.ReactNode }> = ({ 
     let retry: ReturnType<typeof setTimeout> | undefined;
     let attempt = 0;
     let lastFetch = 0;
+    let lastUrgentFetch = 0;
     const connect = async () => {
       if (stopped) return;
       controller = new AbortController();
