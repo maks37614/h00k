@@ -43,7 +43,7 @@
 <label class="check"><input type="checkbox" id="autoAttach"> Прикріплювати автоматично</label>
 <label class="check"><input type="checkbox" id="follow"> Слідувати за вікном</label>
 <label class="check"><input type="checkbox" id="alwaysOnTop"> Завжди поверх вікон</label>
-</div><p>Коли «Слідувати» вимкнено, можна вільно розміщувати плаваючі панелі. Їхнє розташування на моніторах автоматично зберігається й відновлюється під час наступного запуску.</p></section>
+</div><p>Для автоматичного прикріплення мають бути увімкнені обидва параметри: «Увімкнути термінал» і «Прикріплювати автоматично». Для кожного термінала вони зберігаються окремо.</p><p>Коли «Слідувати» вимкнено, можна вільно розміщувати плаваючі панелі. Їхнє розташування на моніторах автоматично зберігається й відновлюється під час наступного запуску.</p></section>
 <div class="row"><button class="action primary" id="save">Зберегти налаштування</button><button class="action" id="attach">Прикріпити зараз</button><button class="action danger" id="detach">Відкріпити</button></div>
 <div id="feedback" role="status"></div><small>Налаштування зберігаються лише на цьому комп’ютері. Програма не запитує біржові API-ключі.</small>
 <p>Примітка: Google OAuth може не працювати у вбудованому вікні Windows через правила Google для embedded webviews. Для входу безпосередньо в h00k Desktop використовуйте email і пароль; вхід у зовнішньому браузері не переносить авторизацію автоматично.</p>
@@ -75,7 +75,11 @@ function drawOnboarding(){
 function drawStatus(){
   if(!snap)return;
   const t=snap.terminals.find(x=>x.id===active);
-  byId('status').textContent=(t?.target?'● '+t.target.title+' • '+t.target.exe:'○ Термінал не знайдено')+' — '+(t?.status||'Очікування');
+  const supported=snap.nativeWindowAttachment!==false;
+  byId('status').textContent=!supported
+    ? 'Автоматичне прикріплення підтримується лише на Windows. На цій системі можна користуватися h00k в окремому вікні.'
+    : (t?.target?'● '+t.target.title+' • '+t.target.exe:'○ Термінал не знайдено')+' — '+(t?.status||'Очікування');
+  byId('target').disabled=!supported;
   // Avoid recreating <option> nodes every ~160ms: live terminal titles may update constantly.
   const listKey=snap.windows.map(w=>w.id+':'+w.exe).join('|');
   if(lastWindowsList!==listKey){
@@ -83,10 +87,13 @@ function drawStatus(){
       ...snap.windows.map(w=>new Option(w.exe+' • '+w.title.slice(0,90),w.id)));
     lastWindowsList=listKey;
   }
+  const explicit=snap.windows.find(w=>w.id===t?.selectedWindowId);
   const hint=snap.settings.profiles[active].targetHint;
-  if(hint){
-    const sameExe=snap.windows.filter(w=>w.exe===hint.exe);
-    const chosen=sameExe.find(w=>w.title===hint.title)||(sameExe.length===1?sameExe[0]:null);
+  if(explicit)byId('target').value=explicit.id;
+  else if(hint){
+    const sameExe=snap.windows.filter(w=>w.exe.toLowerCase()===hint.exe.toLowerCase());
+    const exact=sameExe.filter(w=>w.title===hint.title);
+    const chosen=exact.length===1?exact[0]:(sameExe.length===1?sameExe[0]:null);
     byId('target').value=chosen?.id||'';
   }else byId('target').value='';
   byId('vataga').hidden=active!=='vataga';

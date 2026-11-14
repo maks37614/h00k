@@ -5,7 +5,7 @@ const path = require('node:path');
 const fs = require('node:fs');
 const readline = require('node:readline');
 const { dockRects, floatingRects } = require('./layout.cjs');
-const { normalizeFloatingBounds, restoreFloatingBounds, floatingLayoutKey } = require('./workspace.cjs');
+const { normalizeFloatingBounds, restoreFloatingBounds, floatingLayoutKey, intersectionArea } = require('./workspace.cjs');
 const { PROVIDERS, PANELS, normalizeSettings, normalizeProfile, matchesTerminal, availablePanels } = require('./profiles.cjs');
 
 const WEBSITE = 'https://h00k.top/';
@@ -412,18 +412,32 @@ function candidateWindows() {
 function findTarget(provider) {
   const all = candidateWindows();
   const manualId = manualTargets.get(provider);
-  const explicit = all.find(item => item.id === manualId);
-  if (explicit) return explicit;
   const hint = settings.profiles[provider].targetHint;
+  // Windows can recycle HWNDs after a window closes. Never attach to an unrelated
+  // process merely because it inherited a previous manual window ID.
+  const explicit = all.find(item => item.id === manualId
+    && (!hint || item.exe.toLowerCase() === hint.exe.toLowerCase()));
+  if (explicit) return explicit;
   if (hint) {
-    const sameExecutable = all.filter(item => item.exe === hint.exe);
-    const selected = sameExecutable.find(item => item.title === hint.title);
-    if (selected) return selected;
-    // Dynamic price/PnL titles can change; recover only if exactly one window matches.
+    const sameExecutable = all.filter(item => item.exe.toLowerCase() === hint.exe.toLowerCase());
+    const exactTitle = sameExecutable.filter(item => item.title === hint.title);
+    if (exactTitle.length === 1) return exactTitle[0];
+    // Terminal titles can change with price/PnL. Recover only if unambiguous.
     if (sameExecutable.length === 1) return sameExecutable[0];
+    // A pinned target must never silently become a different (largest) instance.
+    return null;
   }
   return all.filter(item => matchesTerminal(provider, item))
     .sort((a,b) => (b.width*b.height)-(a.width*a.height))[0] || null;
+}
+function activeTerminalBounds() {
+  // Protect other recognized trading-terminal windows, including a manually
+  // selected executable not recognized by the built-in provider matchers.
+  const hinted = new Set(PROVIDERS.map(id => settings.profiles[id].targetHint?.exe?.toLowerCase()).filter(Boolean));
+  return candidateWindows()
+    .filter(item => !item.minimized && (PROVIDERS.some(id => matchesTerminal(id, item))
+      || hinted.has(item.exe.toLowerCase())))
+    .map(item => ({ id: item.id, bounds: externalRect(item) }));
 }
 function externalRect(item) {
   // The Win32 agent reports physical pixels. Electron expects DIP coordinates.
@@ -493,6 +507,10 @@ function preferredFloatingBounds(provider, id, profile, fallback, restore) {
   return restoreFloatingBounds(profile.floatingBounds[id], screen.getAllDisplays(), fallback);
 }
 function syncWindows() {
+  // All provider windows share the same desktop. Plan docked rectangles against
+  // other terminal windows AND already planned h00k panels to avoid overlaps.
+  const protectedTerminals = activeTerminalBounds();
+  const occupiedPanels = [];
   for (const provider of PROVIDERS) {
     const profile = settings.profiles[provider];
     const ready = settings.setupComplete && profile.enabled && (profile.autoAttach || manualAttached.has(provider));
@@ -542,6 +560,13 @@ function syncWindows() {
       hideDockedWindows(provider, 'Замало місця з вибраного боку; змініть сторону або розмір');
       continue;
     }
+    if (profile.mode !== 'floating' && boxes.some(box =>
+      protectedTerminals.some(other => other.id !== target.id && intersectionArea(box, other.bounds) > 0)
+      || occupiedPanels.some(other => intersectionArea(box, other) > 0))) {
+      hideDockedWindows(provider, 'Обрана сторона перекриває інший термінал або панель h00k; змініть сторону');
+      continue;
+    }
+    if (profile.mode !== 'floating') occupiedPanels.push(...boxes);
     const group = ensureContentWindows(provider, ids, profile.mode);
     ids.forEach((id,index) => {
       const win = group.get(id);
@@ -561,9 +586,11 @@ function syncWindows() {
 }
 function snapshot() {
   return {
-    settings, terminals: PROVIDERS.map(provider=>({
+    settings, platform: process.platform, nativeWindowAttachment: process.platform === 'win32',
+    terminals: PROVIDERS.map(provider=>({
       id:provider, label:LABELS[provider],
-      target:findTarget(provider), status:lastDockStatus[provider] || 'Очікування',
+      target:findTarget(provider), selectedWindowId:manualTargets.get(provider) || null,
+      status:lastDockStatus[provider] || 'Очікування',
     })),
     windows:candidateWindows().map(item=>({
       id:item.id, exe:item.exe, title:item.title, minimized:item.minimized, width:item.width, height:item.height,

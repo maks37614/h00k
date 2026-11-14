@@ -7,7 +7,7 @@ const path = require('node:path');
 const { createRequire } = require('node:module');
 const mainPath = path.join(__dirname, '..', 'main.cjs');
 
-function simulateDesktop() {
+function simulateDesktop(platform = process.platform) {
   const created = [];
   let nextWebId = 10;
   class FakeWebContents {
@@ -65,6 +65,7 @@ function simulateDesktop() {
       setSettings(value){settings=normalizeSettings(value)},
       getSettings(){return settings},
       acceptWindows, syncWindows, closeProvider, patchQuickProfile,
+      findTarget, candidateWindows, snapshot, runAgent, manualTargets,
       getWindows(){return windows},
     };
   `;
@@ -76,7 +77,7 @@ function simulateDesktop() {
       return actualRequire(id);
     },
     __dirname:path.dirname(mainPath),__filename:mainPath,
-    console, setTimeout, clearTimeout, URL, process,
+    console, setTimeout, clearTimeout, URL, process:{platform,pid:process.pid},
   };
   vm.runInNewContext(source,sandbox,{filename:mainPath});
   return {engine:sandbox.__audit,created,files};
@@ -144,4 +145,94 @@ test('always-on-top can be toggled for an independent floating pane without a ru
   assert.equal(win.isAlwaysOnTop(),false);
   engine.patchQuickProfile('metascalp',{alwaysOnTop:true});
   assert.equal(win.isAlwaysOnTop(),true);
+});
+
+const tiger={id:'200',pid:433,exe:'Tiger.Trade',title:'Tiger.Trade Terminal',
+  left:1000,top:80,width:420,height:220,minimized:false};
+const vataga={id:'300',pid:434,exe:'Vataga',title:'Vataga Orderbook',
+  left:100,top:580,width:500,height:280,minimized:false};
+const metaCompact={...meta,id:'100',left:80,top:80,width:380,height:220};
+
+test('auto-attachment runs independently for MetaScalp, Tiger.Trade and Vataga',()=>{
+  const {engine}=simulateDesktop('win32');
+  engine.setSettings({setupComplete:true,profiles:{
+    metascalp:{enabled:true,autoAttach:true,mode:'full'},
+    tiger:{enabled:true,autoAttach:true,mode:'full'},
+    vataga:{enabled:true,autoAttach:true,mode:'full'},
+  }});
+  engine.acceptWindows([metaCompact,tiger,vataga]);
+  for (const [provider,target] of [['metascalp',metaCompact],['tiger',tiger],['vataga',vataga]]) {
+    const win=engine.getWindows().get(provider)?.get('full');
+    assert.ok(win && win.isVisible(),provider+' is automatically docked');
+    assert.equal(win.getBounds().x,target.left+target.width);
+    assert.equal(win.webContents.urls.length,1,'site loaded exactly once for '+provider);
+    assert.equal(engine.findTarget(provider)?.id,target.id);
+  }
+  // Removing Tiger should not disturb the other two provider workspaces.
+  engine.acceptWindows([metaCompact,vataga]);
+  const tigerWin=engine.getWindows().get('tiger').get('full');
+  assert.equal(tigerWin.isVisible(),false);
+  assert.equal(engine.getWindows().get('metascalp').get('full').isVisible(),true);
+  assert.equal(engine.getWindows().get('vataga').get('full').isVisible(),true);
+  engine.acceptWindows([metaCompact,tiger,vataga]);
+  assert.equal(tigerWin.isVisible(),true);
+  assert.equal(tigerWin.webContents.urls.length,1,'reconnecting terminal does not reload an already loaded website');
+});
+
+test('first-run onboarding and manual-only profiles do not auto-attach',()=>{
+  const {engine}=simulateDesktop('win32');
+  engine.setSettings({setupComplete:false,profiles:{
+    metascalp:{enabled:true,autoAttach:true},tiger:{enabled:true,autoAttach:true},
+  }});
+  engine.acceptWindows([metaCompact,tiger]);
+  assert.equal(engine.getWindows().size,0,'no attachment before initial setup is saved');
+  engine.setSettings({setupComplete:true,profiles:{
+    metascalp:{enabled:true,autoAttach:false},tiger:{enabled:false,autoAttach:true},
+  }});
+  engine.acceptWindows([metaCompact,tiger]);
+  assert.equal(engine.getWindows().size,0,'manual attach and disabled profiles must not auto-attach');
+  engine.patchQuickProfile('metascalp',{autoAttach:true});
+  assert.ok(engine.getWindows().get('metascalp')?.get('full')?.isVisible());
+  assert.equal(engine.getWindows().has('tiger'),false);
+});
+
+test('a reused HWND or ambiguous pinned terminal never switches to another instance',()=>{
+  const {engine}=simulateDesktop('win32');
+  engine.setSettings({setupComplete:true,profiles:{metascalp:{
+    enabled:true,autoAttach:true,targetHint:{exe:'MetaScalp',title:'Chosen terminal'},
+  }}});
+  engine.manualTargets.set('metascalp','100');
+  const other={...metaCompact,id:'101',title:'Other terminal'};
+  const recycled={...metaCompact,id:'100',exe:'explorer',title:'Explorer'};
+  const third={...metaCompact,id:'102',title:'Another terminal'};
+  engine.acceptWindows([recycled,other,third]);
+  assert.equal(engine.findTarget('metascalp'),null,'do not follow reused HWND into a different executable');
+  assert.equal(engine.getWindows().has('metascalp'),false,'ambiguous pinned target remains hidden');
+  engine.acceptWindows([recycled,other]);
+  assert.equal(engine.findTarget('metascalp')?.id,'101','unambiguous same-exe recovery remains supported');
+  assert.ok(engine.getWindows().get('metascalp')?.get('full')?.isVisible());
+});
+
+test('docked panels never overlap a different trading terminal window',()=>{
+  const {engine}=simulateDesktop('win32');
+  engine.setSettings({setupComplete:true,profiles:{
+    metascalp:{enabled:true,autoAttach:true,mode:'full'},
+    tiger:{enabled:true,autoAttach:true,mode:'full'},
+  }});
+  const first={...metaCompact,left:80,width:550,height:300};
+  const second={...tiger,left:700,top:100,width:600,height:380};
+  engine.acceptWindows([first,second]);
+  assert.equal(engine.getWindows().has('metascalp'),false,'blocked panel would cover Tiger terminal');
+  assert.match(engine.snapshot().terminals.find(x=>x.id==='metascalp').status,/перекриває інший термінал/);
+  assert.ok(engine.getWindows().get('tiger')?.get('full')?.isVisible());
+});
+
+test('macOS and Linux do not start the Windows native discovery agent',()=>{
+  for (const platform of ['darwin','linux']) {
+    const {engine}=simulateDesktop(platform);
+    assert.equal(engine.snapshot().nativeWindowAttachment,false);
+    assert.doesNotThrow(()=>engine.runAgent());
+    assert.equal(engine.getWindows().size,0);
+  }
+  assert.equal(simulateDesktop('win32').engine.snapshot().nativeWindowAttachment,true);
 });

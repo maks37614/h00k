@@ -55,3 +55,13 @@ test('branded settings title bar reserves a safe drag region for native Windows 
   assert.match(css, /app-region:drag/);
   assert.match(main, /titleBarOverlay: \{ color: '#0b2131', symbolColor: '#67e8f9', height: 40 \}/);
 });
+
+test('platform support and selected HWND remain visible to the local settings UI',()=>{
+  const html=fs.readFileSync(path.join(__dirname,'..','settings.html'),'utf8');
+  const main=fs.readFileSync(path.join(__dirname,'..','main.cjs'),'utf8');
+  assert.match(main,/nativeWindowAttachment: process\.platform === 'win32'/);
+  assert.match(main,/selectedWindowId:manualTargets\.get\(provider\)/);
+  assert.match(html,/snap\.nativeWindowAttachment!==false/);
+  assert.match(html,/w\.id===t\?\.selectedWindowId/);
+  assert.match(html,/Для автоматичного прикріплення мають бути увімкнені обидва параметри/);
+});

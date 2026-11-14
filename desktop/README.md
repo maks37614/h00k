@@ -366,3 +366,28 @@ window controls and top-right docking gear as the main app. A separate sandboxed
 website view loads below the titlebar only when layout permits. Docked (seamless)
 panels keep their minimal overlay gear and do not acquire the extra 54 px strip;
 this maintains their existing gapless terminal alignment.
+
+## Automatic attachment audit (Windows-only)
+
+- The single persistent Win32 agent discovers visible application windows and
+  h00k keeps one independent automatic attachment profile **per provider**:
+  MetaScalp, Tiger.Trade and Vataga. Enabling both 'Enable terminal' and
+  'Attach automatically' is necessary. Manual 'Attach now' lasts only for that run
+  when automatic attachment is disabled.
+- A pinned/manual window cannot silently switch to a different instance if an
+  HWND is recycled or multiple same-executable windows become ambiguous.
+  In that situation, select the specific window again.
+- Docked panels never cover detected windows belonging to other recognized
+  trading terminals or manually selected executable targets. If the chosen
+  side is occupied, h00k hides that panel and reports the conflict; floating
+  panels remain independently movable and may intentionally overlap.
+- A single profile selects ONE window per provider. Multiple windows of the
+  same terminal can be chosen manually; it does not automatically create a
+  separate dock for every instance.
+- **OS scope:** Native window discovery/docking is Windows-only. macOS and
+  Linux have no agent or native auto-attachment implementation in this release;
+  standalone HTML content may run in a development Electron environment but
+  no non-Windows installer has been built.
+- CI validates logic using simulated windows plus a read-only Win32 agent
+  smoke test. Physical tests with all three real terminals (Windows 10/11,
+  admin/UAC, multi-monitor, DPI and minimized windows) are still needed.
