@@ -43,7 +43,7 @@ test('durable Liq archive batch uses idempotent event IDs and greatest cumulativ
   assert.equal(archive.stats().queued,0);
   assert.equal(archive.stats().batches,1);
   assert.equal(archive.stats().duplicateQueued,1);
-  const insert=calls.find(c=>c.sql.includes('ON CONFLICT'));
+  const insert=calls.find(c=>c.sql.includes('INSERT INTO h00k_liquidation_events'));
   assert.ok(insert);
   assert.match(insert!.sql,/ON CONFLICT \(exchange,symbol,event_id\)/);
   assert.match(insert!.sql,/EXCLUDED\.observed_notional > h00k_liquidation_events\.observed_notional/);
