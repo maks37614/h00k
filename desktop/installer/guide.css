@@ -1,10 +1,10 @@
 :root{font:14px/1.5 "Segoe UI",system-ui,sans-serif;background:#070d18;color:#e9f7fd;color-scheme:dark}
-*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at 50% 0%,#0a2636,#080e19 70%)}.guide{min-height:100vh;padding:25px 34px;display:flex;flex-direction:column;gap:14px}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at 50% 0%,#0a2636,#080e19 70%)}.guide{min-height:100vh;padding:65px 34px 25px;display:flex;flex-direction:column;gap:14px}
 header,.intro,.steps-head,footer{display:flex;align-items:center;justify-content:space-between;gap:12px}
 header{padding-bottom:18px;border-bottom:1px solid #284456}.brand{display:flex;align-items:baseline;gap:12px}.brand strong{color:#5de4ee;font-size:24px;letter-spacing:-2px}
 .brand span{color:#7e9db0;letter-spacing:2px;font-size:10px}header label{display:flex;align-items:center;gap:10px;color:#9dbbc9;font-size:12px}
 select{background:#10283a;color:#c5eef9;border:1px solid #37647b;padding:7px 10px;border-radius:8px}
-.intro{justify-content:flex-start;padding:18px 0}.eyemark{font-size:38px;letter-spacing:-10px;margin-right:14px;color:#43e8f1;text-shadow:0 0 24px #19d6f7}
+.intro{justify-content:flex-start;padding:18px 0}.eyemark{width:116px;height:56px;object-fit:contain;margin-right:14px;flex:none;filter:drop-shadow(0 0 15px #19d6f744)}
 h1{font-size:28px;line-height:1.1;margin:0}p{color:#94afbf;margin:3px 0;font-size:13px}
 .steps-head{padding:5px 0;color:#77ddec;font-size:12px;font-weight:650}.segments{display:flex;gap:5px}
 .segments span{width:35px;height:4px;background:#174253;border-radius:8px}.segments span.active{background:#37ebee;box-shadow:0 0 7px #18c8eec5}
@@ -18,3 +18,10 @@ button.primary{background:#37dfdc;color:#062a32;border-color:#2ee1e0;font-weight
 button.launch{border-color:#3f8c8f;color:#75ecde}.fill{flex:1}
 button:focus-visible,select:focus-visible{outline:2px solid #71fff5;outline-offset:2px}
 @media(max-width:700px){.guide{padding:18px}footer{flex-wrap:wrap}.step{padding:11px 13px}.brand span{display:none}}
+
+.native-titlebar{position:fixed;top:0;left:0;right:0;z-index:5;height:40px;display:flex;align-items:center;
+padding:0 155px 0 20px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+background:#0b2131;border-bottom:1px solid #255063;color:#afd9e7;font-size:11px;font-weight:650;
+-webkit-app-region:drag;app-region:drag}
+.native-titlebar span{overflow:hidden;text-overflow:ellipsis}
+@media(max-width:700px){.guide{padding-top:58px}.eyemark{width:90px;height:44px}}

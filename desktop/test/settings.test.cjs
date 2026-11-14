@@ -42,3 +42,13 @@ test('first-run welcome and branded assets are bundled for the settings window',
   assert.match(logo, /robot-eye-blink/);
   for (const file of ['settings.css','robot-logo.svg']) assert.ok(pkg.build.files.includes(file));
 });
+
+test('branded settings title bar reserves a safe drag region for native Windows controls', () => {
+  const html = fs.readFileSync(path.join(__dirname, '..', 'settings.html'),'utf8');
+  const css = fs.readFileSync(path.join(__dirname, '..', 'settings.css'),'utf8');
+  const main = fs.readFileSync(path.join(__dirname, '..', 'main.cjs'),'utf8');
+  assert.match(html, /class="native-titlebar"/);
+  assert.match(css, /native-titlebar/);
+  assert.match(css, /app-region:drag/);
+  assert.match(main, /titleBarOverlay: \{ color: '#0b2131', symbolColor: '#67e8f9', height: 40 \}/);
+});

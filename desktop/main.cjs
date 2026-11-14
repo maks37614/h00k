@@ -165,6 +165,8 @@ function createSettingsWindow() {
   settingsWindow = new BrowserWindow({
     title: 'h00k Desktop • Налаштування прикріплення', width: 780, height: 830, minWidth: 580, minHeight: 590,
     backgroundColor: '#070d18', autoHideMenuBar: true,
+    titleBarStyle: 'hidden',
+    titleBarOverlay: { color: '#0b2131', symbolColor: '#67e8f9', height: 40 },
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'), nodeIntegration: false,
       contextIsolation: true, sandbox: true,

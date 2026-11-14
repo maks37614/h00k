@@ -122,3 +122,17 @@ button.danger:hover{background:#492735}
   .head-brand img{width:99px;height:49px}
 }
 @media(prefers-reduced-motion:reduce){button.action,.tabs button,.grid label{transition:none}}
+
+/* The local Windows title bar uses the same dark/navy branding as the app. */
+body{padding-top:60px}
+.native-titlebar{
+  position:fixed;top:0;left:0;right:0;height:40px;z-index:10;
+  display:flex;align-items:center;
+  padding:0 150px 0 17px;max-width:100%;
+  color:#b0dfeb;letter-spacing:.3px;font-weight:650;font-size:11px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  border-bottom:1px solid #255063;background:#0b2131;
+  -webkit-app-region:drag;app-region:drag
+}
+.native-titlebar span{overflow:hidden;text-overflow:ellipsis}
+@media(max-width:690px){body{padding-top:54px}}

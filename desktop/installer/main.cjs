@@ -1,6 +1,7 @@
 'use strict';
 
-const {app,BrowserWindow,dialog,ipcMain,shell}=require('electron');
+const {app,BrowserWindow,dialog,ipcMain,shell,nativeTheme}=require('electron');
+if (process.platform === 'win32' && nativeTheme) nativeTheme.themeSource = 'dark';
 const fs=require('node:fs');
 const path=require('node:path');
 const crypto=require('node:crypto');
@@ -59,7 +60,12 @@ function showGuide() {
     guideWindow.show();guideWindow.focus();
     return true;
   }
-  guideWindow=contentWindow(GUIDE,{width:870,height:650,minWidth:710,minHeight:530,title:'h00k Quick Start',frame:true});
+  guideWindow=contentWindow(GUIDE,{
+    width:870,height:650,minWidth:710,minHeight:530,
+    title:'h00k Desktop • Quick Start',frame:true,
+    titleBarStyle:'hidden',
+    titleBarOverlay:{color:'#0b2131',symbolColor:'#67e8f9',height:40},
+  });
   guideWindow.on('closed',()=>{guideWindow=null;});
   return true;
 }

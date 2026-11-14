@@ -32,7 +32,8 @@
       "guide.js",
       "locales.json",
       "guide.css",
-      "!node_modules/**"
+      "!node_modules/**",
+      "h00k-logo.svg"
     ],
     "extraResources": [
       {

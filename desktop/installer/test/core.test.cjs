@@ -79,3 +79,17 @@ test('portable manifest is generated from an existing NSIS .exe and actual unpac
   assert.match(prepare,/expectedInstalledBytes/);
   assert.match(prepare,/guide.json/);
 });
+
+test('setup guide uses the same h00k robot artwork and styled window controls', () => {
+  const html = fs.readFileSync(path.join(__dirname, '..', 'guide.html'), 'utf8');
+  const css = fs.readFileSync(path.join(__dirname, '..', 'guide.css'), 'utf8');
+  const logo = fs.readFileSync(path.join(__dirname, '..', 'h00k-logo.svg'), 'utf8');
+  const main = fs.readFileSync(path.join(__dirname, '..', 'main.cjs'), 'utf8');
+  const pkg = require('../package.json');
+  assert.match(html, /class="native-titlebar"/);
+  assert.match(html, /h00k-logo\.svg/);
+  assert.match(css, /app-region:drag/);
+  assert.match(logo, /robot-eye-blink/);
+  assert.match(main, /titleBarStyle:'hidden'/);
+  assert.ok(pkg.build.files.includes('h00k-logo.svg'));
+});
