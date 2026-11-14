@@ -1,4 +1,4 @@
-# h00k Desktop — Smart Dock (Windows MVP)
+# h00k Desktop — h00k Desktop (Windows MVP)
 
 This is a separate Electron application for the existing https://h00k.top website.
 It does not execute exchange scanners on the user's computer or change VPS deployment.
@@ -17,14 +17,14 @@ It does not execute exchange scanners on the user's computer or change VPS deplo
 - Follow terminal movement and resizing, hide docked views when it is minimized.
 - Manual OS window selector if a terminal executable has an unexpected name.
 - Per-terminal dock size, automatic attach, follow and always-on-top settings.
-- A shared h00k web login session. Smart Dock never asks for exchange API keys.
+- A shared h00k web login session. h00k Desktop never asks for exchange API keys.
 - An independent full h00k browser window accessible from the settings window.
 
 **Scope:** The selectable panels are real h00k pages: Screener, Formations, Early W/M,
 HookChart Terminal, Surveillance and Replay. Individual OI, liquidations, quality-score
 and density micro-widgets are not yet isolated as independent components. An
 actual native child window embedded *inside* the terminal is not implemented:
-these are independent Windows top-level windows arranged by Smart Dock.
+these are independent Windows top-level windows arranged by h00k Desktop.
 
 **Vataga:** Vataga docking uses Win32 window detection or manual selection.
 Vataga's third-party screener integration is publicly documented but its
@@ -120,7 +120,7 @@ replaced by updating the Linux VPS.
 Email/password sign-in remains the practical option in the embedded view.
 Google OAuth through embedded webviews is not guaranteed (Google restricts
 embedded user-agents); this version does not claim to solve external-browser
-OAuth callback/session transfer. Do not enter exchange API keys in Smart Dock.
+OAuth callback/session transfer. Do not enter exchange API keys in h00k Desktop.
 
 **Vataga limitation:** Public integration instructions exist (enable application
 integration in Settings > General > Other, and select orderbook > Bind to
