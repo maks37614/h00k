@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { randomUUID } from 'node:crypto';
+import { persistenceMetrics } from './persistenceMetrics';
 import { publishSurveillance } from './surveillanceEvents';
 import {
   SurveillanceCoin,
@@ -106,6 +107,8 @@ export function loadSurveillanceStore(): UserSurveillanceStore {
 }
 
 export function saveSurveillanceStore(store: UserSurveillanceStore): boolean {
+  const started = performance.now();
+  let bytes = 0;
   try {
     ensureDataDir();
     let safeStore: UserSurveillanceStore = store;
@@ -121,10 +124,14 @@ export function saveSurveillanceStore(store: UserSurveillanceStore): boolean {
     }
     storeCache = safeStore;
     const temporaryFile = `${SURVEILLANCE_FILE}.tmp`;
-    fs.writeFileSync(temporaryFile, JSON.stringify(safeStore), 'utf-8');
+    const payload = JSON.stringify(safeStore);
+    bytes = Buffer.byteLength(payload);
+    fs.writeFileSync(temporaryFile, payload, 'utf-8');
     fs.renameSync(temporaryFile, SURVEILLANCE_FILE);
+    persistenceMetrics.record('surveillance', performance.now() - started, bytes, true);
     return true;
   } catch (err) {
+    persistenceMetrics.record('surveillance', performance.now() - started, bytes, false);
     console.error('Failed to save surveillance.json:', err);
     return false;
   }
