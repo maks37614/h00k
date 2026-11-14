@@ -80,6 +80,33 @@ export function getUserLanguage(userId?: string): SupportedLanguage {
   return normalizeLanguage(getUserTelegram(userId)?.language);
 }
 
+/** User actions must not acknowledge a change that failed to reach disk. */
+function persistAlertEdit(next: PriceAlert[]): void {
+  if (!saveAlerts(next)) throw new Error('Не вдалося зберегти цінові сповіщення. Повторіть спробу.');
+}
+
+/** A durable deletion tombstone prevents an out-of-date browser snapshot from
+ * restoring an alert. Write tombstones first so even a later alerts.json
+ * rename failure cannot rearm a deleted alert after a server restart. */
+function commitAlertDeletion(identities: string[], next: PriceAlert[]): void {
+  const added = identities.filter(identity => !deletedAlertIds.has(identity));
+  for (const identity of added) deletedAlertIds.add(identity);
+  try {
+    saveDeletedAlertIds();
+  } catch (error) {
+    for (const identity of added) deletedAlertIds.delete(identity);
+    throw error;
+  }
+  if (!saveAlerts(next)) {
+    // The tombstone file is already durable; retain the same logical deletion
+    // in memory, rather than continuing to monitor the now-deleted alert.
+    alertsCache = next;
+    alertsByUser = null;
+    indexedAlerts = null;
+    console.error('[Alerts] Tombstone saved but alerts.json rewrite failed; deletion remains effective');
+  }
+}
+
 // --- Alerts persistence ---
 export function loadAlerts(): PriceAlert[] {
   loadDeletedAlertIds();
@@ -88,13 +115,17 @@ export function loadAlerts(): PriceAlert[] {
     ensureDataDir();
     if (fs.existsSync(ALERTS_FILE)) {
       const raw = fs.readFileSync(ALERTS_FILE, 'utf-8');
-      alertsCache = JSON.parse(raw);
+      const parsed: unknown = JSON.parse(raw);
+      if (!Array.isArray(parsed)) throw new Error('Invalid alerts.json: expected an array');
+      alertsCache = parsed;
     } else {
       alertsCache = [];
     }
   } catch (err) {
+    // An unreadable/corrupt store must never be treated as empty: a later
+    // successful save would otherwise permanently overwrite existing alerts.
     console.error('Failed to read alerts.json:', err);
-    alertsCache = [];
+    throw err;
   }
   isAlertsLoaded = true;
   alertsCache = alertsCache.filter(a => !deletedAlertIds.has(alertIdentity(a.userId || 'guest', a.id)));
@@ -146,13 +177,16 @@ export function loadHistory(): AlertHistoryItem[] {
     ensureDataDir();
     if (fs.existsSync(HISTORY_FILE)) {
       const raw = fs.readFileSync(HISTORY_FILE, 'utf-8');
-      historyCache = JSON.parse(raw);
+      const parsed: unknown = JSON.parse(raw);
+      if (!Array.isArray(parsed)) throw new Error('Invalid alert_history.json: expected an array');
+      historyCache = parsed;
     } else {
       historyCache = [];
     }
   } catch (err) {
+    // Preserve corrupt/unreadable history for recovery instead of wiping it.
     console.error('Failed to read alert_history.json:', err);
-    historyCache = [];
+    throw err;
   }
   isHistoryLoaded = true;
   return historyCache;
@@ -224,7 +258,8 @@ export function addHistoryItem(item: AlertHistoryItem): void {
     entry.userId === item.userId &&
     !(item.alertId && entry.alertId === item.alertId && (entry.deliveryEpoch ?? 0) === (item.deliveryEpoch ?? 0))
   )].slice(0, 500);
-  saveHistory([...ownHistory, ...history.filter(entry => entry.userId !== item.userId)]);
+  if (!saveHistory([...ownHistory, ...history.filter(entry => entry.userId !== item.userId)]))
+    throw new Error('Не вдалося зберегти історію сповіщень');
 }
 
 export function clearAlertHistory(userId?: string): number {
@@ -232,7 +267,9 @@ export function clearAlertHistory(userId?: string): number {
   const history = loadHistory();
   const remaining = history.filter((h) => h.userId !== userId);
   const clearedCount = history.length - remaining.length;
-  return saveHistory(remaining) ? clearedCount : 0;
+  if (!clearedCount) return 0;
+  if (!saveHistory(remaining)) throw new Error('Не вдалося очистити історію сповіщень');
+  return clearedCount;
 }
 
 export function deleteHistoryItem(id: string, userId?: string): boolean {
@@ -240,7 +277,8 @@ export function deleteHistoryItem(id: string, userId?: string): boolean {
   const history = loadHistory();
   const filtered = history.filter((h) => !(h.id === id && h.userId === userId));
   if (filtered.length !== history.length) {
-    return saveHistory(filtered);
+    if (!saveHistory(filtered)) throw new Error('Не вдалося видалити подію з історії');
+    return true;
   }
   return false;
 }
@@ -305,8 +343,7 @@ export function createAlert(
     language: effectiveLanguage,
   };
 
-  alerts.unshift(newAlert);
-  saveAlerts(alerts);
+  persistAlertEdit([newAlert, ...alerts]);
   return newAlert;
 }
 
@@ -332,13 +369,14 @@ export function createAlertsBatch(
   const userTg = getUserTelegram(userId);
   const effectiveLanguage = normalizeLanguage(language || userTg?.language);
 
+  const staged = [...alerts];
   const createdAlerts: PriceAlert[] = [];
   let index = 0;
 
   for (const item of alertsList) {
     const alertId = item.id || `alert_${Date.now()}_${Math.random().toString(36).substring(2, 8)}_${index++}`;
     if (deletedAlertIds.has(alertIdentity(userId, alertId))) continue;
-    const existing = alerts.find(a => a.id === alertId && a.userId === userId);
+    const existing = staged.find(a => a.id === alertId && a.userId === userId);
     if (existing) {
       createdAlerts.push(existing);
       continue;
@@ -360,11 +398,11 @@ export function createAlertsBatch(
       language: normalizeLanguage(item.language || effectiveLanguage),
     };
 
-    alerts.unshift(newAlert);
+    staged.unshift(newAlert);
     createdAlerts.push(newAlert);
   }
 
-  saveAlerts(alerts);
+  if (createdAlerts.some(alert => !alerts.includes(alert))) persistAlertEdit(staged);
   return createdAlerts;
 }
 
@@ -479,18 +517,19 @@ export function createSetupAlertsGroup(
   ];
 
   const alerts = loadAlerts();
+  const staged = [...alerts];
   for (const newAlert of alertsToCreate) {
     if (deletedAlertIds.has(alertIdentity(userId, newAlert.id))) continue;
-    const existingIdx = alerts.findIndex((a) => a.id === newAlert.id && a.userId === userId);
+    const existingIdx = staged.findIndex((a) => a.id === newAlert.id && a.userId === userId);
     if (existingIdx >= 0) {
       // Repeated analysis must not rearm a fired setup or undo a manual pause.
-      Object.assign(newAlert, alerts[existingIdx]);
+      Object.assign(newAlert, staged[existingIdx]);
     } else {
-      alerts.unshift(newAlert);
+      staged.unshift(newAlert);
     }
   }
 
-  saveAlerts(alerts);
+  if (staged.length !== alerts.length) persistAlertEdit(staged);
   return { success: true, alerts: alertsToCreate.filter(a => !deletedAlertIds.has(alertIdentity(userId, a.id))) };
 }
 
@@ -563,7 +602,7 @@ export function syncUserAlerts(
     });
   if (changed) {
     const otherAlerts = all.filter((a) => a.userId !== userId);
-    saveAlerts([...mergedUserAlerts, ...otherAlerts]);
+    persistAlertEdit([...mergedUserAlerts, ...otherAlerts]);
   }
 
   return mergedUserAlerts;
@@ -574,24 +613,19 @@ export function deleteAlert(id: string, userId?: string): boolean {
   if (!userId || userId === 'guest') return false;
   const alerts = loadAlerts();
   const initialCount = alerts.length;
-  // Record deletion even when it arrives before a delayed create request.
-  deletedAlertIds.add(alertIdentity(userId, id));
-  saveDeletedAlertIds();
   const filtered = alerts.filter(a => !(a.id === id && a.userId === userId));
-
-  if (filtered.length !== initialCount) {
-    saveAlerts(filtered);
-    return true;
-  }
-  return false;
+  // Record the tombstone even if DELETE arrives before a delayed create.
+  commitAlertDeletion([alertIdentity(userId, id)], filtered);
+  return filtered.length !== initialCount;
 }
 
 // Toggle alert active state
 export function toggleAlert(id: string, userId?: string, isActive?: boolean): PriceAlert | null {
   if (!userId || userId === 'guest') return null;
   const alerts = loadAlerts();
-  const alert = alerts.find((a) => a.id === id && a.userId === userId);
-  if (alert) {
+  const index = alerts.findIndex((a) => a.id === id && a.userId === userId);
+  if (index >= 0) {
+    const alert = { ...alerts[index] };
     alert.isActive = isActive ?? !alert.isActive;
     // Only this explicit user action starts a new delivery cycle.
     if (alert.isActive && alert.triggered) {
@@ -600,7 +634,9 @@ export function toggleAlert(id: string, userId?: string, isActive?: boolean): Pr
       alert.triggeredAt = undefined;
       alert.triggeredPrice = undefined;
     }
-    saveAlerts(alerts);
+    const staged = alerts.slice();
+    staged[index] = alert;
+    persistAlertEdit(staged);
     return alert;
   }
   return null;
@@ -616,11 +652,10 @@ export function clearTriggeredAlerts(userId?: string): number {
     return false;
   });
   const clearedCount = alerts.length - remaining.length;
-  for (const removed of alerts) {
-    if (!remaining.includes(removed)) deletedAlertIds.add(alertIdentity(removed.userId || 'guest', removed.id));
-  }
-  if (clearedCount > 0) saveDeletedAlertIds();
-  saveAlerts(remaining);
+  if (clearedCount === 0) return 0;
+  const identities = alerts.filter(alert => alert.triggered && alert.userId === userId)
+    .map(alert => alertIdentity(userId, alert.id));
+  commitAlertDeletion(identities, remaining);
   return clearedCount;
 }
 
