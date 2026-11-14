@@ -322,3 +322,20 @@ parent h00k project and a duplicate NSIS executable. CI rejects duplicate
 workers and a launcher app.asar larger than 30MB. Use the Windows CI workflow
 for this reproducible packaging path; do not run electron-builder from the
 nested installer folder in an unisolated checkout.
+
+## Unreleased: unified dark desktop surfaces and first-run experience
+
+- A first installation opens the local h00k settings with a cyan-accented three-step
+  welcome panel. Docking remains paused until the user saves/attaches settings.
+- Legacy smartdock.json profiles are treated as already configured; their existing
+  automatic attachment is preserved without requiring a new onboarding step.
+- A full standalone h00k Desktop window now has the same isolated top-right gear
+  as attached panels. Its native menu opens general or terminal-specific settings.
+- The settings window uses the existing robot logo, a dark graphite/cyan palette,
+  accessible keyboard focus, and responsive controls. Assets are packaged locally.
+- No desktop changes in this feature branch update the website or VPS, and the
+  final Windows installer has not been built or merged.
+
+Manual checks remaining: first launch on Windows, caption/theme under light-mode
+Windows, toolbar overlay against actual h00k pages, focus and DPI at 100–150%,
+and re-launch from a pre-existing smartdock.json file.

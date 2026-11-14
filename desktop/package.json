@@ -27,6 +27,8 @@
       "profiles.cjs",
       "layout.cjs",
       "settings.html",
+      "robot-logo.svg",
+      "settings.css",
       "toolbar.html",
       "toolbar-preload.cjs",
       "workspace.cjs"
