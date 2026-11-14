@@ -40,7 +40,7 @@ test('staging is idempotent, atomic and does not replace JSON canonical state',(
   assert.match(sql,new RegExp('CREATE TABLE IF NOT EXISTS '+name));
  }
  assert.match(cli,/liveCutover:false/);
- assert.match(cli,/Specify exactly --dry-run, --backup, --apply or --verify/);
+ assert.match(cli,/Specify --dry-run, --backup, --apply, --verify or --ready/);
  assert.match(cli,/createPersonalStateBackup\(snapshot\)/);
 });
 
