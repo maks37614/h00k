@@ -20,6 +20,10 @@ export type SharedMarketTicker = {
   low24h: number;
   change24h: number;
   volume24hUsd: number;
+  /** Time of last verified exchange quote/trade (milliseconds). */
+  exchangeTime: number;
+  /** Server reception clock; never refreshed by order-book heartbeats. */
+  receivedAt: number;
 };
 type Entry = {
   key: string;
@@ -69,7 +73,8 @@ export class SharedExchangeStreamHandle {
       // The registry still drops each consumer's listeners at release time.
       source.setMaxListeners(0);
       entry = { key, source, refs: 0, lastResyncAt: 0, lastErrorLoggedAt: 0,
-        ticker: { price: 0, high24h: 0, low24h: 0, change24h: 0, volume24hUsd: 0 },
+        ticker: { price: 0, high24h: 0, low24h: 0, change24h: 0, volume24hUsd: 0,
+          exchangeTime: 0, receivedAt: 0 },
         bids: new Map(), asks: new Map(), depthSequence: 0, depthEventTime: 0, depthReceivedAt: 0,
         depthRevision: 0, normalizedDepth: null };
       entries.set(key, entry);
@@ -93,22 +98,37 @@ export class SharedExchangeStreamHandle {
       });
       // Update price once per market rather than once for every owner.
       // Workers read the same public values but retain their own alert state.
+      const acceptQuote = (price: number, eventTime: number): boolean => {
+        const now = Date.now();
+        // Do not fabricate a fresh quote from socket traffic, depth packets,
+        // missing timestamps or an older cross-topic WS observation.
+        if (!Number.isFinite(price) || price <= 0 ||
+            !Number.isFinite(eventTime) || !isFreshDepthTime(eventTime, now) ||
+            eventTime < shared.ticker.exchangeTime) return false;
+        shared.ticker.price = price;
+        shared.ticker.exchangeTime = eventTime;
+        shared.ticker.receivedAt = now;
+        return true;
+      };
       source.on('price', (data: {
         price: number; high24h: number; low24h: number;
-        volume24hUsd: number; change24h?: number;
+        volume24hUsd: number; change24h?: number; time?: number;
       }) => {
-        if (Number.isFinite(data.price) && data.price > 0) shared.ticker.price = data.price;
+        if (!acceptQuote(data.price, data.time!)) return;
         if (Number.isFinite(data.high24h) && data.high24h >= 0) shared.ticker.high24h = data.high24h;
         if (Number.isFinite(data.low24h) && data.low24h >= 0) shared.ticker.low24h = data.low24h;
         if (Number.isFinite(data.volume24hUsd) && data.volume24hUsd >= 0)
           shared.ticker.volume24hUsd = data.volume24hUsd;
         if (Number.isFinite(data.change24h)) shared.ticker.change24h = data.change24h!;
       });
-      source.on('trade', (trade: { price: number }) => {
-        if (Number.isFinite(trade.price) && trade.price > 0) shared.ticker.price = trade.price;
+      source.on('trade', (trade: { price: number; time?: number }) => {
+        acceptQuote(trade.price, trade.time!);
       });
       source.on('status', (status: string) => {
         if (status !== 'LIVE') {
+          // Preserve last known price for historical context, but invalidate
+          // its realtime freshness immediately on disconnect/resync.
+          shared.ticker.receivedAt = 0;
           shared.normalizedDepth = null;
           shared.depthRevision++;
           shared.depthSequence = 0;
@@ -189,6 +209,17 @@ export class SharedExchangeStreamHandle {
 
   get status() { return this.entry.source.status; }
   get marketTicker(): Readonly<SharedMarketTicker> { return this.entry.ticker; }
+  /** A fresh quote alone is not enough: the associated public depth stream
+   * must also have synchronized after any outage or reconnect. */
+  hasFreshMarketQuote(maxAgeMs = 15_000): boolean {
+    const ticker = this.entry.ticker;
+    const now = Date.now();
+    return !this.disposed && this.entry.source.status === 'LIVE' &&
+      ticker.price > 0 && ticker.receivedAt > 0 &&
+      ticker.exchangeTime > 0 && now >= ticker.receivedAt &&
+      now - ticker.receivedAt <= maxAgeMs &&
+      isFreshDepthTime(ticker.exchangeTime, now, maxAgeMs);
+  }
 
   /** Only synchronous listeners of the same validated source packet can
    * reuse the parsed numeric arrays. Replay and invalid packets are rechecked
