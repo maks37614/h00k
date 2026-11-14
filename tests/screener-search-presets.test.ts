@@ -137,7 +137,9 @@ test('Screener volume arrow changes only local filter mode, preserving preset an
   const editor = source('../src/components/profile/ProfileScreenerSearchSettings.tsx');
   assert.match(screener, /t\('screenerVolume24h'\)/);
   assert.match(screener, /data-screener-volume-direction/);
-  assert.match(screener, /setVolumeMode\(current => current === 'to' \? 'from' : 'to'\)/);
+  assert.match(screener, /setVolumeMode\(nextMode\)/);
+  assert.match(screener, /if \(sortBy === 'volume'\) setSortOrder\(preferredVolumeSortOrder\(nextMode\)\)/);
+  assert.match(screener, /if \(sortBy === 'volume'\) setSortOrder\(preferredVolumeSortOrder\(volumeMode\)\)/);
   assert.match(screener, /isVolumeWithinCap\(coin\.volumeUsd, maxVolumeUsd, volumeMode\)/);
   assert.match(screener, /mode=\{volumeMode\}/);
   assert.match(screener, /volumeMode, advancedFilters, sortBy/);
