@@ -751,6 +751,23 @@ export interface ArchivedFormation {
   savedAtTimestamp: number;
 }
 
+/** CoinGecko Demo free Token Info: address-resolved holder data only.
+ * The provider does not expose top-holder addresses or historical changes on Demo.
+ */
+export interface CoinGeckoHolderSnapshot {
+  source: 'CoinGecko Demo';
+  symbol: string;
+  status: 'available' | 'not_configured' | 'unmapped' | 'ambiguous' |
+    'unavailable' | 'rate_limited' | 'upstream_error';
+  count: number | null;
+  /** Raw provider buckets (top_10, 11_20/11_30 etc.), never guessed. */
+  distribution: Record<string, number> | null;
+  lastUpdated: string | null;
+  network: string | null;
+  contractAddress: string | null;
+  detail: string;
+}
+
 export interface SmartAnalysisData {
   symbol: string;
   exchange: ExchangeId;
