@@ -242,14 +242,31 @@ function indicatorIndexAtTime(candles:Candle[],t:number){if(candles.length<2)ret
 export function IndicatorDock({ids,candles,oi,viewport,rightPadding=0,rightPaddingBars=0,onToggle}:{ids:IndicatorId[],candles:Candle[],oi:{binance:OIPoint[];bybit:OIPoint[]},viewport:Viewport,rightPadding?:number,rightPaddingBars?:number,onToggle:(id:IndicatorId)=>void}){
  const svgId=useId().replace(/:/g,'');
  const ref=useRef<HTMLDivElement>(null),[width,setWidth]=useState(1000),[hover,setHover]=useState<{id:IndicatorId;t:number}|null>(null);
+ const indicatorCache=useRef<{
+   candles:Candle[]; oi:{binance:OIPoint[];bybit:OIPoint[]};
+   idsKey:string; startI:number; endI:number;
+   results:Map<IndicatorId,ReturnType<typeof indicatorData>>;
+ }|null>(null);
  useEffect(()=>{const el=ref.current;if(!el)return;const update=()=>setWidth(Math.max(HOOKCHART_PRICE_SCALE_WIDTH+40,el.getBoundingClientRect().width||1000));update();const ro=new ResizeObserver(update);ro.observe(el);return()=>ro.disconnect()},[ids.length>0,candles.length>0]);
  if(!ids.length||!candles.length)return null;
- const AX=HOOKCHART_PRICE_SCALE_WIDTH,plotW=hookChartPlotWidth(width),{step,virtualEnd,virtualStart}=hookChartHorizontalRange(candles.length,plotW,viewport,rightPaddingBars,rightPadding),startI=Math.max(0,Math.floor(virtualStart)-2),endI=Math.min(candles.length,Math.ceil(virtualEnd)+2),startT=candles[startI]?.t??-Infinity,endT=candles[Math.max(startI,endI-1)]?.t??Infinity,calcCandles=candles.slice(Math.max(0,startI-320),endI);
+ const AX=HOOKCHART_PRICE_SCALE_WIDTH,plotW=hookChartPlotWidth(width),{step,virtualEnd,virtualStart}=hookChartHorizontalRange(candles.length,plotW,viewport,rightPaddingBars,rightPadding),startI=Math.max(0,Math.floor(virtualStart)-2),endI=Math.min(candles.length,Math.ceil(virtualEnd)+2),startT=candles[startI]?.t??-Infinity,endT=candles[Math.max(startI,endI-1)]?.t??Infinity;
+ // Hovering OI updates only its crosshair/labels. Do not recompute every
+ // active indicator from hundreds of candles for each pointer movement.
+ const idsKey=ids.join(',');
+ const cached=indicatorCache.current;
+ if(!cached||cached.candles!==candles||cached.oi!==oi||cached.idsKey!==idsKey||cached.startI!==startI||cached.endI!==endI){
+   const calcCandles=candles.slice(Math.max(0,startI-320),endI);
+   indicatorCache.current={
+     candles,oi,idsKey,startI,endI,
+     results:new Map(ids.map(id=>[id,indicatorData(id,calcCandles,oi)] as const)),
+   };
+ }
+ const computedIndicators=indicatorCache.current!.results;
  const fmtV=(v:number,kind?:string)=>{if(!Number.isFinite(v))return'—';if(kind==='percent')return`${v>=0?'+':''}${fmt(v,2)}%`;if(kind==='compact')return`${v<0?'-':''}${formatUsd(Math.abs(v))}`;if(kind==='usd')return`$${formatUsd(v)}`;if(kind==='price')return fmt(v,Math.abs(v)<1?5:Math.abs(v)<10?4:2);return fmt(v,2)};
  const nearestAt=(values:{t:number;v:number}[],t:number)=>{if(!values.length)return undefined;let lo=0,hi=values.length-1;while(lo<hi){const m=(lo+hi)>>1;if(values[m].t<t)lo=m+1;else hi=m}const a=values[lo],b=lo>0?values[lo-1]:a;return Math.abs(a.t-t)<Math.abs(b.t-t)?a:b};
  return <div className="indicatorDock" ref={ref}>{ids.map(id=>{
   const meta=INDICATOR_META.find(x=>x.id===id)!;
-  const data=indicatorData(id,calcCandles,oi),rows=data.series.map(z=>({...z,values:z.values.filter(p=>p.t>=startT&&p.t<=endT)})).filter(z=>z.values.length);
+  const data=computedIndicators.get(id)!,rows=data.series.map(z=>({...z,values:z.values.filter(p=>p.t>=startT&&p.t<=endT)})).filter(z=>z.values.length);
   let vals=rows.flatMap(z=>z.values.map(p=>p.v)).filter(Number.isFinite),lo=vals.length?Math.min(...vals):0,hi=vals.length?Math.max(...vals):1;
   if(id==='rsi'||id==='stoch'){lo=0;hi=100}else if(id==='cmf'){lo=Math.min(-.1,lo);hi=Math.max(.1,hi)}else if(id==='vr'){lo=0;hi=Math.max(2,hi)}else{for(const guide of data.guides||[]){lo=Math.min(lo,guide);hi=Math.max(hi,guide)}if(hi===lo){hi+=1;lo-=1}const pad=(hi-lo)*(id==='oi'?.055:.08);lo-=pad;hi+=pad}
   const W=Math.max(HOOKCHART_PRICE_SCALE_WIDTH+40,width),H=id==='oi'?112:92,L=0,R=AX,T=id==='oi'?22:18,B=10,innerW=hookChartPlotWidth(W),plotH=H-T-B,x=(t:number)=>L+(indicatorIndexAtTime(candles,t)-virtualStart+.5)*step,y=(v:number)=>T+(hi-v)/(hi-lo)*plotH;
@@ -315,6 +332,9 @@ export function ChartTimeAxis({candles,tf,timezone,language='uk',viewport,rightP
  const accepted:Tick[]=[];for(const priority of [4,3,2,1]){for(const c of candidates.filter(x=>x.priority===priority).sort((a,b)=>a.x-b.x)){if(accepted.some(a=>c.l<a.r+10&&c.r>a.l-10))continue;accepted.push(c)}}accepted.sort((a,b)=>a.x-b.x);
  return <div className="chartTimeAxis" ref={ref}><div className="chartTimePlot" style={{width:plotW}}>{accepted.map((t,i)=><div key={`${t.x}-${i}`} className={`chartTimeTick ${t.major?'major ':''}align-${t.align}`} style={{left:t.x}}><i/><span>{t.label}</span></div>)}{crosshair&&<CrosshairTimeLabel store={crosshair} plotWidth={plotW} timezone={timezone} language={language} seconds={barMs<60000}/>}</div><div className="chartTimeScaleSpacer" ref={countdownRef} style={{width:AX}} aria-hidden={countdownRef?undefined:true}/></div>
 }
+
+// This axis is independent of live depth, liquidation and funding updates.
+export const MemoChartTimeAxis=React.memo(ChartTimeAxis);
 
 export type Viewport={barWidth:number;rightOffset:number;autoY:boolean;manualCenter:number|null;manualRange:number|null;fitAll?:boolean;yZoom?:number};
 export type ViewportGesture='pan'|'zoom'|'price'|'focus';
@@ -440,6 +460,7 @@ export function Chart({candles,symbol,tf,tool,drawings,setDrawings,alerts,setAle
  const transient=useRef<{t:number;p:number}|null>(null);
  const drag=useRef<any>(null),geom=useRef<any>(null),pointers=useRef(new Map<number,{x:number,y:number}>()),lastTap=useRef(0),mouseRef=useRef<{x:number,y:number}|null>(null),drawRef=useRef<()=>void>(()=>{}),interactionDrawRef=useRef<()=>void>(()=>{});
  const frames=useRef<ReturnType<typeof createChartFrameScheduler>|null>(null);
+ const chartOnScreen=useRef(true);
  if(!frames.current)frames.current=createChartFrameScheduler({scene:()=>{const start=chartDiagnosticsEnabled()?performance.now():0;drawRef.current();if(start)recordChartPaint(performance.now()-start)},interaction:()=>interactionDrawRef.current()});
  const resetInteraction=()=>{
    const owner=box.current,ids=[...pointers.current.keys()];
@@ -557,7 +578,11 @@ export function Chart({candles,symbol,tf,tool,drawings,setDrawings,alerts,setAle
    // positive wheel motion moves the visible range toward older bars.
    rightOffset:v.rightOffset+pixels/(v.fitAll?Math.max(.001,geom.current?.step||1):Math.max(terminalMode ? .12 : 3,v.barWidth)),fitAll:false
  }),'pan');
- const scheduleDraw=(scene=true)=>frames.current?.request(scene);
+ // Offscreen Terminal cards continue to receive current data, but their
+ // costly raster paint is deferred until they enter the viewport again.
+ const scheduleDraw=(scene=true)=>{
+   if(chartOnScreen.current&&document.visibilityState!=='hidden')frames.current?.request(scene);
+ };
  const profileData=(d:Drawing,g:any)=>{
   if(d.type!=='profile'||!d.pts[1]||!candles.length)return null;
   const t0=Math.min(d.pts[0].t,d.pts[1].t),t1=Math.max(d.pts[0].t,d.pts[1].t);
@@ -585,7 +610,36 @@ export function Chart({candles,symbol,tf,tool,drawings,setDrawings,alerts,setAle
  const profileActionLayout=(d:Drawing,g:any)=>{const pd=profileData(d,g);if(!pd)return null;const anchor=Math.max(pd.xL+8,pd.xR),y=Math.max(14,Math.min(g.plotH-14,Math.max(16,pd.yTop+12))),editX=Math.max(14,Math.min(g.plotW-38,anchor+16)),deleteX=Math.max(36,Math.min(g.plotW-14,editX+24));return{...pd,editX,deleteX,y}};
  const hitProfileAction=(d:Drawing,g:any,x:number,y:number)=>{const a=profileActionLayout(d,g);if(!a)return null;if(Math.hypot(x-a.editX,y-a.y)<=11)return'edit';if(Math.hypot(x-a.deleteX,y-a.y)<=11)return'delete';return null};
  const rulerPct=(a:{p:number},b:{p:number})=>a.p===0?0:(b.p-a.p)/a.p*100;
- useEffect(()=>{const c=ref.current;if(!c)return;const ro=new ResizeObserver(()=>scheduleDraw()),onVisible=()=>{if(document.visibilityState==='visible')frames.current?.flush()},onResize=()=>scheduleDraw();ro.observe(c);document.addEventListener('visibilitychange',onVisible);window.addEventListener('resize',onResize,{passive:true});window.visualViewport?.addEventListener('resize',onResize,{passive:true});scheduleDraw();return()=>{ro.disconnect();document.removeEventListener('visibilitychange',onVisible);window.removeEventListener('resize',onResize);window.visualViewport?.removeEventListener('resize',onResize);frames.current?.cancel()}},[]);
+ useEffect(()=>{
+   const c=ref.current;
+   if(!c)return;
+   const ro=new ResizeObserver(()=>scheduleDraw());
+   const onVisible=()=>{if(document.visibilityState==='visible'&&chartOnScreen.current)frames.current?.flush()};
+   const onResize=()=>scheduleDraw();
+   let intersection:IntersectionObserver|null=null;
+   if(typeof IntersectionObserver!=='undefined'){
+     intersection=new IntersectionObserver(entries=>{
+       const visible=entries.some(entry=>entry.isIntersecting);
+       const wasVisible=chartOnScreen.current;
+       chartOnScreen.current=visible;
+       if(!visible)frames.current?.cancel();
+       else if(!wasVisible&&document.visibilityState==='visible')frames.current?.request(true);
+     },{rootMargin:'100px'});
+     intersection.observe(c);
+   }
+   ro.observe(c);
+   document.addEventListener('visibilitychange',onVisible);
+   window.addEventListener('resize',onResize,{passive:true});
+   window.visualViewport?.addEventListener('resize',onResize,{passive:true});
+   scheduleDraw();
+   return()=>{
+     intersection?.disconnect();ro.disconnect();
+     document.removeEventListener('visibilitychange',onVisible);
+     window.removeEventListener('resize',onResize);
+     window.visualViewport?.removeEventListener('resize',onResize);
+     frames.current?.cancel();
+   };
+ },[]);
  useEffect(()=>{setDraft(null);if(tool!=='cursor'&&tool!=='trend'&&tool!=='profile'&&tool!=='ruler'&&tool!=='fib'){setSelectedDrawingId(null);setEditingDrawingId(null)}},[tool]);
  const drawInteraction=()=>{
    const source=ref.current,canvas=interactionRef.current,g=geom.current;
@@ -958,7 +1012,7 @@ export function Chart({candles,symbol,tf,tool,drawings,setDrawings,alerts,setAle
   // Date/time axis is rendered as a dedicated synchronized row below indicator panels.
  };
  drawRef.current=draw;
- useLayoutEffect(()=>{if(document.visibilityState==='hidden'){scheduleDraw();return}frames.current?.flush()},[candles,vp,drawings,alerts,densities,marketPrints,liquidations,autoLevels,markers,timeMarkers,splitVolumes,backgroundColor,gridColor,levelLabelMode,levelLabelColor,levelLabelSize,levelLabelStyle,levelLineStyle,crosshairLineWidth,symbol,tf,draft,selectedDrawingId,editingDrawingId,tool,rightPadding,rightPaddingBars,roundGrid,roundness,gridHorizontal,gridVertical,showMarketPrintSums,showVolumes,showLiquidations,showDensityLines,showDensityLabels,showDensityAmounts,highlightDensityReaction,candleLongColor,candleShortColor,densityLineColor,densityLabelColor,densityLineWidth,densityLineStyle,densityLabelSize,autoSR,showSRLabels,autoPrevDay,autoDayOpen,autoVWAP,autoLocalHL,autoRoundLevels,autoPOC,autoStops,autoChannel,channelModel,strategyResult,cascadeRisk.score,cascadeRisk.level,cascadeRisk.total5,cascadeRisk.count5,liquidationCut,timezone,language]);
+ useLayoutEffect(()=>{if(document.visibilityState==='hidden'||!chartOnScreen.current){frames.current?.cancel();return}frames.current?.flush()},[candles,vp,drawings,alerts,densities,marketPrints,liquidations,autoLevels,markers,timeMarkers,splitVolumes,backgroundColor,gridColor,levelLabelMode,levelLabelColor,levelLabelSize,levelLabelStyle,levelLineStyle,crosshairLineWidth,symbol,tf,draft,selectedDrawingId,editingDrawingId,tool,rightPadding,rightPaddingBars,roundGrid,roundness,gridHorizontal,gridVertical,showMarketPrintSums,showVolumes,showLiquidations,showDensityLines,showDensityLabels,showDensityAmounts,highlightDensityReaction,candleLongColor,candleShortColor,densityLineColor,densityLabelColor,densityLineWidth,densityLineStyle,densityLabelSize,autoSR,showSRLabels,autoPrevDay,autoDayOpen,autoVWAP,autoLocalHL,autoRoundLevels,autoPOC,autoStops,autoChannel,channelModel,strategyResult,cascadeRisk.score,cascadeRisk.level,cascadeRisk.total5,cascadeRisk.count5,liquidationCut,timezone,language]);
  useEffect(()=>{
    const cancel=()=>{resetInteraction();scheduleDraw()};
    const visibility=()=>{if(document.visibilityState==='hidden')cancel()};

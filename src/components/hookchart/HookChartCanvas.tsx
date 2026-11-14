@@ -10,6 +10,7 @@ import { alertConditionForPrice, chartTelegramAlerts, telegramIdFromChartMarker 
 import { useLanguage } from '../../context/LanguageContext';
 import { resolveHookChartLanguage } from '../../locales/hookchartLanguage';
 import { toHookCandles } from '../../utils/hookchartData';
+import { convertLiveHookChartCandles, type LiveHookChartConversion } from '../../utils/hookChartLiveConversion';
 import { replayHistoryChange } from '../../utils/replayHistoryChange';
 import { resolveTimeZone } from '../../utils/tradingSessions';
 import { fetchHistoricalReplayCandles } from '../../utils/replayService';
@@ -19,7 +20,7 @@ import { fetchSharedAnalysisKlines } from '../../utils/sharedAnalysisKlines';
 import { fetchSharedChartJson } from '../../utils/sharedChartRequests';
 import { candlesBeforeHistoryEnd, clampHookChartHistory, extendHookChartHistory, scopedHookChartHistoryRows, type ScopedHookChartHistory } from '../../utils/hookChartHistory';
 import { createChartCrosshairStore } from './crosshairState';
-import { Chart, ChartTimeAxis, IndicatorDock, buildStructuralChannel, type Alert, type Candle, type Drawing, type HookChartHandle, type Viewport } from './engine';
+import { Chart, MemoChartTimeAxis, IndicatorDock, buildStructuralChannel, type Alert, type Candle, type Drawing, type HookChartHandle, type Viewport } from './engine';
 import { INDICATOR_META, type IndicatorId, type OIPoint } from './indicatorEngine';
 import { captureVisualProfile, getVisualProfile, makeVisualProfileKey, normalizeVisualProfile, patchVisualProfile, visualContextForTerminalWidth, visualDeviceForWidth, type VisualChartProfile, type VisualContextId, type VisualProfileKey } from './visualProfiles';
 import { hookChartPlotWidth } from './priceScale';
@@ -296,14 +297,21 @@ const HookChartCanvas = forwardRef<HookChartHandle, HookChartCanvasProps>(functi
     });
     return () => cleanup.forEach(dispose => dispose());
   }, [terminalMode, integratedToolbar, terminalExtraToolsOpen, settings.showTopToolbarIcons, settings.showMarketStatsBar]);
-  const indicators = replay ? replayIndicators : enabledIndicators(settings, !!externalData, marketType);
+  // Stable indicator IDs avoid redoing the SVG calculations for unrelated feed updates.
+  const indicators = useMemo(() => replay ? replayIndicators : enabledIndicators(settings, !!externalData, marketType),
+    [replay, replayIndicators, settings.indicators, !!externalData, marketType]);
   const timezone = settings.timezone || resolveTimeZone(profile?.timeZone);
   // Replay is intentionally independent from the live indicator data pipeline.
   const replayConversionRef = useRef<{ scope: string; input: readonly Kline[]; candles: Candle[] } | null>(null);
+  // Live ticks normally replace just the last immutable candle. Keep the
+  // history conversion separate from Replay, with a full rebuild on any
+  // altered prefix, history page, symbol, timeframe or candle limit.
+  const liveConversionRef = useRef<LiveHookChartConversion | null>(null);
   // Replay must remain causal; live chart history can be extended and capped independently.
   const maxChartCandles = settings.maxChartCandles === undefined ? undefined : clampHookChartHistory(settings.maxChartCandles);
   const candles = useMemo(() => {
     if (replay) {
+      liveConversionRef.current = null;
       const previous = replayConversionRef.current;
       const change = replayHistoryChange(previous?.scope === historyScope ? previous.input : null, klines);
       if (previous && previous.scope === historyScope && change === 'same') return previous.candles;
@@ -323,8 +331,10 @@ const HookChartCanvas = forwardRef<HookChartHandle, HookChartCanvasProps>(functi
       return rows;
     }
     replayConversionRef.current = null;
-    const rows = toHookCandles([...extraHistoryRows, ...klines]);
-    return maxChartCandles ? rows.slice(-maxChartCandles) : rows;
+    const converted = convertLiveHookChartCandles(klines, extraHistoryRows, historyScope,
+      maxChartCandles, liveConversionRef.current);
+    liveConversionRef.current = converted;
+    return converted.candles;
   }, [klines, extraHistoryRows, replay, maxChartCandles, historyScope]);
   const historyRequestKey = useRef('');
   useEffect(() => {
@@ -386,7 +396,10 @@ const HookChartCanvas = forwardRef<HookChartHandle, HookChartCanvasProps>(functi
   const liveFeed = useOriginalHookChartLiveFeed({ exchange, marketType, symbol, settings, candles, replay });
   const potentialDensityCount = liveFeed.densities.filter(density => density.reactionTier === 'potential').length;
   // Only filter the chart. Strategy evaluation and density lists retain the full live book.
-  const chartDensities = visibleChartDensities(liveFeed.densities, settings.densityMode, settings.densityAutoDisplay);
+  const chartDensities = useMemo(
+    () => visibleChartDensities(liveFeed.densities, settings.densityMode, settings.densityAutoDisplay),
+    [liveFeed.densities, settings.densityMode, settings.densityAutoDisplay],
+  );
   const activeStrategy = useMemo(() => strategyPreset(settings.strategyId || ''), [settings.strategyId]);
   const analysisTfs = useMemo(() =>
     Array.from(new Set<string>([timeframe, ...(settings.levelIntervals || []), ...(settings.trendIntervals || []), ...(activeStrategy?.requiredTfs || [])])),
@@ -1464,7 +1477,7 @@ const HookChartCanvas = forwardRef<HookChartHandle, HookChartCanvasProps>(functi
     </div>
 
     <IndicatorDock ids={indicators} candles={candles} oi={oi} viewport={viewport} rightPaddingBars={rightPaddingBars} onToggle={toggleIndicator} />
-    <ChartTimeAxis candles={candles} tf={timeframe} timezone={timezone} language={chartLanguage} viewport={viewport} rightPaddingBars={rightPaddingBars} countdownRef={setCountdownContainer} crosshair={crosshair} />
+    <MemoChartTimeAxis candles={candles} tf={timeframe} timezone={timezone} language={chartLanguage} viewport={viewport} rightPaddingBars={rightPaddingBars} countdownRef={setCountdownContainer} crosshair={crosshair} />
 
     <div className="hookchart-footer">
       {!replay && !externalData && settings.showMarketStatsBar !== false && <div ref={statsBarRef} className="marketStatsBar" role="region" aria-label="Показники ринку" tabIndex={0}>
