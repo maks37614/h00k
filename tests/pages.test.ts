@@ -67,7 +67,7 @@ test('main header centers the original-size h00k robot logo with adjacent fullsc
   assert.ok(logoPos >= 0 && logoPos < fullscreenPos && fullscreenPos < langPos, 'buttons are immediately right of the centered logo');
 });
 
-test('sort and 24h volume controls share styling and sit side by side on mobile', () => {
+test('sort and 24h volume controls share styling but retain independent desktop widths', () => {
   const html = renderToString(wrap(React.createElement(CoinScreenerPage, {
     watchlist: [], onSelectCoin: noop, onToggleWatchlist: noop,
     onOpenTelegramAlerts: noop, onOpenWatchlist: noop,
@@ -76,7 +76,12 @@ test('sort and 24h volume controls share styling and sit side by side on mobile'
   const volumeShell = html.match(/<div data-screener-filter="volume" class="([^"]+)"/);
   assert.ok(sortShell, 'sort shell is rendered');
   assert.ok(volumeShell, 'volume shell is rendered');
-  assert.equal(sortShell[1], volumeShell[1], 'both filters have identical styling');
+  const commonClasses = (value: string) => value.split(/\\s+/)
+    .filter(item => !/^lg:w-/.test(item));
+  assert.deepEqual(commonClasses(sortShell[1]), commonClasses(volumeShell[1]),
+    'both controls share styling while their desktop widths may differ');
+  assert.match(sortShell[1], /(?:^|\\s)lg:w-72(?:\\s|$)/, 'sort stays compact on large screens');
+  assert.match(volumeShell[1], /(?:^|\\s)lg:w-80(?:\\s|$)/, 'volume has room for direction chooser');
   assert.match(sortShell[1], /rounded-xl/);
   assert.match(sortShell[1], /border-slate-800/);
   assert.match(html, /grid min-w-0 grid-cols-2 gap-2/, 'filters remain side by side on narrow screens');
