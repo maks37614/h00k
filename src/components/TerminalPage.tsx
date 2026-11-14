@@ -652,16 +652,18 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
     setMaximizedBlockId(null);
   };
 
+  // Index quotes once per refresh instead of searching thousands of coins for every chart.
+  const coinsByMarket = useMemo(() => {
+    const index = new Map<string, ScannedCoin>();
+    for (const coin of coins) {
+      const key = coinMarketKey(coin);
+      if (!index.has(key)) index.set(key, coin);
+    }
+    return index;
+  }, [coins]);
   const getCoinForBlock = useCallback(
-    (block: TerminalChartBlock): ScannedCoin | undefined => {
-      return coins.find(
-        (c) =>
-          c.symbol === block.symbol &&
-          c.exchange === block.exchange &&
-          c.marketType === block.marketType
-      );
-    },
-    [coins]
+    (block: TerminalChartBlock): ScannedCoin | undefined => coinsByMarket.get(coinMarketKey(block)),
+    [coinsByMarket]
   );
 
   const gridColsClass = useMemo(() => {
