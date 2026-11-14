@@ -220,7 +220,7 @@ export class CoinWorker {
     this.releaseAnalysisClock = sharedWorkerAnalysisClock.subscribe(
       `${this.coin.exchange}:${this.coin.marketType}:${normalizeExchangeSymbol(this.coin.symbol)}`,
       () => {
-        if (this.isDestroyed) return;
+        if (this.isDestroyed || !this.coin.isActive) return;
         void this.runDeepAnalysis().catch(err =>
           console.error(`[CoinWorker ${this.coin.symbol}] Analysis failed:`, err));
       },
@@ -247,7 +247,9 @@ export class CoinWorker {
   }
 
   public async runDeepAnalysis() {
-    if (this.isDestroyed || this.currentPrice <= 0 || this.analysisInFlight) return;
+    // Inactive 24/7 monitors still receive lightweight price state, but must
+    // not run costly personal setup/rule evaluation or Telegram dispatches.
+    if (this.isDestroyed || !this.coin.isActive || this.currentPrice <= 0 || this.analysisInFlight) return;
     this.analysisInFlight = true;
     this.lastAnalysisTimestamp = Date.now();
     try {
