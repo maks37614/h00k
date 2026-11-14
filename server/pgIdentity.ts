@@ -519,12 +519,38 @@ export async function updateAccountProfile(userId: string, value: unknown) {
     if (!EDITABLE_FIELDS.has(key)) throw new AuthFailure(400, 'Неприпустиме поле профілю: ' + key);
     patch[key] = data;
   }
+  // A Terminal workspace has its own revision. Concurrent edits of unrelated
+  // profile fields must not cause false conflicts. Older clients remain
+  // compatible, while new clients must supply their last-seen server version.
+  let expectedWorkspaceVersion: string | null | undefined;
+  if (patch.terminalSettings && typeof patch.terminalSettings === 'object'
+      && !Array.isArray(patch.terminalSettings)) {
+    const workspace = patch.terminalSettings as Record<string, unknown>;
+    if (Object.prototype.hasOwnProperty.call(workspace, '_expectedVersion')) {
+      const expected = workspace._expectedVersion;
+      if (expected !== null && (typeof expected !== 'string' || !/^[a-f0-9-]{1,80}$/i.test(expected)))
+        throw new AuthFailure(400, 'Некоректна версія робочої області.');
+      expectedWorkspaceVersion = expected as string | null;
+    }
+    const { _expectedVersion: _requestOnly, version: _clientVersion, ...safeWorkspace } = workspace;
+    patch.terminalSettings = { ...safeWorkspace, version: randomUUID() };
+  }
   if (JSON.stringify(patch).length > 180000) throw new AuthFailure(413, 'Налаштування занадто великі.');
   const client = await database().connect();
   try {
     await client.query('BEGIN');
-    await client.query('UPDATE auth_users SET profile = profile || $1::jsonb, updated_at = now() WHERE id = $2',
-      [JSON.stringify(patch), userId]);
+    if (expectedWorkspaceVersion !== undefined) {
+      const result = await client.query(
+        "UPDATE auth_users SET profile = profile || $1::jsonb, updated_at = now() WHERE id = $2 AND COALESCE(profile -> 'terminalSettings' ->> 'version', '') = $3",
+        [JSON.stringify(patch), userId, expectedWorkspaceVersion ?? ''],
+      );
+      if (!result.rowCount) {
+        throw new AuthFailure(409, 'Робочу область змінено на іншому пристрої. Локальні графіки збережені у вашому браузері.', 'TERMINAL_WORKSPACE_CONFLICT');
+      }
+    } else {
+      await client.query('UPDATE auth_users SET profile = profile || $1::jsonb, updated_at = now() WHERE id = $2',
+        [JSON.stringify(patch), userId]);
+    }
     if (typeof patch.displayName === 'string') {
       const name = patch.displayName.trim().slice(0, 80);
       if (!name) throw new AuthFailure(400, 'Імʼя не може бути порожнім.');
