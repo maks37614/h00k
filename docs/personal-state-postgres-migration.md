@@ -47,6 +47,7 @@ JSON зберігається в Docker-томі `h00k_app_data`, а не обо
 
 ```bash
 docker compose exec -T app node --import tsx server/pgStateMigrator.ts --dry-run
+docker compose exec -T app node --import tsx server/pgStateMigrator.ts --backup
 docker compose exec -T app node --import tsx server/pgStateMigrator.ts --apply
 docker compose exec -T app node --import tsx server/pgStateMigrator.ts --verify
 ```
@@ -90,3 +91,63 @@ docker compose exec -T app node --import tsx server/pgStateMigrator.ts --verify
 єдиним джерелом істини для відповідних функцій.
 
 Жодних тестів фактичного навантаження VPS ці команди не запускають.
+
+
+## Додатковий приватний знімок і план відкату
+
+- `--backup` **не підключається до БД**: записує SHA-256-перевірений
+  знімок `surveillance.json`, `alerts.json`, `alert_history.json` у
+  `/app/server/data/personal-state-backups/` з правами каталогу `0700`
+  і файлу `0600`. Назва файлу виводиться оператору.
+- `--apply` створює ще один такий знімок **автоматично**, перевіряє,
+  що три JSON-файли не змінилися під час створення копії, і лише тоді
+  запускає транзакційне staging-копіювання. В разі SQL-помилки
+  `ROLLBACK` виконується всередині цієї транзакції.
+- Знімок **не містить** Telegram-профілів, черг доставлення або
+  `deleted_alerts.json`. Це не повна резервна копія. Потрібні **обидва**
+  Docker-томи і `pg_dump`, а для консистентного бекапу треба
+  зупинити внесення змін у персональні дані на час копіювання.
+- Не переносити вміст приватного JSON-знімка у Git, тікети або логи.
+
+### Приклад повного бекапу тому на VPS
+
+У технічне вікно, коли записи призупинені, із
+`/home/ubuntu/h00k`:
+
+```bash
+umask 077
+mkdir -p backups
+chmod 700 backups
+docker run --rm -v h00k_app_data:/source:ro -v "$PWD/backups":/backups \
+  alpine:3.20 sh -c 'cd /source && tar czf /backups/h00k-app-data.tar.gz .'
+tar tzf backups/h00k-app-data.tar.gz | head -20
+docker compose exec -T postgres pg_dump -U h00k -Fc h00k_users \
+  > backups/h00k-users.dump
+test -s backups/h00k-users.dump
+```
+
+Архів з персональними даними перенесіть у зашифроване сховище поза VPS.
+Перевірка переліку файлів і `test -s` не замінює тестового відновлення.
+
+### Відкат
+
+1. **До перемикання runtime:** при невдалій підготовчій міграції
+   не потрібно відновлювати JSON — він лишається авторитетним.
+   Зупиніть подальші SQL-кроки, дослідіть помилку й перевірте
+   `--verify`. Не перезапускайте `--apply` із зміненим знімком,
+   не видаляйте staging-маркер для обходу конфліктів.
+2. **За підозри на втрату JSON або збій після майбутнього cutover:**
+   спершу зупиніть застосунок і всі процеси, що можуть надсилати
+   алерти, зробіть ще одну резервну копію поточного стану та
+   перевірте первинні архіви. Відновлюйте **весь** `h00k_app_data`
+   з перевіреного архіву, а SQL — лише з узгодженого
+   `pg_dump`, бажано спочатку на тестовій інстанції.
+   Не відновлюйте старий `alerts.json` поверх новіших tombstones:
+   це ризик повторного спрацювання видалених сповіщень.
+3. Перш ніж відновлювати автоматичні перевірки, перевірте
+   активні записи, історію тригерів, останні доставки та
+   відсутність повторного надсилання Telegram.
+
+**Безпечне розгортання цього етапу не виконує live-cutover.**
+Відкат змін коду — повернення до попереднього commit/образу
+після узгодженої зупинки застосунку; відкат даних окремий.
