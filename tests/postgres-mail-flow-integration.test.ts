@@ -199,6 +199,13 @@ test('real PostgreSQL and captured SMTP: register, verify, login, recover, resen
     assert.equal((await fetch(origin + '/api/auth/session', {
       headers: { Cookie: credentials.cookie },
     })).status, 401, 'a password reset revokes remembered sessions');
+    // The earlier retry belongs to the now-reset account. Retire it so this
+    // test does not race against the separate verification-resend queue job.
+    await db.query(`
+      UPDATE auth_mail_outbox SET completed_at = now()
+      WHERE user_id = (SELECT id FROM auth_users WHERE email = $1)
+        AND purpose = 'reset-password' AND completed_at IS NULL
+    `, [email]);
 
     // If registration email delivery failed, the user can resend without losing the account.
     mailFails = true;
