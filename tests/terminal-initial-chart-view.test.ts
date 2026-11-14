@@ -298,3 +298,16 @@ test('late profile hydration never overwrites a locally edited workspace or clai
   assert.match(hydration, /if \(revision\.current === 0\)/);
   assert.match(hydration, /hydrated\.current && profile\?\.uid === uid && !syncConflictRef\.current/);
 });
+
+test('the sole HookChart uses the current block directly during profile hydration and coin switches', () => {
+  const page = source('../src/components/TerminalPage.tsx');
+  const start = page.indexOf('/* Single Screen 100% View HookChart */');
+  const end = page.indexOf('/* Multi-chart Grid Layout */', start);
+  assert.ok(start >= 0 && end > start);
+  const chart = page.slice(start, end);
+  assert.match(chart, /symbol=\{blocks\[0\]\.symbol\}/);
+  assert.match(chart, /exchange=\{blocks\[0\]\.exchange\}/);
+  assert.match(chart, /marketType=\{blocks\[0\]\.marketType\}/);
+  assert.match(chart, /timeframe=\{blocks\[0\]\.timeframe\}/);
+  assert.doesNotMatch(chart, /symbol=\{activeCoin\.symbol\}/);
+});
