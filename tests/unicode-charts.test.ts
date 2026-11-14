@@ -82,7 +82,7 @@ test('TradingView aliases are scoped to verified exchange markets and regular sy
   assert.equal(getTradingViewSymbol('1000BONK/USDT', 'bybit', 'futures'), 'BYBIT:1000BONKUSDT.P');
 });
 
-test('terminal charts respect provider selection while fullscreen always uses HookChart for international symbols', (t) => {
+test('Terminal and fullscreen always render native HookChart, including legacy TradingView account preferences', (t) => {
   const uid = 'chart-render-test';
   let savedBlocks: TerminalChartBlock[] = [];
   t.mock.method(localStorage, 'getItem', (key: string) =>
@@ -124,17 +124,9 @@ test('terminal charts respect provider selection while fullscreen always uses Ho
         const label = `${provider || 'default'}:${symbol}:${name}`;
         const html = render(view);
         const iframe = html.match(/src="([^"]*widgetembed[^\"]*)"/);
-        if (name === 'fullscreen' || provider !== 'tradingview') {
-          assert.equal(iframe, null, `${label} uses HookChart`);
-          assert.ok(html.includes('Завантаження hookchart…'), `${label} renders HookChart`);
-        } else if (expected) {
-          assert.ok(iframe, label);
-          assert.equal(new URL(iframe[1].replace(/&amp;/g, '&')).searchParams.get('symbol'), expected);
-        } else {
-          assert.equal(iframe, null, 'an unknown Unicode name never becomes an unrelated USDT iframe');
-          assert.ok(html.includes(`aria-label="Графік ${symbol}"`));
-          assert.ok(!html.includes('Завантаження графіку'), 'iframe loading overlay cannot obscure the exchange chart');
-        }
+        assert.equal(iframe, null, `${label} must never embed legacy TradingView`);
+        assert.ok(html.includes('Завантаження hookchart…'), `${label} renders native HookChart`);
+        assert.ok(!html.includes('Завантаження графіку'), 'iframe loader cannot cover native HookChart');
       }
       const deferredGrid = render(widget(false, false));
       assert.ok(!deferredGrid.includes('widgetembed'), 'an offscreen grid card does not embed TradingView');
