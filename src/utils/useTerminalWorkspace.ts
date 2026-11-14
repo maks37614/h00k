@@ -145,7 +145,7 @@ export function useTerminalWorkspace() {
   const workspaceRef = useRef(workspace);
   workspaceRef.current = workspace;
   const lastCommittedWorkspace = useRef(workspace);
-  const skipHydrationCommit = useRef(false);
+  const hydrationWorkspaceRef = useRef<typeof workspace | null>(null);
   const saveQueue = useRef(Promise.resolve());
   const mounted = useRef(true);
 
@@ -202,9 +202,11 @@ export function useTerminalWorkspace() {
     serverVersion.current = profile.terminalSettings?.version ?? null;
     // With no local changes, the account workspace is authoritative.
     if (revision.current === 0) {
-      // Server hydration is not a local edit and must not enqueue an upload.
-      skipHydrationCommit.current = true;
-      setWorkspace(loadTerminalWorkspace(uid, profile.terminalSettings));
+      // Remember the exact cloud snapshot. If a user edit is batched with the
+      // hydration update, the resulting workspace differs and must still save.
+      const hydratedWorkspace = loadTerminalWorkspace(uid, profile.terminalSettings);
+      hydrationWorkspaceRef.current = hydratedWorkspace;
+      setWorkspace(hydratedWorkspace);
     }
   }, [uid, profile]);
 
@@ -228,11 +230,9 @@ export function useTerminalWorkspace() {
   useEffect(() => {
     if (lastCommittedWorkspace.current === workspace) return;
     lastCommittedWorkspace.current = workspace;
-    if (skipHydrationCommit.current) {
-      skipHydrationCommit.current = false;
-      return;
-    }
-    revision.current += 1;
+    const isPureHydration = hydrationWorkspaceRef.current === workspace;
+    hydrationWorkspaceRef.current = null;
+    if (!isPureHydration) revision.current += 1;
   }, [workspace]);
 
   useEffect(() => {
