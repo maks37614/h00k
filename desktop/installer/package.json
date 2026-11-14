@@ -30,7 +30,8 @@
       "ui.js",
       "guide.html",
       "guide.js",
-      "locales.json"
+      "locales.json",
+      "guide.css"
     ],
     "extraResources": [
       {
