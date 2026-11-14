@@ -181,7 +181,8 @@ export class CoinWorker {
       this.orderBookEngine.setVolume24hUsd(this.volume24hUsd);
       // Reuse publicly validated numeric levels for the exact same WS
       // emission. The personal book still checks freshness and sequencing.
-      this.orderBookEngine.applyDepth(delta, this.streamClient.validatedDepth(delta));
+      this.orderBookEngine.applyDepth(delta,
+        this.streamClient.validatedDepth(delta), this.streamClient.sharedBook(delta));
       if (this.orderBookEngine.sequenceGap) this.streamClient.resyncOrderBook();
     });
 
