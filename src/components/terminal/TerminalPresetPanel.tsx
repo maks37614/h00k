@@ -64,18 +64,33 @@ export function TerminalPresetPanel({ blocks, watchlist, presets, selection, tim
   };
 
   // Favorites store symbols; select one explicit exchange/market for each symbol.
-  const favoriteBlocks = useMemo(() => [...new Set(watchlist)].map(symbol => {
+  // Index once per quote refresh instead of scanning the full exchange universe
+  // for every favorite (some users have hundreds of saved instruments).
+  const favoritesQuotesBySymbol = useMemo(() => {
+    const index = new Map<string, MarketCoin[]>();
+    for (const coin of snapshot.coins) {
+      const group = index.get(coin.symbol);
+      if (group) group.push(coin);
+      else index.set(coin.symbol, [coin]);
+    }
+    return index;
+  }, [snapshot.coins]);
+  const workspaceBlocksByMarket = useMemo(() =>
+    new Map(blocks.map(block => [coinMarketKey(block), block] as const)), [blocks]);
+  const favoriteBlocks = useMemo(() => [...new Set(watchlist)].flatMap(symbol => {
     const preferredExchange = exchange === 'all' ? 'binance' : exchange;
     const preferredMarket = marketType === 'all' ? 'futures' : marketType;
-    const matches = snapshot.coins.filter(coin => coin.symbol === symbol
-      && (exchange === 'all' || coin.exchange === exchange) && (marketType === 'all' || coin.marketType === marketType));
+    const matches = (favoritesQuotesBySymbol.get(symbol) || []).filter(coin =>
+      (exchange === 'all' || coin.exchange === exchange)
+      && (marketType === 'all' || coin.marketType === marketType));
     const coin = matches.find(coin => coin.exchange === preferredExchange && coin.marketType === preferredMarket) || matches[0];
-    const existing = blocks.find(block => block.symbol === symbol && block.exchange === preferredExchange && block.marketType === preferredMarket);
-    if (!coin && !existing) return [];
-    const item = coin || existing!;
-    return [{ id: `favorite-${coinMarketKey(item)}`, symbol: item.symbol, baseAsset: item.baseAsset, quoteAsset: item.quoteAsset,
-      exchange: item.exchange, marketType: item.marketType, timeframe, colSpan: 1 as const }];
-  }).flat(), [watchlist, snapshot.coins, exchange, marketType, blocks, timeframe]);
+    const existing = workspaceBlocksByMarket.get(coinMarketKey({
+      symbol, exchange: preferredExchange, marketType: preferredMarket,
+    }));
+    const item = coin || existing;
+    return item ? [{ id: `favorite-${coinMarketKey(item)}`, symbol: item.symbol, baseAsset: item.baseAsset, quoteAsset: item.quoteAsset,
+      exchange: item.exchange, marketType: item.marketType, timeframe, colSpan: 1 as const }] : [];
+  }), [watchlist, favoritesQuotesBySymbol, exchange, marketType, workspaceBlocksByMarket, timeframe]);
   const candidates = source === 'favorites' ? favoriteBlocks : blocks;
   const selectedBlocks = candidates.filter(block => selectedKeys.includes(block.id));
 
