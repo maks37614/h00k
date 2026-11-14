@@ -605,7 +605,12 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
 
   const handleApplyMarketCoins = useCallback((selected: MarketCoin[]) => {
     if (!selected.length) return;
-    setPresetMatches(selected);
+    // Each 30s market refresh creates new quote objects even if the ordered
+    // instrument list is unchanged. Keep the previous ranking identity so
+    // the pagination effect doesn't redundantly apply the same page twice.
+    setPresetMatches(current => current.length === selected.length
+      && current.every((coin, index) => coinMarketKey(coin) === coinMarketKey(selected[index]))
+      ? current : selected);
     applyPresetPage(selected, presetPageRef.current);
   }, [applyPresetPage]);
 
