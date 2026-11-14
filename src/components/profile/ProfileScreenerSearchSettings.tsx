@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { BookmarkPlus, CheckCircle2, Search, Trash2 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import type { ScreenerSearchConfig, SearchUserSettings } from '../../types';
@@ -40,6 +40,7 @@ export function ProfileScreenerSearchSettings() {
   const [presetName, setPresetName] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const savingRef = useRef(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
 
@@ -60,7 +61,8 @@ export function ProfileScreenerSearchSettings() {
   };
 
   const write = async (next: SearchUserSettings, successMessage: string): Promise<boolean> => {
-    if (busy || !user?.uid || profile?.uid !== user.uid) return false;
+    if (savingRef.current || !user?.uid || profile?.uid !== user.uid) return false;
+    savingRef.current = true;
     setBusy(true);
     setMessage('');
     setError('');
@@ -72,6 +74,7 @@ export function ProfileScreenerSearchSettings() {
       setError(cause instanceof Error ? cause.message : 'Не вдалося зберегти налаштування пошуку');
       return false;
     } finally {
+      savingRef.current = false;
       setBusy(false);
     }
   };
