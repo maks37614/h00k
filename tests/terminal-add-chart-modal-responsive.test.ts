@@ -61,3 +61,12 @@ test('Add Chart cancels its fallback quote requests when modal closes or Termina
   assert.match(source, /fetchDirectBybitTickers\(\{ signal: controller\.signal \}\)/);
   assert.match(source, /controller\.abort\(\)/);
 });
+
+test('Terminal quick add preserves a selected market quote instead of inventing a USDT pair', () => {
+  assert.match(source, /const knownPair = unifiedCoins\.find\(c => c\.symbol === cleanSearchSymbol\)/);
+  assert.match(source, /const inferredQuote = knownPair\?\.quoteAsset/);
+  assert.match(source, /exactMarket\?\.quoteAsset \|\| inferredQuote/);
+  assert.match(source, /normalizeTerminalMarketPair\(\s*cleanSearchSymbol/);
+  assert.match(source, /\{quickAddInstrument\.symbol\}/);
+  assert.doesNotMatch(source, /\{cleanSearchSymbol\}USDT/);
+});
