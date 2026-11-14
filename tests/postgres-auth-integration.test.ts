@@ -56,6 +56,35 @@ test('real PostgreSQL: verify email, login, isolate data, revoke session and res
       await updateAccountProfile(uidA, { displayName: 'Alpha Scalper', defaultExchange: 'binance' });
       assert.equal((await readAccount(uidA))?.profile?.defaultExchange, 'binance');
 
+      // Two devices must not overwrite each other's Terminal blocks.
+      const workspace = (symbol: string, expected: string | null) => ({
+        terminalSettings: {
+          columns: 2, blockHeight: 'medium',
+          blocks: [{ id: symbol, symbol, exchange: 'binance', marketType: 'futures', timeframe: '15m' }],
+          _expectedVersion: expected,
+        },
+      });
+      const firstWorkspace = await updateAccountProfile(uidA, workspace('BTCUSDT', null));
+      const versionA = firstWorkspace.profile.terminalSettings?.version;
+      assert.match(versionA, /^[a-f0-9-]{36}$/i);
+      const nextWorkspace = await updateAccountProfile(uidA, workspace('ETHUSDT', versionA));
+      const versionB = nextWorkspace.profile.terminalSettings?.version;
+      assert.notEqual(versionB, versionA);
+      await assert.rejects(
+        updateAccountProfile(uidA, workspace('SOLUSDT', versionA)),
+        (error: any) => error.status === 409 && error.code === 'TERMINAL_WORKSPACE_CONFLICT',
+        'stale tab must not silently overwrite the newest Terminal workspace',
+      );
+      const restored = await readAccount(uidA);
+      assert.equal(restored?.profile?.terminalSettings?.blocks?.[0]?.symbol, 'ETHUSDT');
+      assert.equal(restored?.profile?.terminalSettings?.version, versionB);
+      assert.equal('_expectedVersion' in (restored?.profile?.terminalSettings || {}), false);
+      await updateAccountProfile(uidA, { soundAlertsEnabled: true });
+      const unrelated = await readAccount(uidA);
+      assert.equal(unrelated?.profile?.terminalSettings?.version, versionB,
+        'unrelated profile writes must not invalidate Terminal concurrency');
+
+
       // Full HTTP route: regression for requirePostgresSession injecting userId
       // into the PATCH body, which previously made every profile save fail.
       const webApp = express();
