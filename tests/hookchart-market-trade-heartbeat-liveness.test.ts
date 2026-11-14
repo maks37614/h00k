@@ -46,15 +46,6 @@ function withMarketNetwork(t: any, exchange: 'binance' | 'bybit', symbol: string
   return { sockets: FakeTradeSocket.instances, trades, stop };
 }
 
-test('CONNECTING sockets time out on Binance and Bybit without close/error callbacks', t => {
-  for (const exchange of ['binance', 'bybit'] as const) {
-    const socketBefore = globalThis.WebSocket;
-    const fetchBefore = globalThis.fetch;
-    // Each test runs its own dedicated fake clock; use separately scoped tests below.
-    assert.ok(socketBefore && fetchBefore && exchange);
-  }
-});
-
 for (const exchange of ['binance', 'bybit'] as const) {
   test(`${exchange}: a WebSocket that never opens is closed and replaced after the handshake deadline`, t => {
     const f = withMarketNetwork(t, exchange, `STUCKOPEN${exchange.toUpperCase()}USDT`);
