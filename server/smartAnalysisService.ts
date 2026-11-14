@@ -1,4 +1,5 @@
-import { exchangeFetch } from './exchangeHttp';
+import { exchangeFetch, chartExchangeFetch } from './exchangeHttp';
+import { getVerifiedBtcContext } from './verifiedBtcContext';
 import { ExchangeId, MarketType, Timeframe, Kline, SmartAnalysisData, DetectedFormation } from '../src/types';
 import { fetchKlines } from './marketService';
 import { fetchHookChartOIHistory } from './hookchartOI';
@@ -124,103 +125,8 @@ function calculatePOC(klines: Kline[]): { pocPrice: number | null; pocVolumePct:
   };
 }
 
-// Verified BTC futures context. Never substitute made-up price, structure, or calendar events.
-async function analyzeBTCStructure(): Promise<SmartAnalysisData['btcContext']> {
-  const get = async (path: string): Promise<unknown> => {
-    try {
-      const response = await exchangeFetch('https://fapi.binance.com' + path, {
-        signal: AbortSignal.timeout(4000),
-      });
-      if (!response.ok) return null;
-      return await response.json();
-    } catch { return null; }
-  };
-  const [raw15m, raw5m, raw1m, ticker] = await Promise.all([
-    get('/fapi/v1/klines?symbol=BTCUSDT&interval=15m&limit=25'),
-    get('/fapi/v1/klines?symbol=BTCUSDT&interval=5m&limit=25'),
-    get('/fapi/v1/klines?symbol=BTCUSDT&interval=1m&limit=25'),
-    get('/fapi/v1/ticker/24hr?symbol=BTCUSDT'),
-  ]);
-  type Slice = SmartAnalysisData['btcContext']['timeframes']['15m'];
-  const unavailable: Slice = {
-    direction: 'sideways', structure: 'unknown', label: 'Немає даних біржі',
-  };
-  const parse = (raw: unknown, minutes: number): Slice => {
-    if (!Array.isArray(raw)) return unavailable;
-    const now = Date.now();
-    const candles = raw.filter((entry): entry is unknown[] =>
-      Array.isArray(entry) && entry.length >= 5 &&
-      Number.isFinite(Number(entry[0])) && Number(entry[0]) + minutes * 60_000 <= now &&
-      [entry[2], entry[3], entry[4]].every(value => Number.isFinite(Number(value)) && Number(value) > 0));
-    if (candles.length < 6) return unavailable;
-    const previous = candles.slice(-6, -3);
-    const recent = candles.slice(-3);
-    const prevHigh = Math.max(...previous.map(c => Number(c[2])));
-    const prevLow = Math.min(...previous.map(c => Number(c[3])));
-    const lastHigh = Math.max(...recent.map(c => Number(c[2])));
-    const lastLow = Math.min(...recent.map(c => Number(c[3])));
-    if (lastHigh > prevHigh && lastLow > prevLow) return {
-      direction: 'up', structure: 'HH_HL', label: 'Вищі максимуми та мінімуми',
-    };
-    if (lastHigh < prevHigh && lastLow < prevLow) return {
-      direction: 'down', structure: 'LH_LL', label: 'Нижчі максимуми та мінімуми',
-    };
-    return { direction: 'sideways', structure: 'range', label: 'Змішана структура / діапазон' };
-  };
-  const tf15 = parse(raw15m, 15);
-  const tf5 = parse(raw5m, 5);
-  const tf1 = parse(raw1m, 1);
-  const tickerValue = ticker && typeof ticker === 'object' ? ticker as Record<string, unknown> : null;
-  const priceValue = Number(tickerValue?.lastPrice);
-  const changeValue = Number(tickerValue?.priceChangePercent);
-  const btcPrice = tickerValue?.lastPrice != null && Number.isFinite(priceValue) && priceValue > 0
-    ? priceValue : null;
-  const change24h = tickerValue?.priceChangePercent != null && Number.isFinite(changeValue)
-    ? changeValue : null;
-  const valid15 = tf15.structure !== 'unknown';
-  const valid5 = tf5.structure !== 'unknown';
-  const overallStructure: SmartAnalysisData['btcContext']['overallStructure'] =
-    !valid15 || !valid5 ? 'unknown'
-      : tf15.structure === tf5.structure ? tf15.structure : 'range';
-  const overallStructureLabel = overallStructure === 'unknown'
-    ? 'Структура BTC недоступна: потрібні підтверджені свічки Binance Futures'
-    : overallStructure === 'HH_HL'
-      ? 'Вищі максимуми та мінімуми BTC на 15m і 5m'
-      : overallStructure === 'LH_LL'
-        ? 'Нижчі максимуми та мінімуми BTC на 15m і 5m'
-        : 'Структура BTC неоднозначна на 15m і 5m';
-  let hasSharpImpulse = false;
-  let impulseType: SmartAnalysisData['btcContext']['impulseType'] = 'none';
-  let impulseDescription = 'Немає підтвердженого імпульсу в останній закритій 5m свічці';
-  if (Array.isArray(raw5m)) {
-    const complete = raw5m.filter(row => Array.isArray(row) &&
-      Number(row[0]) + 5 * 60_000 <= Date.now() &&
-      Number(row[1]) > 0 && Number.isFinite(Number(row[4])));
-    const last = complete.at(-1);
-    if (last) {
-      const change = (Number(last[4]) / Number(last[1]) - 1) * 100;
-      hasSharpImpulse = Number.isFinite(change) && Math.abs(change) >= 0.75;
-      if (hasSharpImpulse) {
-        impulseType = change > 0 ? 'pump' : 'dump';
-        impulseDescription = 'Остання закрита 5m свічка BTC: ' +
-          (change > 0 ? '+' : '') + change.toFixed(2) + '%';
-      }
-    } else {
-      impulseDescription = 'Дані 5m недоступні';
-    }
-  } else {
-    impulseDescription = 'Дані 5m недоступні';
-  }
-  return {
-    btcPrice, change24h,
-    available: btcPrice !== null || valid15 || valid5 || tf1.structure !== 'unknown',
-    timeframes: { '15m': tf15, '5m': tf5, '1m': tf1 },
-    overallStructure, overallStructureLabel,
-    hasSharpImpulse, impulseType, impulseDescription,
-    // No calendar provider is connected; synthetic CPI/session countdowns are misleading.
-    upcomingNews: [],
-  };
-}
+// BTC structure is measured from the same confirmed exchange candles as charts,
+// shared across all symbols and users by verifiedBtcContext.ts.
 
 // Exchange-specific, time-bounded orderbook snapshot. No fabricated bids/asks
 // on REST failure, and never substitute Binance Futures for Bybit or spot.
@@ -329,7 +235,7 @@ async function fetchDerivatives(
   const bybitOI = oi ? summarizeVerifiedUsdOI(oi.bybit, now) : absent;
 
   try {
-    const res = await exchangeFetch(`https://fapi.binance.com/fapi/v1/premiumIndex?symbol=${encodeURIComponent(symbol)}`, {
+    const res = await chartExchangeFetch(`https://fapi.binance.com/fapi/v1/premiumIndex?symbol=${encodeURIComponent(symbol)}`, {
       headers: BROWSER_HEADERS, signal: AbortSignal.timeout(3500),
     });
     if (res.ok) {
@@ -340,7 +246,7 @@ async function fetchDerivatives(
     }
   } catch { /* No funding estimate on network failure. */ }
   try {
-    const res = await exchangeFetch(`https://api.bybit.com/v5/market/tickers?category=linear&symbol=${encodeURIComponent(symbol)}`, {
+    const res = await chartExchangeFetch(`https://api.bybit.com/v5/market/tickers?category=linear&symbol=${encodeURIComponent(symbol)}`, {
       headers: BROWSER_HEADERS, signal: AbortSignal.timeout(3500),
     });
     if (res.ok) {
@@ -478,10 +384,17 @@ export async function generateSmartAnalysis(params: {
       undefined, undefined, { chart: true }).catch(() => [])) || [];
   const closedHours = hourly.filter((c) => finiteBar(c) &&
     c.time * 1000 + 60 * 60_000 <= Date.now()).slice(-24);
+  // Genuine 24h series must be consecutive and end within the last 2 hours.
+  // Otherwise show n/d instead of a misleading stale "24h" volume or POC.
+  const lastClosedHour = closedHours.at(-1);
+  const valid24hWindow = closedHours.length === 24 && lastClosedHour !== undefined &&
+    Date.now() / 1000 - (lastClosedHour.time + 3600) <= 7200 &&
+    closedHours.every((bar, i) =>
+      i === 0 || bar.time - closedHours[i - 1].time === 3600);
   // USD-equivalent volume only for USD-like quoted pairs. Never label BTC
   // quote turnover as USD or compare it against USD thresholds.
   const quoteIsUsdLike = /(USDT|USDC|BUSD|FDUSD|USD)$/.test(symbol);
-  const has24h = quoteIsUsdLike && closedHours.length === 24;
+  const has24h = quoteIsUsdLike && valid24hWindow;
   const barUsd = (bar: Kline) => Number.isFinite(bar.quoteVolume)
     ? bar.quoteVolume! : bar.volume * bar.close;
   const total24hVolUsd = has24h
@@ -501,8 +414,10 @@ export async function generateSmartAnalysis(params: {
   const dailyRangePct = dayRange !== null && dayLow !== null && dayLow > 0
     ? Number((dayRange/dayLow*100).toFixed(2)) : null;
 
-  // The POC is a candle-typical-price approximation, NOT tick volume-at-price.
-  const { pocPrice, pocVolumePct } = calculatePOC(klines);
+  // The POC is a candle-typical-price approximation, NOT executed volume-at-price.
+  // Use the SAME latest 24 CLOSED 1h bars as 24h High/Low. A nine-day POC
+  // contradicting the displayed 24h high/low was a period mismatch.
+  const { pocPrice, pocVolumePct } = calculatePOC(has24h ? closedHours : []);
   const strongSupport = Number((Math.min(...lows.slice(-15)) * .996).toPrecision(6));
   const strongResistance = Number((Math.max(...highs.slice(-15)) * 1.004).toPrecision(6));
   const liquidityLevels: SmartAnalysisData['levels']['liquidityLevels'] = [];
@@ -519,7 +434,7 @@ export async function generateSmartAnalysis(params: {
   }
   if (pocPrice !== null) {
     liquidityLevels.push({
-      label: 'Оціночний POC за обсягами OHLCV (не ордери стопів)',
+      label: 'Оціночний POC за 24 закриті 1h свічки OHLCV (не ордери стопів)',
       price: pocPrice, type: 'buy_side',
       distancePct: Number(((pocPrice-currentPrice)/currentPrice*100).toFixed(2)),
     });
@@ -527,7 +442,7 @@ export async function generateSmartAnalysis(params: {
 
   // Async parallel external data
   const [btcContext, orderbookData, derivatives] = await Promise.all([
-    analyzeBTCStructure(),
+    getVerifiedBtcContext(),
     fetchOrderbookAnalysis(symbol, exchange, marketType),
     fetchDerivatives(symbol, marketType),
   ]);
@@ -656,8 +571,13 @@ export async function generateSmartAnalysis(params: {
     signals.push({
       name: 'Низький обсяг за 24 закриті 1h свічки (<800k USDT)',
       detected: thinVolume, severity: thinVolume ? 'high' : 'low',
-      description: 'Виміряний обсяг ≈ ' + (total24hVolUsd / 1000).toFixed(0) +
-        'K у котируваній валюті. Це показник ліквідності, а не доказ маніпуляції.',
+      description: 'Виміряний обсяг ≈ $' +
+        (total24hVolUsd >= 1e9
+          ? (total24hVolUsd / 1e9).toFixed(2) + 'B'
+          : total24hVolUsd >= 1e6
+            ? (total24hVolUsd / 1e6).toFixed(2) + 'M'
+            : (total24hVolUsd / 1e3).toFixed(0) + 'K') +
+        ' в USD-подібній котируваній валюті. Це ліквідність, не доказ маніпуляції.',
     });
   }
   if (dailyRangePct !== null) {
