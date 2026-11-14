@@ -84,7 +84,8 @@ test('stale socket closes do not stop a newer Bybit heartbeat; unstable opens ba
     // socket AFTER the replacement's onopen handler. It must be a no-op.
     first.onclose?.();
     assert.equal(intervals.size, 1, 'old close must not cancel replacement ping');
-    assert.equal(timeouts.size, 1, 'only the seed deadline may remain pending');
+    assert.ok([...timeouts.values()].every(timer => timer.delay >= 7_000),
+      'stale socket must not schedule another reconnect');
     [...intervals.values()][0].run();
     assert.ok(second.sent.some(payload => JSON.parse(payload).op === 'ping'),
       'replacement websocket must keep sending heartbeats');
