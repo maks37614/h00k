@@ -341,7 +341,13 @@ test('Terminal workspace JSON import is available and disables auto presets befo
   assert.match(hook, /parseTerminalWorkspaceBackup\(json\)/);
   assert.match(hook, /setWorkspace\(recovered\)/);
   assert.match(page, /onImportWorkspaceBackup=\{handleImportWorkspaceBackup\}/);
-  assert.match(page, /if \(imported\) \{\s*setActiveMarketPreset\(null\)/);
+  const importHandlerStart = page.indexOf('const handleImportWorkspaceBackup = useCallback(');
+  const importHandlerEnd = page.indexOf('const handleSaveCoinPreset =', importHandlerStart);
+  assert.ok(importHandlerStart >= 0 && importHandlerEnd > importHandlerStart);
+  const importHandler = page.slice(importHandlerStart, importHandlerEnd);
+  assert.match(importHandler, /if \(imported\) \{/);
+  assert.match(importHandler, /setActiveMarketPreset\(null\)/);
+  assert.match(importHandler, /setPresetMatches\(\[\]\)/);
   assert.match(panel, /accept=".json,application\/json"/);
   assert.match(panel, /handleBackupFile\(event\)/);
   assert.match(panel, /onDownloadLocalBackup/);
