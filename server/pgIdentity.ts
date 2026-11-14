@@ -519,9 +519,10 @@ export async function updateAccountProfile(userId: string, value: unknown) {
     if (!EDITABLE_FIELDS.has(key)) throw new AuthFailure(400, 'Неприпустиме поле профілю: ' + key);
     patch[key] = data;
   }
-  // A Terminal workspace has its own revision. Concurrent edits of unrelated
-  // profile fields must not cause false conflicts. Older clients remain
-  // compatible, while new clients must supply their last-seen server version.
+  // Terminal revisions are independent of unrelated profile fields. A legacy
+  // client may initialize an unversioned workspace, but may NEVER overwrite one
+  // that has already been saved by a revision-aware client.
+  const hasWorkspacePatch = Object.prototype.hasOwnProperty.call(patch, 'terminalSettings');
   let expectedWorkspaceVersion: string | null | undefined;
   if (patch.terminalSettings && typeof patch.terminalSettings === 'object'
       && !Array.isArray(patch.terminalSettings)) {
@@ -539,7 +540,9 @@ export async function updateAccountProfile(userId: string, value: unknown) {
   const client = await database().connect();
   try {
     await client.query('BEGIN');
-    if (expectedWorkspaceVersion !== undefined) {
+    if (hasWorkspacePatch) {
+      // Without _expectedVersion, older clients may only update a workspace
+      // whose revision is still absent. This protects a new device's changes.
       const result = await client.query(
         "UPDATE auth_users SET profile = profile || $1::jsonb, updated_at = now() WHERE id = $2 AND COALESCE(profile -> 'terminalSettings' ->> 'version', '') = $3",
         [JSON.stringify(patch), userId, expectedWorkspaceVersion ?? ''],
