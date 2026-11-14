@@ -9,7 +9,7 @@ Var /GLOBAL h00kShortcutWanted
 
 !macro customWelcomePage
   !define MUI_WELCOMEPAGE_TITLE "h00k Desktop"
-  !define MUI_WELCOMEPAGE_TEXT "Smart Dock$\r$\n$\r$\nПідключіть h00k до MetaScalp, Tiger.Trade або Vataga.$\r$\n$\r$\nНатисніть Далі, щоб продовжити."
+  !define MUI_WELCOMEPAGE_TEXT "h00k Desktop$\r$\n$\r$\nПідключіть h00k до MetaScalp, Tiger.Trade або Vataga.$\r$\n$\r$\nНатисніть Далі, щоб продовжити."
   !insertmacro MUI_PAGE_WELCOME
 !macroend
 

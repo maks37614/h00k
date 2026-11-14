@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="uk"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>h00k Desktop · Smart Dock</title>
+<title>h00k Desktop · Налаштування</title>
 <style>
 :root{font:14px/1.5 "Segoe UI",system-ui,sans-serif;color:#e8f3fc;color-scheme:dark;background:#070a12}
 *{box-sizing:border-box}body{margin:0;padding:20px}button,input,select{font:inherit}button{cursor:pointer}
@@ -25,7 +25,7 @@ button.danger{background:#38212b;border-color:#833b4c;color:#ffced8}
 #feedback{font-size:12px;color:#79e7c7;min-height:20px}
 @media(max-width:600px){.stack,.checks{grid-template-columns:1fr}.tabs button{font-size:11px}.grid label{font-size:11px;padding:7px 3px}}
 </style></head><body>
-<header><div><h1>h00k <span style="color:#fff">Desktop</span></h1><small>Smart Dock · Windows</small></div><div class="row" style="margin:0"><button class="action" id="standalone">Окреме вікно</button><button class="action" id="browser">У браузері ↗</button></div></header>
+<header><div><h1>h00k <span style="color:#fff">Desktop</span></h1><small>Налаштування прикріплення · Windows</small></div><div class="row" style="margin:0"><button class="action" id="standalone">Окреме вікно</button><button class="action" id="browser">У браузері ↗</button></div></header>
 <section><h2>1. Торговий термінал</h2><div class="tabs" id="tabs"></div><p>Для кожного термінала окремі налаштування. Можна прикріпити h00k до декількох терміналів одночасно.</p>
 <div id="status">Шукаю запущені термінали…</div>
 <label for="target"><small>Вибрати конкретне вікно вручну</small></label><select id="target"><option value="">Автоматичний пошук</option></select>
@@ -48,7 +48,7 @@ button.danger{background:#38212b;border-color:#833b4c;color:#ffced8}
 <label class="check"><input type="checkbox" id="alwaysOnTop"> Завжди поверх вікон</label>
 </div><p>Коли «Слідувати» вимкнено, можна вільно розміщувати плаваючі панелі. Їхнє розташування на моніторах автоматично зберігається й відновлюється під час наступного запуску.</p></section>
 <div class="row"><button class="action primary" id="save">Зберегти налаштування</button><button class="action" id="attach">Прикріпити зараз</button><button class="action danger" id="detach">Відкріпити</button></div>
-<div id="feedback" role="status"></div><small>Налаштування зберігаються лише на цьому комп’ютері. Smart Dock не запитує біржові API-ключі.</small>
+<div id="feedback" role="status"></div><small>Налаштування зберігаються лише на цьому комп’ютері. Програма не запитує біржові API-ключі.</small>
 <p>Примітка: Google OAuth може не працювати у вбудованому вікні Windows через правила Google для embedded webviews. Для входу безпосередньо в h00k Desktop використовуйте email і пароль; вхід у зовнішньому браузері не переносить авторизацію автоматично.</p>
 <script>
 'use strict';
