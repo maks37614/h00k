@@ -255,7 +255,8 @@ export class ExchangeStreamClient extends EventEmitter {
       // If buyer is maker, taker is seller -> aggressive SELL. If buyer is taker -> aggressive BUY.
       const side: 'BUY' | 'SELL' = isBuyerMaker ? 'SELL' : 'BUY';
 
-      if (!isNaN(price) && price > 0 && !isNaN(quantity) && quantity > 0) {
+      if (Number.isFinite(price) && price > 0 && Number.isFinite(quantity) && quantity > 0 &&
+          isFreshDepthTime(msg.T ?? msg.E)) {
         const tradeEvent: RawTradeEvent = {
           price,
           quantity,
