@@ -105,7 +105,15 @@ test('map switch is under expanded tools, disabled by default, absent on replay/
   assert.match(ui,/LazyLiquidationHeatmapLoader = React\.lazy/);
   assert.match(ui,/liquidationMapOn && liquidationMapSupported/);
   assert.match(ui,/aria-pressed=\{liquidationMapOn\}/);
-  assert.match(ui,/Карта Liq/);
+  // Compact map glyph, never the old flame-and-text pill. Accessible
+  // label/pressed state remain available for mobile assistive technology.
+  assert.match(ui,/Map as MapIcon/);
+  assert.match(ui,/<MapIcon size=\{17\} strokeWidth=\{1\.9\} aria-hidden="true" \/>/);
+  assert.doesNotMatch(ui,/<Flame size=\{14\}\/><span>Карта Liq<\/span>/);
+  assert.match(ui,/aria-label=\{liquidationMapOn \? 'Вимкнути карту ліквідацій' : 'Увімкнути карту ліквідацій'\}/);
+  const css=readFileSync(new URL('../src/components/hookchart/integration.css',import.meta.url),'utf8');
+  assert.match(css,/\.liqHeatmapTools button\.liqHeatmapSwitch \{[\s\S]*?width:30px;/);
+  assert.match(css,/\.liqHeatmapTools button\.liqHeatmapSwitch\.active/);
   assert.match(ui,/liquidationHeatmap=\{mapChartData\}/);
   assert.match(engine,/if \(liquidationHeatmap\?\.bins\.length\) \{/);
   assert.match(engine,/paintObservedLiquidationHeatmap\(q,liquidationHeatmap\.bins/);
