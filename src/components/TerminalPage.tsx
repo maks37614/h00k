@@ -1175,12 +1175,14 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
             <ExchangeCandlestickChart
               forceHookChart
               visualContext="terminalLarge"
-              symbol={activeCoin.symbol}
+              // Use the saved chart block immediately rather than a one-render
+              // stale activeCoin snapshot while hydration or switching catches up.
+              symbol={blocks[0].symbol}
               terminalAutoScale={autoScaleCharts && chartProvider === 'hookchart'}
               terminalInitialView={config.initialChartView}
-              exchange={activeCoin.exchange}
-              marketType={activeCoin.marketType}
-              timeframe={activeTimeframe}
+              exchange={blocks[0].exchange}
+              marketType={blocks[0].marketType}
+              timeframe={blocks[0].timeframe}
             />
             </div>
             {presetPagination && <div className="shrink-0 px-2 pb-2">{presetPagination}</div>}
