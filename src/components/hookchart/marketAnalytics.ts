@@ -74,6 +74,53 @@ export function orderBookLocalShareFloor(
   return other * target / (1 - target);
 }
 
+/**
+ * Batch equivalent of orderBookLocalShareFloor. The old per-candidate scan
+ * performs O(levels × candidates) work on every depth refresh. This lookup
+ * groups prices by side, builds prefix USD sums once and answers each query
+ * with two binary searches. Same-price levels are excluded exactly as before.
+ */
+export function createOrderBookLocalShareFloorLookup(
+  levels: readonly OrderBookDensityLevel[],
+  widthPct = .5,
+  share = .25,
+): (candidate: OrderBookDensityLevel) => number {
+  const width = Math.max(0, widthPct) / 100;
+  const target = Math.max(0, Math.min(.95, share));
+  const build = (side: OrderBookDensityLevel['side']) => {
+    const sorted = levels.filter(level => level.side === side).sort((a, b) => a.p - b.p);
+    const prices: number[] = [];
+    const totals: number[] = [0];
+    const byPrice = new Map<number, number>();
+    for (const row of sorted) {
+      prices.push(row.p);
+      totals.push(totals.at(-1)! + row.usd);
+      byPrice.set(row.p, (byPrice.get(row.p) || 0) + row.usd);
+    }
+    return { prices, totals, byPrice };
+  };
+  const indexed = { BID: build('BID'), ASK: build('ASK') };
+  const bound = (prices: readonly number[], value: number, upper: boolean) => {
+    let lo = 0, hi = prices.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >>> 1;
+      if (prices[mid] < value || (upper && prices[mid] === value)) lo = mid + 1;
+      else hi = mid;
+    }
+    return lo;
+  };
+  return candidate => {
+    const { prices, totals, byPrice } = indexed[candidate.side];
+    if (!prices.length || target === 0 || !(candidate.p > 0)) return 0;
+    const deviation = candidate.p * width;
+    const left = bound(prices, candidate.p - deviation, false);
+    const right = bound(prices, candidate.p + deviation, true);
+    if (right <= left) return 0;
+    const others = Math.max(0, totals[right] - totals[left] - (byPrice.get(candidate.p) || 0));
+    return others * target / (1 - target);
+  };
+}
+
 export const median=(a:number[])=>{if(!a.length)return 0;const x=[...a].sort((m,n)=>m-n),i=Math.floor(x.length/2);return x.length%2?x[i]:(x[i-1]+x[i])/2};
 export const quantile=(a:number[],q:number)=>{if(!a.length)return 0;const x=[...a].sort((m,n)=>m-n),pos=(x.length-1)*q,lo=Math.floor(pos),hi=Math.ceil(pos);return lo===hi?x[lo]:x[lo]+(x[hi]-x[lo])*(pos-lo)};
 export const robustThreshold=(values:number[],q=.965,madMult=5)=>{const v=values.filter(x=>Number.isFinite(x)&&x>0);if(v.length<12)return v.length?Math.max(quantile(v,.9),median(v)*3):0;const logs=v.map(x=>Math.log1p(x)),m=median(logs),mad=median(logs.map(x=>Math.abs(x-m)))||.01;const robust=Math.expm1(m+madMult*1.4826*mad);return Math.max(quantile(v,q),robust)};
