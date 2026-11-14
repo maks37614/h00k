@@ -2667,8 +2667,8 @@
 }
 .hookchart-root .hookchart-toolbar .liqHeatmapTools button.liqHeatmapSwitch svg {
   display:block;
-  width:17px;
-  height:17px;
+  width:15px;
+  height:15px;
   flex-shrink:0;
 }
 .hookchart-root .hookchart-toolbar .liqHeatmapTools button.liqHeatmapSwitch.active {
