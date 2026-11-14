@@ -23,6 +23,7 @@ const locale: LocaleFile = {
     "screenerVolume24h": "24h Volume:",
     "screenerVolumeTo": "Up to",
     "screenerVolumeFrom": "From",
+    "screenerVolumeUnlimited": "Unlimited",
     "addToSurveillance": "Add to Surveillance",
     "language": "Site Language",
     "allExchanges": "All Exchanges",
