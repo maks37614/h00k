@@ -93,8 +93,13 @@ export class OrderBookEngine {
 
   public applyDepth(delta: RawDepthDelta) {
     const now = Date.now();
+    // Exchange fallback packets may contain numeric strings. Validating them
+    // and then iterating the original tuples silently drops all string levels.
+    // Apply only the normalized numeric levels used in validation.
+    const bids = parseDepthLevels(delta.bids);
+    const asks = parseDepthLevels(delta.asks);
     if (!Number.isSafeInteger(delta.sequence) || delta.sequence! <= 0 ||
-        !parseDepthLevels(delta.bids) || !parseDepthLevels(delta.asks) ||
+        !bids || !asks ||
         (delta.eventTime !== undefined && !isFreshDepthTime(delta.eventTime, now))) {
       this.sequenceGap = true;
       this.setStatus(delta.eventTime !== undefined && !isFreshDepthTime(delta.eventTime, now) ? 'STALE' : 'RESYNCING');
@@ -134,7 +139,7 @@ export class OrderBookEngine {
     let bestAsk = delta.isSnapshot ? Infinity : (this.bestAsk || Infinity);
     let bidDeletedAtBest = false;
     let askDeletedAtBest = false;
-    for (const [price, qty] of delta.bids) {
+    for (const [price, qty] of bids) {
       if (!Number.isFinite(price) || price <= 0 ||
           !Number.isFinite(qty) || qty < 0) continue;
       if (qty === 0) {
@@ -145,7 +150,7 @@ export class OrderBookEngine {
         if (price > bestBid) bestBid = price;
       }
     }
-    for (const [price, qty] of delta.asks) {
+    for (const [price, qty] of asks) {
       if (!Number.isFinite(price) || price <= 0 ||
           !Number.isFinite(qty) || qty < 0) continue;
       if (qty === 0) {
