@@ -37,6 +37,7 @@ test('incomplete check errors retain their failed-coin count for retryable 503 r
   assert.equal(error.name, 'SurveillanceCheckIncompleteError');
   assert.equal(error.failedChecks, 2);
   assert.match(error.message, /2 монет/);
+  assert.match(error.message, /Спробуйте пізніше/);
 });
 
 test('surveillance endpoints do not report a successful manual scan without new candles', () => {
