@@ -73,7 +73,10 @@ function loadDeletedAlertIds() {
 function saveDeletedAlertIds() {
   ensureDataDir();
   const temporary = `${DELETED_ALERTS_FILE}.tmp`;
-  fs.writeFileSync(temporary, JSON.stringify([...deletedAlertIds]), 'utf-8');
+  // Tombstones contain owner/alert identities. Restrict access before rename,
+  // including when an older release left a permissive .tmp file behind.
+  fs.writeFileSync(temporary, JSON.stringify([...deletedAlertIds]), { encoding: 'utf-8', mode: 0o600 });
+  fs.chmodSync(temporary, 0o600);
   fs.renameSync(temporary, DELETED_ALERTS_FILE);
 }
 
@@ -158,7 +161,10 @@ export function saveAlerts(alerts: PriceAlert[]): boolean {
     const temp = `${ALERTS_FILE}.tmp`;
     const payload = JSON.stringify(alerts);
     bytes = Buffer.byteLength(payload);
-    fs.writeFileSync(temp, payload, 'utf-8');
+    // Price alerts contain personal settings. A reused temp file can retain
+    // old permissive permissions; chmod before exposing the final path.
+    fs.writeFileSync(temp, payload, { encoding: 'utf-8', mode: 0o600 });
+    fs.chmodSync(temp, 0o600);
     fs.renameSync(temp, ALERTS_FILE);
     alertsCache = alerts;
     alertsByUser = null;
@@ -202,7 +208,9 @@ export function saveHistory(items: AlertHistoryItem[]): boolean {
     const temp = `${HISTORY_FILE}.tmp`;
     const payload = JSON.stringify(items);
     bytes = Buffer.byteLength(payload);
-    fs.writeFileSync(temp, payload, 'utf-8');
+    // Alert history contains personal trigger and delivery information.
+    fs.writeFileSync(temp, payload, { encoding: 'utf-8', mode: 0o600 });
+    fs.chmodSync(temp, 0o600);
     fs.renameSync(temp, HISTORY_FILE);
     // A failed write must never make unpersisted history look durable.
     historyCache = items;
