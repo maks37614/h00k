@@ -167,3 +167,9 @@ test('1x–4x Terminal layout buttons never remove, replace or reorder existing 
   }
   assert.match(layout, /config\.columns === 1/);
 });
+
+test('Terminal preserves actual quote timestamp instead of claiming every refreshed card is fresh', () => {
+  const page = source('../src/components/TerminalPage.tsx');
+  assert.match(page, /timeframe: preferences\.defaultTimeframe, lastUpdated: marketSnapshot\.timestamp \?\? 0/);
+  assert.match(page, /\[marketCoins, marketSnapshot\.timestamp, formationCoins, preferences\.defaultTimeframe\]/);
+});
