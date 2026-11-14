@@ -296,14 +296,24 @@ const HookChartCanvas = forwardRef<HookChartHandle, HookChartCanvasProps>(functi
     });
     return () => cleanup.forEach(dispose => dispose());
   }, [terminalMode, integratedToolbar, terminalExtraToolsOpen, settings.showTopToolbarIcons, settings.showMarketStatsBar]);
-  const indicators = replay ? replayIndicators : enabledIndicators(settings, !!externalData, marketType);
+  // Stable indicator IDs avoid redoing the SVG calculations for unrelated feed updates.
+  const indicators = useMemo(() => replay ? replayIndicators : enabledIndicators(settings, !!externalData, marketType),
+    [replay, replayIndicators, settings.indicators, !!externalData, marketType]);
   const timezone = settings.timezone || resolveTimeZone(profile?.timeZone);
   // Replay is intentionally independent from the live indicator data pipeline.
   const replayConversionRef = useRef<{ scope: string; input: readonly Kline[]; candles: Candle[] } | null>(null);
+  // Live ticks normally replace just the last immutable candle. Keep the
+  // history conversion separate from Replay, with a full rebuild on any
+  // altered prefix, history page, symbol, timeframe or candle limit.
+  const liveConversionRef = useRef<{
+    scope: string; input: readonly Kline[]; history: readonly Kline[];
+    max: number | undefined; candles: Candle[];
+  } | null>(null);
   // Replay must remain causal; live chart history can be extended and capped independently.
   const maxChartCandles = settings.maxChartCandles === undefined ? undefined : clampHookChartHistory(settings.maxChartCandles);
   const candles = useMemo(() => {
     if (replay) {
+      liveConversionRef.current = null;
       const previous = replayConversionRef.current;
       const change = replayHistoryChange(previous?.scope === historyScope ? previous.input : null, klines);
       if (previous && previous.scope === historyScope && change === 'same') return previous.candles;
@@ -323,8 +333,34 @@ const HookChartCanvas = forwardRef<HookChartHandle, HookChartCanvasProps>(functi
       return rows;
     }
     replayConversionRef.current = null;
+    const previous = liveConversionRef.current;
+    const sameScope = previous?.scope === historyScope &&
+      previous.history === extraHistoryRows && previous.max === maxChartCandles;
+    const change = sameScope ? replayHistoryChange(previous!.input, klines) : 'reset';
+    if (change === 'same') return previous!.candles;
+    if ((change === 'append' || change === 'replace-last') && previous?.candles.length &&
+        previous.input.at(-1)?.time * 1000 === previous.candles.at(-1)?.t) {
+      const last = toHookCandles(klines.slice(-1))[0];
+      const oldLast = previous.candles.at(-1)!;
+      if (last && (change === 'append' ? last.t > oldLast.t : last.t === oldLast.t)) {
+        const next = change === 'append'
+          ? [...previous.candles, last]
+          : [...previous.candles.slice(0, -1), last];
+        const result = maxChartCandles ? next.slice(-maxChartCandles) : next;
+        liveConversionRef.current = {
+          scope: historyScope, input: klines, history: extraHistoryRows,
+          max: maxChartCandles, candles: result,
+        };
+        return result;
+      }
+    }
     const rows = toHookCandles([...extraHistoryRows, ...klines]);
-    return maxChartCandles ? rows.slice(-maxChartCandles) : rows;
+    const result = maxChartCandles ? rows.slice(-maxChartCandles) : rows;
+    liveConversionRef.current = {
+      scope: historyScope, input: klines, history: extraHistoryRows,
+      max: maxChartCandles, candles: result,
+    };
+    return result;
   }, [klines, extraHistoryRows, replay, maxChartCandles, historyScope]);
   const historyRequestKey = useRef('');
   useEffect(() => {
@@ -386,7 +422,10 @@ const HookChartCanvas = forwardRef<HookChartHandle, HookChartCanvasProps>(functi
   const liveFeed = useOriginalHookChartLiveFeed({ exchange, marketType, symbol, settings, candles, replay });
   const potentialDensityCount = liveFeed.densities.filter(density => density.reactionTier === 'potential').length;
   // Only filter the chart. Strategy evaluation and density lists retain the full live book.
-  const chartDensities = visibleChartDensities(liveFeed.densities, settings.densityMode, settings.densityAutoDisplay);
+  const chartDensities = useMemo(
+    () => visibleChartDensities(liveFeed.densities, settings.densityMode, settings.densityAutoDisplay),
+    [liveFeed.densities, settings.densityMode, settings.densityAutoDisplay],
+  );
   const activeStrategy = useMemo(() => strategyPreset(settings.strategyId || ''), [settings.strategyId]);
   const analysisTfs = useMemo(() =>
     Array.from(new Set<string>([timeframe, ...(settings.levelIntervals || []), ...(settings.trendIntervals || []), ...(activeStrategy?.requiredTfs || [])])),
