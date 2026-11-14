@@ -242,7 +242,7 @@ After the application files install, three translated onboarding pages explain:
 3. Existing MetaScalp/Tiger symbol linking, current limits of the Vataga API,
    and safe read-only exchange API keys (when used in supported h00k features).
 
-**Security:** h00k Smart Dock does **not** need API keys; never give trading
+**Security:** h00k Desktop does **not** need API keys; never give trading
 or withdrawal permissions to a read-only connection. Docking Vataga windows
 is supported, but automatic ticker linking over a Vataga API has not been
 implemented because the external protocol has not been confirmed.
