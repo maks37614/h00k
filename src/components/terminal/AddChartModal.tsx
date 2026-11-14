@@ -24,6 +24,8 @@ interface AddChartModalProps {
   isOpen: boolean;
   onClose: () => void;
   coins: ScannedCoin[];
+  /** Already loaded by TerminalPage; avoids a duplicate full-market request. */
+  terminalMarketCoins?: MarketCoin[];
   watchlist: string[];
   onAddChart: (
     coin: ScannedCoin | MarketCoin | { symbol: string; baseAsset: string; quoteAsset: string; exchange: ExchangeId; marketType: MarketType },
@@ -41,6 +43,7 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({
   isOpen,
   onClose,
   coins,
+  terminalMarketCoins,
   watchlist,
   onAddChart,
 }) => {
@@ -51,6 +54,8 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({
   const [selectedMinVolume, setSelectedMinVolume] = useState<number>(50_000); // Default $50k
   const [selectedTimeframe, setSelectedTimeframe] = useState<Timeframe>('15m');
   const [marketCoins, setMarketCoins] = useState<MarketCoin[]>(() => globalMarketCoinsCache || []);
+  // Prefer Terminal's existing quote snapshot over this dialog's fallback cache.
+  const availableMarketCoins = terminalMarketCoins?.length ? terminalMarketCoins : marketCoins;
   const [isLoadingAllCoins, setIsLoadingAllCoins] = useState(false);
   const [displayCount, setDisplayCount] = useState<number>(80);
 
@@ -63,6 +68,12 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({
   // Load all coins from exchange ($50k to $10B)
   useEffect(() => {
     if (!isOpen) return;
+    // The parent Terminal already refreshes this market catalog. Avoid another
+    // backend call (and possibly four direct-exchange fallbacks) on each open.
+    if (terminalMarketCoins?.length) {
+      setIsLoadingAllCoins(false);
+      return;
+    }
 
     if (globalMarketCoinsCache && Date.now() - globalMarketCoinsTimestamp < CACHE_TTL) {
       setMarketCoins(globalMarketCoinsCache);
@@ -115,7 +126,7 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({
     return () => {
       isMounted = false;
     };
-  }, [isOpen]);
+  }, [isOpen, terminalMarketCoins]);
 
   // Create unified lookup map from ScannedCoins (contains detected formations)
   const formationsMap = useMemo(() => {
@@ -129,8 +140,9 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({
 
   // Unified coins list: merges all market coins with formation metadata
   const unifiedCoins = useMemo(() => {
-    if (marketCoins.length > 0) {
-      return marketCoins.map((mc) => {
+    if (availableMarketCoins.length > 0) {
+      // Keep the modal's existing $50k–$10B catalog constraint.
+      return availableMarketCoins.filter(mc => mc.volumeUsd >= 50_000 && mc.volumeUsd <= 10_000_000_000).map((mc) => {
         const key = `${mc.exchange}_${mc.symbol}_${mc.marketType}`.toUpperCase();
         const scanned = formationsMap.get(key);
         return {
@@ -163,7 +175,7 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({
       lowPrice24h: c.lowPrice24h || c.currentPrice,
       formations: c.formations || [],
     }));
-  }, [marketCoins, coins, formationsMap]);
+  }, [availableMarketCoins, coins, formationsMap]);
 
   // Filter and sort coins
   const filteredCoins = useMemo(() => {
@@ -534,7 +546,7 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({
 
         {/* Coins List (Virtualized / Paginated) */}
         <div className="terminal-add-chart-list min-h-0 min-w-0 flex-1 divide-y divide-slate-800/60 overflow-x-hidden overflow-y-auto overscroll-contain p-3 touch-scroll">
-          {isLoadingAllCoins && marketCoins.length === 0 ? (
+          {isLoadingAllCoins && availableMarketCoins.length === 0 ? (
             <div className="py-16 text-center text-slate-400 space-y-3">
               <Loader2 className="w-8 h-8 mx-auto text-cyan-400 animate-spin" />
               <p className="text-xs font-semibold text-white">Завантаження повного списку монет з біржі ($50k - $10B)...</p>
