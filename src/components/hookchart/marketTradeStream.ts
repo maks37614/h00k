@@ -25,6 +25,9 @@ const MAX_SAMPLE = 8192;
 const MAX_SEEN = 30000;
 const PRINT_HISTORY_MS = 60 * 60_000;
 const MAX_PRINT_SECONDS = 7200;
+const WS_CONNECT_TIMEOUT_MS = 15_000;
+const BYBIT_HEARTBEAT_INTERVAL_MS = 20_000;
+const BYBIT_HEARTBEAT_STALE_MS = 60_000;
 
 /** Exponential retry with per-browser jitter, to prevent mass reconnect bursts. */
 export function marketTradeReconnectDelay(attempt: number, randomValue = Math.random()): number {
@@ -163,6 +166,7 @@ class SharedMarketTradeStream {
   private recentHead = 0;
   private socket: WebSocket | null = null;
   private ping: ReturnType<typeof setInterval> | null = null;
+  private connectDeadline: ReturnType<typeof setTimeout> | null = null;
   private publishTimer: ReturnType<typeof setTimeout> | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private pending: MarketTrade[] = [];
@@ -308,10 +312,13 @@ class SharedMarketTradeStream {
       // recovery. Preserve exponential backoff until the connection has
       // remained established for a meaningful interval.
       let openedAt = 0;
+      let lastBybitResponseAt = 0;
       ws.onopen = () => {
-        if (this.stopped || this.socket !== ws) return;
+        if (this.stopped || this.socket !== ws || this.reconnectTimer) return;
         openedAt = Date.now();
+        if (this.connectDeadline) { clearTimeout(this.connectDeadline); this.connectDeadline = null; }
         if (exchange !== 'binance') {
+          lastBybitResponseAt = openedAt;
           try {
             ws.send(JSON.stringify({ op: 'subscribe', args: ['publicTrade.' + symbol] }));
           } catch {
@@ -321,23 +328,40 @@ class SharedMarketTradeStream {
             return;
           }
           this.ping = setInterval(() => {
-            if (ws.readyState === WebSocket.OPEN) {
-              try { ws.send(JSON.stringify({ op: 'ping' })); }
-              catch { try { ws.close(); } catch {} reconnect(); }
+            if (this.stopped || this.socket !== ws || this.reconnectTimer) return;
+            // Bybit acknowledges application-level pings even when an
+            // illiquid market has no trades. Silence from the server despite
+            // outgoing pings indicates a half-open transport.
+            if (ws.readyState !== WebSocket.OPEN ||
+                Date.now() - lastBybitResponseAt >= BYBIT_HEARTBEAT_STALE_MS) {
+              reconnect();
+              return;
             }
-          }, 20_000);
+            try { ws.send(JSON.stringify({ op: 'ping' })); }
+            catch { reconnect(); }
+          }, BYBIT_HEARTBEAT_INTERVAL_MS);
         }
       };
       ws.onmessage = event => {
-        if (this.stopped || this.socket !== ws) return;
+        if (this.stopped || this.socket !== ws || this.reconnectTimer) return;
         try {
           const data = JSON.parse(event.data);
+          if (!data || typeof data !== 'object') return;
           if (exchange === 'binance') {
             this.receive({
               t: Number(data.T), p: Number(data.p), q: Number(data.q),
               side: data.m ? 'SELL' : 'BUY', id: String(data.a ?? ''),
             });
+          } else if (data.op === 'subscribe' && data.success === false) {
+            // Do not treat a rejected subscription as a healthy open socket.
+            reconnect();
+          } else if (data.op === 'pong' ||
+                     (data.op === 'ping' && data.success !== false &&
+                       (data.ret_msg === 'pong' || data.retMsg === 'pong'))) {
+            lastBybitResponseAt = Date.now();
           } else if (data.topic === 'publicTrade.' + symbol && Array.isArray(data.data)) {
+            // A genuine market frame is also proof of a working transport.
+            lastBybitResponseAt = Date.now();
             const trades: MarketTrade[] = data.data.map((row: any) => ({
               t: Number(row.T), p: Number(row.p), q: Number(row.v),
               side: String(row.S).toLowerCase() === 'sell' ? 'SELL' : 'BUY',
@@ -353,6 +377,7 @@ class SharedMarketTradeStream {
         // heartbeat belonging to the already established replacement.
         if (this.stopped || this.socket !== ws || this.reconnectTimer) return;
         if (this.ping) { clearInterval(this.ping); this.ping = null; }
+        if (this.connectDeadline) { clearTimeout(this.connectDeadline); this.connectDeadline = null; }
         // Only a stable connection resets the retry budget. Otherwise an
         // exchange that briefly accepts then drops connections would induce
         // a permanent one-second reconnect storm across Terminal coins.
@@ -362,9 +387,17 @@ class SharedMarketTradeStream {
           this.reconnectTimer = null;
           this.connect();
         }, delay);
+        // Browsers do not guarantee that close/error follows a half-open
+        // socket. Initiate shutdown ourselves; the late close is idempotent.
+        try { ws.close(); } catch {}
       };
-      ws.onerror = () => { try { ws.close(); } catch {} };
+      ws.onerror = reconnect;
       ws.onclose = reconnect;
+      // Never leave a CONNECTING WebSocket indefinitely registered in the
+      // shared Terminal feed (including if its error/close events never fire).
+      this.connectDeadline = setTimeout(() => {
+        if (!this.stopped && this.socket === ws && !openedAt) reconnect();
+      }, WS_CONNECT_TIMEOUT_MS);
     } catch {
       if (!this.stopped && !this.reconnectTimer) {
         const delay = marketTradeReconnectDelay(this.retries++);
@@ -377,6 +410,7 @@ class SharedMarketTradeStream {
     this.stopped = true;
     this.abort.abort();
     if (this.ping) clearInterval(this.ping);
+    if (this.connectDeadline) clearTimeout(this.connectDeadline);
     if (this.publishTimer) clearTimeout(this.publishTimer);
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
     this.listeners.clear();
