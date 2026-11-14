@@ -124,3 +124,13 @@ test('Terminal renders truthful quote status, unique rapid-add IDs and indexed m
   assert.match(page, /const coinsByMarket = useMemo\(\(\) => \{/);
   assert.match(page, /coinsByMarket\.get\(coinMarketKey\(block\)\)/);
 });
+
+test('Terminal does not poll market quotes while hidden and refreshes safely on return', () => {
+  const page = source('../src/components/TerminalPage.tsx');
+  assert.match(page, /document\.visibilityState === 'hidden'/);
+  assert.match(page, /document\.visibilityState === 'visible'/);
+  assert.match(page, /now - lastRequestAt < 25_000/);
+  assert.match(page, /document\.addEventListener\('visibilitychange', onVisibilityChange\)/);
+  assert.match(page, /document\.removeEventListener\('visibilitychange', onVisibilityChange\)/);
+  assert.match(page, /controller\.abort\(\)/);
+});
