@@ -40,7 +40,7 @@ import { formatCryptoPrice, formatVolume } from '../utils/formatters';
 import { getStoredPreferences, useAppPreferences } from '../utils/userPreferences';
 import { useAuth } from '../context/AuthContext';
 import { useTerminalWorkspace } from '../utils/useTerminalWorkspace';
-import { blocksForMarketPreset } from '../utils/terminalPresets';
+import { blocksForMarketPreset, normalizeTerminalMarketPair } from '../utils/terminalPresets';
 import { getTerminalPresetPage, pageAfterLimitChange, resolveTerminalPresetPageSize } from '../utils/terminalPresetPaging';
 import { MARKET_PRESETS, coinMarketKey, type TerminalMarketPreset } from '../utils/marketPresets';
 import { loadMarketCoins, type MarketCoinSnapshot } from '../utils/marketCoinLoader';
@@ -430,11 +430,9 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
   }, [chartProvider, activeCoin.symbol, activeCoin.exchange, activeCoin.marketType, activeTimeframe]);
 
   // Block management
-  const handleAddChart = (coin: any, tf: Timeframe, formationId?: string) => {
-    const rawSymbol = (coin.symbol || 'BTCUSDT').toUpperCase().replace('/', '').trim();
-    const symbol = rawSymbol.endsWith('USDT') ? rawSymbol : `${rawSymbol}USDT`;
-    const base = coin.baseAsset || symbol.replace(/(USDT|BUSD|USDC)$/, '') || symbol;
-    const quote = coin.quoteAsset || 'USDT';
+  const handleAddChart = (coin: MarketCoin | ScannedCoin, tf: Timeframe, formationId?: string) => {
+    const { symbol, quoteAsset: quote } = normalizeTerminalMarketPair(coin.symbol, coin.quoteAsset);
+    const base = coin.baseAsset || symbol.slice(0, -quote.length);
     const exchange = coin.exchange || 'binance';
     const marketType = coin.marketType || 'futures';
 
