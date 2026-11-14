@@ -363,10 +363,16 @@ export function getAllActiveSurveillanceCoins(): { userId: string; coin: Surveil
     if (Array.isArray(coins)) {
       for (const coin of coins) {
         if (coin.isActive) {
-          if (!coin.config.triggerModes) {
-            coin.config.triggerModes = coin.config.triggerMode ? [coin.config.triggerMode] : ['bar_close'];
-          }
-          results.push({ userId, coin });
+          // Legacy defaults are normalized for scheduling only. Reading the
+          // active monitor inventory must not silently change saved configs.
+          const scheduledCoin = coin.config.triggerModes ? coin : {
+            ...coin, config: {
+              ...coin.config,
+              triggerModes: coin.config.triggerMode
+                ? [coin.config.triggerMode] : ['bar_close' as const],
+            },
+          };
+          results.push({ userId, coin: scheduledCoin });
         }
       }
     }
