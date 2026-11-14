@@ -120,13 +120,14 @@ test('adaptive Liq threshold respects the inclusive 15m window without recalcula
   ], t0), Infinity);
 });
 
-test('stable buffer references do not freeze the time-sensitive cascade indicator', () => {
-  const source = readFileSync(new URL('../src/components/hookchart/useOriginalHookChartLiveFeed.ts', import.meta.url), 'utf8');
-  assert.match(source, /rows !== lastPublishedRows \|\| now >= nextCascadeTransitionAt/);
+test('one shared Liq view preserves time-sensitive cascade and adaptive-cut expiry', () => {
+  const source = readFileSync(new URL('../src/components/hookchart/sharedLiquidationView.ts', import.meta.url), 'utf8');
+  const hook = readFileSync(new URL('../src/components/hookchart/useOriginalHookChartLiveFeed.ts', import.meta.url), 'utf8');
+  assert.match(source, /now >= entry\.nextCascadeAt/);
   assert.match(source, /nextLiquidationCascadeTransition\(rows, now\)/);
-  assert.match(source, /rows !== lastAdaptiveRows \|\| now > adaptiveExpiresAt/);
+  assert.match(source, /now > entry\.adaptiveExpiresAt/);
   assert.match(source, /nextLiquidationAdaptiveCutExpiry\(rows, now\)/);
-  assert.match(source, /setCascadeClock\(now\)/);
-  assert.match(source, /calcCascadeRisk\(liquidations, liquidationCut, candles\.at\(-1\)\?\.c \|\| 0\)/);
-  assert.match(source, /\[liquidations, liquidationCut, candles\.at\(-1\)\?\.c, cascadeClock\]/);
+  assert.match(hook, /setCascadeClock\(view\.cascadeClock\)/);
+  assert.match(hook, /calcCascadeRisk\(liquidations, liquidationCut, candles\.at\(-1\)\?\.c \|\| 0\)/);
+  assert.match(hook, /\[liquidations, liquidationCut, candles\.at\(-1\)\?\.c, cascadeClock\]/);
 });
