@@ -3,6 +3,7 @@ import path from 'node:path';
 import type { Server } from 'node:http';
 import WebSocket, { WebSocketServer, type RawData } from 'ws';
 import { sharedLiquidationUpstreams } from './liquidationUpstreamPool';
+import { liquidationArchive } from './liquidationArchive';
 
 export type LiquidationRow = {
   id: string; side: 'LONG' | 'SHORT'; t: number; p: number; q: number; usd: number;
@@ -186,6 +187,9 @@ export class SharedLiquidationFeed {
       entry.lastEventAt = Math.max(entry.lastEventAt, row.t);
       this.counters.received++;
       this.revision++;
+      // Optional durable observed-event history. Unique (exchange,symbol,id)
+      // upserts are independent of the bounded 30-minute chart event buffer.
+      liquidationArchive.record({ exchange: entry.exchange, symbol: entry.symbol, ...row });
       this.broadcast(entry, { type: 'liquidation', event: row });
     }
     this.prune(entry);
