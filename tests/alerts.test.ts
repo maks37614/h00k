@@ -74,9 +74,16 @@ test('duplicate create requests preserve a paused or triggered alert', () => {
   service.toggleAlert(created.id, 'retry-user', false);
   assert.equal(service.createAlert(alert(created.id, 'retry-user')).isActive, false);
   assert.equal(service.createAlertsBatch('retry-user', [alert(created.id, 'retry-user')])[0].isActive, false);
+  // The original object returned by createAlert is a detached snapshot:
+  // mutating it must not silently edit the persisted user alert.
   created.triggered = true;
   created.triggeredAt = 123;
-  service.saveAlerts(service.loadAlerts());
+  assert.equal(service.getAllAlerts('retry-user')[0].triggered, false);
+  const updated = service.loadAlerts().map(item =>
+    item.id === created.id && item.userId === 'retry-user'
+      ? { ...item, triggered: true, triggeredAt: 123, isActive: false }
+      : item);
+  assert.equal(service.saveAlerts(updated), true);
   assert.equal(service.createAlert(alert(created.id, 'retry-user')).triggered, true);
 });
 
