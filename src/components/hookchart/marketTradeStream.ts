@@ -52,6 +52,12 @@ export class LargeMarketTradeTracker {
   private prints = new Map<string, MarketPrint>();
   private cut = 0;
   private cutAt = 0;
+  // Reuse the same immutable-by-convention array while no print changes.
+  // This avoids sorting the full hour of markers for every Terminal chart
+  // mount and prevents redundant React state updates for identical data.
+  private cachedSnapshot: {
+    revision: number; expiresAt: number; rows: MarketPrint[];
+  } | null = null;
   revision = 0;
 
   get thresholdUsd() { return this.cut; }
@@ -161,9 +167,17 @@ export class LargeMarketTradeTracker {
   }
 
   snapshot(now = Date.now()): MarketPrint[] {
+    const cached = this.cachedSnapshot;
+    if (cached && cached.revision === this.revision && now <= cached.expiresAt)
+      return cached.rows;
     const cutoff = now - PRINT_HISTORY_MS;
     for (const [id, item] of this.prints) if (item.t < cutoff) this.prints.delete(id);
-    return [...this.prints.values()].sort((a, b) => a.t - b.t);
+    const rows = [...this.prints.values()].sort((a, b) => a.t - b.t);
+    // Prune when the earliest row first falls *outside* the one-hour window.
+    // Without an expiry bound, a quiet market would keep old marks forever.
+    const expiresAt = rows.length ? rows[0].t + PRINT_HISTORY_MS : Infinity;
+    this.cachedSnapshot = { revision: this.revision, expiresAt, rows };
+    return rows;
   }
 }
 
