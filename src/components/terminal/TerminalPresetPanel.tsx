@@ -12,6 +12,8 @@ interface Props {
   timeframe: Timeframe;
   activePreset: TerminalMarketPreset | null;
   autoUpdate: boolean;
+  /** Panel stays mounted while hidden so automatic refresh can continue. */
+  menuOpen: boolean;
   snapshot: MarketCoinSnapshot;
   loading: boolean;
   error: string | null;
@@ -29,7 +31,7 @@ interface Props {
 const ICONS = { active: Activity, top_gainers: TrendingUp, top_losers: TrendingDown, near_highs: ChevronUp, near_lows: ChevronDown };
 const controlClass = 'rounded-lg border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:ring-2 focus:ring-cyan-500';
 
-export function TerminalPresetPanel({ blocks, watchlist, presets, selection, timeframe, activePreset, autoUpdate, snapshot, loading, error,
+export function TerminalPresetPanel({ blocks, watchlist, presets, selection, timeframe, activePreset, autoUpdate, menuOpen, snapshot, loading, error,
   onActivePresetChange, onPresetChosen, onApplyCoins, onSavePreset, onLoadPreset, onDeletePreset, syncError, onRetrySync, signedIn }: Props) {
   const { exchange, marketType } = selection;
   const [showPresets, setShowPresets] = useState(false);
@@ -42,9 +44,18 @@ export function TerminalPresetPanel({ blocks, watchlist, presets, selection, tim
   const applyRef = useRef(onApplyCoins);
   applyRef.current = onApplyCoins;
 
-  const readyCoins = useMemo(() => Object.fromEntries(MARKET_PRESETS.map(preset =>
-    [preset.id, selectMarketPresetCoins(snapshot.coins, preset.id, selection, Number.POSITIVE_INFINITY)])) as Record<TerminalMarketPreset, MarketCoin[]>,
-  [snapshot.coins, selection]);
+  const readyCoins = useMemo(() => {
+    const result = Object.fromEntries(MARKET_PRESETS.map(preset =>
+      [preset.id, [] as MarketCoin[]])) as Record<TerminalMarketPreset, MarketCoin[]>;
+    // The hidden panel only needs the active auto-updating category, not five
+    // full-market filter + sort passes every 30 seconds.
+    const ids = menuOpen ? MARKET_PRESETS.map(preset => preset.id)
+      : activePreset ? [activePreset] : [];
+    for (const id of ids) {
+      result[id] = selectMarketPresetCoins(snapshot.coins, id, selection, Number.POSITIVE_INFINITY);
+    }
+    return result;
+  }, [snapshot.coins, selection, menuOpen, activePreset]);
 
   useEffect(() => {
     if (activePreset && autoUpdate && !error && readyCoins[activePreset].length) {

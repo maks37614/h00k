@@ -8,11 +8,13 @@ on:
       - 'server/verifiedBtcContext.ts'
       - 'server/estimatedPoc.ts'
       - 'tests/verified-btc-context.test.ts'
-      - 'tests/smart-analysis-poc.test.ts'
+      - 'tests/smart-analysis-poc.test.ts tests/smart-analysis-visibility.test.ts'
       - 'server.ts'
       - 'src/components/SmartAnalysisBlock.tsx'
       - 'src/types.ts'
       - 'tests/smart-analysis-trust.test.ts'
+      - 'tests/smart-analysis-visibility.test.ts'
+      - 'src/utils/smartAnalysisVisibility.ts'
       - '.github/workflows/smart-analysis-recovery.yml'
   pull_request:
     branches: [main]
@@ -26,6 +28,8 @@ on:
       - 'src/components/SmartAnalysisBlock.tsx'
       - 'src/types.ts'
       - 'tests/smart-analysis-trust.test.ts'
+      - 'tests/smart-analysis-visibility.test.ts'
+      - 'src/utils/smartAnalysisVisibility.ts'
       - '.github/workflows/smart-analysis-recovery.yml'
 
 jobs:

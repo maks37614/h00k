@@ -30,7 +30,7 @@ test('exchange / market type are respected for live depth and missing depth cann
   assert.doesNotMatch(service, /amountUsd: 145000|amountUsd: 92000|amountUsd: 120000|amountUsd: 180000/);
   assert.doesNotMatch(service, /bidWallUsd: Math\.round\(currentPrice \* 25000\)/);
   assert.match(ui, /priceOrNA\(data\.orderbook\.bidWallPrice\)/);
-  assert.match(ui, /volumeOrNA\(data\.orderbook\.askWallUsd\)/);
+  assert.match(ui, /formatVolume\(data\.orderbook\.askWallUsd!\)/);
 });
 
 test('no invented BTC quotes, structural signals, dates or pseudo-24h from arbitrary TF candles', () => {
@@ -50,12 +50,12 @@ test('no invented BTC quotes, structural signals, dates or pseudo-24h from arbit
   assert.match(service, /closedHours\.length === 24/);
   assert.match(service, /quoteIsUsdLike/);
   assert.match(service, /const currentPrice = klines\[klines\.length - 1\]\.close/);
-  assert.match(ui, /Календар новин не підключено/);
-  assert.match(ui, /data\.btcContext\.change24h === null \? 'н\/д'/);
-  assert.match(ui, /volumeOrNA\(data\.volumeMetrics\.volume24hUsd\)/);
+  assert.doesNotMatch(ui, /Календар новин не підключено/);
+  assert.match(ui, /visible\.btcChange/);
+  assert.match(ui, /visible\.volume24h/);
   assert.match(service, /calculatePOC\(has24h \? closedHours : \[\]\)/);
   assert.match(service, /valid24hWindow/);
-  assert.match(ui, /EMA200: \{data\.trend\.ema200 \?\? 'н\/д'\}/);
+  assert.match(ui, /visible\.ema200/);
   assert.match(ui, /Funding Rate · Binance \/ Bybit/);
   assert.match(ui, /Частка токенів у топ-10% адрес/);
 });
@@ -70,11 +70,11 @@ test('holder wallets, iceberg trades, HFT algorithms and manipulation are not fa
   assert.doesNotMatch(service, /185000|140000|45000|top10ConcentrationPct = total24hVolUsd/);
   assert.doesNotMatch(service, /TWAP-набір|Айсберг у стакані|активних адрес за добу/);
   assert.doesNotMatch(ui, /54\}%|62% Whales & Insiders|HFT_GRID|95% Conf|320000/);
-  assert.match(ui, /CoinGecko Holders недоступні/);
-  assert.match(ui, /holderSnapshot\?\.status === 'available'/);
-  assert.match(ui, /Одного зрізу стакана недостатньо/);
+  assert.doesNotMatch(ui, /CoinGecko Holders недоступні/);
+  assert.match(ui, /getSmartAnalysisVisibility\(data, holderSnapshot\)/);
+  assert.doesNotMatch(ui, /Одного зрізу стакана недостатньо/);
   assert.match(ui, /Евристика, не доказ маніпуляцій/);
-  assert.match(ui, /Підтверджений спред вибраного ринку/);
+  assert.match(ui, /visible\.marketMaker/);
 });
 
 test('POC and trade-level claims are explicitly approximate, not executed-volume evidence', () => {
