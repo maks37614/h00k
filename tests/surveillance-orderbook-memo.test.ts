@@ -33,3 +33,37 @@ test('manual and HYBRID settings, 24h turnover changes and resync invalidate cac
  assert.equal(book.getState().status,'LIVE');
  assert.equal(book.calculateAdaptiveThreshold(),110_000);
 });
+
+test('top-of-book and imbalance share sorting until next depth revision',()=>{
+ const book=new OrderBookEngine('BTCUSDT','binance','futures');
+ book.applyDepth({sequence:1,isSnapshot:true,bids:[[99,2],[100,5],[98,3]],
+   asks:[[103,1],[101,2],[102,2]],eventTime:Date.now()});
+ const initial=book.thresholdStats().sortedPriceComputations;
+ assert.equal(initial,0,'density evaluation does not request sorted price arrays');
+ const state=book.getState();
+ assert.deepEqual(state.bids.map(x=>x.price),[100,99,98]);
+ assert.deepEqual(state.asks.map(x=>x.price),[101,102,103]);
+ assert.equal(book.thresholdStats().sortedPriceComputations,initial+2);
+ const expectedImbalance=book.getOrderBookImbalance(2);
+ for(let i=0;i<30;i++){
+   assert.equal(book.getOrderBookImbalance(2),expectedImbalance);
+   assert.equal(book.getState().bids[0].price,100);
+   book.getSortedAsks(1);
+ }
+ assert.equal(book.thresholdStats().sortedPriceComputations,initial+2,
+   'repeated snapshots and imbalance reads must reuse both sorted-price lists');
+ state.bids[0].price=1;
+ state.bids[0].quantity=999999;
+ assert.deepEqual(book.getSortedBids(1).map(x=>[x.price,x.quantity]),[[100,5]],
+   'snapshots are copies; mutating one cannot poison the sorted cache');
+ book.applyDepth({sequence:2,bids:[[99,0],[104,10]],asks:[],eventTime:Date.now()});
+ assert.deepEqual(book.getSortedBids(3).map(x=>x.price),[104,100,98]);
+ assert.equal(book.thresholdStats().sortedPriceComputations,initial+3);
+ assert.deepEqual(book.getSortedAsks(2).map(x=>x.price),[101,102]);
+ assert.equal(book.thresholdStats().sortedPriceComputations,initial+4);
+ book.clear();
+ assert.deepEqual(book.getSortedBids(),[]);
+ assert.deepEqual(book.getSortedAsks(),[]);
+ assert.equal(book.thresholdStats().sortedPriceComputations,initial+6,
+   'clearing a book releases the cached ordering and invalidates both sides');
+});
