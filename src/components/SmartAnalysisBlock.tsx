@@ -207,7 +207,7 @@ export const SmartAnalysisBlock: React.FC<SmartAnalysisBlockProps> = ({
     visible.modules[module] && (selectedTab === 'all' || selectedTab === module);
   const tabs: Array<{ id: SmartAnalysisModule; label: string }> = [
     { id: 'btc', label: 'Контекст BTC (15m → 5m → 1m)' },
-    { id: 'tech', label: 'RSI, EMA, Об'єми та Спред' },
+    { id: 'tech', label: "RSI, EMA, Об'єми та Спред" },
     { id: 'orderbook', label: 'Стакан, POC та Ліквідність' },
     { id: 'derivatives', label: 'Open Interest та Деривативи' },
     { id: 'institutional', label: 'Holders / Заявки / ММ / Ризики' },
@@ -511,7 +511,7 @@ export const SmartAnalysisBlock: React.FC<SmartAnalysisBlockProps> = ({
                 {visible.ema200 && <><span>•</span><span>EMA200: {data.trend.ema200}</span></>}
               </div>
             </div>
-            )
+            )}
 
             {/* 1h Volume & Spike */}
             {(visible.volume1h || visible.volume24h) && (
@@ -531,7 +531,7 @@ export const SmartAnalysisBlock: React.FC<SmartAnalysisBlockProps> = ({
                 Обсяг 24 закритих 1h свічок (≈ USD): {formatVolume(data.volumeMetrics.volume24hUsd!)}
               </span>}
             </div>
-            )
+            )}
 
             {/* Spread & Quality */}
             {visible.spread && (
