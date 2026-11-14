@@ -20,7 +20,7 @@ import { sharedWorkerAnalysisClock } from './surveillance/sharedWorkerAnalysisCl
 import { sharedCandleFeedStats } from './surveillance/sharedCandleFeed';
 import { sharedOiPoller } from './surveillance/sharedOiPoller';
 import { surveillanceCheckCandleCache } from './surveillance/checkCandleCache';
-import { priceAlertFallbackStats } from './alertService';
+import { priceAlertFallbackStats, priceAlertCheckStats } from './alertService';
 import { candleCloseCheckPlanner } from './surveillance/candleCloseCheckPlanner';
 import { sharedSurveillanceState } from './surveillance/sharedSurveillanceState';
 import { persistenceMetrics } from './persistenceMetrics';
@@ -85,6 +85,7 @@ export function installOpsMetrics(app: Express,
       publicQuoteDelivery: publicQuoteResponseCache.stats(),
       publicPriceWebSockets: publicPriceFeed.status(),
       priceAlertFallback: priceAlertFallbackStats(),
+      priceAlertChecks: priceAlertCheckStats(),
       binanceMarketTickers: binanceTickerStream.status(),
       sharedExchange: { marketStreams: shared.length,
         totalSubscribers: shared.reduce((sum, x) => sum + x.subscribers, 0),
