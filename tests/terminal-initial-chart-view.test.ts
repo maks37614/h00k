@@ -283,7 +283,7 @@ test('Terminal sync conflicts are visible outside hidden menus and can be recove
   // Cloud hydration now checks the conflict first and only loads the remote
   // state if there were no local edits; keep the two safety gates explicit.
   assert.match(hook, /if \(syncConflictRef\.current\) return;/);
-  assert.match(hook, /if \(revision\.current === 0\)\s*setWorkspace\(loadTerminalWorkspace\(uid, profile\.terminalSettings\)\)/);
+  assert.match(hook, /if \(revision\.current === 0\) \{[\s\S]*?setWorkspace\(loadTerminalWorkspace\(uid, profile\.terminalSettings\)\)/);
   assert.match(hook, /window\.confirm\(/);
   assert.match(hook, /window\.location\.reload\(\)/);
 });
@@ -294,13 +294,14 @@ test('late profile hydration never overwrites a locally edited workspace or clai
   const end = hook.indexOf('const setField =', start);
   assert.ok(start >= 0 && end > start);
   const hydration = hook.slice(start, end);
-  assert.match(hydration, /revision\.current > 0 && profile\.terminalSettings && !syncConflictRef\.current/);
+  assert.match(hydration, /revision\.current > 0 \|\| lastCommittedWorkspace\.current !== workspace/);
   assert.match(hydration, /syncConflictRef\.current = true/);
   assert.match(hydration, /saveConflictBackup\(uid, workspaceRef\.current\)/);
   assert.match(hydration, /setSyncConflict\(true\)/);
   assert.match(hydration, /if \(syncConflictRef\.current\) return;/);
   assert.match(hydration, /if \(revision\.current === 0\)/);
-  assert.match(hydration, /hydrated\.current && profile\?\.uid === uid && !syncConflictRef\.current/);
+  assert.doesNotMatch(hook, /serverVersion\.current = profile\.terminalSettings\?\.version[\s\S]*?serverVersion\.current = profile\.terminalSettings\?\.version/,
+    'the CAS version must not be upgraded by a newer profile update from another device');
 });
 
 test('the sole HookChart uses the current block directly during profile hydration and coin switches', () => {
