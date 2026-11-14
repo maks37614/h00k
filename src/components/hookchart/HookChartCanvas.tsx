@@ -28,7 +28,7 @@ import { FibIcon, IndicatorIcon, OverlayIcon } from './ToolbarIcons';
 import { HookChartTimeframePicker } from './HookChartTimeframePicker';
 import { DEFAULT_HOOKCHART_HOTKEYS, OriginalHookChartSettings, hotkeyMatches, normalizeOriginalHookChartPreferences } from './OriginalHookChartSettings';
 import { evaluateStrategy, strategyPreset, strategyPreferencePatch } from './strategyEngine';
-import { atr, deriveAutoLevels, formatUsd, normalizeDensityDistance, type LevelTf } from './marketAnalytics';
+import { chartMarketStatistics, deriveAutoLevels, formatUsd, normalizeDensityDistance, type LevelTf } from './marketAnalytics';
 import { useOriginalHookChartLiveFeed } from './useOriginalHookChartLiveFeed';
 import { connectChartDiagnostics } from './chartDiagnostics';
 import { visibleChartDensities } from './reactionPotential';
@@ -556,24 +556,20 @@ const HookChartCanvas = forwardRef<HookChartHandle, HookChartCanvasProps>(functi
     const benchmark = btcBenchmarkSymbol(normalizeExchangeSymbol(symbol));
     if (!benchmark) return null;
     // BTC compared with itself has +1 correlation if enough valid closed bars.
-    const current = candles.map(c => ({ time: Math.round(c.t / 1000), close: c.c }));
+    // BTC history is fetched in 250-bar pages and correlation uses only the
+    // last 121 overlapping closed bars. Avoid mapping 5000 historical candles
+    // again on every live price tick (500 retains room for sparse overlap).
+    const current = candles.slice(-500).map(c => ({ time: Math.round(c.t / 1000), close: c.c }));
     const reference = benchmark === normalizeExchangeSymbol(symbol)
       ? current
       : btcReference?.scope === statsScope ? btcReference.rows : [];
     return calculateBtcCorrelation(current, reference, TF_MS[timeframe]);
   }, [candles, btcReference, statsScope, symbol, timeframe, replay, !!externalData]);
 
-  const marketStats = useMemo(() => {
-    const last = candles.at(-1);
-    if (!last) return { vol24: 0, high: 0, low: 0, natr: NaN };
-    const day = candles.filter(candle => candle.t >= last.t - 86_400_000);
-    return {
-      vol24: day.reduce((sum, candle) => sum + (candle.v || 0) * candle.c, 0),
-      high: day.length ? Math.max(...day.map(candle => candle.h)) : last.h,
-      low: day.length ? Math.min(...day.map(candle => candle.l)) : last.l,
-      natr: last.c > 0 ? atr(candles, Math.max(2, settings.natrPeriod || 14)) / last.c * 100 : NaN,
-    };
-  }, [candles, settings.natrPeriod]);
+  const marketStats = useMemo(
+    () => chartMarketStatistics(candles, settings.natrPeriod),
+    [candles, settings.natrPeriod],
+  );
 
   const flush = useCallback(() => {
     if (saveTimer.current) clearTimeout(saveTimer.current);
