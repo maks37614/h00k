@@ -42,3 +42,22 @@ test('Terminal coin rows wrap, core filters and add actions remain wired', () =>
   assert.match(source, /onAddChart\(coin, selectedTimeframe, firstFormation\?\.id\)/);
   assert.match(source, /setDisplayCount\(\(prev\) => prev \+ 80\)/);
 });
+
+test('Add Chart reuses the Terminal quote snapshot instead of making duplicate market requests', () => {
+  const page = readFileSync(new URL('../src/components/TerminalPage.tsx', import.meta.url), 'utf8');
+  assert.match(page, /terminalMarketCoins=\{marketCoins\}/);
+  assert.match(source, /terminalMarketCoins\?: MarketCoin\[\]/);
+  assert.match(source, /if \(terminalMarketCoins\?\.length\) \{/);
+  assert.match(source, /const availableMarketCoins = terminalMarketCoins\?\.length \? terminalMarketCoins : marketCoins/);
+  assert.match(source, /return availableMarketCoins\.filter\(mc => mc\.volumeUsd >= 50_000 && mc\.volumeUsd <= 10_000_000_000\)/);
+  assert.match(source, /\}, \[isOpen, terminalMarketCoins\]\)/);
+});
+
+test('Add Chart cancels its fallback quote requests when modal closes or Terminal data arrives', () => {
+  assert.match(source, /const controller = new AbortController\(\)/);
+  assert.match(source, /fetch\('\/api\/screener\/coins\?minVolume=50000&maxVolume=10000000000', \{/);
+  assert.match(source, /signal: controller\.signal/);
+  assert.match(source, /fetchDirectBinanceTickers\(\{ signal: controller\.signal \}\)/);
+  assert.match(source, /fetchDirectBybitTickers\(\{ signal: controller\.signal \}\)/);
+  assert.match(source, /controller\.abort\(\)/);
+});
