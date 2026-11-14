@@ -22,7 +22,9 @@
     "api3": "8. Vataga window docking is supported; Vataga ticker API linking is not available yet.",
     "api4": "9. If using exchange keys in supported h00k account features, enable read-only access only; disable trading and withdrawals.",
     "api5": "10. Smart Dock never requires API keys. For issues, check window selection, terminal state and free monitor space.",
-    "guideFooter": "Website: h00k.top. Never share your API secrets."
+    "guideFooter": "Website: h00k.top. Never share your API secrets.",
+    "layoutTitle": "Placement and controls",
+    "layoutSubtitle": "Configure panels, layout and ticker linking."
   },
   "pl": {
     "languageTitle": "Język instalatora",
@@ -47,7 +49,9 @@
     "api3": "8. Przypinanie do okna Vataga działa; łączenie tickerów przez API Vataga nie jest jeszcze dostępne.",
     "api4": "9. Jeżeli korzystasz z kluczy giełdowych w obsługiwanych funkcjach konta h00k, nadaj im tylko odczyt. Wyłącz handel i wypłaty.",
     "api5": "10. Smart Dock nie wymaga kluczy API. W razie problemu sprawdź wybrane okno, terminal i wolne miejsce na ekranie.",
-    "guideFooter": "Strona: h00k.top. Nigdy nie udostępniaj sekretów API."
+    "guideFooter": "Strona: h00k.top. Nigdy nie udostępniaj sekretów API.",
+    "layoutTitle": "Położenie i sterowanie",
+    "layoutSubtitle": "Skonfiguruj panele, układ i łączenie tickerów."
   },
   "ru": {
     "languageTitle": "Язык установщика",
@@ -72,7 +76,9 @@
     "api3": "8. Прикрепление к окну Vataga работает; передача тикеров через API Vataga пока недоступна.",
     "api4": "9. Если используете биржевые ключи в поддерживаемых функциях аккаунта h00k, оставьте доступ только для чтения. Запретите торговлю и вывод средств.",
     "api5": "10. Smart Dock не требует API-ключей. При проблемах проверьте выбранное окно, состояние терминала и свободное место на экране.",
-    "guideFooter": "Сайт: h00k.top. Никому не передавайте секретные API-ключи."
+    "guideFooter": "Сайт: h00k.top. Никому не передавайте секретные API-ключи.",
+    "layoutTitle": "Размещение и управление",
+    "layoutSubtitle": "Настройте панели, расположение и связь тикеров."
   },
   "uk": {
     "languageTitle": "Мова інсталятора",
@@ -97,6 +103,8 @@
     "api3": "8. Прикріплення до вікна Vataga працює; передавання тікерів через API Vataga поки недоступне.",
     "api4": "9. Якщо використовуєте біржові ключі в підтримуваних функціях акаунта h00k, надавайте лише доступ для читання. Вимкніть торгівлю та виведення коштів.",
     "api5": "10. Smart Dock не потребує API-ключів. У разі проблем перевірте вибір вікна, стан термінала й вільне місце на моніторі.",
-    "guideFooter": "Сайт: h00k.top. Нікому не передавайте секрети API."
+    "guideFooter": "Сайт: h00k.top. Нікому не передавайте секрети API.",
+    "layoutTitle": "Розташування та керування",
+    "layoutSubtitle": "Налаштуйте панелі, компонування та лінковку тікерів."
   }
 }
