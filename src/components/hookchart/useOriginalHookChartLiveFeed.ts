@@ -343,7 +343,9 @@ export function useOriginalHookChartLiveFeed({
     [liquidations, liquidationCut, settings.showLiquidationLong,
       settings.showLiquidationShort, settings.liquidationLongMinUsd, settings.liquidationShortMinUsd]);
   const risk = useMemo(
-    () => calcCascadeRisk(liquidations, liquidationCut, candles.at(-1)?.c || 0, cascadeClock),
+    // The clock state invalidates this memo at 1m/5m event boundaries.
+    // On price/cut changes use real wall-clock time too, never a stale tick.
+    () => calcCascadeRisk(liquidations, liquidationCut, candles.at(-1)?.c || 0),
     [liquidations, liquidationCut, candles.at(-1)?.c, cascadeClock],
   );
   const liquidationSource = marketType === 'futures'
