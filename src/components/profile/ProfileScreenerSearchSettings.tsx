@@ -157,6 +157,9 @@ export function ProfileScreenerSearchSettings() {
           <input className={control} value={draft.searchQuery} maxLength={80}
             placeholder="Наприклад, BTC або ETH"
             onChange={event => setField('searchQuery', event.target.value)} />
+          <span className="block text-xs font-normal leading-relaxed text-slate-400">
+            Необов’язково. Якщо залишити поле порожнім, скрінер шукатиме всі монети, які відповідають вибраним фільтрам.
+          </span>
         </label>
         <label className={label}>Готовий фільтр Скрінера
           <select className={control} value={draft.presetFilter} onChange={event => setField('presetFilter', event.target.value as ScreenerSearchConfig['presetFilter'])}>
