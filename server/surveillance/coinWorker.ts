@@ -3,7 +3,7 @@ import { normalizeExchangeSymbol } from '../../src/utils/marketSymbols';
 import { sharedOiPoller } from './sharedOiPoller';
 import { notificationRouter } from '../notificationRouter';
 import { createSetupAlertsGroup, getUserLanguage } from '../alertService';
-import type { RawDepthDelta, RawTradeEvent } from './exchangeStream';
+import type { RawDepthDelta } from './exchangeStream';
 import { acquireExchangeStream, type SharedExchangeStreamHandle } from './sharedExchangeStream';
 import { publishSurveillance } from '../surveillanceEvents';
 import { sharedMarketAnalysis } from './sharedMarketAnalysis';
@@ -76,11 +76,15 @@ export class CoinWorker {
   private releaseOiSubscription: (() => void) | null = null;
   private lastWsOiAt = 0;
 
-  public currentPrice = 0;
-  public high24h = 0;
-  public low24h = 0;
-  public change24h = 0;
-  public volume24hUsd = 0;
+  private initialPrice = 0;
+  // Public ticker data are shared at the exchange stream. A user-specific
+  // worker keeps only private density/OI/rule/alert state.
+  public get currentPrice() { return this.streamClient.marketTicker.price || this.initialPrice; }
+  public set currentPrice(price: number) { this.initialPrice = price; }
+  public get high24h() { return this.streamClient.marketTicker.high24h; }
+  public get low24h() { return this.streamClient.marketTicker.low24h; }
+  public get change24h() { return this.streamClient.marketTicker.change24h; }
+  public get volume24hUsd() { return this.streamClient.marketTicker.volume24hUsd; }
   public lastAnalysisTimestamp = 0;
   private analysisInFlight = false;
   /** Skip repeated saved-group lookups for the same confirmed setup. */
@@ -171,25 +175,12 @@ export class CoinWorker {
       console.warn(`[CoinWorker ${this.coin.symbol}] Stream error:`, err.message);
     });
 
-    // 1. Live Ticker / Price Tick
-    this.streamClient.on('price', (data: { price: number; high24h: number; low24h: number; volume24hUsd: number; time: number; change24h?: number }) => {
-      this.currentPrice = data.price;
-      this.high24h = data.high24h;
-      this.low24h = data.low24h;
-      this.volume24hUsd = data.volume24hUsd;
-      this.orderBookEngine.setVolume24hUsd(data.volume24hUsd);
-      if (Number.isFinite(data.change24h)) this.change24h = data.change24h!;
-    });
-
-    // 2. Real-time Trade Flow
-    this.streamClient.on('trade', (trade: RawTradeEvent) => {
-      this.currentPrice = trade.price;
-      // SharedCandleFeed accumulates public market trades once per instrument.
-      // Per-user OI and Delta baselines stay in VolumeAndOIEngine.
-    });
+    // Live ticker and trades are now maintained once in SharedExchangeStream.
+    // Candle aggregation is independently shared by SharedCandleFeed.
 
     // 3. Depth Updates for Local Order Book & Densities (Fast Path)
     this.streamClient.on('depth', (delta: RawDepthDelta) => {
+      this.orderBookEngine.setVolume24hUsd(this.volume24hUsd);
       this.orderBookEngine.applyDepth(delta);
       if (this.orderBookEngine.sequenceGap) this.streamClient.resyncOrderBook();
     });
