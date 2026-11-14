@@ -234,6 +234,12 @@ test('Terminal JSON import rejects corrupt and oversized backups without changin
   for (const input of [
     '{broken', '{}', JSON.stringify({ blocks: [], presets: [], config: null }),
     JSON.stringify({ blocks: [{ id: 'bad', symbol: 'BTCUSDT' }], presets: [], config: {} }),
+    JSON.stringify({ blocks: [{ id: '', symbol: 'BTCUSDT', baseAsset: 'BTC', quoteAsset: 'USDT',
+      exchange: 'binance', marketType: 'futures', timeframe: '15m' }], presets: [], config: {} }),
+    JSON.stringify({ blocks: [{ id: 'untrusted', symbol: 'BTCUSDT', baseAsset: 'BTC', quoteAsset: 'USDT',
+      exchange: 'binance', marketType: 'futures', timeframe: '15m', heightPx: -120 }], presets: [], config: {} }),
+    JSON.stringify({ blocks: [{ id: 'badSymbol', symbol: 'BTC/USDT', baseAsset: 'BTC', quoteAsset: 'USDT',
+      exchange: 'binance', marketType: 'futures', timeframe: '15m' }], presets: [], config: {} }),
     JSON.stringify({ blocks: [], presets: [{ id: 'invalid', name: 'Empty', blocks: [] }], config: {} }),
     JSON.stringify({ blocks: Array(251).fill({ id: 'btc', symbol: 'BTCUSDT' }), presets: [], config: {} }),
     JSON.stringify({ blocks: [], config: {}, presets: [{
