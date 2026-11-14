@@ -75,7 +75,7 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
   const { preferences } = useAppPreferences();
   const { user, profile } = useAuth();
   const { blocks, config, customPresets, setBlocks: updateBlocks, setConfig, setCustomPresets,
-    syncError, syncConflict, retrySync, downloadLocalBackup } = useTerminalWorkspace();
+    syncError, syncConflict, retrySync, downloadLocalBackup, restoreCloudWorkspace } = useTerminalWorkspace();
   const [activeMarketPreset, setActiveMarketPreset] = useState<TerminalMarketPreset | null>(null);
   const [presetMatches, setPresetMatches] = useState<MarketCoin[]>([]);
   const [presetPage, setPresetPage] = useState(0);
@@ -1018,6 +1018,22 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
           </div>
         </div>
       </header>
+
+      {syncConflict && (
+        <div role="alert" className="z-30 flex shrink-0 flex-wrap items-center gap-2 border-b border-amber-500/35 bg-amber-950/85 px-3 py-2 text-xs text-amber-100">
+          <span className="flex-1">
+            Робочу область змінено на іншому пристрої. Локальна копія збережена окремо, автоматичну синхронізацію призупинено.
+          </span>
+          <button type="button" onClick={downloadLocalBackup}
+            className="rounded-md border border-amber-500/50 px-2 py-1 hover:bg-amber-900/60">
+            Завантажити JSON-копію
+          </button>
+          <button type="button" onClick={restoreCloudWorkspace}
+            className="rounded-md border border-slate-500/70 px-2 py-1 hover:bg-slate-800">
+            Повернути хмарну версію
+          </button>
+        </div>
+      )}
 
       <div
         ref={presetsMenuRef}
