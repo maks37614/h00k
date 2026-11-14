@@ -922,11 +922,6 @@ export function OriginalHookChartSettings({
             </div></Setting>
             <Setting label="Свічка Long"><input className="colorInput" type="color" value={prefs.candleLongColor || '#0ECB81'} onChange={event => set('candleLongColor', event.target.value)} /></Setting>
             <Setting label="Свічка Short"><input className="colorInput" type="color" value={prefs.candleShortColor || '#F6465D'} onChange={event => set('candleShortColor', event.target.value)} /></Setting>
-            <Setting label="Колір ліній щільностей"><input className="colorInput" type="color" value={prefs.densityLineColor || '#7B61FF'} onChange={event => set('densityLineColor', event.target.value)} /></Setting>
-            <Setting label="Колір міток щільностей"><input className="colorInput" type="color" value={prefs.densityLabelColor || '#C4B5FD'} onChange={event => set('densityLabelColor', event.target.value)} /></Setting>
-            <Setting label="Товщина лінії"><Num value={prefs.densityLineWidth ?? 0.5} min={0.1} max={5} step={0.1} set={value => set('densityLineWidth', value)} /><b className="valueBadge">px</b></Setting>
-            <Choice label="Вигляд лінії" values={['solid', 'dash', 'dot']} labels={['Суцільна', 'Пунктир', 'Крапки']} value={prefs.densityLineStyle} set={value => set('densityLineStyle', value)} />
-            <Setting label="Розмір мітки"><Num value={prefs.densityLabelSize ?? 8} min={8} max={20} set={value => set('densityLabelSize', value)} /><b className="valueBadge">px</b></Setting>
           </Section>
 
           <Section title="Дані та сортування">
@@ -975,7 +970,7 @@ export function OriginalHookChartSettings({
             <Setting label="Глибина історії для визначення похилих ліній"><Num value={prefs.trendHistory ?? 300} min={80} max={1500} set={value => set('trendHistory', value)} /></Setting>
           </Section>
 
-          <Section title="Великі лімітні заявки (колонка O)">
+          <Section title="Щільності">
             <SwitchRow label="Аналіз великих лімітних заявок (щільностей)" value={prefs.densityAnalysis !== false} onChange={value => set('densityAnalysis', value)} />
             <SwitchRow unavailable label="Таблиця ТОП ордерів" value={prefs.densityTop !== false} onChange={value => set('densityTop', value)} />
             <SwitchRow unavailable label="Показувати об’єм у базовій монеті" value={!!prefs.densityBaseVolume} onChange={value => set('densityBaseVolume', value)} />
@@ -983,6 +978,11 @@ export function OriginalHookChartSettings({
             <Setting label="Щільності на графіку" desc="Незалежно керуйте лініями, мітками та відображенням суми всередині мітки."><div className="densityVisibilityRow">
               {([['showDensityLines', 'Лінії'], ['showDensityLabels', 'Мітки'], ['showDensityAmounts', 'Суми']] as const).map(([key, label]) => <label key={key}><span>{label}</span><input type="checkbox" checked={!!prefs[key]} onChange={event => set(key, event.target.checked)} /></label>)}
             </div></Setting>
+            <Setting label="Колір ліній щільностей"><input className="colorInput" type="color" value={prefs.densityLineColor || '#7B61FF'} onChange={event => set('densityLineColor', event.target.value)} /></Setting>
+            <Setting label="Колір міток щільностей"><input className="colorInput" type="color" value={prefs.densityLabelColor || '#C4B5FD'} onChange={event => set('densityLabelColor', event.target.value)} /></Setting>
+            <Setting label="Товщина лінії"><Num value={prefs.densityLineWidth ?? 0.5} min={0.1} max={5} step={0.1} set={value => set('densityLineWidth', value)} /><b className="valueBadge">px</b></Setting>
+            <Choice label="Вигляд лінії" values={['solid', 'dash', 'dot']} labels={['Суцільна', 'Пунктир', 'Крапки']} value={prefs.densityLineStyle} set={value => set('densityLineStyle', value)} />
+            <Setting label="Розмір мітки"><Num value={prefs.densityLabelSize ?? 8} min={8} max={20} set={value => set('densityLabelSize', value)} /><b className="valueBadge">px</b></Setting>
             <Setting label="Таймаут великих лімітних ордерів" desc="Мінімальний вік перед показом на графіку."><Num value={prefs.densityTimeoutMin ?? 0} min={0} max={120} set={value => set('densityTimeoutMin', value)} /><b className="valueBadge">хв</b></Setting>
             <Setting label="Дистанція від ціни" desc="Максимальна різниця між ціною ордера та поточною ціною."><Num value={normalizeDensityDistance(prefs.densityDiffPct)} min={0.1} max={20} step={0.1} set={value => set('densityDiffPct', normalizeDensityDistance(value))} /><b className="valueBadge">%</b></Setting>
             <Setting label="Пороговий об’єм великих ордерів"><div className="densityModeRow">
