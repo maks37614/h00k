@@ -10,7 +10,8 @@ export type LiquidationRow = {
 type Exchange = 'binance' | 'bybit';
 type Entry = {
   key: string; exchange: Exchange; symbol: string;
-  rows: LiquidationRow[]; clients: Set<WebSocket>; bulkClients: Set<WebSocket>;
+  rows: LiquidationRow[]; idIndex: Map<string, number>; lastPrunedAt: number;
+  clients: Set<WebSocket>; bulkClients: Set<WebSocket>;
   upstream: WebSocket | null; ping: ReturnType<typeof setInterval> | null;
   reconnect: ReturnType<typeof setTimeout> | null;
   failures: number; idleAt: number; lastEventAt: number;
@@ -105,7 +106,9 @@ export class SharedLiquidationFeed {
   }
 
   private makeEntry(exchange: Exchange, symbol: string, rows: LiquidationRow[] = []): Entry {
-    return { key: `${exchange}:${symbol}`, exchange, symbol, rows, clients: new Set(), bulkClients: new Set(),
+    return { key: `${exchange}:${symbol}`, exchange, symbol, rows,
+      idIndex: new Map(rows.map((row, index) => [row.id, index])), lastPrunedAt: 0,
+      clients: new Set(), bulkClients: new Set(),
       upstream: null, ping: null, reconnect: null, failures: 0,
       idleAt: Date.now(), lastEventAt: rows.length ? Math.max(...rows.map(r => r.t)) : 0,
       pooledStop: null, pooledConnected: false };
@@ -155,23 +158,31 @@ export class SharedLiquidationFeed {
     }
   }
 
-  private prune(entry: Entry) {
-    const cutoff = Date.now() - RETAIN_MS;
+  private prune(entry: Entry, force = false) {
+    const now = Date.now();
+    // No full-array scan on every liquidation packet during a market cascade.
+    if (!force && entry.rows.length <= MAX_ROWS && now - entry.lastPrunedAt < 2000) return;
+    const cutoff = now - RETAIN_MS;
     const count = entry.rows.length;
     entry.rows = entry.rows.filter(row => row.t >= cutoff).slice(-MAX_ROWS);
+    entry.idIndex = new Map(entry.rows.map((row, index) => [row.id, index]));
+    entry.lastPrunedAt = now;
     if (entry.rows.length !== count) this.revision++;
   }
 
   private onRows(entry: Entry, rows: LiquidationRow[]) {
     for (const row of rows) {
-      const previous = entry.rows.findIndex(old => old.id === row.id);
-      if (previous >= 0) {
+      const previous = entry.idIndex.get(row.id);
+      if (previous !== undefined) {
         const old = entry.rows[previous];
         // A partially-filled liquidation order can be reported again with a
         // larger cumulative fill; replace it rather than double-counting.
         if (row.q <= old.q) { this.counters.duplicates++; continue; }
         entry.rows[previous] = row;
-      } else entry.rows.push(row);
+      } else {
+        entry.idIndex.set(row.id, entry.rows.length);
+        entry.rows.push(row);
+      }
       entry.lastEventAt = Math.max(entry.lastEventAt, row.t);
       this.counters.received++;
       this.revision++;
