@@ -25,7 +25,7 @@ import {
   ChevronDown,
   ChevronUp,
 } from 'lucide-react';
-import { ScannedCoin, DetectedFormation, Kline, FormationAIAnalysis, Timeframe, ArchivedFormation } from '../types';
+import { ScannedCoin, DetectedFormation, Kline, Timeframe, ArchivedFormation } from '../types';
 import { TradingViewChart } from './TradingViewChart';
 import type { ChartPageOrigin } from '../utils/chartPageRoute';
 import { FullscreenChartModal } from './FullscreenChartModal';
@@ -34,14 +34,8 @@ import { fetchDirectKlines } from '../utils/directExchangeClient';
 import { useAuth } from '../context/AuthContext';
 import { useAlerts } from '../context/AlertsContext';
 import { useArchive } from '../context/ArchiveContext';
-import { SmartAnalysisBlock } from './SmartAnalysisBlock';
 import { SiteFooter } from './SiteFooter';
 import { chartCrosshairAlertPrice } from '../utils/chartAlertPrice';
-import {
-  readSmartAnalysisPanelCollapsed, saveSmartAnalysisPanelCollapsed,
-  smartAnalysisPanelStorageKey, isSmartAnalysisPanelSyncPending,
-  saveSmartAnalysisPanelSyncPending,
-} from '../utils/smartAnalysisPanelPreference';
 import { ChartTopAnalysisText } from './ChartTopAnalysisText';
 import {
   readTelegramAlertPanelCollapsed,
@@ -145,15 +139,27 @@ export const FormationDetailsModal: React.FC<FormationDetailsModalProps> = ({
   });
   const [klines, setKlines] = useState<Kline[]>([]);
   const [loadingKlines, setLoadingKlines] = useState<boolean>(true);
-  const [aiAnalysis, setAiAnalysis] = useState<FormationAIAnalysis | null>(null);
+  const [aiScore, setAiScore] = useState<number | null>(null);
+  const [aiError, setAiError] = useState<string | null>(null);
   const [loadingAi, setLoadingAi] = useState<boolean>(false);
+  const [qualityExpanded, setQualityExpanded] = useState(false);
   const aiRequestRef = useRef(0);
+  const aiAbortRef = useRef<AbortController | null>(null);
+  const aiContextKey = [coin.exchange, coin.marketType, coin.symbol, timeframe, formation.id].join(':');
   useEffect(() => {
-    // AI commentary belongs to the selected pattern, not just to its coin.
-    aiRequestRef.current += 1;
-    setAiAnalysis(null);
+    // An AI score is specific to this instrument, market, timeframe and formation.
+    aiRequestRef.current++;
+    aiAbortRef.current?.abort();
+    aiAbortRef.current = null;
+    setAiScore(null);
+    setAiError(null);
     setLoadingAi(false);
-  }, [formation.id]);
+    setQualityExpanded(false);
+    return () => {
+      aiRequestRef.current++;
+      aiAbortRef.current?.abort();
+    };
+  }, [aiContextKey]);
   const [alertFeedback, setAlertFeedback] = useState<string | null>(null);
   const [settingAlert, setSettingAlert] = useState<string | null>(null);
 
@@ -239,53 +245,6 @@ export const FormationDetailsModal: React.FC<FormationDetailsModalProps> = ({
       })
       .catch(() => setTelegramAlertPanelSaveError(true))
       .finally(() => { pendingTelegramAlertPreferenceWrites.current -= 1; });
-  };
-
-  // AI + Quant visibility is independent from the Telegram panel and shared
-  // across every coin. The signed-in profile is the cross-device authority.
-  const smartAnalysisStorageKey = smartAnalysisPanelStorageKey(user?.uid);
-  const [smartAnalysisCollapsed, setSmartAnalysisCollapsed] = useState(
-    () => readSmartAnalysisPanelCollapsed(alertPanelStorage(), user?.uid)
-  );
-  const [smartAnalysisSaveError, setSmartAnalysisSaveError] = useState(false);
-  const pendingSmartAnalysisWrites = useRef(0);
-
-  useEffect(() => {
-    if (pendingSmartAnalysisWrites.current > 0) return;
-    const saved = profile?.uid === user?.uid ? profile.smartAnalysisCollapsed : undefined;
-    const pending = !!user?.uid && isSmartAnalysisPanelSyncPending(alertPanelStorage(), user.uid);
-    const collapsed = !pending && typeof saved === 'boolean'
-      ? saved : readSmartAnalysisPanelCollapsed(alertPanelStorage(), user?.uid);
-    setSmartAnalysisCollapsed(collapsed);
-    saveSmartAnalysisPanelCollapsed(alertPanelStorage(), collapsed, user?.uid);
-  }, [user?.uid, profile?.uid, profile?.smartAnalysisCollapsed]);
-
-  useEffect(() => {
-    const syncAcrossTabs = (event: StorageEvent) => {
-      if (event.key === smartAnalysisStorageKey) {
-        setSmartAnalysisCollapsed(event.newValue === 'true');
-      }
-    };
-    window.addEventListener('storage', syncAcrossTabs);
-    return () => window.removeEventListener('storage', syncAcrossTabs);
-  }, [smartAnalysisStorageKey]);
-
-  const toggleSmartAnalysis = () => {
-    const next = !smartAnalysisCollapsed;
-    setSmartAnalysisCollapsed(next);
-    setSmartAnalysisSaveError(false);
-    saveSmartAnalysisPanelCollapsed(alertPanelStorage(), next, user?.uid);
-    if (!user) return;
-    saveSmartAnalysisPanelSyncPending(alertPanelStorage(), user.uid, true);
-    pendingSmartAnalysisWrites.current += 1;
-    void updateProfileData({ smartAnalysisCollapsed: next })
-      .then(() => {
-        if (pendingSmartAnalysisWrites.current === 1) {
-          saveSmartAnalysisPanelSyncPending(alertPanelStorage(), user.uid, false);
-        }
-      })
-      .catch(() => setSmartAnalysisSaveError(true))
-      .finally(() => { pendingSmartAnalysisWrites.current -= 1; });
   };
 
   // Custom price alert under chart state
@@ -512,33 +471,47 @@ export const FormationDetailsModal: React.FC<FormationDetailsModalProps> = ({
     };
   }, [coin, timeframe, historyLimit]);
 
-  // Trigger AI analysis
+  // AI is requested ONLY by clicking the icon. No automatic analysis,
+  // background subscription, fallback algorithm or extra text response.
   const handleRequestAi = async () => {
     if (loadingAi) return;
+    aiAbortRef.current?.abort();
+    const controller = new AbortController();
+    aiAbortRef.current = controller;
     const requestId = ++aiRequestRef.current;
+    setAiScore(null);
+    setAiError(null);
     setLoadingAi(true);
     try {
-      const res = await fetch('/api/ai/analyze-formation', {
+      const res = await fetch('/api/ai/setup-score', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        signal: controller.signal,
         body: JSON.stringify({
           symbol: coin.symbol,
           exchange: coin.exchange,
+          marketType: coin.marketType,
           timeframe,
           formation,
-          currentPrice: coin.currentPrice,
+          currentPrice: livePrice,
           recentCandles: klines.slice(-10),
         }),
       });
-
-      const data = await res.json();
-      if (requestId === aiRequestRef.current && data.success && data.analysis) {
-        setAiAnalysis(data.analysis);
+      const response = await res.json();
+      if (controller.signal.aborted || requestId !== aiRequestRef.current) return;
+      if (!res.ok || response.success !== true ||
+          !Number.isInteger(response.score) || response.score < 0 || response.score > 100) {
+        throw new Error('AI недоступний');
       }
-    } catch (err) {
-      if (requestId === aiRequestRef.current) console.error('Failed to get AI analysis:', err);
+      setAiScore(response.score);
+    } catch (error) {
+      if (!controller.signal.aborted && requestId === aiRequestRef.current) {
+        setAiError('AI недоступний');
+      }
     } finally {
-      if (requestId === aiRequestRef.current) setLoadingAi(false);
+      if (!controller.signal.aborted && requestId === aiRequestRef.current) setLoadingAi(false);
+      if (aiAbortRef.current === controller) aiAbortRef.current = null;
     }
   };
 
@@ -753,10 +726,66 @@ export const FormationDetailsModal: React.FC<FormationDetailsModalProps> = ({
                     <span className="font-semibold text-slate-100">{formation.statusLabel}</span>
                   </div>
                   <div className="bg-slate-900/60 p-2.5 rounded-xl border border-slate-800/60">
-                    <span className="text-slate-400 text-[10px] block" title="Зважена оцінка якості, не статистична ймовірність успіху">Якість сетапу</span>
-                    <span className="font-bold text-cyan-400 font-mono">{formation.confidence}/100</span>
+                    <button type="button"
+                      aria-expanded={qualityExpanded}
+                      aria-controls="formation-setup-quality-details"
+                      onClick={() => setQualityExpanded(expanded => !expanded)}
+                      className="w-full flex items-center justify-between gap-2 text-left cursor-pointer"
+                      title={qualityExpanded ? 'Згорнути складові якості' : 'Розгорнути складові якості'}>
+                      <span>
+                        <span className="text-slate-400 text-[10px] block" title="Зважена оцінка якості, не статистична ймовірність успіху">Якість сетапу</span>
+                        <span className="font-bold text-cyan-400 font-mono">{formation.confidence}/100</span>
+                      </span>
+                      <ChevronDown className={`w-4 h-4 shrink-0 text-cyan-300 transition-transform ${qualityExpanded ? 'rotate-180' : ''}`} />
+                    </button>
                   </div>
                 </div>
+                {qualityExpanded && (
+                  <div id="formation-setup-quality-details"
+                    className="rounded-xl border border-slate-700/70 bg-slate-900/60 p-3 space-y-2">
+                    {formation.validation?.confluence ? (
+                      <>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+                          {Object.entries(formation.validation.confluence.components)
+                            // Keep the existing score; hide density from the visual list only,
+                            // matching the Formations cards. Never rescore or invent signals.
+                            .filter(([key]) => key !== 'density')
+                            .map(([key, item]) => (
+                              <details key={key} className="rounded-lg border border-slate-700/60 bg-slate-950/70 p-2 text-[11px]">
+                                <summary className="cursor-pointer list-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-400">
+                                  <span className="block text-slate-400 truncate">{({
+                                    formation: 'Формація', extremeLocation: 'Екстремум',
+                                    trigger: 'Пробій', retest: 'Ретест', volume: 'Обсяг',
+                                    volatility: 'Волатильність', level: 'Рівень', riskReward: 'R:R',
+                                    dataQuality: 'Якість даних', openInterest: 'OI',
+                                    delta: 'Дельта', cvd20: 'CVD20', roundNumber: 'Кругле число',
+                                    rsi: 'RSI', atr: 'ATR', rvol: 'RVOL',
+                                  } as Record<string, string>)[key] || key}</span>
+                                  <strong className={`font-mono ${item.status === 'CONFLICT' ? 'text-rose-300' : 'text-cyan-200'}`}>
+                                    {item.available === false ? `н/д / ${item.max}` : `${item.score} / ${item.max}`}
+                                  </strong>
+                                </summary>
+                                <p className="mt-1 pt-1 border-t border-slate-800 text-slate-400 break-words">
+                                  {item.evidence}
+                                </p>
+                              </details>
+                          ))}
+                        </div>
+                        {formation.validation.confluence.rawTotal !== undefined &&
+                         formation.validation.confluence.availableMax !== undefined && (
+                          <p className="text-[10px] text-slate-400">
+                            Нормовано: {formation.validation.confluence.rawTotal} / {formation.validation.confluence.availableMax}
+                            {' '}доступних балів → {formation.validation.confluence.total}/100.
+                          </p>
+                        )}
+                      </>
+                    ) : (
+                      <p className="text-[11px] text-slate-400">
+                        Детальний розподіл балів для цієї формації недоступний.
+                      </p>
+                    )}
+                  </div>
+                )}
 
                 {/* Trade Setup Matrix */}
                 <div className="space-y-2 pt-2 border-t border-slate-800">
@@ -919,15 +948,19 @@ export const FormationDetailsModal: React.FC<FormationDetailsModalProps> = ({
                   )}
                 </div>
 
-                {/* AI Analysis Trigger Button */}
-                <button
-                  onClick={handleRequestAi}
-                  disabled={loadingAi}
-                  className="w-full py-2.5 px-4 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-lg shadow-cyan-950/40 transition-all cursor-pointer"
-                >
-                  <Sparkles className={`w-4 h-4 ${loadingAi ? 'animate-spin' : ''}`} />
-                  <span>{loadingAi ? 'Аналізуємо патерн...' : 'Інституційний Аналіз'}</span>
-                </button>
+                {/* Explicit AI-only numerical score. No automatic queries or prose. */}
+                <div className="flex items-center justify-between gap-3 border-t border-slate-800 pt-3">
+                  <button type="button" onClick={handleRequestAi} disabled={loadingAi}
+                    aria-label="Оцінити якість сетапу за допомогою AI"
+                    title="Оцінка AI · запит лише після натискання"
+                    className="inline-flex items-center gap-2 rounded-lg border border-cyan-500/40 bg-cyan-950/30 px-3 py-2 text-xs font-semibold text-cyan-200 hover:bg-cyan-900/40 disabled:opacity-60 cursor-pointer">
+                    <Sparkles className={`h-4 w-4 ${loadingAi ? 'animate-pulse' : ''}`} />
+                    <span>Оцінка AI</span>
+                  </button>
+                  <output aria-live="polite" className="font-mono font-bold text-sm text-cyan-300">
+                    {loadingAi ? '…' : aiScore !== null ? `AI: ${aiScore}/100` : aiError}
+                  </output>
+                </div>
 
               </div>
   );
@@ -1443,105 +1476,9 @@ export const FormationDetailsModal: React.FC<FormationDetailsModalProps> = ({
 
           </div>
 
-          {/* AI Analysis Section */}
-          {aiAnalysis && (
-            <div className="p-6 rounded-2xl bg-gradient-to-b from-slate-900 to-slate-950 border border-cyan-900/40 space-y-4">
-              <div className="flex items-center gap-2 text-cyan-400">
-                <Sparkles className="w-5 h-5" />
-                <h4 className="text-sm font-bold uppercase tracking-wider">
-                  Інституційний Розбір Формації
-                </h4>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-                {/* Summary & Confirmation */}
-                <div className="space-y-3 bg-slate-950/60 p-4 rounded-xl border border-slate-800">
-                  <div>
-                    <span className="font-semibold text-slate-300 block mb-1 text-xs">Резюме позиції:</span>
-                    <p className="text-slate-300 leading-relaxed">{aiAnalysis.summary}</p>
-                  </div>
-                  <div>
-                    <span className="font-semibold text-cyan-300 block mb-1 text-xs">Підтвердження формації:</span>
-                    <p className="text-slate-400 leading-relaxed">{aiAnalysis.patternConfirmation}</p>
-                  </div>
-                </div>
-
-                {/* Targets & Invalidation */}
-                <div className="space-y-3 bg-slate-950/60 p-4 rounded-xl border border-slate-800">
-                  <div>
-                    <span className="font-semibold text-emerald-400 block mb-1 text-xs">Аналіз ліквідності та цілей:</span>
-                    <p className="text-slate-300 leading-relaxed">{aiAnalysis.targetAnalysis}</p>
-                  </div>
-                  <div>
-                    <span className="font-semibold text-rose-400 block mb-1 text-xs">Критерій інвалідації (Скасування):</span>
-                    <p className="text-slate-400 leading-relaxed">{aiAnalysis.invalidationCriteria}</p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Qualitative analysis never overrides the canonical detected setup. */}
-              <div className="bg-slate-950 p-4 rounded-xl border border-slate-800">
-                <p className="text-[11px] text-slate-400">
-                  Інституційний аналіз пояснює ризики. Єдині торгові рівні Entry / TP / SL
-                  наведені у блоці «Виявлена формація» — альтернативних цін тут немає.
-                </p>
-
-                {/* Key Risks */}
-                {aiAnalysis.keyRisks && aiAnalysis.keyRisks.length > 0 && (
-                  <div className="mt-3 pt-3 border-t border-slate-800/80">
-                    <span className="text-[11px] font-semibold text-amber-300 flex items-center gap-1 mb-1">
-                      <AlertTriangle className="w-3 h-3 text-amber-400" />
-                      Ключові ризики:
-                    </span>
-                    <ul className="list-disc list-inside text-slate-400 text-xs space-y-0.5">
-                      {aiAnalysis.keyRisks.map((risk, idx) => (
-                        <li key={idx}>{risk}</li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Global, persistent Smart Analysis accordion. Only its UI is hidden;
-              no Telegram alert or trading setting is changed. */}
-          <div className="relative w-full min-w-0">
-            {smartAnalysisCollapsed ? (
-              <div className="grid w-full min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 rounded-xl border border-indigo-500/30 bg-slate-950/90 p-3 sm:p-4">
-                <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-indigo-500/40 bg-indigo-500/20 text-indigo-400">
-                  <Zap className="h-4 w-4 fill-current" />
-                </span>
-                <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-                  <h4 className="min-w-0 text-xs font-bold uppercase tracking-wide text-white sm:text-sm">
-                    РОЗУМНИЙ АНАЛІЗ
-                  </h4>
-                  <span className="shrink-0 rounded-full border border-indigo-500/40 bg-indigo-500/20 px-2 py-0.5 font-mono text-[10px] font-bold text-indigo-300">
-                    AI + Quant
-                  </span>
-                </div>
-                <button
-                  type="button"
-                  onClick={toggleSmartAnalysis}
-                  aria-expanded={false}
-                  aria-label="Розгорнути Розумний аналіз AI + Quant"
-                  title="Розгорнути Розумний аналіз"
-                  className="ml-auto inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-indigo-500/40 bg-slate-900 text-slate-300 transition-colors hover:text-indigo-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-400"
-                >
-                  <ChevronDown className="h-4 w-4" />
-                </button>
-              </div>
-            ) : (
-              <>
-                <SmartAnalysisBlock coin={coin} formation={formation} klines={klines} timeframe={timeframe} tradeSetup={tradeSetupPanel} onCollapse={toggleSmartAnalysis} />
-              </>
-            )}
-            {smartAnalysisSaveError && (
-              <p role="status" className="mt-2 text-xs text-amber-300">
-                Не вдалося синхронізувати згортання аналізу з профілем. Вибір збережено в цьому браузері.
-              </p>
-            )}
-          </div>
+          {/* Detected setup replaces the large automatic AI + Quant panel.
+              Keep one copy of the original Entry/TP/SL and Telegram controls. */}
+          {tradeSetupPanel}
         </div>
         {/* Same localized legal/contact footer as the main Screener page. */}
         <SiteFooter />
