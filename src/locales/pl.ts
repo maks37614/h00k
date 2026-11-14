@@ -23,6 +23,7 @@ const locale: LocaleFile = {
     "screenerVolume24h": "Wolumen 24 godz.:",
     "screenerVolumeTo": "Do",
     "screenerVolumeFrom": "Od",
+    "screenerVolumeUnlimited": "Bez ograniczeń",
     "addToSurveillance": "Dodaj do nadzoru",
     "language": "Język strony",
     "allExchanges": "Wszystkie giełdy",
