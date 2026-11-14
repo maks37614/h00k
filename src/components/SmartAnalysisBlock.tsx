@@ -707,15 +707,15 @@ export const SmartAnalysisBlock: React.FC<SmartAnalysisBlockProps> = ({
 
             <div className="p-3 rounded-lg bg-slate-900/80 border border-slate-800">
               <span className="font-semibold text-slate-300 block mb-1.5">
-                Оціночні рівні Support / Resistance (за свічками):
+                Оціночні рівні Support / Resistance (екстремуми 15 закритих свічок з відступом 0,4%):
               </span>
               <div className="space-y-1.5 font-mono text-[11px]">
                 <div className="flex items-center justify-between">
-                  <span className="text-emerald-400">Сильна підтримка (Demand):</span>
+                  <span className="text-emerald-400">Орієнтовна підтримка:</span>
                   <span className="text-white font-bold">{formatCryptoPrice(data.levels.strongSupport)}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-rose-400">Сильний опір (Supply):</span>
+                  <span className="text-rose-400">Орієнтовний опір:</span>
                   <span className="text-white font-bold">{formatCryptoPrice(data.levels.strongResistance)}</span>
                 </div>
               </div>
@@ -917,7 +917,7 @@ export const SmartAnalysisBlock: React.FC<SmartAnalysisBlockProps> = ({
             <section className="p-3.5 rounded-xl bg-slate-900/80 border border-slate-800 space-y-2">
               <h6 className="flex items-center gap-2 font-bold text-white">
                 <ShieldAlert className="w-4 h-4 text-amber-400" />
-                4. Індекс ринкової вразливості
+                4. Евристичний індекс ринкової вразливості
               </h6>
               <p className="font-mono text-lg font-bold text-white">
                 {data.participants.manipulativeCoin.riskScore === null
