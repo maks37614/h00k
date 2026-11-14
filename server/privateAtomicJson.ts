@@ -60,6 +60,9 @@ export function writePrivateJsonAtomic(destination: string, payload: string): vo
   } catch (error) {
     console.error('[Private JSON] Directory sync after rename failed:', error);
   } finally {
-    if (dirFd !== undefined) fs.closeSync(dirFd);
+    if (dirFd !== undefined) {
+      try { fs.closeSync(dirFd); }
+      catch (error) { console.error('[Private JSON] Directory descriptor close failed:', error); }
+    }
   }
 }
