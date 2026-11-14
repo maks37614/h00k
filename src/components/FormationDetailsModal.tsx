@@ -34,8 +34,14 @@ import { fetchDirectKlines } from '../utils/directExchangeClient';
 import { useAuth } from '../context/AuthContext';
 import { useAlerts } from '../context/AlertsContext';
 import { useArchive } from '../context/ArchiveContext';
+import { SmartAnalysisBlock } from './SmartAnalysisBlock';
 import { SiteFooter } from './SiteFooter';
 import { chartCrosshairAlertPrice } from '../utils/chartAlertPrice';
+import {
+  readSmartAnalysisPanelCollapsed, saveSmartAnalysisPanelCollapsed,
+  smartAnalysisPanelStorageKey, isSmartAnalysisPanelSyncPending,
+  saveSmartAnalysisPanelSyncPending,
+} from '../utils/smartAnalysisPanelPreference';
 import { ChartTopAnalysisText } from './ChartTopAnalysisText';
 import {
   readTelegramAlertPanelCollapsed,
@@ -245,6 +251,53 @@ export const FormationDetailsModal: React.FC<FormationDetailsModalProps> = ({
       })
       .catch(() => setTelegramAlertPanelSaveError(true))
       .finally(() => { pendingTelegramAlertPreferenceWrites.current -= 1; });
+  };
+
+  // AI + Quant visibility is independent from the Telegram panel and shared
+  // across every coin. The signed-in profile is the cross-device authority.
+  const smartAnalysisStorageKey = smartAnalysisPanelStorageKey(user?.uid);
+  const [smartAnalysisCollapsed, setSmartAnalysisCollapsed] = useState(
+    () => readSmartAnalysisPanelCollapsed(alertPanelStorage(), user?.uid)
+  );
+  const [smartAnalysisSaveError, setSmartAnalysisSaveError] = useState(false);
+  const pendingSmartAnalysisWrites = useRef(0);
+
+  useEffect(() => {
+    if (pendingSmartAnalysisWrites.current > 0) return;
+    const saved = profile?.uid === user?.uid ? profile.smartAnalysisCollapsed : undefined;
+    const pending = !!user?.uid && isSmartAnalysisPanelSyncPending(alertPanelStorage(), user.uid);
+    const collapsed = !pending && typeof saved === 'boolean'
+      ? saved : readSmartAnalysisPanelCollapsed(alertPanelStorage(), user?.uid);
+    setSmartAnalysisCollapsed(collapsed);
+    saveSmartAnalysisPanelCollapsed(alertPanelStorage(), collapsed, user?.uid);
+  }, [user?.uid, profile?.uid, profile?.smartAnalysisCollapsed]);
+
+  useEffect(() => {
+    const syncAcrossTabs = (event: StorageEvent) => {
+      if (event.key === smartAnalysisStorageKey) {
+        setSmartAnalysisCollapsed(event.newValue === 'true');
+      }
+    };
+    window.addEventListener('storage', syncAcrossTabs);
+    return () => window.removeEventListener('storage', syncAcrossTabs);
+  }, [smartAnalysisStorageKey]);
+
+  const toggleSmartAnalysis = () => {
+    const next = !smartAnalysisCollapsed;
+    setSmartAnalysisCollapsed(next);
+    setSmartAnalysisSaveError(false);
+    saveSmartAnalysisPanelCollapsed(alertPanelStorage(), next, user?.uid);
+    if (!user) return;
+    saveSmartAnalysisPanelSyncPending(alertPanelStorage(), user.uid, true);
+    pendingSmartAnalysisWrites.current += 1;
+    void updateProfileData({ smartAnalysisCollapsed: next })
+      .then(() => {
+        if (pendingSmartAnalysisWrites.current === 1) {
+          saveSmartAnalysisPanelSyncPending(alertPanelStorage(), user.uid, false);
+        }
+      })
+      .catch(() => setSmartAnalysisSaveError(true))
+      .finally(() => { pendingSmartAnalysisWrites.current -= 1; });
   };
 
   // Custom price alert under chart state
@@ -1476,9 +1529,46 @@ export const FormationDetailsModal: React.FC<FormationDetailsModalProps> = ({
 
           </div>
 
-          {/* Detected setup replaces the large automatic AI + Quant panel.
-              Keep one copy of the original Entry/TP/SL and Telegram controls. */}
-          {tradeSetupPanel}
+          {/* Original AI + Quant panel and its full functionality are preserved.
+              Only the two introductory ratings are replaced by tradeSetupPanel. */}
+          {/* Global, persistent Smart Analysis accordion. Only its UI is hidden;
+              no Telegram alert or trading setting is changed. */}
+          <div className="relative w-full min-w-0">
+            {smartAnalysisCollapsed ? (
+              <div className="grid w-full min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 rounded-xl border border-indigo-500/30 bg-slate-950/90 p-3 sm:p-4">
+                <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-indigo-500/40 bg-indigo-500/20 text-indigo-400">
+                  <Zap className="h-4 w-4 fill-current" />
+                </span>
+                <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                  <h4 className="min-w-0 text-xs font-bold uppercase tracking-wide text-white sm:text-sm">
+                    РОЗУМНИЙ АНАЛІЗ
+                  </h4>
+                  <span className="shrink-0 rounded-full border border-indigo-500/40 bg-indigo-500/20 px-2 py-0.5 font-mono text-[10px] font-bold text-indigo-300">
+                    AI + Quant
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={toggleSmartAnalysis}
+                  aria-expanded={false}
+                  aria-label="Розгорнути Розумний аналіз AI + Quant"
+                  title="Розгорнути Розумний аналіз"
+                  className="ml-auto inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-indigo-500/40 bg-slate-900 text-slate-300 transition-colors hover:text-indigo-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-400"
+                >
+                  <ChevronDown className="h-4 w-4" />
+                </button>
+              </div>
+            ) : (
+              <>
+                <SmartAnalysisBlock coin={coin} formation={formation} klines={klines} timeframe={timeframe} tradeSetup={tradeSetupPanel} onCollapse={toggleSmartAnalysis} />
+              </>
+            )}
+            {smartAnalysisSaveError && (
+              <p role="status" className="mt-2 text-xs text-amber-300">
+                Не вдалося синхронізувати згортання аналізу з профілем. Вибір збережено в цьому браузері.
+              </p>
+            )}
+          </div>
         </div>
         {/* Same localized legal/contact footer as the main Screener page. */}
         <SiteFooter />
