@@ -2,6 +2,7 @@ import React, { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Check, ChevronDown } from 'lucide-react';
 import { SCREENER_VOLUME_CAPS, type ScreenerVolumeMode } from '../utils/screenerVolume';
+import { useLanguage } from '../context/LanguageContext';
 
 
 interface Props {
@@ -13,13 +14,17 @@ interface Props {
 }
 
 export const ScreenerVolumeDropdown: React.FC<Props> = ({ id, labelId, value, mode = 'to', onChange }) => {
+  const { t } = useLanguage();
+  const upTo = t('screenerVolumeTo');
+  const from = t('screenerVolumeFrom');
+  const unlimited = t('screenerVolumeUnlimited');
   const options = useMemo(() => [
-    { value: 0, label: 'Без обмежень' },
+    { value: 0, label: unlimited },
     ...SCREENER_VOLUME_CAPS.map(option => ({
       value: option.value,
-      label: mode === 'from' ? option.label.replace(/^До /, 'Від ') : option.label,
+      label: option.label.replace(/^До /, `${mode === 'from' ? from : upTo} `),
     })),
-  ], [mode]);
+  ], [mode, upTo, from, unlimited]);
   const [open, setOpen] = useState(false);
   const selectedIndex = Math.max(0, options.findIndex(option => option.value === value));
   const [activeIndex, setActiveIndex] = useState(selectedIndex);
