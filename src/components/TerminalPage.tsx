@@ -152,9 +152,11 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
       currentPrice: coin.price, priceChange24h: coin.change24h, volume24hUsd: coin.volumeUsd,
       highPrice24h: coin.high24h, lowPrice24h: coin.low24h,
       formations: formations.get(coinMarketKey(coin))?.formations || [],
-      timeframe: preferences.defaultTimeframe, lastUpdated: Date.now(),
+      // Preserve market-data provenance. Rebuilding a coin card is not a fresh
+      // exchange update and must not turn an old quote into a current one.
+      timeframe: preferences.defaultTimeframe, lastUpdated: marketSnapshot.timestamp ?? 0,
     } as ScannedCoin));
-  }, [marketCoins, formationCoins, preferences.defaultTimeframe]);
+  }, [marketCoins, marketSnapshot.timestamp, formationCoins, preferences.defaultTimeframe]);
   // Any manual edit stops the automatic selection from restoring a removed chart.
   const setBlocks: typeof updateBlocks = useCallback(update => {
     setActiveMarketPreset(null);
