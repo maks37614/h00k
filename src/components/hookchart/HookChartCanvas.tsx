@@ -10,6 +10,7 @@ import { alertConditionForPrice, chartTelegramAlerts, telegramIdFromChartMarker 
 import { useLanguage } from '../../context/LanguageContext';
 import { resolveHookChartLanguage } from '../../locales/hookchartLanguage';
 import { toHookCandles } from '../../utils/hookchartData';
+import { convertLiveHookChartCandles, type LiveHookChartConversion } from '../../utils/hookChartLiveConversion';
 import { replayHistoryChange } from '../../utils/replayHistoryChange';
 import { resolveTimeZone } from '../../utils/tradingSessions';
 import { fetchHistoricalReplayCandles } from '../../utils/replayService';
@@ -305,10 +306,7 @@ const HookChartCanvas = forwardRef<HookChartHandle, HookChartCanvasProps>(functi
   // Live ticks normally replace just the last immutable candle. Keep the
   // history conversion separate from Replay, with a full rebuild on any
   // altered prefix, history page, symbol, timeframe or candle limit.
-  const liveConversionRef = useRef<{
-    scope: string; input: readonly Kline[]; history: readonly Kline[];
-    max: number | undefined; candles: Candle[];
-  } | null>(null);
+  const liveConversionRef = useRef<LiveHookChartConversion | null>(null);
   // Replay must remain causal; live chart history can be extended and capped independently.
   const maxChartCandles = settings.maxChartCandles === undefined ? undefined : clampHookChartHistory(settings.maxChartCandles);
   const candles = useMemo(() => {
@@ -333,34 +331,10 @@ const HookChartCanvas = forwardRef<HookChartHandle, HookChartCanvasProps>(functi
       return rows;
     }
     replayConversionRef.current = null;
-    const previous = liveConversionRef.current;
-    const sameScope = previous?.scope === historyScope &&
-      previous.history === extraHistoryRows && previous.max === maxChartCandles;
-    const change = sameScope ? replayHistoryChange(previous!.input, klines) : 'reset';
-    if (change === 'same') return previous!.candles;
-    if ((change === 'append' || change === 'replace-last') && previous?.candles.length &&
-        previous.input.at(-1)?.time === previous.candles.at(-1)!.t / 1000) {
-      const last = toHookCandles(klines.slice(-1))[0];
-      const oldLast = previous.candles.at(-1)!;
-      if (last && (change === 'append' ? last.t > oldLast.t : last.t === oldLast.t)) {
-        const next = change === 'append'
-          ? [...previous.candles, last]
-          : [...previous.candles.slice(0, -1), last];
-        const result = maxChartCandles ? next.slice(-maxChartCandles) : next;
-        liveConversionRef.current = {
-          scope: historyScope, input: klines, history: extraHistoryRows,
-          max: maxChartCandles, candles: result,
-        };
-        return result;
-      }
-    }
-    const rows = toHookCandles([...extraHistoryRows, ...klines]);
-    const result = maxChartCandles ? rows.slice(-maxChartCandles) : rows;
-    liveConversionRef.current = {
-      scope: historyScope, input: klines, history: extraHistoryRows,
-      max: maxChartCandles, candles: result,
-    };
-    return result;
+    const converted = convertLiveHookChartCandles(klines, extraHistoryRows, historyScope,
+      maxChartCandles, liveConversionRef.current);
+    liveConversionRef.current = converted;
+    return converted.candles;
   }, [klines, extraHistoryRows, replay, maxChartCandles, historyScope]);
   const historyRequestKey = useRef('');
   useEffect(() => {
