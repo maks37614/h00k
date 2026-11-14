@@ -2,6 +2,16 @@
 !include "LogicLib.nsh"
 !include "${__FILEDIR__}\installer-locales.nsh"
 
+; This include is parsed before electron-builder includes MUI2.nsh.
+; Set the standard MUI header controls directly, after the dialog exists.
+!macro h00kSetHeader TITLE SUBTITLE
+  GetDlgItem $R7 $HWNDPARENT 1037
+  SendMessage $R7 12 0 "STR:${TITLE}"
+  GetDlgItem $R7 $HWNDPARENT 1038
+  SendMessage $R7 12 0 "STR:${SUBTITLE}"
+!macroend
+
+
 ; The installer language selector is the first page. English is the default.
 !ifndef BUILD_UNINSTALLER
 Var /GLOBAL h00kShortcutCheck
@@ -105,7 +115,7 @@ Function h00kLanguagePageCreate
   ${If} ${Silent}
     Abort
   ${EndIf}
-  !insertmacro MUI_HEADER_TEXT "$(h00kLanguageTitle)" "$(h00kLanguageSubtitle)"
+  !insertmacro h00kSetHeader "$(h00kLanguageTitle)" "$(h00kLanguageSubtitle)"
   nsDialogs::Create 1018
   Pop $0
   ${If} $0 == error
@@ -156,7 +166,7 @@ Function h00kShortcutPageCreate
   ${If} ${Silent}
     Abort
   ${EndIf}
-  !insertmacro MUI_HEADER_TEXT "$(h00kShortcutTitle)" "$(h00kShortcutSubtitle)"
+  !insertmacro h00kSetHeader "$(h00kShortcutTitle)" "$(h00kShortcutSubtitle)"
   nsDialogs::Create 1018
   Pop $0
   ${If} $0 == error
@@ -180,7 +190,7 @@ Function h00kGuideBasicsCreate
   ${If} ${Silent}
     Abort
   ${EndIf}
-  !insertmacro MUI_HEADER_TEXT "$(h00kGuideTitle)" "$(h00kGuideSubtitle)"
+  !insertmacro h00kSetHeader "$(h00kGuideTitle)" "$(h00kGuideSubtitle)"
   nsDialogs::Create 1018
   Pop $0
   ${If} $0 == error
@@ -199,7 +209,7 @@ Function h00kGuideLayoutCreate
   ${If} ${Silent}
     Abort
   ${EndIf}
-  !insertmacro MUI_HEADER_TEXT "$(h00kLayoutTitle)" "$(h00kLayoutSubtitle)"
+  !insertmacro h00kSetHeader "$(h00kLayoutTitle)" "$(h00kLayoutSubtitle)"
   nsDialogs::Create 1018
   Pop $0
   ${If} $0 == error
@@ -220,7 +230,7 @@ Function h00kGuideApiCreate
   ${If} ${Silent}
     Abort
   ${EndIf}
-  !insertmacro MUI_HEADER_TEXT "$(h00kApiTitle)" "$(h00kApiSubtitle)"
+  !insertmacro h00kSetHeader "$(h00kApiTitle)" "$(h00kApiSubtitle)"
   nsDialogs::Create 1018
   Pop $0
   ${If} $0 == error
