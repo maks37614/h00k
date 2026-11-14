@@ -73,8 +73,9 @@ function loadDeletedAlertIds() {
 function saveDeletedAlertIds() {
   ensureDataDir();
   const temporary = `${DELETED_ALERTS_FILE}.tmp`;
-  // Tombstones contain owner/alert identities. Restrict access before rename,
-  // including when an older release left a permissive .tmp file behind.
+  // Tombstones contain owner/alert identities. Restrict an old temp file
+  // before writing data, not just before its atomic rename.
+  protectExistingAlertTemp(temporary);
   fs.writeFileSync(temporary, JSON.stringify([...deletedAlertIds]), { encoding: 'utf-8', mode: 0o600 });
   fs.chmodSync(temporary, 0o600);
   fs.renameSync(temporary, DELETED_ALERTS_FILE);
@@ -108,6 +109,17 @@ function commitAlertDeletion(identities: string[], next: PriceAlert[]): void {
     alertsByUser = null;
     indexedAlerts = null;
     console.error('[Alerts] Tombstone saved but alerts.json rewrite failed; deletion remains effective');
+  }
+}
+
+/** Secure a temp file from an older release *before* writing personal data.
+ * writeFileSync's mode applies only at creation; an existing 0644 file keeps
+ * its old permissions unless they are tightened in advance. */
+function protectExistingAlertTemp(temp: string): void {
+  try {
+    fs.chmodSync(temp, 0o600);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
   }
 }
 
@@ -161,8 +173,9 @@ export function saveAlerts(alerts: PriceAlert[]): boolean {
     const temp = `${ALERTS_FILE}.tmp`;
     const payload = JSON.stringify(alerts);
     bytes = Buffer.byteLength(payload);
-    // Price alerts contain personal settings. A reused temp file can retain
-    // old permissive permissions; chmod before exposing the final path.
+    // Price alerts contain personal settings. Restrict a reused temporary
+    // file before any personal data is written to it.
+    protectExistingAlertTemp(temp);
     fs.writeFileSync(temp, payload, { encoding: 'utf-8', mode: 0o600 });
     fs.chmodSync(temp, 0o600);
     fs.renameSync(temp, ALERTS_FILE);
@@ -209,6 +222,7 @@ export function saveHistory(items: AlertHistoryItem[]): boolean {
     const payload = JSON.stringify(items);
     bytes = Buffer.byteLength(payload);
     // Alert history contains personal trigger and delivery information.
+    protectExistingAlertTemp(temp);
     fs.writeFileSync(temp, payload, { encoding: 'utf-8', mode: 0o600 });
     fs.chmodSync(temp, 0o600);
     fs.renameSync(temp, HISTORY_FILE);
