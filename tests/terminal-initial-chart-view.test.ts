@@ -144,3 +144,9 @@ test('Terminal header actions cannot target the wrong symbol in multi-chart mode
   assert.match(widget, /onSendMetaScalp\(coin\)/);
   assert.match(widget, /onOpenTelegramAlerts\(\{/);
 });
+
+test('closed per-chart coin switchers do not rescan the entire Terminal market', () => {
+  const widget = source('../src/components/terminal/TerminalChartWidget.tsx');
+  assert.match(widget, /const filteredCoins = useMemo\(\(\) => \{\s*if \(!isCoinPickerOpen\) return \[\];/);
+  assert.match(widget, /\}, \[allCoins, coinSearch, isCoinPickerOpen\]\)/);
+});
