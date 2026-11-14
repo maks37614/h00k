@@ -4,6 +4,8 @@ import { candleCloseCheckPlanner } from './surveillance/candleCloseCheckPlanner'
 import { runBackgroundFormationScans } from './marketService';
 import { getUserTelegram } from './userTelegram';
 import { surveillanceManager } from './surveillance/surveillanceManager';
+import { hasFreshSurveillanceCheck, wasSurveillanceCheckCommitted } from './surveillance/checkResult';
+import { isCronJobHealthy } from './cronHealth';
 
 export interface CronJobStatus {
   id: string;
@@ -230,39 +232,53 @@ class CronManager {
   }
 
   // --- Manual Run Trigger ---
+  // This legacy/operator entry point is not the authenticated per-user HTTP
+  // route. Never claim that a skipped/failed coin was successfully checked.
   public async triggerJob(jobId: string): Promise<{ success: boolean; message: string; durationMs?: number }> {
-    if (jobId === 'all') {
-      const start = Date.now();
-      await Promise.allSettled([
-        checkAlertsOnce(),
-        (async () => {
-          const active = getAllActiveSurveillanceCoins();
-          for (const { coin } of active.slice(0, 5)) {
-            await checkCoinSurveillance(coin).catch(() => {});
+    if (!['all', 'price_alerts', 'surveillance'].includes(jobId))
+      return { success: false, message: `Невідоме завдання cron: ${jobId}` };
+
+    const started = Date.now();
+    const tasks: Promise<void>[] = [];
+    if (jobId !== 'surveillance') {
+      tasks.push(checkAlertsOnce());
+    }
+    if (jobId !== 'price_alerts') {
+      tasks.push((async () => {
+        const active = getAllActiveSurveillanceCoins();
+        // Keep the operator "all" shortcut bounded; report remaining work
+        // as incomplete rather than issuing an unbounded exchange API burst.
+        const batch = jobId === 'all' ? active.slice(0, 5) : active;
+        let failed = 0;
+        for (const { coin } of batch) {
+          try {
+            const { coin: checked } = await checkCoinSurveillance(coin, {
+              forceCheck: true, forceNotify: false,
+            });
+            if (!hasFreshSurveillanceCheck(coin, checked)) throw new Error('No fresh market state');
+            const committed = commitSurveillanceCheck(checked);
+            if (!wasSurveillanceCheckCommitted(checked, committed))
+              throw new Error('Surveillance state was not persisted');
+          } catch (error) {
+            failed++;
+            console.error('[CRON:manual] Surveillance coin check failed:', error);
           }
-        })(),
-      ]);
-      return { success: true, message: 'Усі завдання cron успішно виконано вручну', durationMs: Date.now() - start };
+        }
+        const skipped = active.length - batch.length;
+        if (failed || skipped) throw new Error(
+          `Нагляд перевірено частково: ${failed} помилок, ${skipped} не перевірено`);
+      })());
     }
-
-    if (jobId === 'price_alerts') {
-      const start = Date.now();
-      await checkAlertsOnce();
-      this.jobs.price_alerts.lastRunAt = new Date().toISOString();
-      return { success: true, message: 'Перевірку цінових алерів виконано', durationMs: Date.now() - start };
+    const results = await Promise.allSettled(tasks);
+    const failures = results.filter((result): result is PromiseRejectedResult =>
+      result.status === 'rejected');
+    const durationMs = Date.now() - started;
+    if (failures.length) {
+      const message = failures.map(result =>
+        result.reason instanceof Error ? result.reason.message : 'Помилка cron').join('; ');
+      return { success: false, message: `Ручна перевірка не завершена: ${message}`, durationMs };
     }
-
-    if (jobId === 'surveillance') {
-      const start = Date.now();
-      const active = getAllActiveSurveillanceCoins();
-      for (const { coin } of active) {
-        await checkCoinSurveillance(coin).catch(() => {});
-      }
-      this.jobs.surveillance.lastRunAt = new Date().toISOString();
-      return { success: true, message: `Нагляд перевірено (${active.length} активних монет)`, durationMs: Date.now() - start };
-    }
-
-    return { success: false, message: `Невідоме завдання cron: ${jobId}` };
+    return { success: true, message: 'Обрані завдання cron виконано', durationMs };
   }
 
   /**
@@ -292,7 +308,8 @@ class CronManager {
     return {
       uptimeSeconds: Math.floor((Date.now() - this.startTime) / 1000),
       startedAt: new Date(this.startTime).toISOString(),
-      isHealthy: Object.values(this.jobs).every((j) => j.errorCount < 10),
+      isHealthy: Object.values(this.jobs).every((j) =>
+        isCronJobHealthy(j, this.startTime)),
       jobs: this.jobs,
       stats: {
         totalAlertsMonitored: allAlerts.length,
