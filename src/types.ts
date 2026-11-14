@@ -381,6 +381,8 @@ export interface ChartTradeMarkerSettings {
 }
 
 export interface TerminalWorkspaceSettings {
+  /** Server-issued optimistic concurrency version; missing for legacy profiles. */
+  version?: string;
   columns: number;
   blockHeight: 'compact' | 'medium' | 'large' | 'tall';
   blocks: any[];
