@@ -11,12 +11,27 @@ export const VISUAL_CONTEXTS = [
 ] as const;
 export type VisualContextId = typeof VISUAL_CONTEXTS[number]['id'];
 
-/** Hide Terminal-only layouts from the shared Screener/Formation profile picker.
- * Keep all seven profiles in storage, and allow Terminal to edit its own layouts. */
-export function selectableVisualContexts(includeTerminalContexts = true) {
-  return includeTerminalContexts
-    ? VISUAL_CONTEXTS
-    : VISUAL_CONTEXTS.filter(context => !context.id.startsWith('terminal'));
+/** The Scale picker has only two choices. Terminal layouts retain independent
+ * stored profiles, but do not appear as choices here. */
+export const SHARED_SCALE_CONTEXTS = [
+  { id: 'screenerQuick', label: 'Швидкий перегляд' },
+  { id: 'screenerFull', label: 'Повний графік' },
+] as const;
+
+export function selectableVisualContexts(_includeTerminalContexts = false) {
+  return SHARED_SCALE_CONTEXTS;
+}
+
+/** Screener and Formations use the same profile for the same chart size. */
+export function canonicalVisualContext(context: VisualContextId): VisualContextId {
+  if (context === 'formationsQuick') return 'screenerQuick';
+  if (context === 'formationsFull') return 'screenerFull';
+  return context;
+}
+
+/** Select a visible Scale-tab option without selecting a Terminal-only layout. */
+export function visibleScaleContext(context?: VisualContextId): 'screenerQuick' | 'screenerFull' {
+  return context === 'screenerFull' || context === 'formationsFull' ? 'screenerFull' : 'screenerQuick';
 }
 export type VisualDevice = 'mobile' | 'desktop';
 export type VisualProfileKey = `${VisualContextId}:${VisualDevice}`;
@@ -56,7 +71,7 @@ export function visualContextForTerminalWidth(chartWidth: number): VisualContext
 }
 
 export function makeVisualProfileKey(context: VisualContextId, device: VisualDevice): VisualProfileKey {
-  return `${context}:${device}`;
+  return `${canonicalVisualContext(context)}:${device}`;
 }
 
 function clamp(value: unknown, min: number, max: number, fallback: number): number {
@@ -65,7 +80,7 @@ function clamp(value: unknown, min: number, max: number, fallback: number): numb
 }
 
 export function normalizeVisualProfile(value: unknown, context: VisualContextId): VisualChartProfile {
-  const defaults = BASE[context];
+  const defaults = BASE[canonicalVisualContext(context)];
   const raw = value && typeof value === 'object' && !Array.isArray(value)
     ? value as Partial<VisualChartProfile> : {};
   return {
@@ -80,10 +95,15 @@ export function normalizedVisualProfiles(value: unknown): VisualProfiles {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
   const source = value as Record<string, unknown>;
   const profiles: VisualProfiles = {};
+  // The Screener key takes precedence if both old page-specific keys exist.
+  // Otherwise migrate the saved Formation key instead of losing its settings.
   for (const context of VISUAL_CONTEXTS) {
     for (const device of ['mobile', 'desktop'] as const) {
-      const key = makeVisualProfileKey(context.id, device);
-      if (source[key] !== undefined) profiles[key] = normalizeVisualProfile(source[key], context.id);
+      const legacyKey = `${context.id}:${device}` as VisualProfileKey;
+      const sharedKey = makeVisualProfileKey(context.id, device);
+      if (source[legacyKey] !== undefined && profiles[sharedKey] === undefined) {
+        profiles[sharedKey] = normalizeVisualProfile(source[legacyKey], context.id);
+      }
     }
   }
   return profiles;
@@ -94,7 +114,13 @@ export function getVisualProfile(
   context: VisualContextId,
   device: VisualDevice,
 ): VisualChartProfile {
-  return normalizeVisualProfile(settings?.visualProfiles?.[makeVisualProfileKey(context, device)], context);
+  const profiles = settings?.visualProfiles;
+  const sharedKey = makeVisualProfileKey(context, device);
+  const oldFormationKey = canonicalVisualContext(context) === 'screenerQuick'
+    ? `formationsQuick:${device}` : canonicalVisualContext(context) === 'screenerFull'
+      ? `formationsFull:${device}` : null;
+  const value = profiles?.[sharedKey] ?? (oldFormationKey ? profiles?.[oldFormationKey as VisualProfileKey] : undefined);
+  return normalizeVisualProfile(value, context);
 }
 
 export function patchVisualProfile(
@@ -102,10 +128,13 @@ export function patchVisualProfile(
   key: VisualProfileKey,
   update: Partial<VisualChartProfile> | null,
 ): VisualProfiles {
-  const result = { ...(source || {}) };
-  if (update === null) { delete result[key]; return result; }
-  const context = key.split(':')[0] as VisualContextId;
-  result[key] = normalizeVisualProfile({ ...getVisualProfile({ visualProfiles: result }, context, key.endsWith(':mobile') ? 'mobile' : 'desktop'), ...update }, context);
+  const result = normalizedVisualProfiles(source);
+  const [context, device] = key.split(':') as [VisualContextId, VisualDevice];
+  const sharedKey = makeVisualProfileKey(context, device);
+  if (update === null) { delete result[sharedKey]; return result; }
+  result[sharedKey] = normalizeVisualProfile({
+    ...getVisualProfile({ visualProfiles: result }, context, device), ...update,
+  }, context);
   return result;
 }
 
