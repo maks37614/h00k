@@ -6,7 +6,7 @@ import type { Request } from 'express';
 import express from 'express';
 import { AuthFailure } from '../server/pgIdentity';
 import { captchaConfig, verifyAuthCaptcha } from '../server/authCaptcha';
-import { installPostgresIdentityRoutes } from '../server/pgIdentityRoutes';
+import { installPostgresIdentityRoutes, rateLimit } from '../server/pgIdentityRoutes';
 
 const variables = ['TURNSTILE_SITE_KEY', 'TURNSTILE_SECRET_KEY', 'PUBLIC_BASE_URL', 'NODE_ENV'] as const;
 function withCaptchaEnvironment(t: { after: (fn: () => void) => void }, values: Record<string, string>) {
@@ -45,14 +45,21 @@ test('Turnstile config remains public while missing keys fail closed, including 
   assert.equal(publicConfig.captcha.siteKey, null);
   assert.equal(JSON.stringify(publicConfig).includes('secret'), false, 'never expose the server secret');
 
-  // CAPTCHA rejection must happen before the Postgres schema initialization or SMTP.
-  for (const route of ['register', 'login', 'forgot-password', 'resend-verification']) {
-    const response = await fetch(origin + '/api/auth/' + route, {
+  // Express is case-insensitive and ignores trailing slashes by default.
+  // All equivalent protected URLs MUST pass through the same CAPTCHA gate.
+  const protectedUrls = [
+    '/api/auth/register', '/api/auth/REGISTER', '/api/auth/register/',
+    '/api/auth/login', '/api/auth/Login', '/api/auth/login/',
+    '/api/auth/forgot-password', '/api/auth/Forgot-Password/',
+    '/api/auth/resend-verification', '/api/auth/Resend-Verification/',
+  ];
+  for (const route of protectedUrls) {
+    const response = await fetch(origin + route, {
       method: 'POST', headers: { Origin: origin, 'Content-Type': 'application/json' },
       body: JSON.stringify({ email: 'blocked@example.invalid', password: 'strong-password-123' }),
     });
     assert.equal(response.status, 503, route);
-    assert.equal((await response.json()).code, 'CAPTCHA_NOT_CONFIGURED');
+    assert.equal((await response.json()).code, 'CAPTCHA_NOT_CONFIGURED', route);
   }
 });
 
@@ -117,4 +124,16 @@ test('Turnstile Siteverify binds success to action, hostname, unique token and o
   await assert.rejects(verifyAuthCaptcha(request('timeout')), (error: unknown) =>
     error instanceof AuthFailure && error.code === 'CAPTCHA_UNAVAILABLE');
   assert.equal(calls, 6);
+});
+
+
+test('unverified CAPTCHA attempts cannot consume an email-address abuse budget', () => {
+  const unique = Date.now().toString(36) + Math.random().toString(36).slice(2);
+  const req = { ip: '198.51.100.12-' + unique, body: { email: unique + '@example.invalid' } } as Request;
+  for (let i = 0; i < 10; i++) {
+    rateLimit(req, 'captcha-preflight', 60, 5 * 60 * 1000, false);
+  }
+  assert.doesNotThrow(() => rateLimit(req, 'signup', 1, 60 * 60 * 1000));
+  assert.throws(() => rateLimit(req, 'signup', 1, 60 * 60 * 1000),
+    (error: unknown) => error instanceof AuthFailure && error.code === 'RATE_LIMITED');
 });
