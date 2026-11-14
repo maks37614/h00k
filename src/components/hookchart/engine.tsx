@@ -8,6 +8,7 @@ import { createPortal } from 'react-dom';
 import { CalendarDays } from 'lucide-react';
 import { drawTouchMagnifier, magnifierZoomFromPriceDrag, TOUCH_MAGNIFIER_DEFAULT_ZOOM } from './touchMagnifier';
 import { createChartFrameScheduler } from './frameScheduler';
+import { chartDiagnosticsEnabled, recordChartPaint } from './chartDiagnostics';
 import { DEFAULT_CROSSHAIR_LINE_WIDTH, paintChartCrosshair, paintChartRuler } from './chartCursor';
 import { createChartTouchHold, isChartControlTarget } from './touchHold';
 import { CrosshairTimeLabel } from './CrosshairTimeLabel';
@@ -439,7 +440,7 @@ export function Chart({candles,symbol,tf,tool,drawings,setDrawings,alerts,setAle
  const transient=useRef<{t:number;p:number}|null>(null);
  const drag=useRef<any>(null),geom=useRef<any>(null),pointers=useRef(new Map<number,{x:number,y:number}>()),lastTap=useRef(0),mouseRef=useRef<{x:number,y:number}|null>(null),drawRef=useRef<()=>void>(()=>{}),interactionDrawRef=useRef<()=>void>(()=>{});
  const frames=useRef<ReturnType<typeof createChartFrameScheduler>|null>(null);
- if(!frames.current)frames.current=createChartFrameScheduler({scene:()=>drawRef.current(),interaction:()=>interactionDrawRef.current()});
+ if(!frames.current)frames.current=createChartFrameScheduler({scene:()=>{const start=chartDiagnosticsEnabled()?performance.now():0;drawRef.current();if(start)recordChartPaint(performance.now()-start)},interaction:()=>interactionDrawRef.current()});
  const resetInteraction=()=>{
    const owner=box.current,ids=[...pointers.current.keys()];
    cancelTouchHold();magnifierPointer.current=null;magnifierPriceDrag.current=null;magnifierZoom.current=TOUCH_MAGNIFIER_DEFAULT_ZOOM;touchCursorVisible.current=false;suppressTouchClick.current=false;
