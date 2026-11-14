@@ -49,7 +49,7 @@ import {
 } from '../utils/directExchangeClient';
 import { loadMarketCoins } from '../utils/marketCoinLoader';
 import { matchesExchangeInstrumentSearch } from '../utils/marketSymbols';
-import { isVolumeWithinCap } from '../utils/screenerVolume';
+import { isVolumeWithinCap, type ScreenerVolumeMode } from '../utils/screenerVolume';
 import { ScreenerVolumeDropdown } from './ScreenerVolumeDropdown';
 import { ScreenerSortDropdown } from './ScreenerSortDropdown';
 import { compareScreenerSearchCoins, effectiveScreenerSearchConfig, normalizeScreenerSearchSettings } from '../utils/screenerSearchSettings';
@@ -104,6 +104,7 @@ const screenerUiSession = new Map<string, {
   exchange: 'all' | ExchangeId;
   marketType: 'all' | MarketType;
   maxVolumeUsd: number;
+  volumeMode: ScreenerVolumeMode;
   sortBy: ScreenerSortBy;
   sortOrder: 'asc' | 'desc';
   secondarySortBy: ScreenerSortBy | 'none';
@@ -161,8 +162,9 @@ export const CoinScreenerPage: React.FC<CoinScreenerPageProps> = ({
     setExchange(preferences.defaultExchange);
     setMarketType(preferences.defaultMarketType);
   }, [preferences.defaultExchange, preferences.defaultMarketType, user?.uid, profile?.uid, profile?.searchSettings]);
-  // 0 means no upper limit; thresholds include the selected value.
+  // 0 means unlimited; positive thresholds include the selected value in both directions.
   const [maxVolumeUsd, setMaxVolumeUsd] = useState<number>(() => cachedUi?.maxVolumeUsd ?? initialSearch.maxVolumeUsd);
+  const [volumeMode, setVolumeMode] = useState<ScreenerVolumeMode>(() => cachedUi?.volumeMode ?? initialSearch.volumeMode);
   const [sortBy, setSortBy] = useState<ScreenerSortBy>(() => cachedUi?.sortBy ?? initialSearch.sortBy);
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>(() => cachedUi?.sortOrder ?? initialSearch.sortOrder);
   const [secondarySortBy, setSecondarySortBy] = useState<ScreenerSortBy | 'none'>(() => cachedUi?.secondarySortBy ?? initialSearch.secondarySortBy);
@@ -207,6 +209,7 @@ export const CoinScreenerPage: React.FC<CoinScreenerPageProps> = ({
     setExchange(config.exchange);
     setMarketType(config.marketType);
     setMaxVolumeUsd(config.maxVolumeUsd);
+    setVolumeMode(config.volumeMode);
     setSortBy(config.sortBy);
     setSortOrder(config.sortOrder);
     setSecondarySortBy(config.secondarySortBy);
@@ -228,10 +231,10 @@ export const CoinScreenerPage: React.FC<CoinScreenerPageProps> = ({
 
   useEffect(() => {
     screenerUiSession.set(user?.uid || 'guest', {
-      presetFilter, searchQuery, exchange, marketType, maxVolumeUsd, sortBy,
+      presetFilter, searchQuery, exchange, marketType, maxVolumeUsd, volumeMode, sortBy,
       sortOrder, secondarySortBy, secondarySortOrder, viewMode, displayLimit,
     });
-  }, [user?.uid, presetFilter, searchQuery, exchange, marketType, maxVolumeUsd,
+  }, [user?.uid, presetFilter, searchQuery, exchange, marketType, maxVolumeUsd, volumeMode,
     sortBy, sortOrder, secondarySortBy, secondarySortOrder, viewMode, displayLimit]);
 
   const currentRequest = useRef<{ key: string; controller: AbortController } | null>(null);
@@ -335,8 +338,8 @@ export const CoinScreenerPage: React.FC<CoinScreenerPageProps> = ({
       // Market type filter
       if (marketType !== 'all' && coin.marketType !== marketType) return false;
 
-      // Apply the inclusive 24-hour volume cap across the full loaded dataset.
-      if (!isVolumeWithinCap(coin.volumeUsd, maxVolumeUsd)) return false;
+      // Apply an inclusive ceiling or floor to already loaded 24-hour volume values.
+      if (!isVolumeWithinCap(coin.volumeUsd, maxVolumeUsd, volumeMode)) return false;
 
       return matchesMarketPreset(coin, presetFilter);
     });
@@ -347,7 +350,7 @@ export const CoinScreenerPage: React.FC<CoinScreenerPageProps> = ({
     }));
 
     return result;
-  }, [coins, searchQuery, exchange, marketType, maxVolumeUsd, presetFilter, sortBy, sortOrder, secondarySortBy, secondarySortOrder]);
+  }, [coins, searchQuery, exchange, marketType, maxVolumeUsd, volumeMode, presetFilter, sortBy, sortOrder, secondarySortBy, secondarySortOrder]);
 
   // Market stats calculated from all coins
   const marketStats = useMemo(() => {
@@ -809,18 +812,32 @@ export const CoinScreenerPage: React.FC<CoinScreenerPageProps> = ({
               </div>
             </div>
 
-            {/* The custom volume listbox keeps its existing filtering behavior. */}
-            <div data-screener-filter="volume" className="flex min-h-12 w-full min-w-0 flex-col items-stretch justify-center gap-0.5 rounded-xl border border-slate-800 bg-slate-950/80 px-2.5 py-1 text-xs sm:min-h-9 sm:flex-row sm:items-center sm:gap-1.5 lg:w-72">
-              <label id="screener-volume-cap-label" htmlFor="screener-volume-cap" className="shrink-0 whitespace-nowrap text-[11px] text-slate-500">{t('volume')}</label>
-              <ScreenerVolumeDropdown
-                id="screener-volume-cap"
-                labelId="screener-volume-cap-label"
-                value={maxVolumeUsd}
-                onChange={value => {
-                  setMaxVolumeUsd(value);
-                  setDisplayLimit(50);
-                }}
-              />
+            {/* The arrow toggles an inclusive 24-hour volume ceiling/floor without fetching more quotes. */}
+            <div data-screener-filter="volume" className="flex min-h-12 w-full min-w-0 flex-col items-stretch justify-center gap-0.5 rounded-xl border border-slate-800 bg-slate-950/80 px-2.5 py-1 text-xs sm:min-h-9 sm:flex-row sm:items-center sm:gap-1.5 lg:w-80">
+              <span id="screener-volume-cap-label" className="shrink-0 whitespace-nowrap text-[11px] text-slate-500">Обсяг 24год:</span>
+              <div className="flex min-w-0 flex-1 items-center gap-1.5">
+                <button type="button" data-screener-volume-direction
+                  aria-label={volumeMode === 'to' ? 'Перемкнути обсяг на Від' : 'Перемкнути обсяг на До'}
+                  title={volumeMode === 'to' ? 'Зараз: до обраного обсягу. Натисніть для режиму Від.' : 'Зараз: від обраного обсягу. Натисніть для режиму До.'}
+                  onClick={() => {
+                    setVolumeMode(current => current === 'to' ? 'from' : 'to');
+                    setDisplayLimit(50);
+                  }}
+                  className="flex h-6 shrink-0 items-center justify-center gap-0.5 rounded-md border border-slate-700/80 px-1.5 text-[11px] font-medium text-cyan-300 transition-colors hover:border-cyan-400 hover:text-white focus:outline-none focus-visible:ring-1 focus-visible:ring-cyan-500">
+                  {volumeMode === 'to' ? <ArrowDownToLine className="h-3 w-3" /> : <ArrowUpToLine className="h-3 w-3" />}
+                  <span>{volumeMode === 'to' ? 'До' : 'Від'}</span>
+                </button>
+                <ScreenerVolumeDropdown
+                  id="screener-volume-cap"
+                  labelId="screener-volume-cap-label"
+                  mode={volumeMode}
+                  value={maxVolumeUsd}
+                  onChange={value => {
+                    setMaxVolumeUsd(value);
+                    setDisplayLimit(50);
+                  }}
+                />
+              </div>
             </div>
           </div>
 
@@ -935,6 +952,7 @@ export const CoinScreenerPage: React.FC<CoinScreenerPageProps> = ({
               setExchange('all');
               setMarketType('all');
               setMaxVolumeUsd(0);
+              setVolumeMode('to');
             }}
             className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 transition-colors cursor-pointer"
           >
