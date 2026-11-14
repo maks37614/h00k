@@ -108,6 +108,12 @@ test('real PostgreSQL and captured SMTP: register, verify, login, recover, resen
     assert.equal(mail.length, 1);
     assert.equal(mail[0].to, email);
     assert.match(mail[0].subject, /підтвердження/);
+    const duplicate = await post('/api/auth/register', {
+      email, password: 'some-other-12-char-password',
+    });
+    assert.equal(duplicate.status, 202, 'registration must not expose whether an email exists');
+    assert.equal((await duplicate.json()).success, true);
+    assert.equal(mail.length, 1, 'a duplicate registration must not send an additional mail');
     const verifyToken = tokenFrom(mail[0], 'verifyEmail');
 
     const beforeVerification = await post('/api/auth/login', {
@@ -148,8 +154,13 @@ test('real PostgreSQL and captured SMTP: register, verify, login, recover, resen
     // Simulate failure of a replacement email: the previous link must still work.
     mailFails = true;
     const failedResetMail = await post('/api/auth/forgot-password', { email });
-    assert.equal(failedResetMail.status, 503);
-    assert.equal((await failedResetMail.json()).code, 'MAIL_DELIVERY_FAILED');
+    const failedBody = await failedResetMail.json();
+    assert.equal(failedResetMail.status, 200,
+      'a failing SMTP transport must not reveal a registered recovery email');
+    const unknownDuringOutage = await post('/api/auth/forgot-password', { email: 'unknown-' + id1 + '@example.invalid' });
+    assert.equal(unknownDuringOutage.status, 200);
+    assert.deepEqual(await unknownDuringOutage.json(), failedBody,
+      'SMTP failures must not distinguish registered and unknown email addresses');
     mailFails = false;
 
     const invalidReset = await post('/api/auth/reset-password', {
@@ -180,6 +191,14 @@ test('real PostgreSQL and captured SMTP: register, verify, login, recover, resen
     });
     assert.equal(failedRegistration.status, 503);
     assert.equal((await failedRegistration.json()).code, 'MAIL_DELIVERY_FAILED');
+    mailFails = false;
+    mailFails = true;
+    const failedResend = await post('/api/auth/resend-verification', { email: email2 });
+    const unknownResend = await post('/api/auth/resend-verification', { email: 'unknown-resend-' + id2 + '@example.invalid' });
+    assert.equal(failedResend.status, 200);
+    assert.equal(unknownResend.status, 200);
+    assert.deepEqual(await failedResend.json(), await unknownResend.json(),
+      'verification resend must not reveal which emails are registered when SMTP fails');
     mailFails = false;
     const resend = await post('/api/auth/resend-verification', { email: email2 });
     assert.equal(resend.status, 200);
