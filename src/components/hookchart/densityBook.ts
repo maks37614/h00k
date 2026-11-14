@@ -3,7 +3,7 @@ import type { BookUpdate } from '../../utils/binanceOrderBook';
 import { isFreshDepthTime, ORDER_BOOK_MAX_AGE_MS, parseDepthLevels } from '../../utils/orderBookValidation';
 import type { Density } from './engine';
 import { assessDensityReaction } from './reactionPotential';
-import { orderBookAutoThreshold, orderBookLocalShareFloor, filterOrderBookDensities, getOrderBookDensityLevels, normalizeDensityDistance } from './marketAnalytics';
+import { orderBookAutoThreshold, createOrderBookLocalShareFloorLookup, filterOrderBookDensities, getOrderBookDensityLevels, normalizeDensityDistance } from './marketAnalytics';
 
 export type DensityAutoStats = {
   baseline: number; bidCut: number; askCut: number;
@@ -27,6 +27,13 @@ export class HookChartDensityBook {
   private thresholdAt = 0;
   private thresholdKey = '';
   private autoThreshold = 0;
+  // The hold-time refresh needs new scores, not a full re-sort of unchanged
+  // exchange depth. Invalidate implicitly on any new sequence or distance.
+  private levelView: {
+    sequence: number; distance: number;
+    levels: ReturnType<typeof getOrderBookDensityLevels>;
+    book: { b: { p: number; q: number }[]; a: { p: number; q: number }[] };
+  } | null = null;
   // Trade IDs deduplicate REST seed and WebSocket overlap.
   private tradeSeconds = new Map<number, { buy: number; sell: number }>();
   private seenTradeIds = new Map<string, number>();
@@ -87,6 +94,7 @@ export class HookChartDensityBook {
     this.ready = false;
     this.receivedAt = this.sourceTime = this.sequence = this.thresholdAt = this.autoThreshold = 0;
     this.thresholdKey = '';
+    this.levelView = null;
     this.tradeSeconds.clear();
     this.executions.clear();
     this.seenTradeIds.clear();
@@ -146,11 +154,15 @@ export class HookChartDensityBook {
     }
     const price = (this.bestBid + this.bestAsk) / 2;
     const distance = normalizeDensityDistance(settings.densityDiffPct);
-    const levels = getOrderBookDensityLevels([...this.bids], [...this.asks], price, distance);
-    const book = {
-      b: levels.filter(row => row.side === 'BID').slice(0, 40).map(({ p, q }) => ({ p, q })),
-      a: levels.filter(row => row.side === 'ASK').slice(0, 40).map(({ p, q }) => ({ p, q })),
-    };
+    if (!this.levelView || this.levelView.sequence !== this.sequence || this.levelView.distance !== distance) {
+      const levels = getOrderBookDensityLevels([...this.bids], [...this.asks], price, distance);
+      const book = {
+        b: levels.filter(row => row.side === 'BID').slice(0, 40).map(({ p, q }) => ({ p, q })),
+        a: levels.filter(row => row.side === 'ASK').slice(0, 40).map(({ p, q }) => ({ p, q })),
+      };
+      this.levelView = { sequence: this.sequence, distance, levels, book };
+    }
+    const { levels, book } = this.levelView;
     const multiplier = Number.isFinite(settings.densityAutoMultiplier)
       ? Math.max(.1, Math.min(10, settings.densityAutoMultiplier!)) : 1;
     const key = `${distance}:${multiplier}`;
@@ -175,10 +187,11 @@ export class HookChartDensityBook {
     else {
       const seen = new Set<string>();
       const tolerance = Math.max(price * .00055, (atr || price * .001) * .18);
+      const localShareFloor = manual ? null : createOrderBookLocalShareFloorLookup(levels);
       for (const row of filterOrderBookDensities(levels, cut)) {
-        if (!manual && row.usd < Math.max(
+        if (localShareFloor && row.usd < Math.max(
           row.side === 'BID' ? bidCut : askCut,
-          orderBookLocalShareFloor(levels, row),
+          localShareFloor(row),
         )) continue;
         const id = `${row.side}:${row.p}`;
         seen.add(id);
