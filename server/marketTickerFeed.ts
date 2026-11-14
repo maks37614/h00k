@@ -1,4 +1,4 @@
-import { exchangeFetch } from './exchangeHttp';
+import { ExchangeBudgetError, exchangeFetch } from './exchangeHttp';
 import type { ExchangeId, MarketType } from '../src/types';
 
 export interface RawTicker {
@@ -45,6 +45,9 @@ interface FeedEntry {
 }
 
 const FRESH_MS = 15_000;
+// Bybit is REST-only in this screener and normally reconciles every 30s.
+// A 15s live window incorrectly warns 'stale' between healthy polls.
+const BYBIT_REST_FRESH_MS = 45_000;
 const STALE_MS = 120_000;
 
 /** Shares requests across screener, sentiment and formation scans. */
@@ -81,9 +84,10 @@ export class MarketTickerFeed {
     // stale while validated live miniTicker frames are still arriving.
     const wsFresh = entry.streamAt !== undefined && now - entry.streamAt >= 0 && now - entry.streamAt < FRESH_MS;
     const effectiveError = wsFresh ? undefined : entry.error;
+    const freshMs = exchange === 'bybit' ? BYBIT_REST_FRESH_MS : FRESH_MS;
     return {
       exchange, marketType: market,
-      status: age < FRESH_MS && !effectiveError ? 'live' : age < STALE_MS ? 'stale' : 'unavailable',
+      status: age >= 0 && age < freshMs && !effectiveError ? 'live' : age >= 0 && age < STALE_MS ? 'stale' : 'unavailable',
       updatedAt: entry.updatedAt,
       ...(effectiveError ? { error: effectiveError } : {}),
       ...(effectiveError && entry.httpStatus ? { httpStatus: entry.httpStatus } : {}),
@@ -200,11 +204,13 @@ export class MarketTickerFeed {
         if (!response.ok) {
           httpStatus = response.status;
           failureDetail = `HTTP ${response.status} from ${new URL(url).hostname}`;
-          error = response.status === 403 || response.status === 451
-            ? `Біржа обмежила доступ із регіону сервера (HTTP ${response.status})`
-            : response.status === 429
-              ? 'Перевищено ліміт запитів біржі (HTTP 429)'
-              : `Помилка біржі (HTTP ${response.status})`;
+          error = response.status === 451
+            ? 'Біржа відхилила запит через обмеження доступу (HTTP 451)'
+            : response.status === 403
+              ? 'Біржа відхилила запит (HTTP 403): можлива IP-квота або обмеження доступу'
+              : response.status === 429
+                ? 'Перевищено ліміт запитів біржі (HTTP 429)'
+                : `Помилка біржі (HTTP ${response.status})`;
           // Do not retry denied or rate-limited requests through another hostname.
           if ([403, 451, 429].includes(response.status)) {
             const retryAfter = response.headers.get('retry-after');
@@ -219,6 +225,7 @@ export class MarketTickerFeed {
         }
         const json = await response.json();
         if (exchange === 'bybit' && json?.retCode !== 0) {
+          failureDetail = `Bybit retCode ${json?.retCode ?? 'unknown'} from ${new URL(url).hostname}`;
           error = `Помилка API Bybit (код ${json?.retCode ?? 'невідомий'})`;
           if (json?.retCode === 10006) { retryMs = 60_000; break; }
           continue;
@@ -250,6 +257,11 @@ export class MarketTickerFeed {
           .filter(t => Number.isFinite(t.price) && t.price > 0 && Number.isFinite(t.volumeUsd) && t.volumeUsd >= 0
             && Number.isFinite(t.change24h) && Number.isFinite(t.high24h) && Number.isFinite(t.low24h))
           .sort((a, b) => b.volumeUsd - a.volumeUsd);
+        if (!data.length) {
+          failureDetail = `No valid USDT tickers from ${new URL(url).hostname}`;
+          error = 'Біржа повернула порожні або некоректні USDT-котирування';
+          continue;
+        }
         if (overlay?.size) {
           const latest = new Map(data.map(t => [t.symbol, t]));
           for (const [symbol, tick] of overlay) {
@@ -268,6 +280,14 @@ export class MarketTickerFeed {
         entry.httpStatus = undefined;
         return data;
       } catch (cause) {
+        // An application IP-budget cooldown is authoritative. Attempting a
+        // second Bybit hostname would not evade the same outgoing IP limit.
+        if (cause instanceof ExchangeBudgetError) {
+          error = 'Тимчасова пауза локального ліміту запитів біржі';
+          failureDetail = `Local REST budget: ${cause.message}`.slice(0, 240);
+          retryMs = 15_000;
+          break;
+        }
         // Keep the precise transport cause in operator metrics / VPS logs.
         // Never expose backend addresses, credentials or request headers.
         const reason = cause instanceof Error ? `${cause.name}: ${cause.message}` : String(cause);
