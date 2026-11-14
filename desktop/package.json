@@ -1,6 +1,6 @@
 {
   "name": "h00k-desktop",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "description": "h00k Desktop application for Windows trading terminals",
   "private": true,
   "main": "main.cjs",
@@ -9,8 +9,9 @@
     "test": "node --check main.cjs && node --check preload.cjs && node --check toolbar-preload.cjs && node --test test/*.test.cjs",
     "dist": "electron-builder --win nsis --x64 --publish never",
     "brand-assets": "node scripts/generate-installer-assets.cjs",
-    "pretest": "npm run brand-assets",
-    "predist": "npm run brand-assets"
+    "pretest": "npm run brand-assets && npm run installer-locales",
+    "predist": "npm run brand-assets && npm run installer-locales",
+    "installer-locales": "node scripts/generate-installer-locales.cjs"
   },
   "devDependencies": {
     "electron": "^45.0.0",
@@ -53,7 +54,16 @@
       "uninstallerSidebar": "build/uninstallerSidebar.bmp",
       "installerHeader": "build/installerHeader.bmp",
       "include": "build/installer.nsh",
-      "artifactName": "h00k Desktop Setup ${version}.${ext}"
+      "artifactName": "h00k Desktop Setup ${version}.${ext}",
+      "installerLanguages": [
+        "en_US",
+        "pl_PL",
+        "ru_RU",
+        "uk_UA"
+      ],
+      "multiLanguageInstaller": true,
+      "displayLanguageSelector": false,
+      "language": "1033"
     }
   }
 }
