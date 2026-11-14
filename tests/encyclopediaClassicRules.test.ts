@@ -84,3 +84,22 @@ test('Classic rules has six working section tabs and responsive redrawn candle d
     assert.match(chart, /скриншот із PDF/);
   }
 });
+
+
+test('encyclopedia enlarges all text only in its wide-screen dialog', () => {
+  const modalSource = readFileSync(new URL('../src/components/FormationGuideModal.tsx', import.meta.url), 'utf8');
+  const css = readFileSync(new URL('../src/index.css', import.meta.url), 'utf8');
+  const html = renderToString(React.createElement(FormationGuideModal, { isOpen: true, onClose: () => {} }));
+
+  assert.match(html, /class="encyclopedia-modal /);
+  assert.match(modalSource, /<KotapychGuide \/>|<ClassicRulesGuide \/>|<OpenInterestGuide \/>/);
+  const rules = css.slice(css.lastIndexOf('Encyclopedia typography:'));
+  assert.match(rules, /@media \(min-width: 1280px\)/);
+  for (const size of ['xs', 'sm', 'base', 'lg', 'xl']) {
+    assert.match(rules, new RegExp('--text-' + size + ':'));
+    assert.match(rules, new RegExp('--text-' + size + '--line-height:'));
+  }
+  assert.match(rules, /\.encyclopedia-modal \.text-\\\[10px\\\]/);
+  assert.match(rules, /\.encyclopedia-modal \.text-\\\[11px\\\]/);
+  assert.doesNotMatch(css.slice(0, css.lastIndexOf('Encyclopedia typography:')), /--text-xs:\s*0\.95rem/);
+});
