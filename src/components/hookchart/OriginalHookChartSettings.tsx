@@ -825,7 +825,7 @@ export function OriginalHookChartSettings({
       </div>
       <div className="settingsTabs">
         <button type="button" className={tab === 'main' ? 'active' : ''} onClick={() => setTab('main')}>Основні</button>
-        <button type="button" className={tab === 'chart' ? 'active' : ''} onClick={() => setTab('chart')}>Графік</button>
+        <button type="button" className={tab === 'chart' ? 'active' : ''} onClick={() => setTab('chart')}>Масштаб</button>
         <button type="button" className={tab === 'strategies' ? 'active' : ''} onClick={() => setTab('strategies')}>Стратегії</button>
         <button type="button" className={tab === 'hotkeys' ? 'active' : ''} onClick={() => setTab('hotkeys')}>Гарячі клавіші</button>
       </div>
