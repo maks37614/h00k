@@ -141,6 +141,10 @@ export const CoinScreenerPage: React.FC<CoinScreenerPageProps> = ({
   const [lastUpdated, setLastUpdated] = useState<number | null>(null);
 
   const { preferences } = useAppPreferences();
+  const previousSitePreferences = useRef({
+    exchange: preferences.defaultExchange,
+    marketType: preferences.defaultMarketType,
+  });
 
   // Search & Filter state
   const [presetFilter, setPresetFilter] = useState<ScreenerPresetFilter>(() => cachedUi?.presetFilter ?? initialSearch.presetFilter);
@@ -149,8 +153,13 @@ export const CoinScreenerPage: React.FC<CoinScreenerPageProps> = ({
   const [marketType, setMarketType] = useState<'all' | MarketType>(() => cachedUi?.marketType ?? initialSearch.marketType);
 
   useEffect(() => {
-    setExchange((prev) => (prev === preferences.defaultExchange ? prev : preferences.defaultExchange));
-    setMarketType((prev) => (prev === preferences.defaultMarketType ? prev : preferences.defaultMarketType));
+    const before = previousSitePreferences.current;
+    if (before.exchange === preferences.defaultExchange && before.marketType === preferences.defaultMarketType) return;
+    previousSitePreferences.current = { exchange: preferences.defaultExchange, marketType: preferences.defaultMarketType };
+    // Only react when website-wide defaults actually change. Never overwrite
+    // an account search preset on initial mount.
+    setExchange(preferences.defaultExchange);
+    setMarketType(preferences.defaultMarketType);
   }, [preferences.defaultExchange, preferences.defaultMarketType]);
   // 0 means no upper limit; thresholds include the selected value.
   const [maxVolumeUsd, setMaxVolumeUsd] = useState<number>(() => cachedUi?.maxVolumeUsd ?? initialSearch.maxVolumeUsd);
@@ -651,7 +660,7 @@ export const CoinScreenerPage: React.FC<CoinScreenerPageProps> = ({
             }}
             className="max-w-full rounded-lg border border-cyan-500/30 bg-slate-950 px-3 py-2 text-xs text-slate-100 focus:border-cyan-400 focus:outline-none">
             <option value="">Вибрати збережений пресет</option>
-            {searchSettings.presets.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
+            {(searchSettings.presets || []).map(item => <option key={item.id} value={item.id}>{item.name}</option>)}
           </select>
         </div>}
 
