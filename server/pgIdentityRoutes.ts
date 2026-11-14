@@ -1,10 +1,11 @@
 import type { Express, Request, Response, NextFunction } from 'express';
 import { captchaConfig, verifyAuthCaptcha } from './authCaptcha';
+import { issueArchivedScoreProof } from './archiveQualityProof';
 import {
   AuthFailure, COOKIE_NAME, initializeIdentity, registerAccount, checkCredentials,
   verifyEmailToken, resendVerification, sendReset, changePasswordWithToken, readAccount,
   createSession, cookieToken, currentSession, revokeSession, revokeAllSessions, listSessions,
-  updateAccountProfile, loadArchive, saveArchive, deleteArchive, clearArchive, touchSession,
+  updateAccountProfile, loadArchive, loadArchiveItem, saveArchive, deleteArchive, clearArchive, touchSession,
 } from './pgIdentity';
 
 const cookieOptions = (days: number, remember = true) => ({
@@ -226,6 +227,15 @@ export function installPostgresIdentityRoutes(app: Express) {
   }));
   app.get('/api/account/archive', requirePostgresSession, wrap(async (_req, res) => {
     res.json({ success: true, items: await loadArchive(res.locals.userId) });
+  }));
+  // Explicit authenticated export of a signed archived score record. GET has
+  // no side effects, requires an owner cookie, and does not expose account IDs.
+  app.get('/api/account/archive/:id/quality-proof', requirePostgresSession, wrap(async (req, res) => {
+    rateLimit(req, 'quality-proof-export', 10, 60_000, false);
+    const archive = await loadArchiveItem(res.locals.userId, String(req.params.id));
+    if (!archive) throw new AuthFailure(404, 'Формацію не знайдено.', 'ARCHIVE_NOT_FOUND');
+    const proof = issueArchivedScoreProof(archive, process.env.H00K_QUALITY_SIGNING_KEY_B64);
+    res.json({ success: true, proof, assurance: 'archive-record-only' });
   }));
   app.put('/api/account/archive/:id', requirePostgresSession, wrap(async (req, res) => {
     const item = await saveArchive(res.locals.userId, req.params.id, req.body);
