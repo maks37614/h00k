@@ -40,7 +40,7 @@ test('missing migration marker must not be presented as a verified PostgreSQL cu
 test('explicit --verify mode does not initialize or migrate identity schema', () => {
   const cli=readFileSync(new URL('../server/pgStateMigrator.ts',import.meta.url),'utf8');
   assert.match(cli,/--verify/);
-  assert.match(cli,/if \(!verify\) await initializeIdentity\(\)/);
+  assert.match(cli,/if \(!verify && !ready\) await initializeIdentity\(\)/);
   assert.match(cli,/verifyPersonalStateStaging\(connection,snapshot\)/);
   assert.match(cli,/process\.exitCode=2/);
 });

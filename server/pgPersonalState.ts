@@ -62,8 +62,21 @@ export function preparePersonalStateRows(snapshot: PersonalStateSnapshot,
     }
     rows.history.push({owner:event.userId,id:event.id,time:event.triggeredAt,payload:event});
   }
-  const unique=<T>(items: readonly T[], key:(item:T)=>string) =>
-    [...new Map(items.map(item=>[key(item),item])).values()];
+  // Duplicate IDs in one owner's JSON are ambiguous, not harmless. A
+  // silent last-write-wins Map would discard personal alerts during staging.
+  // Keep the first complete record and report the duplicate as invalid, so
+  // cutover preflight cannot claim the source is lossless.
+  const unique=<T>(items: readonly T[], key:(item:T)=>string) => {
+    const seen = new Set<string>();
+    const out: T[] = [];
+    for (const item of items) {
+      const id = key(item);
+      if (seen.has(id)) { invalid++; continue; }
+      seen.add(id);
+      out.push(item);
+    }
+    return out;
+  };
   return {
     surveillance:unique(rows.surveillance,x=>JSON.stringify([x.owner,x.id])),
     alerts:unique(rows.alerts,x=>JSON.stringify([x.owner,x.id])),
