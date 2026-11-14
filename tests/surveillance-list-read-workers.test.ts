@@ -8,6 +8,9 @@ import type { SurveillanceCoin } from '../src/types';
 test('reading a surveillance list reuses existing workers and does not spawn guest streams', async () => {
   const originalCwd = process.cwd();
   const fixture = fs.mkdtempSync(path.join(os.tmpdir(), 'h00k-surveillance-list-'));
+  // The manager imports surveillanceService, whose data path is fixed at
+  // module initialization. Change cwd BEFORE either module is loaded.
+  process.chdir(fixture);
   const originalStart = await import('../server/surveillance/surveillanceManager');
   const manager = originalStart.surveillanceManager;
   const startWorker = manager.startWorkerForCoin;
@@ -16,7 +19,6 @@ test('reading a surveillance list reuses existing workers and does not spawn gue
   const running = new Map<string, any>();
   const launches: string[] = [];
   try {
-    process.chdir(fixture);
     const service = await import('../server/surveillanceService');
     const config = service.getDefaultSurveillanceConfig();
     const sample = (userId: string, id: string, isActive: boolean): SurveillanceCoin => ({
