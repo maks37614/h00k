@@ -122,4 +122,9 @@ test('Terminal keeps each exchange instrument quote currency instead of appendin
   assert.deepEqual(normalizeTerminalMarketPair('ETH/BTC', 'BTC'), { symbol: 'ETHBTC', quoteAsset: 'BTC' });
   assert.deepEqual(normalizeTerminalMarketPair('ETH', 'USDT'), { symbol: 'ETHUSDT', quoteAsset: 'USDT' });
   assert.deepEqual(normalizeTerminalMarketPair('SOLFDUSD', 'FDUSD'), { symbol: 'SOLFDUSD', quoteAsset: 'FDUSD' });
+  assert.deepEqual(normalizeTerminalMarketPair('ETHBTC'), { symbol: 'ETHBTC', quoteAsset: 'BTC' });
+  assert.deepEqual(normalizeTerminalMarketPair('SOLBTC', 'USDT'), { symbol: 'SOLBTC', quoteAsset: 'BTC' });
+  assert.deepEqual(normalizeTerminalMarketPair('BTCUSDC', 'USDT'), { symbol: 'BTCUSDC', quoteAsset: 'USDC' });
+  assert.deepEqual(normalizeTerminalMarketPair('WBTC'), { symbol: 'WBTCUSDT', quoteAsset: 'USDT' });
+  assert.deepEqual(normalizeTerminalMarketPair('WBTCUSDT'), { symbol: 'WBTCUSDT', quoteAsset: 'USDT' });
 });
