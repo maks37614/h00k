@@ -421,6 +421,18 @@ export function findSurveillanceCoinById(
   return index === -1 ? null : { userId, coin: list[index], index, list };
 }
 
+/** Cheap owner-scoped count for the status endpoint. Never iterate every
+ * user's coins on every authenticated profile refresh. */
+export function countActiveSurveillanceCoins(userId?: string): number {
+  const store = loadSurveillanceStore();
+  if (userId) return (store[userId] || []).reduce((n, coin) => n + Number(coin.isActive), 0);
+  let total = 0;
+  for (const coins of Object.values(store))
+    if (Array.isArray(coins))
+      for (const coin of coins) if (coin.isActive) total++;
+  return total;
+}
+
 export function getAllActiveSurveillanceCoins(): { userId: string; coin: SurveillanceCoin }[] {
   const store = loadSurveillanceStore();
   const results: { userId: string; coin: SurveillanceCoin }[] = [];
