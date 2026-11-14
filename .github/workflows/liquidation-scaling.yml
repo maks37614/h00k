@@ -8,6 +8,8 @@ on:
       - 'server/liquidationArchive.ts'
       - 'server/liquidationArchiveRoutes.ts'
       - 'server/migrations/003_liquidation_events.sql'
+      - 'server/migrations/004_liquidation_monthly_reset.sql'
+      - 'src/components/hookchart/LiquidationHeatmapLoader.tsx'
       - 'tests/liquidation-archive.test.ts'
       - 'tests/liquidation-archive-postgres.test.ts'
       - 'server/liquidationUpstreamPool.ts'
