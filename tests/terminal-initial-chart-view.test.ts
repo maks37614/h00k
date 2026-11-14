@@ -109,6 +109,7 @@ test('maximizing one Terminal chart suspends other visible charts without changi
 test('Terminal coin changes clear pending prices from a prior instrument', () => {
   const widget = source('../src/components/terminal/TerminalChartWidget.tsx');
   assert.match(widget, /previousInstrumentRef\.current === instrumentKey/);
+  assert.match(widget, /activeInstrumentRef\.current !== instrumentKey/);
   assert.match(widget, /clearTimeout\(headerPriceTimerRef\.current\)/);
   assert.match(widget, /pendingHeaderPriceRef\.current = null/);
   assert.match(widget, /setCurrentPrice\(nextPrice\)/);
