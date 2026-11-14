@@ -43,14 +43,13 @@ jobs:
           & ./scripts/smoke-installer.ps1 -Installer $installer.FullName
       - name: Prepare animated compact setup and embed checked NSIS payload
         run: node installer/prepare.cjs
-      - name: Install compact setup dependencies
-        run: npm install --prefix installer --no-audit --no-fund
       - name: Test compact setup security, progress and locales
         run: npm test --prefix installer
-      - name: Build animated h00k Setup
+      - name: Build isolated animated h00k Setup
+        shell: pwsh
         env:
           DEBUG: electron-builder
-        run: npm run dist --prefix installer
+        run: ./installer/build-isolated.ps1
       - name: Verify branded icon in animated setup EXE
         shell: pwsh
         run: |
