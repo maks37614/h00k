@@ -1024,7 +1024,7 @@ export function OriginalHookChartSettings({
           </Section>
         </> : tab === 'chart' ? (
           <VisualProfileEditor
-            includeTerminalContexts={!activeVisualContext || activeVisualContext.startsWith('terminal')}
+            includeTerminalContexts={Boolean(activeVisualContext?.startsWith('terminal'))}
             visualContext={visualContext}
             visualDevice={visualDevice}
             selectedProfile={getVisualProfile(prefs, visualContext, visualDevice)}
