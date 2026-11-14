@@ -44,3 +44,11 @@ CREATE TABLE IF NOT EXISTS h00k_alert_history_state (
 );
 CREATE INDEX IF NOT EXISTS h00k_alert_history_recent_idx
   ON h00k_alert_history_state(user_id, triggered_at DESC);
+
+-- A migration marker prevents accidental re-staging of an older JSON
+-- snapshot after PostgreSQL has been changed. This is not live cutover.
+CREATE TABLE IF NOT EXISTS h00k_personal_state_staging_runs (
+  stage_key TEXT PRIMARY KEY CHECK (length(stage_key) BETWEEN 1 AND 128),
+  snapshot_sha256 TEXT NOT NULL CHECK (length(snapshot_sha256) = 64),
+  staged_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
