@@ -18,7 +18,7 @@ import { normalizeKlineTimeMs } from '../src/utils/formationValidation';
 import { getTimeframeMs } from './surveillance/multiTimeframeEngine';
 import { fetchKlines } from './marketService';
 import { surveillanceCheckCandleCache } from './surveillance/checkCandleCache';
-import { hasFreshSurveillanceCheck, wasSurveillanceCheckCommitted } from './surveillance/checkResult';
+import { hasFreshSurveillanceCheck, wasSurveillanceCheckCommitted, SurveillanceCheckIncompleteError } from './surveillance/checkResult';
 import { candleCloseCheckPlanner } from './surveillance/candleCloseCheckPlanner';
 import { sharedSurveillanceState } from './surveillance/sharedSurveillanceState';
 import { getUserTelegram } from './alertService';
@@ -871,7 +871,7 @@ export async function checkAllUserCoins(userId: string): Promise<SurveillanceCoi
   }
   // A manual user request must not report a complete success if a durable
   // checkpoint failed. Other coins are still checked independently.
-  if (failedChecks) throw new Error(`Не вдалося завершити перевірку ${failedChecks} монет.`);
+  if (failedChecks) throw new SurveillanceCheckIncompleteError(failedChecks);
 
   return loadSurveillanceList(uid);
 }
