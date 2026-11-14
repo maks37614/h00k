@@ -5,6 +5,7 @@ import { readFileSync } from 'node:fs';
 const source = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf8');
 const service = source('../server/smartAnalysisService.ts');
 const btc = source('../server/verifiedBtcContext.ts');
+const poc = source('../server/estimatedPoc.ts');
 const ui = source('../src/components/SmartAnalysisBlock.tsx');
 const details = source('../src/components/FormationDetailsModal.tsx');
 
@@ -77,8 +78,8 @@ test('holder wallets, iceberg trades, HFT algorithms and manipulation are not fa
 });
 
 test('POC and trade-level claims are explicitly approximate, not executed-volume evidence', () => {
-  assert.match(service, /function calculatePOC\(klines: Kline\[\]\)/);
-  assert.match(service, /pocVolumePct: null/);
+  assert.match(poc, /function calculatePOC\(klines: Kline\[\]\)/);
+  assert.match(poc, /pocVolumePct: null/);
   assert.doesNotMatch(service, /Math\.max\(pocVolumePct, 15\)|pocVolumePct: 22/);
   assert.match(ui, /Оціночний POC за свічками/);
   assert.match(ui, /Розрахункові цінові орієнтири/);
