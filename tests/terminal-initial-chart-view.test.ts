@@ -114,3 +114,12 @@ test('Terminal coin changes clear pending prices from a prior instrument', () =>
   assert.match(widget, /setCurrentPrice\(nextPrice\)/);
   assert.match(widget, /setLivePrice\(nextPrice \?\? 0\)/);
 });
+
+test('Terminal renders truthful quote status, unique rapid-add IDs and indexed market lookups', () => {
+  const page = source('../src/components/TerminalPage.tsx');
+  assert.match(page, /quotesAvailable = marketSnapshot\.timestamp !== null && !marketError && !marketSnapshot\.warning/);
+  assert.doesNotMatch(page, />WLive</);
+  assert.match(page, /Math\.random\(\)\.toString\(36\)\.slice\(2, 10\)/);
+  assert.match(page, /const coinsByMarket = useMemo\(\(\) => \{/);
+  assert.match(page, /coinsByMarket\.get\(coinMarketKey\(block\)\)/);
+});
