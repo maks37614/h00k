@@ -40,6 +40,9 @@ export class ExchangeStreamClient extends EventEmitter {
   private readonly backoffSchedule = [1000, 2000, 5000, 10000, 30000, 60000];
 
   private bybitTicker: Record<string, any> = {};
+  /** Reject older-but-still-fresh ticker frames after a newer price/OI
+   * sample. Reset on each WebSocket connection generation. */
+  private lastBybitTickerEventTime = 0;
   private additionalSockets: WebSocket[] = [];
   private binanceBook: BinanceOrderBookSync;
   private bybitBook: BybitOrderBookSync;
@@ -111,6 +114,7 @@ export class ExchangeStreamClient extends EventEmitter {
     this.snapshotRetryDelayMs = 3_000;
     this.binanceBook.reset();
     this.bybitBook.reset();
+    this.lastBybitTickerEventTime = 0;
     this.lastDepthReceivedAt = 0;
     this.connectionStartedAt = Date.now();
 
@@ -131,6 +135,7 @@ export class ExchangeStreamClient extends EventEmitter {
           if (index === 0) this.setStatus('SYNCING');
           this.lastDataReceivedAt = Date.now();
           this.bybitTicker = {};
+          this.lastBybitTickerEventTime = 0;
 
           // If Bybit, send subscription payload and start ping interval
           if (this.exchange === 'bybit') {
@@ -288,10 +293,14 @@ export class ExchangeStreamClient extends EventEmitter {
 
     // Tickers
     if (topic === `tickers.${symbol}` && freshEvent) {
+      // A delayed frame can still be within the 5-second freshness window.
+      // Never move the quote or OI backwards after newer data was observed.
+      if (eventTime < this.lastBybitTickerEventTime) return;
       const incoming = Array.isArray(msg.data) ? msg.data[0] : msg.data;
       if (!incoming || typeof incoming !== 'object' || Array.isArray(incoming) ||
           (incoming.symbol !== undefined && normalizeExchangeSymbol(incoming.symbol) !== symbol))
         return;
+      this.lastBybitTickerEventTime = eventTime;
       if (msg.type === 'snapshot') this.bybitTicker = {};
       Object.assign(this.bybitTicker, incoming);
       const data = this.bybitTicker;
