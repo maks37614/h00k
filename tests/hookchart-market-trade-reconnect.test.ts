@@ -20,6 +20,10 @@ test('shared trade WebSocket uses jitter for both close and constructor failures
   assert.equal((source.match(/marketTradeReconnectDelay\(this\.retries\+\+\)/g) || []).length, 2);
   assert.match(source, /try \{\s*ws\.send\(JSON\.stringify\(\{ op: 'subscribe'/);
   assert.match(source, /A failed subscription is not a healthy open market feed/);
-  assert.match(source, /catch \{ try \{ ws\.close\(\); \} catch \{\} reconnect\(\); \}/);
+  // Sending failures now share one reconnect path that actively closes the
+  // obsolete socket even when the browser omits close/error callbacks.
+  assert.match(source, /catch \{ reconnect\(\); \}/);
+  assert.match(source, /ws\.onerror = reconnect/);
+  assert.match(source, /try \{ ws\.close\(\); \} catch \{\}/);
   assert.match(source, /this\.reconnectTimer = setTimeout/);
 });
