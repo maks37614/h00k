@@ -28,6 +28,12 @@ export class SharedMarketAnalysisCache<T> {
     const row = this.rows.get(key);
     if (row && row.fingerprint === fingerprint && now >= row.at && now-row.at < this.ttlMs) {
       this.hits++;
+      // The cache is capped because each market contains several indicator
+      // arrays. Promote popular instruments on *read*: FIFO eviction could
+      // discard BTC/ETH while rarely used markets retain the limited slots.
+      // Preserve the original calculation timestamp so TTL never slides.
+      this.rows.delete(key);
+      this.rows.set(key, row);
       return row.data;
     }
     const data=calculate();
