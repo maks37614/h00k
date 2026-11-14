@@ -81,10 +81,13 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({
     }
 
     let isMounted = true;
+    const controller = new AbortController();
     async function loadAllMarketCoins() {
       setIsLoadingAllCoins(true);
       try {
-        const res = await fetch('/api/screener/coins?minVolume=50000&maxVolume=10000000000');
+        const res = await fetch('/api/screener/coins?minVolume=50000&maxVolume=10000000000', {
+          signal: controller.signal,
+        });
         if (res.ok) {
           const json = await res.json();
           if (json.success && Array.isArray(json.data) && json.data.length > 0) {
@@ -104,8 +107,8 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({
       // Direct exchange fallback (Binance + Bybit)
       try {
         const [binanceTickers, bybitTickers] = await Promise.all([
-          fetchDirectBinanceTickers(),
-          fetchDirectBybitTickers(),
+          fetchDirectBinanceTickers({ signal: controller.signal }),
+          fetchDirectBybitTickers({ signal: controller.signal }),
         ]);
         const combined = [...binanceTickers, ...bybitTickers].filter(
           (c) => c.volumeUsd >= 50_000 && c.volumeUsd <= 10_000_000_000
@@ -125,6 +128,7 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({
     loadAllMarketCoins();
     return () => {
       isMounted = false;
+      controller.abort();
     };
   }, [isOpen, terminalMarketCoins]);
 
