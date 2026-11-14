@@ -71,7 +71,8 @@ async function verifyTable(client: Client, table: string, idColumn: string,
       if (!stored) { missing++; continue; }
       found++;
       const metadataMatches = columns.every(column =>
-        isDeepStrictEqual(stored[column], row.fields[column]));
+        isDeepStrictEqual(column === 'triggered_at'
+          ? Number(stored[column]) : stored[column], row.fields[column]));
       const payloadMatches = isDeepStrictEqual(stored.payload, normalizedPayload(row.payload));
       if (metadataMatches && payloadMatches) matched++;
       else different++;
