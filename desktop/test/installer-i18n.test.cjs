@@ -88,7 +88,7 @@ test('onboarding text is scrollable and language selector fits standard Windows 
 
 test('language radio buttons form exactly one exclusive Windows group',()=>{
   assert.equal((nsis.match(/NSD_CreateRadioButton/g)||[]).length,4);
-  assert.equal((nsis.match(/NSD_AddStyle\\} \\$h00kRadioEn \\$\\{WS_GROUP\\}/g)||[]).length,1);
+  assert.equal((nsis.match(/NSD_AddStyle\} \$h00kRadioEn \$\{WS_GROUP\}/g)||[]).length,1);
   assert.equal((nsis.match(/WS_GROUP/g)||[]).length,2); // comment + macro: one exclusive group
   assert.ok(nsis.indexOf('NSD_AddStyle') > nsis.indexOf('Pop $h00kRadioEn'));
   assert.ok(nsis.indexOf('NSD_AddStyle') < nsis.indexOf('Pop $h00kRadioPl'));
