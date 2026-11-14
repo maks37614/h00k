@@ -38,6 +38,10 @@ function formatPrice(val: number): string {
 
 // In-memory caches
 let alertsCache: PriceAlert[] = [];
+// A read-only lookup index for frequent /api/alerts requests. Rebuilt only
+// when the persisted array changes, not on every browser refresh.
+let alertsByUser: Map<string, PriceAlert[]> | null = null;
+let indexedAlerts: PriceAlert[] | null = null;
 let isAlertsLoaded = false;
 
 let historyCache: AlertHistoryItem[] = [];
@@ -116,6 +120,8 @@ export function saveAlerts(alerts: PriceAlert[]): boolean {
     fs.writeFileSync(temp, JSON.stringify(alerts, null, 2), 'utf-8');
     fs.renameSync(temp, ALERTS_FILE);
     alertsCache = alerts;
+    alertsByUser = null;
+    indexedAlerts = null;
     return true;
   } catch (err) {
     console.error('Failed to save alerts.json:', err);
@@ -206,7 +212,19 @@ export function deleteHistoryItem(id: string, userId?: string): boolean {
 export function getAllAlerts(userId?: string): PriceAlert[] {
   if (!userId || userId === 'guest') return [];
   const all = loadAlerts();
-  return all.filter((a) => a.userId === userId);
+  if (indexedAlerts !== all || !alertsByUser) {
+    const next = new Map<string, PriceAlert[]>();
+    for (const alert of all) {
+      const owner = alert.userId || 'guest';
+      let rows = next.get(owner);
+      if (!rows) { rows = []; next.set(owner, rows); }
+      rows.push(alert);
+    }
+    indexedAlerts = all;
+    alertsByUser = next;
+  }
+  // Never return the mutable indexed collection to caller code.
+  return alertsByUser.get(userId)?.slice() ?? [];
 }
 
 // Create alert
@@ -455,10 +473,8 @@ export function syncUserAlerts(
 
   // Map of existing alerts on server for this user
   const existingUserAlerts = new Map<string, PriceAlert>();
-  for (const a of all) {
-    if (a.userId === userId) {
-      existingUserAlerts.set(a.id, a);
-    }
+  for (const a of getAllAlerts(userId)) {
+    existingUserAlerts.set(a.id, a);
   }
 
   // Merge incoming alerts
