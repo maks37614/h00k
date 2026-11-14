@@ -1,5 +1,6 @@
 import type { MarketCoin, TerminalChartBlock, TerminalSavedPreset, Timeframe } from '../types';
 import { coinMarketKey } from './marketPresets';
+import { formatCryptoPrice } from './formatters';
 
 const TERMINAL_KNOWN_QUOTES = ['FDUSD', 'USDT', 'USDC', 'BUSD', 'BTC'] as const;
 
@@ -17,6 +18,15 @@ export function normalizeTerminalMarketPair(symbolInput: string, quoteInput?: st
       ? cleanSymbol : `${cleanSymbol}${specifiedQuote}`,
     quoteAsset: specifiedQuote,
   };
+}
+
+/** A BTC/ETH quoted instrument is not priced in dollars. */
+export function formatTerminalQuotedPrice(price: number | null | undefined, quoteAsset?: string): string {
+  const quote = (quoteAsset || 'USDT').toUpperCase();
+  const formatted = formatCryptoPrice(price);
+  return ['USDT', 'USDC', 'BUSD', 'FDUSD', 'USD'].includes(quote)
+    ? `${formatted}`
+    : `${formatted} ${quote}`;
 }
 
 /** Maximum number of newly added live HookCharts in one Terminal workspace. */
