@@ -403,6 +403,23 @@ export interface ScreenerSearchConfig {
   maxVolumeUsd: number;
   /** Interpret maxVolumeUsd as a ceiling ('to') or a floor ('from'). */
   volumeMode: 'to' | 'from';
+  /** 0 means disabled; real or estimated 5m volatility from the existing quote feed. */
+  minVolatility5mPct: number;
+  /** 0 disables a price boundary (USD/USDT quote price). */
+  minPriceUsd: number;
+  maxPriceUsd: number;
+  /** Null disables a 24h high/low proximity check; 0 is an exact level touch. */
+  maxDistanceToHighPct: number | null;
+  maxDistanceToLowPct: number | null;
+  /** Only formations already present in the standard-scanner results are considered. */
+  onlyWithFormations: boolean;
+  /** 0 disables the USD open interest threshold. Missing OI never passes an active filter. */
+  minOpenInterestUsd: number;
+  fundingRateDirection: 'any' | 'positive' | 'negative';
+  /** 0 disables the absolute funding rate threshold, in percent. */
+  minFundingRateAbsPct: number;
+  /** Closed breakout candle volume / previous 20 candles, from cached confirmed formations. 0 disables. */
+  minBreakoutRvol: number;
   presetFilter: ScreenerPresetFilter;
   sortBy: ScreenerSortBy;
   sortOrder: 'asc' | 'desc';
