@@ -20,11 +20,12 @@ function readConflictBackup(uid?: string): WorkspaceSnapshot | null {
   return { blocks: normalizeTerminalBlocks(value.blocks), config: value.config,
     presets: normalizeTerminalPresets(value.presets) };
 }
-function saveConflictBackup(uid: string, value: WorkspaceSnapshot): void {
+function saveConflictBackup(uid: string, value: WorkspaceSnapshot): boolean {
   try {
     localStorage.setItem(terminalStorageKey(CONFLICT_KEY, uid),
       JSON.stringify({ ...value, savedAt: new Date().toISOString() }));
-  } catch { /* Export button remains available if browser storage is full. */ }
+    return true;
+  } catch { return false; }
 }
 const DEFAULT_CONFIG: TerminalWorkspaceConfig = {
   layoutPreset: 'custom', columns: 2, autoFitScreen: true, blocks: [], showFormations: true, blockHeight: 'medium',
@@ -63,6 +64,7 @@ export function useTerminalWorkspace() {
   const [workspace, setWorkspace] = useState(() => loadTerminalWorkspace(uid, profile?.uid === uid ? profile?.terminalSettings : undefined));
   const [syncError, setSyncError] = useState(() => Boolean(readConflictBackup(uid)));
   const [syncConflict, setSyncConflict] = useState(() => Boolean(readConflictBackup(uid)));
+  const [backupFailed, setBackupFailed] = useState(false);
   const syncConflictRef = useRef(syncConflict);
   const serverVersion = useRef<string | null>(profile?.terminalSettings?.version ?? null);
   const revision = useRef(0);
@@ -91,7 +93,8 @@ export function useTerminalWorkspace() {
     }).catch((error: Error & { code?: string }) => {
       if (error.code === 'TERMINAL_WORKSPACE_CONFLICT') {
         syncConflictRef.current = true;
-        if (uid) saveConflictBackup(uid, workspaceRef.current);
+        const saved = uid ? saveConflictBackup(uid, workspaceRef.current) : false;
+        if (mounted.current && !saved) setBackupFailed(true);
       }
       if (!mounted.current) return;
       setSyncError(true);
@@ -142,7 +145,10 @@ export function useTerminalWorkspace() {
       localStorage.setItem(terminalStorageKey(CONFIG_KEY, uid), JSON.stringify(workspace.config));
       localStorage.setItem(terminalStorageKey(TERMINAL_PRESETS_STORAGE_KEY, uid), JSON.stringify(workspace.presets));
     } catch { setSyncError(true); }
-    if (uid && syncConflictRef.current) saveConflictBackup(uid, workspace);
+    if (uid && syncConflictRef.current) {
+      const stored = saveConflictBackup(uid, workspace);
+      setBackupFailed(!stored);
+    }
     if (!uid || !hydrated.current || syncConflict) return;
     const currentRevision = revision.current;
     const timer = setTimeout(() => persistToProfile(workspace, currentRevision), 1200);
@@ -179,5 +185,5 @@ export function useTerminalWorkspace() {
 
   return { blocks: workspace.blocks, config: workspace.config, customPresets: workspace.presets,
     setBlocks, setConfig, setCustomPresets, syncError, syncConflict, retrySync,
-    downloadLocalBackup, restoreCloudWorkspace };
+    downloadLocalBackup, restoreCloudWorkspace, backupFailed };
 }
