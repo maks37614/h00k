@@ -173,7 +173,7 @@ function registerHandlers(){
     assertTrusted(e.sender);
     if(!mainWindow||e.sender!==mainWindow.webContents)throw new Error('Setup window required');
     // Acknowledge quickly; status/progress is published asynchronously.
-    void beginInstall(options);
+    void beginInstall(options).catch(error=>finishFailure(error));
     return true;
   });
   ipcMain.handle('setup:close',e=>{
