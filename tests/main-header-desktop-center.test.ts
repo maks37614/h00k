@@ -37,7 +37,7 @@ test('desktop quick formation totals are removed without removing nav formation 
 });
 
 test('site header retains icon borders but does not show a manual refresh button', () => {
-  assert.ok(!css.includes('button * {\\n  border-width: 0;'));
+  assert.ok(!css.includes('.app-header:is([data-page="screener"], [data-page="patterns"]) button'));
   assert.ok(!source.includes('id="refresh-screener-btn"'));
   assert.ok(!source.includes('<RefreshCw'));
   assert.ok(source.includes('<SiteNotificationBell'));
