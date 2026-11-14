@@ -21,6 +21,7 @@ const CACHE_MS = 55_000;
 // the engine. A hidden/off map does not keep accumulating new responses.
 const MAX_CACHE_BYTES = 3 * 1024 * 1024;
 let cacheBytes = 0;
+let cacheMonth = new Date().toISOString().slice(0,7);
 const cache = new Map<string,{at:number;result:Result;bytes:number}>();
 const putCache = (key:string,result:Result) => {
   const bytes = new TextEncoder().encode(JSON.stringify(result)).byteLength;
@@ -49,6 +50,11 @@ export async function fetchSharedObservedHeatmap(
   // A monthly PostgreSQL archive reset must also bypass any browser memory
   // cache built before midnight UTC, even if its 55s TTL has not expired.
   const utcMonth=new Date().toISOString().slice(0,7);
+  if(cacheMonth!==utcMonth){
+    cache.clear();
+    cacheBytes=0;
+    cacheMonth=utcMonth;
+  }
   const key=`${utcMonth}:${exchange}:${symbol}:${period}`;
   const hit=cache.get(key);
   if(hit && Date.now()-hit.at<CACHE_MS)return hit.result;
