@@ -175,15 +175,9 @@ export const AlertsProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         if (!currentUser || currentUser.uid !== user.uid) return;
         const currentAlertsList = alertsRef.current;
 
-        const res = await apiFetch('/api/alerts/sync', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            userId: currentUser.uid,
-            language: normalizeLanguage(localStorage.getItem('crypto_screener_language')),
-            alerts: currentAlertsList,
-          }),
-        });
+        // All changes are already saved by the dedicated create/delete/toggle
+        // routes. Polling is read-only: never resubmit every alert on every tab.
+        const res = await apiFetch('/api/alerts?userId=' + encodeURIComponent(currentUser.uid));
 
         if (!res.ok) return;
         const data = await res.json();

@@ -1,5 +1,6 @@
 import { checkAlertsOnce, loadAlerts, getAllAlerts } from './alertService';
-import { checkCoinSurveillance, getAllActiveSurveillanceCoins, findSurveillanceCoinById, commitSurveillanceCheck } from './surveillanceService';
+import { checkCoinSurveillance, getAllActiveSurveillanceCoins, findSurveillanceCoinById, commitSurveillanceCheck, flushDeferredSurveillanceChecks } from './surveillanceService';
+import { candleCloseCheckPlanner } from './surveillance/candleCloseCheckPlanner';
 import { runBackgroundFormationScans } from './marketService';
 import { getUserTelegram } from './userTelegram';
 import { surveillanceManager } from './surveillance/surveillanceManager';
@@ -33,6 +34,8 @@ export interface CronSystemStatus {
 class CronManager {
   private startTime: number = Date.now();
   private timers: Map<string, NodeJS.Timeout> = new Map();
+  // Continue large surveillance passes fairly instead of always starting at user #1.
+  private surveillanceCursor = 0;
 
   private jobs: Record<string, CronJobStatus> = {
     price_alerts: {
@@ -115,7 +118,7 @@ class CronManager {
     this.timers.set(job.id, timer);
   }
 
-  // --- 2. Surveillance Cron (Every 15s) ---
+  // --- 2. Surveillance Cron: candle-aware, bounded and batched ---
   private startSurveillanceCron() {
     const job = this.jobs.surveillance;
     if (this.timers.has(job.id)) clearInterval(this.timers.get(job.id)!);
@@ -124,29 +127,56 @@ class CronManager {
       if (job.isRunning || !job.enabled) return;
       job.isRunning = true;
       const start = Date.now();
+      let lastPersistAt = start;
       try {
         const activeItems = getAllActiveSurveillanceCoins();
-        if (activeItems.length > 0) {
-          for (const { userId, coin } of activeItems) {
+        const activeKeys = new Set(activeItems.map(({ userId, coin }) =>
+          JSON.stringify([userId, coin.id])));
+        candleCloseCheckPlanner.prune(activeKeys);
+        const count = activeItems.length;
+        if (count) {
+          const first = this.surveillanceCursor % count;
+          let examined = 0;
+          for (; examined < count; examined++) {
+            const { userId, coin } = activeItems[(first + examined) % count];
+            const key = JSON.stringify([userId, coin.id]);
+            const now = Date.now();
+            if (!candleCloseCheckPlanner.due(key, coin.config, now)) continue;
             try {
-              // 1. Fresh check: ensure user has not paused or removed the coin while batch is executing
-              const currentCoin = findSurveillanceCoinById(coin.id, userId)?.coin;
-              if (!currentCoin || !currentCoin.isActive) {
-                // User paused or removed coin - respect user's explicit state immediately
-                continue;
+              // A paused/deleted coin must not be resurrected by an older snapshot.
+              const fresh = findSurveillanceCoinById(coin.id, userId)?.coin;
+              if (!fresh || !fresh.isActive) continue;
+              const { coin: checked } = await checkCoinSurveillance(fresh, {
+                forceCheck: false, forceNotify: false,
+              });
+              // Routine observations are written together, while a real Telegram
+              // delivery is persisted immediately by commitSurveillanceCheck.
+              const committed = commitSurveillanceCheck(checked, { deferPersist: true });
+              if (!committed || !committed.lastCheckedAt
+                || committed.lastCheckedAt === fresh.lastCheckedAt
+                || !candleCloseCheckPlanner.hasLatestClosedBars(
+                  fresh.config, committed.state?.lastProcessedCandleTimes, Date.now())) {
+                // A stale/partial candle snapshot is NOT a completed check.
+                candleCloseCheckPlanner.failed(key, fresh.config, Date.now());
+              } else {
+                candleCloseCheckPlanner.succeeded(key, fresh.config, Date.now());
               }
-
-              // 2. Perform surveillance calculation (levels, momentum, golden pocket, channel, etc.)
-              // #1 & #6: Cron surveillance only checks candle close events and strictly enforces cooldowns
-              const { coin: updated } = await checkCoinSurveillance(currentCoin, { forceCheck: false, forceNotify: false });
-
-              // 3. Atomically write back state without ever altering or resetting isActive
-              commitSurveillanceCheck(updated);
             } catch (coinErr) {
+              candleCloseCheckPlanner.failed(key, coin.config, Date.now());
               console.error(`[CRON:surveillance] Error on ${coin.symbol}:`, coinErr);
-              // Coin remains active for next scan iteration despite transient network/API issues
             }
+            if (Date.now() - lastPersistAt >= 5_000) {
+              if (!flushDeferredSurveillanceChecks())
+                console.error('[CRON:surveillance] Failed to flush deferred observations');
+              lastPersistAt = Date.now();
+            }
+            // Keep the event loop responsive during a large backlog. The next
+            // pass resumes at the next owner instead of starving later accounts.
+            if (Date.now() - start >= 10_000) { examined++; break; }
           }
+          this.surveillanceCursor = (first + examined) % count;
+        } else {
+          this.surveillanceCursor = 0;
         }
 
         job.lastRunAt = new Date().toISOString();
@@ -158,6 +188,8 @@ class CronManager {
         job.lastError = err?.message || 'Помилка виконання нагляду';
         console.error('[CRON:surveillance] Error:', err);
       } finally {
+        if (!flushDeferredSurveillanceChecks())
+          console.error('[CRON:surveillance] Failed to flush final observations');
         job.isRunning = false;
       }
     };

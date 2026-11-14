@@ -1,4 +1,5 @@
 import { publicPriceFeed } from './publicPriceFeed';
+import { persistenceMetrics } from './persistenceMetrics';
 import { exchangeFetch } from './exchangeHttp';
 import { forEachBounded, selectRoundRobinBatch } from './priceAlertFallback';
 import fs from 'fs';
@@ -38,9 +39,16 @@ function formatPrice(val: number): string {
 
 // In-memory caches
 let alertsCache: PriceAlert[] = [];
+// A read-only lookup index for frequent /api/alerts requests. Rebuilt only
+// when the persisted array changes, not on every browser refresh.
+let alertsByUser: Map<string, PriceAlert[]> | null = null;
+let indexedAlerts: PriceAlert[] | null = null;
 let isAlertsLoaded = false;
 
 let historyCache: AlertHistoryItem[] = [];
+let historyByUser: Map<string, AlertHistoryItem[]> | null = null;
+let processedHistoryIndex: Map<string, AlertHistoryItem> | null = null;
+let indexedHistory: AlertHistoryItem[] | null = null;
 let isHistoryLoaded = false;
 
 let monitorInterval: any = null;
@@ -110,14 +118,22 @@ export function loadAlerts(): PriceAlert[] {
 }
 
 export function saveAlerts(alerts: PriceAlert[]): boolean {
+  const started = performance.now();
+  let bytes = 0;
   try {
     ensureDataDir();
     const temp = `${ALERTS_FILE}.tmp`;
-    fs.writeFileSync(temp, JSON.stringify(alerts, null, 2), 'utf-8');
+    const payload = JSON.stringify(alerts);
+    bytes = Buffer.byteLength(payload);
+    fs.writeFileSync(temp, payload, 'utf-8');
     fs.renameSync(temp, ALERTS_FILE);
     alertsCache = alerts;
+    alertsByUser = null;
+    indexedAlerts = null;
+    persistenceMetrics.record('alerts', performance.now() - started, bytes, true);
     return true;
   } catch (err) {
+    persistenceMetrics.record('alerts', performance.now() - started, bytes, false);
     console.error('Failed to save alerts.json:', err);
     return false;
   }
@@ -143,12 +159,24 @@ export function loadHistory(): AlertHistoryItem[] {
 }
 
 export function saveHistory(items: AlertHistoryItem[]): boolean {
+  const started = performance.now();
+  let bytes = 0;
   try {
     ensureDataDir();
+    const temp = `${HISTORY_FILE}.tmp`;
+    const payload = JSON.stringify(items);
+    bytes = Buffer.byteLength(payload);
+    fs.writeFileSync(temp, payload, 'utf-8');
+    fs.renameSync(temp, HISTORY_FILE);
+    // A failed write must never make unpersisted history look durable.
     historyCache = items;
-    fs.writeFileSync(HISTORY_FILE, JSON.stringify(items, null, 2), 'utf-8');
+    historyByUser = null;
+    processedHistoryIndex = null;
+    indexedHistory = null;
+    persistenceMetrics.record('alertHistory', performance.now() - started, bytes, true);
     return true;
   } catch (err) {
+    persistenceMetrics.record('alertHistory', performance.now() - started, bytes, false);
     console.error('Failed to save alert_history.json:', err);
     return false;
   }
@@ -156,18 +184,35 @@ export function saveHistory(items: AlertHistoryItem[]): boolean {
 
 /** Completed alert cycles remain terminal across stale browser syncs and server restarts. */
 function findProcessedAlertHistory(alert: PriceAlert): AlertHistoryItem | undefined {
-  const epoch = alert.deliveryEpoch ?? 0;
-  return loadHistory().find(item =>
-    item.userId === alert.userId &&
-    item.alertId === alert.id &&
-    (item.deliveryEpoch ?? 0) === epoch
-  );
+  const history = loadHistory();
+  if (indexedHistory !== history || !processedHistoryIndex) {
+    const next = new Map<string, AlertHistoryItem>();
+    for (const item of history) {
+      // Preserve the first match in history order, as Array.find did.
+      const key = JSON.stringify([item.userId, item.alertId, item.deliveryEpoch ?? 0]);
+      if (!next.has(key)) next.set(key, item);
+    }
+    processedHistoryIndex = next;
+    indexedHistory = history;
+  }
+  return processedHistoryIndex.get(JSON.stringify([
+    alert.userId, alert.id, alert.deliveryEpoch ?? 0,
+  ]));
 }
 
 export function getAlertHistory(userId?: string): AlertHistoryItem[] {
   if (!userId || userId === 'guest') return [];
   const all = loadHistory();
-  return all.filter((h) => h.userId === userId).map(item => {
+  if (!historyByUser) {
+    historyByUser = new Map();
+    for (const item of all) {
+      const owner = item.userId || 'guest';
+      let rows = historyByUser.get(owner);
+      if (!rows) { rows = []; historyByUser.set(owner, rows); }
+      rows.push(item);
+    }
+  }
+  return (historyByUser.get(userId) || []).map(item => {
     const delivery = item.telegramDeliveryId ? getTelegramDelivery(userId, item.telegramDeliveryId) : undefined;
     return delivery ? { ...item, telegramSent: delivery.status === 'sent', telegramPending: delivery.status === 'pending', telegramError: delivery.error, telegramMessageIds: delivery.messageIds } : item;
   });
@@ -187,8 +232,7 @@ export function clearAlertHistory(userId?: string): number {
   const history = loadHistory();
   const remaining = history.filter((h) => h.userId !== userId);
   const clearedCount = history.length - remaining.length;
-  saveHistory(remaining);
-  return clearedCount;
+  return saveHistory(remaining) ? clearedCount : 0;
 }
 
 export function deleteHistoryItem(id: string, userId?: string): boolean {
@@ -196,8 +240,7 @@ export function deleteHistoryItem(id: string, userId?: string): boolean {
   const history = loadHistory();
   const filtered = history.filter((h) => !(h.id === id && h.userId === userId));
   if (filtered.length !== history.length) {
-    saveHistory(filtered);
-    return true;
+    return saveHistory(filtered);
   }
   return false;
 }
@@ -206,7 +249,19 @@ export function deleteHistoryItem(id: string, userId?: string): boolean {
 export function getAllAlerts(userId?: string): PriceAlert[] {
   if (!userId || userId === 'guest') return [];
   const all = loadAlerts();
-  return all.filter((a) => a.userId === userId);
+  if (indexedAlerts !== all || !alertsByUser) {
+    const next = new Map<string, PriceAlert[]>();
+    for (const alert of all) {
+      const owner = alert.userId || 'guest';
+      let rows = next.get(owner);
+      if (!rows) { rows = []; next.set(owner, rows); }
+      rows.push(alert);
+    }
+    indexedAlerts = all;
+    alertsByUser = next;
+  }
+  // Never return the mutable indexed collection to caller code.
+  return alertsByUser.get(userId)?.slice() ?? [];
 }
 
 // Create alert
@@ -455,10 +510,8 @@ export function syncUserAlerts(
 
   // Map of existing alerts on server for this user
   const existingUserAlerts = new Map<string, PriceAlert>();
-  for (const a of all) {
-    if (a.userId === userId) {
-      existingUserAlerts.set(a.id, a);
-    }
+  for (const a of getAllAlerts(userId)) {
+    existingUserAlerts.set(a.id, a);
   }
 
   // Merge incoming alerts

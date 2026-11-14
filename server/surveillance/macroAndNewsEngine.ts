@@ -1,4 +1,4 @@
-import { Kline } from '../../src/types';
+import { Kline, type ExchangeId, type MarketType, type Timeframe } from '../../src/types';
 import { fetchKlines } from '../marketService';
 import { BTCContextSnapshot, NewsItem, TradingSessionName } from './types';
 
@@ -20,8 +20,17 @@ export class MacroAndNewsEngine {
 
   private lastSession: TradingSessionName = 'Asia';
   private newsCache: NewsItem[] = [];
+  private btcRefreshInFlight: Promise<BTCContextSnapshot> | null = null;
+  private lastBtcFetchAttemptAt = 0;
 
-  constructor() {
+  constructor(
+    private readonly getCandles: (
+      exchange: ExchangeId, market: MarketType, symbol: string,
+      timeframe: Timeframe, limit: number,
+    ) => Promise<Kline[]> = (exchange, market, symbol, timeframe, limit) =>
+      fetchKlines(exchange, market, symbol, timeframe, limit),
+    private readonly now: () => number = Date.now,
+  ) {
     this.lastSession = this.getCurrentSession();
   }
 
@@ -56,20 +65,44 @@ export class MacroAndNewsEngine {
   }
 
   public async updateBTCContext(): Promise<BTCContextSnapshot> {
-    const now = Date.now();
-    // Cache for 60 seconds
-    if (now - this.btcSnapshot.lastUpdated < 60000) {
-      return this.btcSnapshot;
-    }
+    const now = this.now();
+    // All per-user workers must share a single BTC refresh, not each issue
+    // four independent REST calls at the same 60-second cache boundary.
+    if (this.btcSnapshot.lastUpdated && now >= this.btcSnapshot.lastUpdated
+      && now - this.btcSnapshot.lastUpdated < 60_000) return this.btcSnapshot;
+    if (this.btcRefreshInFlight) return this.btcRefreshInFlight;
+    // A failed exchange request must not generate a reconnect/request storm.
+    if (this.lastBtcFetchAttemptAt && now >= this.lastBtcFetchAttemptAt
+      && now - this.lastBtcFetchAttemptAt < 15_000) return this.btcSnapshot;
+    this.lastBtcFetchAttemptAt = now;
 
+    const request = this.refreshBTCContext(now);
+    this.btcRefreshInFlight = request;
+    try { return await request; }
+    finally {
+      if (this.btcRefreshInFlight === request) this.btcRefreshInFlight = null;
+    }
+  }
+
+  public btcCacheStats() {
+    return { inFlight: Boolean(this.btcRefreshInFlight),
+      cacheAgeMs: this.btcSnapshot.lastUpdated
+        ? Math.max(0, this.now() - this.btcSnapshot.lastUpdated) : null };
+  }
+
+  private async refreshBTCContext(now: number): Promise<BTCContextSnapshot> {
     try {
       const [k1d, k4h, k1h, k15m] = await Promise.all([
-        fetchKlines('binance', 'futures', 'BTCUSDT', '1d', 10).catch(() => []),
-        fetchKlines('binance', 'futures', 'BTCUSDT', '4h', 15).catch(() => []),
-        fetchKlines('binance', 'futures', 'BTCUSDT', '1h', 20).catch(() => []),
-        fetchKlines('binance', 'futures', 'BTCUSDT', '15m', 20).catch(() => []),
+        this.getCandles('binance', 'futures', 'BTCUSDT', '1d', 10).catch(() => []),
+        this.getCandles('binance', 'futures', 'BTCUSDT', '4h', 15).catch(() => []),
+        this.getCandles('binance', 'futures', 'BTCUSDT', '1h', 20).catch(() => []),
+        this.getCandles('binance', 'futures', 'BTCUSDT', '15m', 20).catch(() => []),
       ]);
 
+      if (!k1d.length && !k4h.length && !k1h.length && !k15m.length) {
+        // Do not mark an empty exchange response as successfully refreshed.
+        return this.btcSnapshot;
+      }
       const curPrice = k15m.length > 0 ? k15m[k15m.length - 1].close : this.btcSnapshot.currentPrice;
 
       const evalTrend = (candles: Kline[]): 'Bullish' | 'Bearish' | 'Neutral' => {
