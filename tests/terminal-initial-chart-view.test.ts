@@ -91,7 +91,9 @@ test('terminal chart initial view is passed only through terminal widgets to Hoo
 test('single-chart Terminal renders the timeframe saved on its block instead of stale global selection', () => {
   const page = source('../src/components/TerminalPage.tsx');
   assert.match(page, /const activeTimeframe = blocks\.length === 1 \? blocks\[0\]\.timeframe : timeframe/);
-  assert.match(page, /switch \(activeTimeframe\)/);
+  // HookChart-only Terminal no longer uses a legacy TradingView switch.
+  // The active timeframe must still come from the saved single chart block.
+  assert.match(page, /const activeTimeframe = blocks\.length === 1 \? blocks\[0\]\.timeframe : timeframe/);
   assert.match(page, /timeframe=\{activeTimeframe\}/);
   assert.match(page, /activeTimeframe === tf/);
   assert.match(page, /Таймфрейм: <strong[^>]*>\{activeTimeframe\}<\/strong>/);
@@ -177,7 +179,7 @@ test('Terminal preserves actual quote timestamp instead of claiming every refres
 test('favorite click is visible in multi-chart mode and never wipes existing charts', () => {
   const page = source('../src/components/TerminalPage.tsx');
   const start = page.indexOf('const handleSelectFavoriteCoin =');
-  const end = page.indexOf('// Build TradingView Embed URL', start);
+  const end = page.indexOf('// Block management', start);
   assert.ok(start >= 0 && end > start);
   const handler = page.slice(start, end);
   assert.match(handler, /setIsFavoritesDrawerOpen\(false\)/);
@@ -278,7 +280,7 @@ test('Terminal sync conflicts are visible outside hidden menus and can be recove
   assert.match(banner, /Недостатньо місця у сховищі браузера/);
   assert.match(hook, /saveConflictBackup\(uid: string, value: WorkspaceSnapshot\): boolean/);
   assert.match(hook, /localStorage\.setItem\(terminalStorageKey\(CONFLICT_KEY, uid\)/);
-  assert.match(hook, /if \(uid && syncConflictRef\.current\) saveConflictBackup\(uid, workspace\)/);
+  assert.match(hook, /if \(uid && syncConflictRef\.current\) \{\s*const stored = saveConflictBackup\(uid, workspace\);\s*setBackupFailed\(!stored\)/);
   assert.match(hook, /if \(revision\.current === 0 && !syncConflictRef\.current\)/);
   assert.match(hook, /window\.confirm\(/);
   assert.match(hook, /window\.location\.reload\(\)/);
