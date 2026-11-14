@@ -189,8 +189,8 @@ export const ScreenerVolumeDropdown: React.FC<Props> = ({ id, labelId, value, mo
         aria-controls={open ? listId : undefined}
         aria-labelledby={labelId + ' ' + valueId}
         title={mode === 'from'
-          ? 'Показати пари з добовим обсягом від вибраної суми включно. Сортування обсягу змінюється окремо.'
-          : 'Показати пари з добовим обсягом до вибраної суми включно. Сортування обсягу змінюється окремо.'}
+          ? 'Показати пари з добовим обсягом від вибраної суми включно. Якщо обрано сортування за обсягом, спочатку показуються монети найближче до мінімуму.'
+          : 'Показати пари з добовим обсягом до вибраної суми включно. Якщо обрано сортування за обсягом, спочатку показуються монети найближче до максимуму.'}
         onClick={() => open ? close() : openAt(selectedIndex)}
         onKeyDown={event => {
           if (event.key === 'ArrowDown' || event.key === 'ArrowUp' || event.key === 'Home' || event.key === 'End') {

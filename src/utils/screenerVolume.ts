@@ -26,6 +26,11 @@ export const SCREENER_VOLUME_CAPS = [
 /** A selected 24-hour volume threshold can be either a ceiling or a floor. */
 export type ScreenerVolumeMode = 'to' | 'from';
 
+/** When filtering a bound, show coins nearest to that bound before distant coins. */
+export function preferredVolumeSortOrder(mode: ScreenerVolumeMode): 'asc' | 'desc' {
+  return mode === 'from' ? 'asc' : 'desc';
+}
+
 export function isVolumeWithinCap(
   volumeUsd: number,
   limitUsd: number,
