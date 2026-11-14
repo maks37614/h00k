@@ -11,18 +11,6 @@ const config = JSON.parse(fs.readFileSync(path.join(desktop, 'package.json'), 'u
 const worker = path.join(desktop, 'dist', 'h00k Desktop Setup ' + config.version + '.exe');
 const installed = path.join(desktop, 'dist', 'win-unpacked');
 
-function sizeOfDirectory(dir) {
-  let total = 0, files = 0, pending = [dir];
-  while (pending.length) {
-    for (const entry of fs.readdirSync(pending.pop(), {withFileTypes:true})) {
-      const name = path.join(entry.parentPath || dir, entry.name);
-      // Dirent.parentPath is Node 20+; never infer a destination outside the build folder.
-      if (entry.isDirectory()) pending.push(name);
-      else if (entry.isFile()) { total += fs.statSync(name).size; files++; }
-    }
-  }
-  return {total, files};
-}
 function accurateSize(dir) {
   let total = 0, files = 0;
   const visit = current => {
@@ -47,7 +35,8 @@ async function main() {
   }
   const robot = svg
     .replace(/<svg\b[^>]*>/, '<svg id="robotHead" xmlns="http://www.w3.org/2000/svg" viewBox="23 2 50 39" role="img" aria-label="h00k robot eyes">')
-    .replace(/<title\b[^>]*>[\s\S]*?<\/title>/, '');
+    .replace(/<title\b[^>]*>[\s\S]*?<\/title>/, '')
+    .replace(/<style>[\s\S]*?<\/style>/, ''); // animation is controlled by the local CSP-safe CSS
   const template = fs.readFileSync(path.join(here,'ui.template.html'),'utf8');
   if (!template.includes('<!-- ROBOT_FACE_FROM_H00K_TOP -->')) throw new Error('Missing robot placeholder');
   fs.writeFileSync(path.join(here,'ui.html'),
