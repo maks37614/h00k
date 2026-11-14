@@ -559,11 +559,7 @@ export async function generateSmartAnalysis(params: {
   const riskRewardRatio = parseFloat((tp2Pct / slPct).toFixed(2));
 
   const positionSizingRecommendation =
-    score >= 8.0
-      ? '1.5% - 2.5% від депозиту (плече 3x - 5x). Вхід лімітними ордерами в зоні POC.'
-      : score >= 6.5
-      ? '1.0% - 1.5% від депозиту (плече не більше 2x - 3x). Фіксація 50% на TP1.'
-      : 'Консервативно: до 0.8% від капіталу без надмірного плеча через змішаний фон.';
+    'Не визначається без параметрів ризику користувача. Технічний індикатор не є сигналом або рекомендацією плеча.';
 
   // 1. Actual holder concentration and wallet activity require an on-chain
   // indexer. OHLCV and depth cannot establish who owns tokens or where they move.
@@ -667,16 +663,20 @@ export async function generateSmartAnalysis(params: {
   const isManipulativeCoin: boolean | null = null;
   const manipulativeReasons = signals.filter(item => item.detected === true).map(item => item.description);
 
-  // Comprehensive Ukrainian auto-summary
-  const summary = `Комплексний інституційний аудит для ${symbol}: технічний рейтинг ${score}/10 (${verdictLabel}). ` +
-    `Структура BTC демонструє ${btcContext.overallStructureLabel}. ` +
-    `RSI (${rsi}) перебуває у стані ${rsi > 70 ? 'перекупленості' : rsi < 30 ? 'перепроданості' : 'здорового імпульсу'}, ` +
-    `${crossSignalLabel}. Спред становить ${orderbookData.spread.spreadPct}% (${orderbookData.spread.quality === 'ultra_tight' ? 'ультра-вузький, відмінна ліквідність' : 'помірний'}). ` +
-    `Ядро торгового обсягу POC розташоване на рівні $${pocPrice}. ` +
-    (derivatives.totalOIUsd !== null
-      ? `Доступний ф'ючерсний OI: ${(derivatives.totalOIUsd / 1e6).toFixed(1)}M (${derivatives.oiCoverage === 'partial' ? 'лише одна біржа' : 'дві біржі'}). `
-      : '') +
-    `${largePlayerNote}`;
+  // Describe observed data and limitations, never imply institutional proof.
+  const summary = 'Технічні показники ' + symbol + ' (' + exchange + ' ' + marketType +
+    ', ' + tf + '): RSI14=' + rsi + ', ' + crossSignalLabel + '. ' +
+    (btcContext.overallStructure === 'unknown' ? 'BTC: немає структури. ' :
+      'BTC: ' + btcContext.overallStructureLabel + '. ') +
+    (orderbookData.spread.spreadPct === null
+      ? 'Стакан: дані недоступні. '
+      : 'Спред у поточному стакані: ' + orderbookData.spread.spreadPct + '%. ') +
+    (pocPrice === null ? 'Оціночний POC недоступний. '
+      : 'Оціночний POC з OHLCV: ' + pocPrice + '. ') +
+    (derivatives.totalOIUsd === null ? 'OI не підтверджено. '
+      : 'Перевірений OI: ' + (derivatives.totalOIUsd / 1e6).toFixed(1) + 'M (' +
+      (derivatives.oiCoverage === 'partial' ? 'одна біржа' : 'дві біржі') + '). ') +
+    'Ончейн-активність, особу власників заявок та маніпуляції не перевірено.';
 
   const result: SmartAnalysisData = {
     symbol,
@@ -717,8 +717,8 @@ export async function generateSmartAnalysis(params: {
     },
     btcContext,
     volumeMetrics: {
-      volume24hUsd: total24hVolUsd || 1500000,
-      volume1hUsd: last1hVolUsd || 65000,
+      volume24hUsd: total24hVolUsd,
+      volume1hUsd: last1hVolUsd,
       volume1hSpikeRatio,
       hasVolumeSpike,
     },
@@ -728,10 +728,12 @@ export async function generateSmartAnalysis(params: {
       atr: Number(atr.toPrecision(5)),
       atrPct: parseFloat(((atr / currentPrice) * 100).toFixed(2)),
       positionInDayRangePct,
-      high24h: Number(dayHigh.toPrecision(6)),
-      low24h: Number(dayLow.toPrecision(6)),
+      high24h: dayHigh,
+      low24h: dayLow,
     },
     orderbook: {
+      available: orderbookData.available,
+      source: orderbookData.source,
       bidAskRatio: orderbookData.bidAskRatio,
       dominantSide: orderbookData.dominantSide,
       bidWallUsd: orderbookData.bidWallUsd,
@@ -759,7 +761,7 @@ export async function generateSmartAnalysis(params: {
       },
       largePlayer: {
         detected: largePlayerDetected,
-        confidencePct: largePlayerDetected ? 88 : 35,
+        confidencePct: null,
         actionType,
         actionLabel,
         clusterVolumeUsd,
