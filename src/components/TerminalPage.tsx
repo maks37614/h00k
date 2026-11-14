@@ -721,6 +721,10 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
   // A loaded quote snapshot is not proof of an active WebSocket stream.
   const quotesAvailable = marketSnapshot.timestamp !== null && !marketError && !marketSnapshot.warning;
 
+  // Header shortcuts have a unique target only when the Terminal displays one
+  // chart and its loaded instrument matches that chart. Grid cards carry their
+  // own explicit coin actions, so never silently target the first grid coin.
+  const hasHeaderTarget = blocks.length === 1 && coinMarketKey(activeCoin) === coinMarketKey(blocks[0]);
   const formation = activeCoin.formations?.[0] || null;
   const isBullish = formation?.bias === 'bullish';
   const isBearish = formation?.bias === 'bearish';
@@ -786,7 +790,7 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
           {/* Telegram, MetaScalp, Settings, Fullscreen */}
           <div className="col-start-3 row-start-1 flex shrink-0 items-center justify-self-end gap-0 min-[375px]:gap-0.5 sm:gap-2">
             {/* Telegram Alert shortcut */}
-            {onOpenTelegramAlerts && (
+            {onOpenTelegramAlerts && hasHeaderTarget && (
               <button
                 onClick={() =>
                   onOpenTelegramAlerts({
@@ -807,7 +811,7 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
             )}
 
             {/* MetaScalp shortcut */}
-            {onSendMetaScalp && (
+            {onSendMetaScalp && hasHeaderTarget && (
               <button
                 onClick={() => onSendMetaScalp(activeCoin)}
                 className="flex h-7 w-6 shrink-0 items-center justify-center p-0 sm:h-auto sm:w-auto sm:p-2 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border-0 lg:h-8 lg:w-8 lg:rounded-lg lg:border lg:border-amber-500/35 transition-all active:scale-95 cursor-pointer"
