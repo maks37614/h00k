@@ -241,7 +241,11 @@ export class CoinWorker {
   public async runDeepAnalysis() {
     // Inactive 24/7 monitors still receive lightweight price state, but must
     // not run costly personal setup/rule evaluation or Telegram dispatches.
-    if (this.isDestroyed || !this.coin.isActive || this.currentPrice <= 0 || this.analysisInFlight) return;
+    // Never produce realtime setups or private notifications from an old
+    // cached quote after a WebSocket disconnect, silent market ticker or
+    // unconfirmed book resync. Historical candles remain available to UI.
+    if (this.isDestroyed || !this.coin.isActive || this.currentPrice <= 0 ||
+        !this.streamClient.hasFreshMarketQuote() || this.analysisInFlight) return;
     this.analysisInFlight = true;
     this.lastAnalysisTimestamp = Date.now();
     try {
