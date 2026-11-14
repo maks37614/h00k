@@ -33,6 +33,9 @@ export class HookChartDensityBook {
     sequence: number; distance: number;
     levels: ReturnType<typeof getOrderBookDensityLevels>;
     book: { b: { p: number; q: number }[]; a: { p: number; q: number }[] };
+    // The local-share lookup only depends on these immutable level rows,
+    // not on hold-time, ATR, absorption scores or individual chart renders.
+    localShareFloor?: ReturnType<typeof createOrderBookLocalShareFloorLookup>;
   } | null = null;
   // Trade IDs deduplicate REST seed and WebSocket overlap.
   private tradeSeconds = new Map<number, { buy: number; sell: number }>();
@@ -187,7 +190,13 @@ export class HookChartDensityBook {
     else {
       const seen = new Set<string>();
       const tolerance = Math.max(price * .00055, (atr || price * .001) * .18);
-      const localShareFloor = manual ? null : createOrderBookLocalShareFloorLookup(levels);
+      // Hold-time refreshes run every second. Reuse the sorted local-share
+      // index until a new depth sequence or distance invalidates levelView.
+      // Manual thresholds never need this index, so build it lazily.
+      const localShareFloor = manual ? null : (
+        this.levelView.localShareFloor ??=
+          createOrderBookLocalShareFloorLookup(levels)
+      );
       for (const row of filterOrderBookDensities(levels, cut)) {
         if (localShareFloor && row.usd < Math.max(
           row.side === 'BID' ? bidCut : askCut,

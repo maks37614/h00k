@@ -72,3 +72,57 @@ test('unchanged depth auto counters can skip React updates without hiding trade-
     assert.equal(equalDepthAutoStats(a, { ...a, [key]: a[key] + 1 }), false);
   }
 });
+
+test('auto local-share threshold index is reused on hold refresh and invalidated only for new level inputs', () => {
+  type View = {
+    levels: OrderBookDensityLevel[];
+    localShareFloor?: ReturnType<typeof createOrderBookLocalShareFloorLookup>;
+  };
+  const now = Date.now();
+  const depth = new HookChartDensityBook();
+  const levelView = () => (depth as unknown as { levelView: View | null }).levelView;
+  const manual = {
+    densityDiffPct: 5, densityMode: 'manual', densityThreshold: 100,
+    densityAnalysis: true, densityTimeoutMin: 0,
+  } as HookChartPreferences;
+  const auto = { ...manual, densityMode: 'auto' } as HookChartPreferences;
+  assert.equal(depth.apply({
+    bids: [[99, 50], [98, 30], [97, 15]], asks: [[101, 40], [102, 25], [103, 18]],
+    sequence: 100, isSnapshot: true, eventTime: now,
+  }, now), true);
+
+  const manualRead = depth.read(manual, 1, now + 50);
+  assert.equal(manualRead.depthReady, true);
+  assert.equal(levelView()?.localShareFloor, undefined,
+    'explicit manual cutoff must not build an unnecessary depth share index');
+
+  const autoRead = depth.read(auto, 1, now + 100);
+  const firstView = levelView()!;
+  const firstIndex = firstView.localShareFloor;
+  assert.equal(autoRead.depthReady, true);
+  assert.ok(firstIndex, 'automatic threshold mode needs a populated index');
+  for (const item of firstView.levels) {
+    assert.ok(Math.abs(firstIndex!(item) - orderBookLocalShareFloor(firstView.levels, item)) < 1e-5);
+  }
+  const hold = depth.read(auto, 1, now + 1_000);
+  assert.strictEqual(hold.book, autoRead.book, 'unchanged book must be reused on hold refresh');
+  assert.strictEqual(levelView()?.localShareFloor, firstIndex,
+    'hold-time score updates must reuse the existing price index');
+
+  const otherDistance = depth.read({ ...auto, densityDiffPct: 8 }, 1, now + 1_001);
+  assert.equal(otherDistance.depthReady, true);
+  const distanceIndex = levelView()?.localShareFloor;
+  assert.ok(distanceIndex);
+  assert.notStrictEqual(distanceIndex, firstIndex);
+
+  assert.equal(depth.apply({ sequence: 101, eventTime: now + 1_200,
+    bids: [[99, 55]], asks: [],
+  }, now + 1_200), true);
+  depth.read({ ...auto, densityDiffPct: 8 }, 1, now + 1_201);
+  const newSequenceIndex = levelView()?.localShareFloor;
+  assert.ok(newSequenceIndex);
+  assert.notStrictEqual(newSequenceIndex, distanceIndex);
+
+  depth.clear();
+  assert.equal(levelView(), null);
+});
