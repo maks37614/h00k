@@ -4,6 +4,7 @@
  *   node --import tsx server/pgStateMigrator.ts --apply
  */
 import { identityPool, initializeIdentity } from './pgIdentity';
+import { createPersonalStateBackup } from './pgStateBackup';
 import { verifyPersonalStateStaging } from './pgPersonalStateVerifier';
 import { DEFAULT_PERSONAL_STATE_STAGE_KEY, personalStateSnapshotDigest,
   preparePersonalStateRows, readJsonSnapshot, readPersonalStateSchema,
@@ -11,11 +12,19 @@ import { DEFAULT_PERSONAL_STATE_STAGE_KEY, personalStateSnapshotDigest,
 
 async function main() {
   const args=process.argv.slice(2);
-  if(args.length!==1 || !['--dry-run','--apply','--verify'].includes(args[0]))
-    throw new Error('Specify exactly --dry-run or --apply or --verify');
+  if(args.length!==1 || !['--dry-run','--apply','--verify','--backup'].includes(args[0]))
+    throw new Error('Specify exactly --dry-run, --backup, --apply or --verify');
   const dry=args[0]==='--dry-run';
   const verify=args[0]==='--verify';
   const snapshot=readJsonSnapshot();
+  // A local, private copy also supports operators without DB connectivity.
+  // Back up full app/PostgreSQL volumes separately before any real migration.
+  if (args[0] === '--backup') {
+    const backup = createPersonalStateBackup(snapshot);
+    console.log(JSON.stringify({mode:'backup-only',backupFile:backup.file,
+      snapshotSha256:backup.sha256,jsonStillAuthoritative:true},null,2));
+    return;
+  }
   // --verify must be truly read-only, including schema setup. Applying or
   // planning the first migration still initializes existing identity tables.
   if (!verify) await initializeIdentity();
@@ -54,8 +63,15 @@ async function main() {
         changesApplied:false},null,2));
       return;
     }
+    // A failed SQL transaction rolls back itself. The private copy permits
+    // a separate, verified operator rollback even after a successful stage.
+    const backup = createPersonalStateBackup(snapshot);
+    // Abort if the three live JSON sources changed while backup was written.
+    if (personalStateSnapshotDigest(readJsonSnapshot()) !== backup.sha256)
+      throw new Error('JSON changed during backup; pause writers before PostgreSQL staging');
     const count=await stagePersonalStateToPostgres(connection,snapshot,readPersonalStateSchema());
     console.log(JSON.stringify({mode:'staged-to-postgresql',...count,
+      backupFile:backup.file,
       jsonStillAuthoritative:true,liveCutover:false},null,2));
   } finally { connection.release(); await identityPool().end(); }
 }
