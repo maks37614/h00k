@@ -187,8 +187,12 @@ export function loadSurveillanceList(userId?: string): SurveillanceCoin[] {
       coin.config.triggerModes = coin.config.triggerMode ? [coin.config.triggerMode] : ['bar_close'];
     }
 
-    // Ensure worker is running if coin is active
-    if (coin.isActive) {
+    // Reading a user's list must not repeatedly reconfigure an already
+    // running worker or start anonymous guest market streams. Actual user
+    // edits and the initial boot already reconcile active worker settings.
+    // Recover a missing worker for an authenticated user's active coin only.
+    if (uid !== 'guest' && coin.isActive &&
+        !surveillanceManager.getWorker(coin.id, uid)) {
       surveillanceManager.startWorkerForCoin(coin);
     }
 
