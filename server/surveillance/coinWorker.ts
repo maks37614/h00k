@@ -617,7 +617,7 @@ export class CoinWorker {
       exchange: this.coin.exchange,
       marketType: this.coin.marketType,
       isActive: this.coin.isActive,
-      status: orderBookState.status,
+      status: this.streamClient.hasFreshMarketQuote() ? orderBookState.status : 'STALE',
       currentPrice: this.currentPrice,
       change24h: this.change24h,
       high24h: this.high24h,
