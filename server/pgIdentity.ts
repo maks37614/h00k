@@ -242,12 +242,21 @@ export async function sendReset(emailInput: unknown) {
 export async function verifyEmailToken(token: unknown) {
   const value = String(token || '');
   if (!/^[a-zA-Z0-9_-]{40,80}$/.test(value)) throw new AuthFailure(400, 'Посилання недійсне або застаріле.');
+  const tokenHash = hashToken(value);
+  const candidate = await database().query(
+    "SELECT user_id FROM auth_action_tokens WHERE token_hash = $1 AND purpose = 'verify-email' AND consumed_at IS NULL AND expires_at > now()",
+    [tokenHash],
+  );
+  if (!candidate.rows[0]) throw new AuthFailure(400, 'Посилання недійсне або застаріле.');
   const client = await database().connect();
   try {
     await client.query('BEGIN');
+    // Lock the account before any individual token rows, ensuring concurrent
+    // sibling links cannot deadlock while all account tokens are consumed.
+    await client.query('SELECT id FROM auth_users WHERE id = $1 FOR UPDATE', [candidate.rows[0].user_id]);
     const { rows } = await client.query(
       "SELECT user_id FROM auth_action_tokens WHERE token_hash = $1 AND purpose = 'verify-email' AND consumed_at IS NULL AND expires_at > now() FOR UPDATE",
-      [hashToken(value)],
+      [tokenHash],
     );
     if (!rows[0]) throw new AuthFailure(400, 'Посилання недійсне або застаріле.');
     // Every outstanding confirmation link for the same account becomes invalid
@@ -268,7 +277,7 @@ export async function changePasswordWithToken(token: unknown, passwordInput: unk
   // The transaction below checks the token again under a row lock to prevent races.
   const tokenHash = hashToken(value);
   const candidate = await database().query(
-    "SELECT 1 FROM auth_action_tokens WHERE token_hash = $1 AND purpose = 'reset-password' AND consumed_at IS NULL AND expires_at > now()",
+    "SELECT user_id FROM auth_action_tokens WHERE token_hash = $1 AND purpose = 'reset-password' AND consumed_at IS NULL AND expires_at > now()",
     [tokenHash],
   );
   if (!candidate.rows[0]) throw new AuthFailure(400, 'Посилання недійсне або застаріле.');
@@ -276,6 +285,9 @@ export async function changePasswordWithToken(token: unknown, passwordInput: unk
   const client = await database().connect();
   try {
     await client.query('BEGIN');
+    // Serialize concurrent recovery links for the same account before locking
+    // a token row. The second request will re-check its now-consumed token.
+    await client.query('SELECT id FROM auth_users WHERE id = $1 FOR UPDATE', [candidate.rows[0].user_id]);
     const { rows } = await client.query(
       "SELECT user_id FROM auth_action_tokens WHERE token_hash = $1 AND purpose = 'reset-password' AND consumed_at IS NULL AND expires_at > now() FOR UPDATE",
       [tokenHash],

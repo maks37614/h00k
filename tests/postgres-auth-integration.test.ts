@@ -135,6 +135,28 @@ test('real PostgreSQL: verify email, login, isolate data, revoke session and res
         'a sibling reset link must be consumed after the first successful password change');
       await assert.rejects(checkCredentials(emailA, 'x'.repeat(200000)), /Неправильна/,
         'oversized login passwords must be rejected without expensive hashing');
+
+      // Two different links for the same account may arrive concurrently.
+      // The account-level transaction lock must avoid a PostgreSQL deadlock.
+      const simultaneous = [
+        randomUUID().replaceAll('-', '') + randomUUID().replaceAll('-', ''),
+        randomUUID().replaceAll('-', '') + randomUUID().replaceAll('-', ''),
+      ];
+      for (const token of simultaneous) {
+        await db.query(
+          "INSERT INTO auth_action_tokens (token_hash, user_id, purpose, expires_at) VALUES ($1, $2, 'reset-password', now() + interval '10 minutes')",
+          [createHash('sha256').update(token).digest('hex'), uidB],
+        );
+      }
+      const outcomes = await Promise.allSettled(simultaneous.map((token, i) =>
+        changePasswordWithToken(token, 'simultaneous-secure-password-' + i)));
+      assert.equal(outcomes.filter(result => result.status === 'fulfilled').length, 1,
+        'exactly one concurrent password reset may succeed');
+      const failed = outcomes.find(result => result.status === 'rejected');
+      assert.ok(failed?.status === 'rejected');
+      assert.match(String(failed.reason), /застаріле/,
+        'losing concurrent request must be a stale token, not a SQL deadlock');
+
     } finally {
       await db.query('DELETE FROM auth_users WHERE id = ANY($1::text[])', [[uidA, uidB]]);
       await db.end();
