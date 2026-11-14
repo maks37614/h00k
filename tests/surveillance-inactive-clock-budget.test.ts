@@ -40,7 +40,8 @@ test('inactive CoinWorker cannot run expensive deep analysis or dispatch 24/7 al
   // check the latest mutable per-owner active setting, so reactivation still
   // works automatically on the next shared market tick.
   assert.match(source, /if \(this\.isDestroyed \|\| !this\.coin\.isActive\) return;/);
-  assert.match(source, /if \(this\.isDestroyed \|\| !this\.coin\.isActive \|\| this\.currentPrice <= 0 \|\| this\.analysisInFlight\) return;/);
+  assert.match(source, /if \(this\.isDestroyed \|\| !this\.coin\.isActive \|\| this\.currentPrice <= 0 \|\|\s*!this\.streamClient\.hasFreshMarketQuote\(\) \|\| this\.analysisInFlight\) return;/,
+    'inactive or market-stale watchers must never generate realtime alerts');
   assert.match(source, /this\.releaseAnalysisClock = sharedWorkerAnalysisClock\.subscribe/);
   assert.match(source, /this\.coin = coin;/);
   assert.doesNotMatch(source, /setInterval\(\(\) => this\.runDeepAnalysis/,
