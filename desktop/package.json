@@ -63,7 +63,8 @@
       ],
       "multiLanguageInstaller": true,
       "displayLanguageSelector": false,
-      "language": "1033"
+      "language": "1033",
+      "shortcutName": "h00k"
     }
   }
 }
