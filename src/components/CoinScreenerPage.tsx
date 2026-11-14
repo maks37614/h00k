@@ -621,14 +621,14 @@ export const CoinScreenerPage: React.FC<CoinScreenerPageProps> = ({
         {/* Secondary controls: Search, Exchange, Market, Min Volume, View mode */}
         <div className="flex flex-wrap items-center justify-between gap-2.5 pt-2 border-t border-slate-800/60">
           <div className="w-full flex justify-center">
-            <div className="relative w-full sm:w-auto sm:min-w-[200px] sm:max-w-xs">
-              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <div className="relative w-full sm:w-auto sm:min-w-[200px] sm:max-w-xs lg:w-[280px] lg:min-w-[280px]">
+              <Search className="w-4 h-4 lg:w-[18px] lg:h-[18px] text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder={t('search')}
-                className="w-full pl-9 pr-8 py-1.5 rounded-xl bg-slate-950/80 border border-slate-800 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:border-cyan-500 transition-colors font-mono"
+                className="w-full pl-9 lg:pl-10 pr-8 py-1.5 lg:py-2 rounded-xl bg-slate-950/80 border border-slate-800 text-xs lg:text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-cyan-500 transition-colors font-mono"
               />
               {searchQuery && (
                 <button
@@ -643,10 +643,10 @@ export const CoinScreenerPage: React.FC<CoinScreenerPageProps> = ({
 
           <div className="flex flex-wrap items-center justify-center gap-2 flex-1 min-w-0 sm:relative sm:left-12">
             {/* Exchange Filter */}
-            <div className="flex items-center rounded-xl bg-slate-950/80 border border-slate-800 p-0.5 text-xs">
+            <div className="flex items-center rounded-xl bg-slate-950/80 border border-slate-800 p-0.5 text-xs lg:text-sm">
               <button
                 onClick={() => setExchange('all')}
-                className={`px-2 sm:px-2.5 py-1 rounded-lg font-medium transition-colors ${
+                className={`px-2 sm:px-2.5 lg:px-3.5 py-1 lg:py-1.5 rounded-lg font-medium transition-colors ${
                   exchange === 'all' ? 'bg-slate-800 text-white font-semibold' : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
@@ -654,7 +654,7 @@ export const CoinScreenerPage: React.FC<CoinScreenerPageProps> = ({
               </button>
               <button
                 onClick={() => setExchange('binance')}
-                className={`px-2 sm:px-2.5 py-1 rounded-lg font-medium transition-colors ${
+                className={`px-2 sm:px-2.5 lg:px-3.5 py-1 lg:py-1.5 rounded-lg font-medium transition-colors ${
                   exchange === 'binance' ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' : 'text-slate-400 hover:text-amber-400'
                 }`}
               >
@@ -662,7 +662,7 @@ export const CoinScreenerPage: React.FC<CoinScreenerPageProps> = ({
               </button>
               <button
                 onClick={() => setExchange('bybit')}
-                className={`px-2 sm:px-2.5 py-1 rounded-lg font-medium transition-colors ${
+                className={`px-2 sm:px-2.5 lg:px-3.5 py-1 lg:py-1.5 rounded-lg font-medium transition-colors ${
                   exchange === 'bybit' ? 'bg-orange-500/20 text-orange-300 border border-orange-500/30' : 'text-slate-400 hover:text-orange-400'
                 }`}
               >
@@ -671,10 +671,10 @@ export const CoinScreenerPage: React.FC<CoinScreenerPageProps> = ({
             </div>
 
             {/* Market Type Filter */}
-            <div className="flex items-center rounded-xl bg-slate-950/80 border border-slate-800 p-0.5 text-xs">
+            <div className="flex items-center rounded-xl bg-slate-950/80 border border-slate-800 p-0.5 text-xs lg:text-sm">
               <button
                 onClick={() => setMarketType('all')}
-                className={`px-2 sm:px-2.5 py-1 rounded-lg font-medium transition-colors ${
+                className={`px-2 sm:px-2.5 lg:px-3.5 py-1 lg:py-1.5 rounded-lg font-medium transition-colors ${
                   marketType === 'all' ? 'bg-slate-800 text-white font-semibold' : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
@@ -682,7 +682,7 @@ export const CoinScreenerPage: React.FC<CoinScreenerPageProps> = ({
               </button>
               <button
                 onClick={() => setMarketType('futures')}
-                className={`px-2 sm:px-2.5 py-1 rounded-lg font-medium transition-colors ${
+                className={`px-2 sm:px-2.5 lg:px-3.5 py-1 lg:py-1.5 rounded-lg font-medium transition-colors ${
                   marketType === 'futures' ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30' : 'text-slate-400 hover:text-indigo-400'
                 }`}
               >
@@ -690,7 +690,7 @@ export const CoinScreenerPage: React.FC<CoinScreenerPageProps> = ({
               </button>
               <button
                 onClick={() => setMarketType('spot')}
-                className={`px-2 sm:px-2.5 py-1 rounded-lg font-medium transition-colors ${
+                className={`px-2 sm:px-2.5 lg:px-3.5 py-1 lg:py-1.5 rounded-lg font-medium transition-colors ${
                   marketType === 'spot' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'text-slate-400 hover:text-emerald-400'
                 }`}
               >
