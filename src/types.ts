@@ -399,7 +399,10 @@ export interface ScreenerSearchConfig {
   searchQuery: string;
   exchange: 'all' | ExchangeId;
   marketType: 'all' | MarketType;
+  /** Threshold in USD. 0 means all volumes in both modes. */
   maxVolumeUsd: number;
+  /** Interpret maxVolumeUsd as a ceiling ('to') or a floor ('from'). */
+  volumeMode: 'to' | 'from';
   presetFilter: ScreenerPresetFilter;
   sortBy: ScreenerSortBy;
   sortOrder: 'asc' | 'desc';
