@@ -56,7 +56,8 @@ export async function fetchHistoricalReplayCandles(
     );
     if (res.ok) {
       const json = await res.json();
-      if (json.success && Array.isArray(json.data) && json.data.length >= 10) {
+      if (json.success && Array.isArray(json.data) && json.data.length >= 10 &&
+          replayFallbackContainsDate(json.data, targetTimestampMs, timeframe)) {
         return processCandlesForCutoff(json.data, targetTimestampMs, timeframe);
       }
     }
@@ -67,7 +68,8 @@ export async function fetchHistoricalReplayCandles(
   // 2. Direct client fallback with multi-mirrors
   try {
     const directData = await fetchDirectKlines(exchange, market, symbol, timeframe, totalLimit, startTime, endTime);
-    if (directData && directData.length >= 10) {
+    if (directData && directData.length >= 10 &&
+        replayFallbackContainsDate(directData, targetTimestampMs, timeframe)) {
       return processCandlesForCutoff(directData, targetTimestampMs, timeframe);
     }
   } catch (err) {
@@ -149,14 +151,18 @@ export function replayFallbackContainsDate(
 ): boolean {
   if (!candles.length || !Number.isFinite(targetTimestampMs)) return false;
   const targetSec = targetTimestampMs / 1000;
-  let earliest = Infinity, latest = -Infinity;
+  const frameSec = timeframeToMs(timeframe) / 1000;
+  if (!Number.isFinite(frameSec) || frameSec <= 0) return false;
+  let matches = false;
   for (const candle of candles) {
     const time = candle.time > 1e11 ? candle.time / 1000 : candle.time;
     if (!Number.isFinite(time) || time <= 0) return false;
-    earliest = Math.min(earliest, time);
-    latest = Math.max(latest, time);
+    // A sparse response can bracket the target with a multi-day gap.
+    // Only a real historical bar covering the chosen time is acceptable;
+    // price simulation must never run with a fabricated/rewound date.
+    if (time <= targetSec && targetSec <= time + frameSec) matches = true;
   }
-  return targetSec >= earliest && targetSec <= latest + timeframeToMs(timeframe) / 1000;
+  return matches;
 }
 
 function findClosestCandleIndex(candles: Kline[], targetTimestampMs: number): number {
