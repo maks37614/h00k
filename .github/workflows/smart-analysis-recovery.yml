@@ -8,7 +8,7 @@ on:
       - 'server/verifiedBtcContext.ts'
       - 'server/estimatedPoc.ts'
       - 'tests/verified-btc-context.test.ts'
-      - 'tests/smart-analysis-poc.test.ts tests/smart-analysis-visibility.test.ts'
+      - 'tests/smart-analysis-poc.test.ts tests/smart-analysis-visibility.test.ts tests/formation-ai-score-layout.test.ts'
       - 'server.ts'
       - 'src/components/SmartAnalysisBlock.tsx'
       - 'src/types.ts'
