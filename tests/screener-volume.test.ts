@@ -47,3 +47,15 @@ test('zero means unlimited in both modes and the legacy two-argument call stays 
   assert.equal(isVolumeWithinCap(50_001, 50_000), false);
   assert.equal(isVolumeWithinCap(50_001, 50_000, 'to'), false);
 });
+
+test('changing the direction applies from/to to the same selected amount without a new lookup', () => {
+  const sample = [0, 49_999, 50_000, 50_001, 100_000, 1_000_000, 10_000_000];
+  const from = sample.filter(volume => isVolumeWithinCap(volume, 50_000, 'from'));
+  const to = sample.filter(volume => isVolumeWithinCap(volume, 50_000, 'to'));
+  assert.deepEqual(from, [50_000, 50_001, 100_000, 1_000_000, 10_000_000]);
+  assert.deepEqual(to, [0, 49_999, 50_000]);
+  assert.equal(isVolumeWithinCap(10_000_000, 50_000, 'from'), true);
+  assert.equal(isVolumeWithinCap(10_000_000, 50_000, 'to'), false);
+  assert.equal(isVolumeWithinCap(50_000, 50_000, 'from'), true);
+  assert.equal(isVolumeWithinCap(50_000, 50_000, 'to'), true);
+});
