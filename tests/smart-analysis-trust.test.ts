@@ -35,10 +35,13 @@ test('no invented BTC quotes, structural signals, dates or pseudo-24h from arbit
   assert.doesNotMatch(service, /btcPrice: 85200|btcPrice = .*85000|change24h = .*1\.2/);
   assert.match(service, /structure: 'unknown', label: 'Немає даних біржі'/);
   assert.match(service, /upcomingNews: \[\]/);
-  assert.match(service, /if \(klines\.length < 201\)/);
-  assert.match(service, /if \(klines\.length < 201 \|\| !klines\.every\(finiteBar\)\)/);
+  assert.match(service, /fetchKlines\(exchange, marketType, symbol, tf, 220,/);
+  assert.match(service, /undefined, undefined, \{ chart: true \}/);
+  assert.match(service, /klines\.length < MIN_TECHNICAL_BARS/);
+  assert.match(service, /const ema200 = klines\.length >= 200 \? calculateEMA/);
+  assert.match(service, /ema200: ema200 === null \? null/);
   assert.doesNotMatch(service, /currentPrice \* 1\.03|currentPrice \* 0\.97/);
-  assert.match(service, /fetchKlines\(exchange, marketType, symbol, '1h', 26\)/);
+  assert.match(service, /fetchKlines\(exchange, marketType, symbol, '1h', 26,/);
   assert.match(service, /closedHours\.length === 24/);
   assert.match(service, /quoteIsUsdLike/);
   assert.match(service, /const currentPrice = klines\[klines\.length - 1\]\.close/);
