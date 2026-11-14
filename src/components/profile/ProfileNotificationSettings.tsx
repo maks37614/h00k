@@ -381,7 +381,7 @@ export const ProfileNotificationSettings: React.FC = () => {
         )}
         {soundError && <p role="alert" className="text-xs text-rose-300">{soundError}</p>}
         <label className="flex items-center justify-between gap-3 text-[13px]">
-          <span>Звукове сповіщення (за замовчуванням вимкнено)</span>
+          <span>Звукове сповіщення</span>
           <input type="checkbox" checked={soundEnabled} disabled={!settings.enabled}
             onChange={e => void setSoundEnabled(e.target.checked)} className="h-4 w-4 accent-cyan-400"/>
         </label>
@@ -399,7 +399,7 @@ export const ProfileNotificationSettings: React.FC = () => {
         <button type="button" onClick={reset} className="inline-flex items-center gap-2 rounded-lg border border-rose-700/50 px-3 py-2 text-xs text-rose-300">
           <BellOff className="h-4 w-4"/> Вимкнути всі сповіщення сайту
         </button>
-        <span className="text-[10px] text-slate-500">Зміни зберігаються автоматично</span>
+        <span className="text-xs text-slate-400">Зміни зберігаються автоматично</span>
       </div>
       {formError && <p role="alert" className="rounded-lg border border-rose-500/40 p-3 text-xs text-rose-300"><ShieldAlert className="mr-1 inline h-4 w-4" />{formError}</p>}
       {message && <p role="status" className="text-xs text-emerald-300">{message}</p>}
