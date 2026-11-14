@@ -274,14 +274,16 @@ export async function processAuthMailJobs(): Promise<{ processed: number; delive
       'SELECT email, email_verified_at FROM auth_users WHERE id = $1',
       [job.user_id],
     );
+    let delivered = 0;
     if (account.rows[0] && (job.purpose !== 'verify-email' || !account.rows[0].email_verified_at)) {
       await actionFor(job.user_id, account.rows[0].email, job.purpose);
+      delivered = 1;
     }
     await database().query(
       'UPDATE auth_mail_outbox SET completed_at = now(), claimed_until = NULL WHERE id = $1',
       [job.id],
     );
-    return { processed: 1, delivered: account.rows.length ? 1 : 0 };
+    return { processed: 1, delivered };
   } catch (error) {
     // Never log the email, authentication token or SMTP credentials.
     console.warn('[Auth email] Queued mail attempt failed:', error instanceof AuthFailure ? error.code : 'DELIVERY_ERROR');
