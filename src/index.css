@@ -287,3 +287,37 @@ article,
 @media (max-width:640px) {
   .chart-page-backdrop__frozen {opacity:.40}
 }
+
+
+/*
+ * Encyclopedia typography: keep phone, tablet and narrow-window sizes intact.
+ * Tailwind v4 text-xs/text-sm/etc. utilities read these scoped font variables,
+ * so all nested encyclopedia articles and navigation inherit the larger desktop
+ * type without changing buttons or content elsewhere in the application.
+ */
+@media (min-width: 1280px) {
+  .encyclopedia-modal {
+    font-size: 1.15rem;
+    --text-xs: 0.95rem;
+    --text-xs--line-height: 1.5;
+    --text-sm: 1.1rem;
+    --text-sm--line-height: 1.5;
+    --text-base: 1.25rem;
+    --text-base--line-height: 1.55;
+    --text-lg: 1.5rem;
+    --text-lg--line-height: 1.4;
+    --text-xl: 1.75rem;
+    --text-xl--line-height: 1.35;
+  }
+
+  /* Arbitrary Tailwind pixel sizes do not use the theme variables. */
+  .encyclopedia-modal .text-\[10px\] {
+    font-size: 0.86rem;
+    line-height: 1.45;
+  }
+
+  .encyclopedia-modal .text-\[11px\] {
+    font-size: 0.94rem;
+    line-height: 1.45;
+  }
+}
