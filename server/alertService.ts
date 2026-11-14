@@ -1,4 +1,5 @@
 import { publicPriceFeed } from './publicPriceFeed';
+import { AlertCheckScheduler } from './alertCheckScheduler';
 import { persistenceMetrics } from './persistenceMetrics';
 import { exchangeFetch } from './exchangeHttp';
 import { forEachBounded, selectRoundRobinBatch } from './priceAlertFallback';
@@ -706,16 +707,12 @@ export function priceAlertFallbackStats() { return { ...fallbackLast,
   maxRestPerCycle: PRICE_REST_FALLBACK_MAX_PER_CYCLE,
   maxConcurrentRest: PRICE_REST_FALLBACK_PARALLEL }; }
 
-// Check active alerts against live prices
-let checkInFlight = false;
-export async function checkAlertsOnce(userId?: string) {
-  if (checkInFlight) return;
-  checkInFlight = true;
-  try {
-    await checkAlertsInternal(userId);
-  } finally {
-    checkInFlight = false;
-  }
+// The background cron may skip an overlapping pass, but an explicit user's
+// manual check is queued and awaited instead of falsely returning success.
+const alertCheckScheduler = new AlertCheckScheduler(checkAlertsInternal);
+export const priceAlertCheckStats = () => alertCheckScheduler.stats();
+export function checkAlertsOnce(userId?: string): Promise<void> {
+  return alertCheckScheduler.check(userId);
 }
 
 async function checkAlertsInternal(userId?: string) {
