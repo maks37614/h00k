@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { LiquidationEventBuffer } from '../src/components/hookchart/liquidationEventBuffer';
-import { nextLiquidationCascadeTransition } from '../src/components/hookchart/feedPublishPolicy';
+import { nextLiquidationAdaptiveCutExpiry, nextLiquidationCascadeTransition } from '../src/components/hookchart/feedPublishPolicy';
 import { calcCascadeRisk, type Liquidation } from '../src/components/hookchart/engine';
 
 const minute = 60_000;
@@ -104,10 +104,28 @@ test('future-dated events enter the cascade window on time; invalid rows cannot 
   ], t0), Infinity);
 });
 
+test('adaptive Liq threshold respects the inclusive 15m window without recalculating each poll', () => {
+  const first = row('first', t0, 1_000);
+  const second = row('second', t0 + 3 * minute, 4_000);
+  const rows = [first, second];
+  assert.equal(nextLiquidationAdaptiveCutExpiry(rows, t0 + minute), t0 + 15 * minute);
+  assert.equal(nextLiquidationAdaptiveCutExpiry(rows, t0 + 15 * minute), t0 + 15 * minute,
+    'an event exactly 15 minutes old still participates in the adaptive threshold');
+  assert.equal(nextLiquidationAdaptiveCutExpiry(rows, t0 + 15 * minute + 1), t0 + 18 * minute);
+  assert.equal(nextLiquidationAdaptiveCutExpiry(rows, t0 + 18 * minute + 1), Infinity);
+  assert.equal(nextLiquidationAdaptiveCutExpiry([
+    { t: NaN, usd: 100 },
+    { t: t0, usd: 0 },
+    { t: t0, usd: Infinity },
+  ], t0), Infinity);
+});
+
 test('stable buffer references do not freeze the time-sensitive cascade indicator', () => {
   const source = readFileSync(new URL('../src/components/hookchart/useOriginalHookChartLiveFeed.ts', import.meta.url), 'utf8');
   assert.match(source, /rows !== lastPublishedRows \|\| now >= nextCascadeTransitionAt/);
   assert.match(source, /nextLiquidationCascadeTransition\(rows, now\)/);
+  assert.match(source, /rows !== lastAdaptiveRows \|\| now > adaptiveExpiresAt/);
+  assert.match(source, /nextLiquidationAdaptiveCutExpiry\(rows, now\)/);
   assert.match(source, /setCascadeClock\(now\)/);
   assert.match(source, /calcCascadeRisk\(liquidations, liquidationCut, candles\.at\(-1\)\?\.c \|\| 0, cascadeClock\)/);
   assert.match(source, /\[liquidations, liquidationCut, candles\.at\(-1\)\?\.c, cascadeClock\]/);
