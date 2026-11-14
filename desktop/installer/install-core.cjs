@@ -41,7 +41,9 @@ function folderScan(root, afterEpochMs, maxEntries = 6000) {
       } else if (item.isFile()) {
         try {
           const stat = fs.statSync(name);
-          if (stat.mtimeMs >= afterEpochMs - 2000) {
+          // NSIS may restore the archived mtime. Creation/change timestamps
+          // still reflect actual extraction on the machine, including upgrades.
+          if (Math.max(stat.mtimeMs,stat.ctimeMs,stat.birthtimeMs) >= afterEpochMs - 2000) {
             const normalized = path.relative(root, name).toLowerCase();
             // Files may be moved into place by NSIS. Count only actual installed files.
             if (!seen.has(normalized)) { total += stat.size; seen.add(normalized); }
