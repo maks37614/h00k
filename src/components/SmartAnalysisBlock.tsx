@@ -155,17 +155,6 @@ export const SmartAnalysisBlock: React.FC<SmartAnalysisBlockProps> = ({
 
   if (!data) return <>{tradeSetup}</>;
 
-  // Score color helper
-  const getScoreBadge = (score: number) => {
-    if (score >= 8.0) return { bg: 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300', fill: 'bg-emerald-500' };
-    if (score >= 6.5) return { bg: 'bg-cyan-500/20 border-cyan-500/40 text-cyan-300', fill: 'bg-cyan-500' };
-    if (score <= 3.5) return { bg: 'bg-rose-500/20 border-rose-500/40 text-rose-300', fill: 'bg-rose-500' };
-    if (score <= 5.0) return { bg: 'bg-amber-500/20 border-amber-500/40 text-amber-300', fill: 'bg-amber-500' };
-    return { bg: 'bg-slate-500/20 border-slate-500/40 text-slate-300', fill: 'bg-slate-500' };
-  };
-
-  const scoreBadge = getScoreBadge(data.score);
-
   return (
     <div className="p-4 sm:p-6 rounded-2xl bg-gradient-to-b from-slate-900 via-slate-900/90 to-slate-950 border border-indigo-500/30 shadow-xl shadow-indigo-950/20 space-y-5">
       {/* Header controls have their own grid column: no absolute overlay over the title on mobile. */}
@@ -199,63 +188,8 @@ export const SmartAnalysisBlock: React.FC<SmartAnalysisBlockProps> = ({
         </p>
       </div>
 
-      {/* Hero Score & Executive Summary Card */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 p-4 rounded-xl bg-slate-950/80 border border-indigo-900/30">
-        {/* Score & Verdict */}
-        <div className="lg:col-span-4 flex flex-col justify-between p-3.5 rounded-xl bg-gradient-to-br from-slate-900 to-slate-950 border border-slate-800 space-y-3">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold text-slate-400 uppercase">Ринкова оцінка (не сигнал входу)</span>
-            <span className={`px-2 py-0.5 rounded-full text-xs font-bold border ${scoreBadge.bg}`}>
-              {data.score} / 10
-            </span>
-          </div>
-
-          <div className="flex items-baseline gap-2">
-            <span className="text-3xl sm:text-4xl font-black font-mono tracking-tight text-white">
-              {data.score}
-            </span>
-            <span className="text-xs text-slate-400 font-medium">/ 10.0</span>
-          </div>
-
-          <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
-            <div
-              className={`h-full transition-all duration-500 ${scoreBadge.fill}`}
-              style={{ width: `${(data.score / 10) * 100}%` }}
-            />
-          </div>
-
-          <div className="pt-2 border-t border-slate-800/80">
-            <span className="text-[10px] text-slate-400 block mb-0.5">Вердикт алгоритму:</span>
-            <span className="text-xs font-bold text-white tracking-wide block">
-              {data.verdictLabel}
-            </span>
-          </div>
-        </div>
-
-        {/* Executive Summary & Position Sizing */}
-        <div className="lg:col-span-8 flex flex-col justify-between space-y-3">
-          <div>
-            <div className="flex items-center gap-1.5 text-xs font-semibold text-cyan-300 mb-1.5">
-              <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
-              <span>Автоматично згенероване резюме:</span>
-            </div>
-            <p className="text-xs text-slate-300 leading-relaxed bg-slate-900/60 p-3 rounded-lg border border-slate-800/70">
-              {data.summary}
-            </p>
-          </div>
-
-          <div className="p-3 rounded-lg bg-indigo-950/30 border border-indigo-800/40 flex items-start gap-2.5">
-            <ShieldAlert className="w-4 h-4 text-indigo-400 shrink-0 mt-0.5" />
-            <div className="text-xs">
-              <span className="font-semibold text-indigo-300 block mb-0.5">Рекомендація щодо обсягу позиції:</span>
-              <p className="text-slate-300 text-[11px] leading-relaxed">
-                {data.positionSizingRecommendation}
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-
+      {/* Replace ONLY the two upper ratings (market score + generated summary)
+          with the detected formation. Retain every AI + Quant module below. */}
       {/* Canonical detected setup: includes real formation Entry/TP/SL and Telegram alerts. */}
       {tradeSetup}
 
