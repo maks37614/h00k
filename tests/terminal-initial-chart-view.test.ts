@@ -315,3 +315,33 @@ test('the sole HookChart uses the current block directly during profile hydratio
   assert.match(chart, /timeframe=\{blocks\[0\]\.timeframe\}/);
   assert.doesNotMatch(chart, /symbol=\{activeCoin\.symbol\}/);
 });
+
+test('Terminal increments save revisions only for committed React workspaces', () => {
+  const hook = source('../src/utils/useTerminalWorkspace.ts');
+  const start = hook.indexOf('const setField = useCallback(');
+  const end = hook.indexOf('const retrySync = useCallback(', start);
+  assert.ok(start >= 0 && end > start);
+  const updates = hook.slice(start, end);
+  const updaterEnd = updates.indexOf('const setBlocks:');
+  assert.ok(updaterEnd > 0);
+  assert.doesNotMatch(updates.slice(0, updaterEnd), /revision\.current \+= 1/);
+  assert.match(updates, /if \(lastCommittedWorkspace\.current === workspace\) return/);
+  assert.match(updates, /if \(skipHydrationCommit\.current\)/);
+  assert.match(updates, /revision\.current \+= 1/);
+  assert.match(hook, /revision\.current === savedRevision\.current/);
+  assert.match(hook, /lastCommittedWorkspace\.current !== workspace/);
+});
+
+test('Terminal workspace JSON import is available and disables auto presets before restoring charts', () => {
+  const hook = source('../src/utils/useTerminalWorkspace.ts');
+  const page = source('../src/components/TerminalPage.tsx');
+  const panel = source('../src/components/terminal/TerminalPresetPanel.tsx');
+  assert.match(hook, /const importWorkspaceBackup = useCallback/);
+  assert.match(hook, /parseTerminalWorkspaceBackup\(json\)/);
+  assert.match(hook, /setWorkspace\(recovered\)/);
+  assert.match(page, /onImportWorkspaceBackup=\{handleImportWorkspaceBackup\}/);
+  assert.match(page, /if \(imported\) \{\s*setActiveMarketPreset\(null\)/);
+  assert.match(panel, /accept=".json,application\/json"/);
+  assert.match(panel, /handleBackupFile\(event\)/);
+  assert.match(panel, /onDownloadLocalBackup/);
+});
