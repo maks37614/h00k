@@ -179,6 +179,8 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
   }, [coins, blocks]);
 
   const [timeframe, setTimeframe] = useState<Timeframe>(() => getStoredPreferences().defaultTimeframe);
+  // A saved one-chart block may use a different timeframe from the global selector.
+  const activeTimeframe = blocks.length === 1 ? blocks[0].timeframe : timeframe;
 
   useEffect(() => {
     setTimeframe(preferences.defaultTimeframe);
@@ -368,7 +370,7 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
           quoteAsset: favCoin.quoteAsset,
           exchange: favCoin.exchange,
           marketType: favCoin.marketType,
-          timeframe,
+          timeframe: activeTimeframe,
           colSpan: 1,
         },
       ]);
@@ -382,7 +384,7 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
     if (!tvSymbol) return null;
 
     let interval = '15';
-    switch (timeframe) {
+    switch (activeTimeframe) {
       case '1m': interval = '1'; break;
       case '5m': interval = '5'; break;
       case '15m': interval = '15'; break;
@@ -411,7 +413,7 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
     });
 
     return `https://s.tradingview.com/widgetembed/?${params.toString()}`;
-  }, [chartProvider, activeCoin.symbol, activeCoin.exchange, activeCoin.marketType, timeframe]);
+  }, [chartProvider, activeCoin.symbol, activeCoin.exchange, activeCoin.marketType, activeTimeframe]);
 
   // Block management
   const handleAddChart = (coin: any, tf: Timeframe, formationId?: string) => {
@@ -922,7 +924,7 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
                   setIframeLoading(true);
                 }}
                 className={`px-2 py-1 rounded-lg transition-colors cursor-pointer ${
-                  timeframe === tf
+                  activeTimeframe === tf
                     ? 'bg-cyan-600 text-white font-bold shadow-sm'
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
@@ -1014,7 +1016,7 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
             </span>
             <span className="text-slate-500">|</span>
             <span>
-              Таймфрейм: <strong className="text-cyan-400 font-bold">{timeframe}</strong>
+              Таймфрейм: <strong className="text-cyan-400 font-bold">{activeTimeframe}</strong>
             </span>
           </div>
         </div>
@@ -1206,7 +1208,7 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
                 terminalInitialView={config.initialChartView}
                 exchange={activeCoin.exchange}
                 marketType={activeCoin.marketType}
-                timeframe={timeframe}
+                timeframe={activeTimeframe}
               />
             )}
             </div>
@@ -1251,6 +1253,7 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
                       allCoins={coins}
                       isSingleBlock={blocks.length === 1}
                       isMaximized={isMaximized}
+                      isSuspended={maximizedBlockId !== null && !isMaximized}
                       onToggleMaximize={() =>
                         setMaximizedBlockId((prev) => (prev === block.id ? null : block.id))
                       }
