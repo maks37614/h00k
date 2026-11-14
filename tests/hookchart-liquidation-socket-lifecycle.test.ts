@@ -161,7 +161,4 @@ test('unsubscribing clears initial deadline, pending retries and ignores late so
   first.onclose?.();
   t.mock.timers.tick(120_000);
   assert.equal(f.sockets.length, 1, 'no ghost socket after final unmount');
-
-  const second = harness; // keep test source import exercised without network use
-  assert.equal(typeof second, 'function');
 });
