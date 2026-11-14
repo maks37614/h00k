@@ -216,6 +216,13 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [maximizedBlockId, setMaximizedBlockId] = useState<string | null>(null);
+  useEffect(() => {
+    // Market preset refreshes must not collapse the user's enlarged chart.
+    // Clear it only if that particular block no longer exists.
+    if (maximizedBlockId !== null && !blocks.some(block => block.id === maximizedBlockId)) {
+      setMaximizedBlockId(null);
+    }
+  }, [maximizedBlockId, blocks]);
   const [isBrowserFullscreen, setIsBrowserFullscreen] = useState(false);
   const [draggedBlockIndex, setDraggedBlockIndex] = useState<number | null>(null);
 
@@ -572,7 +579,6 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
       return current.columns === columns && current.layoutPreset === 'custom' ? current
         : { ...current, columns, layoutPreset: 'custom' };
     });
-    setMaximizedBlockId(null);
   }, [updateBlocks, setConfig, timeframe, coinPresetLimit]);
 
   const handleWorkspaceConfigUpdate = useCallback((updated: Partial<TerminalWorkspaceConfig>) => {
