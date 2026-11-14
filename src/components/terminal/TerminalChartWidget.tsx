@@ -25,7 +25,6 @@ import {
 import { ExchangeCandlestickChart } from '../ExchangeCandlestickChart';
 import type { TerminalToolbarVisibility } from '../hookchart/HookChartCanvas';
 import type { VisualChartProfile } from '../hookchart/visualProfiles';
-import { normalizeExchangeSymbol } from '../../utils/marketSymbols';
 import { formatTerminalQuotedPrice } from '../../utils/terminalPresets';
 import { normalizeChartProvider } from '../../utils/chartPreferences';
 
@@ -203,82 +202,6 @@ export const TerminalChartWidget: React.FC<TerminalChartWidgetProps> = ({
     if (headerPriceTimerRef.current !== null) clearTimeout(headerPriceTimerRef.current);
     headerPriceTimerRef.current = null;
   }, []);
-
-  // Only legacy chart layouts need their own ticker; the HookChart already
-  // receives its latest price via the shared kline/trade stream.
-  useEffect(() => {
-    if (!shouldLoadWidgets || useIntegratedHookChartToolbar) return;
-    let ws: WebSocket | null = null;
-    let isDisposed = false;
-
-    const cleanSymbol = normalizeExchangeSymbol(block.symbol);
-    if (!cleanSymbol) return;
-
-    const handlePriceUpdate = (price: number) => {
-      if (!isDisposed) handleChartPrice(price);
-    };
-
-    if (block.exchange === 'binance') {
-      const lower = encodeURIComponent(cleanSymbol.toLowerCase());
-      const wsUrl =
-        block.marketType === 'futures'
-          ? `wss://fstream.binance.com/market/ws/${lower}@miniTicker`
-          : `wss://stream.binance.com:9443/ws/${lower}@miniTicker`;
-
-      try {
-        ws = new WebSocket(wsUrl);
-        ws.onmessage = (event) => {
-          try {
-            const data = JSON.parse(event.data);
-            if (data && data.c) {
-              const p = parseFloat(data.c);
-              if (!isNaN(p)) handlePriceUpdate(p);
-            }
-          } catch {}
-        };
-      } catch {}
-    } else {
-      // Bybit
-      const wsUrl =
-        block.marketType === 'futures'
-          ? 'wss://stream.bybit.com/v5/public/linear'
-          : 'wss://stream.bybit.com/v5/public/spot';
-
-      try {
-        ws = new WebSocket(wsUrl);
-        ws.onopen = () => {
-          if (isDisposed) return;
-          try {
-            ws?.send(
-              JSON.stringify({
-                op: 'subscribe',
-                args: [`tickers.${cleanSymbol}`],
-              })
-            );
-          } catch {}
-        };
-        ws.onmessage = (event) => {
-          try {
-            const data = JSON.parse(event.data);
-            if (data?.data) {
-              const item = Array.isArray(data.data) ? data.data[0] : data.data;
-              const p = parseFloat(item?.lastPrice);
-              if (!isNaN(p)) handlePriceUpdate(p);
-            }
-          } catch {}
-        };
-      } catch {}
-    }
-
-    return () => {
-      isDisposed = true;
-      if (ws) {
-        try {
-          ws.close();
-        } catch {}
-      }
-    };
-  }, [block.symbol, block.exchange, block.marketType, shouldLoadWidgets, useIntegratedHookChartToolbar, handleChartPrice]);
 
   const detailCoin = useMemo<ScannedCoin>(() => {
     if (coin) {
