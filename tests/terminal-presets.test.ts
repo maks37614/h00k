@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import type { MarketCoin, TerminalChartBlock } from '../src/types';
 import { matchesMarketPreset, selectMarketPresetCoins } from '../src/utils/marketPresets';
 import { blocksForMarketPreset, normalizeTerminalBlocks, normalizeTerminalMarketPair, formatTerminalQuotedPrice, normalizeTerminalPresets, terminalStorageKey, TERMINAL_PRESETS_STORAGE_KEY } from '../src/utils/terminalPresets';
@@ -136,4 +137,23 @@ test('Terminal displays non-USD quote assets without a misleading dollar sign', 
   // instrument's quote asset separately rather than inventing a dollar sign.
   assert.equal(formatTerminalQuotedPrice(10, 'USDT'), '10.00');
   assert.equal(formatTerminalQuotedPrice(10, 'USDC'), '10.00');
+});
+
+test('Terminal preset draft creation never deactivates automatic market refresh', () => {
+  const panel = readFileSync(new URL('../src/components/terminal/TerminalPresetPanel.tsx', import.meta.url), 'utf8');
+  const start = panel.indexOf('const openForm = useCallback(');
+  const end = panel.indexOf('const savePreset =', start);
+  assert.ok(start >= 0 && end > start);
+  const handler = panel.slice(start, end);
+  assert.doesNotMatch(handler, /onActivePresetChange\(null\)/);
+  assert.match(handler, /setShowForm\(true\)/);
+});
+
+test('Terminal favorite preset construction indexes quotes and workspace blocks once', () => {
+  const panel = readFileSync(new URL('../src/components/terminal/TerminalPresetPanel.tsx', import.meta.url), 'utf8');
+  assert.match(panel, /const favoritesQuotesBySymbol = useMemo\(\(\) => \{/);
+  assert.match(panel, /const workspaceBlocksByMarket = useMemo\(\(\) =>/);
+  assert.match(panel, /favoritesQuotesBySymbol\.get\(symbol\)/);
+  assert.match(panel, /workspaceBlocksByMarket\.get\(coinMarketKey\(/);
+  assert.doesNotMatch(panel, /snapshot\.coins\.filter\(coin => coin\.symbol === symbol/);
 });
