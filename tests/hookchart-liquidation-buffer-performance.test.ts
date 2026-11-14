@@ -55,11 +55,14 @@ test('buffer removes expired rows and sorts out-of-order reconnect snapshots', (
   assert.deepEqual(book.snapshot(t), []);
 });
 
-test('HookChart uses indexed buffers only in the live liquidation effect, not historical Replay', () => {
-  const source = readFileSync(new URL('../src/components/hookchart/useOriginalHookChartLiveFeed.ts', import.meta.url), 'utf8');
-  assert.match(source, /const buffered = new LiquidationEventBuffer<Liquidation>\(\)/);
-  assert.match(source, /if \(!buffered\.upsert\(\{ \.\.\.row, id \}\)\) return/);
-  assert.match(source, /buffered\.replace\(deduplicateLiquidations\(events\)\)/);
-  assert.match(source, /const rows = buffered\.snapshot\(now\)/);
-  assert.match(source, /if \(replay \|\| !exchangeSymbol \|\| marketType !== 'futures'\)/);
+test('all live HookCharts use one indexed Liq buffer per market, while Replay stays isolated', () => {
+  const hook = readFileSync(new URL('../src/components/hookchart/useOriginalHookChartLiveFeed.ts', import.meta.url), 'utf8');
+  const shared = readFileSync(new URL('../src/components/hookchart/sharedLiquidationView.ts', import.meta.url), 'utf8');
+  assert.match(shared, /new LiquidationEventBuffer<Liquidation>\(\)/);
+  assert.match(shared, /current\.buffered\.upsert\(row\)/);
+  assert.match(shared, /current\.buffered\.replace\(deduplicateLiquidations\(events\)\)/);
+  assert.match(shared, /entry\.buffered\.snapshot\(now\)/);
+  assert.match(hook, /sharedLiquidationViews\.subscribe\(/);
+  assert.doesNotMatch(hook, /new LiquidationEventBuffer<Liquidation>\(\)/);
+  assert.match(hook, /if \(replay \|\| !exchangeSymbol \|\| marketType !== 'futures'\)/);
 });
