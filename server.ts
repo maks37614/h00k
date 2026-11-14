@@ -60,6 +60,7 @@ import { formationDensityFeed } from './server/formationDensityFeed';
 import { installHookChartDepthStream } from './server/hookChartDepth';
 import { installHookChartKlineRelay } from './server/hookChartKlineRelay';
 import { installLiquidationStream } from './server/liquidationFeed';
+import { installLiquidationArchiveRoutes } from './server/liquidationArchiveRoutes';
 import { installOpsMetrics } from './server/opsMetrics';
 import { subscribeSurveillance } from './server/surveillanceEvents';
 import { SharedScanBusyError } from './server/sharedScanJobs';
@@ -83,6 +84,9 @@ async function startServer() {
   // Read-only operator endpoint is disabled unless H00K_OPS_TOKEN is configured.
   let chartDepthMetrics: (() => { activeMarkets: number; clients: number }) | null = null;
   let chartKlineMetrics: (() => ReturnType<ReturnType<typeof installHookChartKlineRelay>['stats']>) | null = null;
+  // Disabled unless LIQ_ARCHIVE_ENABLED=1; no extra work for normal charts.
+  installLiquidationArchiveRoutes(app);
+
   installOpsMetrics(app, () => chartDepthMetrics?.() ?? null,
     () => chartKlineMetrics?.() ?? null);
 
