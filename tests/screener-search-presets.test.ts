@@ -143,6 +143,15 @@ test('Screener volume arrow changes only local filter mode, preserving preset an
   assert.match(screener, /volumeMode, advancedFilters, sortBy/);
   assert.match(dropdown, /option\.label\.replace\(/);
   assert.match(editor, /setField\('volumeMode', draft\.volumeMode === 'to' \? 'from' : 'to'\)/);
+  // Direction control is icon-only on the right; the amount shows ≤ or ≥.
+  const volumeSection = screener.slice(screener.indexOf('data-screener-filter="volume"'),
+    screener.indexOf('data-screener-filter="volume"') + 2200);
+  assert.ok(volumeSection.indexOf('<ScreenerVolumeDropdown') < volumeSection.indexOf('data-screener-volume-direction'));
+  assert.match(volumeSection, /aria-pressed=\{volumeMode === 'from'\}/);
+  assert.doesNotMatch(volumeSection, /<span>\{volumeMode === 'to' \?/);
+  assert.match(dropdown, /option\.label\.replace\(\/\^До \/, ''\)/);
+  assert.match(dropdown, /mode === 'from' \? '≥' : '≤'/);
+  assert.match(dropdown, /entries\.splice\(insertAt/);
 });
 
 test('24h volume filter label is translated while preserving the requested Ukrainian wording', () => {

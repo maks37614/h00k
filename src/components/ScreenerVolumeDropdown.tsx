@@ -15,16 +15,27 @@ interface Props {
 
 export const ScreenerVolumeDropdown: React.FC<Props> = ({ id, labelId, value, mode = 'to', onChange }) => {
   const { t } = useLanguage();
-  const upTo = t('screenerVolumeTo');
-  const from = t('screenerVolumeFrom');
   const unlimited = t('screenerVolumeUnlimited');
-  const options = useMemo(() => [
-    { value: 0, label: unlimited },
-    ...SCREENER_VOLUME_CAPS.map(option => ({
-      value: option.value,
-      label: option.label.replace(/^До /, `${mode === 'from' ? from : upTo} `),
-    })),
-  ], [mode, upTo, from, unlimited]);
+  const options = useMemo(() => {
+    const entries: Array<{ value: number; label: string }> = [
+      { value: 0, label: unlimited },
+      ...SCREENER_VOLUME_CAPS.map(option => ({
+        value: option.value,
+        // The direction is shown by the adjacent ≥ / ≤ sign and switch icon.
+        label: option.label.replace(/^До /, ''),
+      })),
+    ];
+    // Saved presets can contain numeric thresholds between the predefined tiers.
+    // Preserve their real filter value instead of incorrectly displaying "unlimited".
+    if (Number.isFinite(value) && value > 0 && !entries.some(option => option.value === value)) {
+      const label = '$' + new Intl.NumberFormat('en-US', {
+        notation: 'compact', maximumFractionDigits: 2,
+      }).format(value);
+      const insertAt = entries.findIndex(option => option.value > value);
+      entries.splice(insertAt < 0 ? entries.length : insertAt, 0, { value, label });
+    }
+    return entries;
+  }, [unlimited, value]);
   const [open, setOpen] = useState(false);
   const selectedIndex = Math.max(0, options.findIndex(option => option.value === value));
   const [activeIndex, setActiveIndex] = useState(selectedIndex);
@@ -189,7 +200,10 @@ export const ScreenerVolumeDropdown: React.FC<Props> = ({ id, labelId, value, mo
         }}
         className="flex min-w-0 flex-1 cursor-pointer items-center justify-between gap-1 rounded-md bg-transparent px-0 py-1 text-xs font-medium text-slate-200 transition-colors hover:text-white focus:outline-none focus-visible:ring-1 focus-visible:ring-cyan-500/70"
       >
-        <span id={valueId} className="min-w-0 truncate">{options[selectedIndex].label}</span>
+        <span id={valueId} className="flex min-w-0 items-center gap-1 truncate">
+          {value > 0 && <span className="shrink-0 font-bold text-cyan-400">{mode === 'from' ? '≥' : '≤'}</span>}
+          <span className="truncate">{options[selectedIndex].label}</span>
+        </span>
         <ChevronDown aria-hidden="true" className={'h-3 w-3 shrink-0 text-slate-400 transition-transform ' + (open ? 'rotate-180' : '')} />
       </button>
       {open && position && createPortal(
