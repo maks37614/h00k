@@ -545,7 +545,7 @@ export const SmartAnalysisBlock: React.FC<SmartAnalysisBlockProps> = ({
               </h5>
             </div>
             <span className="text-xs text-slate-400 font-mono">
-              Дисбаланс Bid/Ask = <strong className="text-white">{data.orderbook.bidAskRatio}</strong>
+              Стакан {data.orderbook.source}: Bid/Ask = <strong className="text-white">{data.orderbook.bidAskRatio ?? 'н/д'}</strong>
             </span>
           </div>
 
@@ -557,23 +557,23 @@ export const SmartAnalysisBlock: React.FC<SmartAnalysisBlockProps> = ({
                 Найбільша стіна в лонг (Bid Wall):
               </span>
               <div className="text-sm font-bold text-white">
-                {formatCryptoPrice(data.orderbook.bidWallPrice)}
+                {priceOrNA(data.orderbook.bidWallPrice)}
               </div>
               <div className="text-[11px] text-emerald-300">
-                Обсяг стіни: {formatVolume(data.orderbook.bidWallUsd)}
+                Обсяг заявки: {volumeOrNA(data.orderbook.bidWallUsd)}
               </div>
             </div>
 
             {/* POC Zone */}
             <div className="p-3 rounded-lg bg-indigo-950/20 border border-indigo-800/40 space-y-1">
               <span className="text-[10px] text-indigo-300 font-sans block font-semibold">
-                Point of Control (Зона POC об'єму):
+                Оціночний POC за свічками (не біржовий профіль угод):
               </span>
               <div className="text-sm font-bold text-white">
-                {formatCryptoPrice(data.levels.pocPrice)}
+                {priceOrNA(data.levels.pocPrice)}
               </div>
               <div className="text-[11px] text-indigo-300">
-                Концентрація: ~{data.levels.pocVolumePct}% об'єму
+                Частка обсягу в ціновому кошику: {data.levels.pocVolumePct === null ? 'н/д' : data.levels.pocVolumePct + '%'}
               </div>
             </div>
 
@@ -583,10 +583,10 @@ export const SmartAnalysisBlock: React.FC<SmartAnalysisBlockProps> = ({
                 Найбільша стіна в шорт (Ask Wall):
               </span>
               <div className="text-sm font-bold text-white">
-                {formatCryptoPrice(data.orderbook.askWallPrice)}
+                {priceOrNA(data.orderbook.askWallPrice)}
               </div>
               <div className="text-[11px] text-rose-300">
-                Обсяг стіни: {formatVolume(data.orderbook.askWallUsd)}
+                Обсяг заявки: {volumeOrNA(data.orderbook.askWallUsd)}
               </div>
             </div>
           </div>
@@ -596,7 +596,7 @@ export const SmartAnalysisBlock: React.FC<SmartAnalysisBlockProps> = ({
             <div className="p-3 rounded-lg bg-slate-900/80 border border-slate-800 space-y-2 text-xs">
               <span className="font-semibold text-slate-300 flex items-center gap-1.5 text-xs">
                 <Crosshair className="w-3.5 h-3.5 text-cyan-400" />
-                Виявлені великі лімітні заявки в стакані (Whale & Large Walls):
+                Великі лімітні заявки поточного стакана (не виконані угоди):
               </span>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2">
@@ -631,7 +631,7 @@ export const SmartAnalysisBlock: React.FC<SmartAnalysisBlockProps> = ({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
             <div className="p-3 rounded-lg bg-slate-900/80 border border-slate-800">
               <span className="font-semibold text-slate-300 block mb-1.5">
-                Найближчі пули ліквідності:
+                Розрахункові цінові орієнтири (не підтверджені стоп-ордери):
               </span>
               <div className="space-y-1 font-mono text-[11px]">
                 {data.levels.liquidityLevels.map((liq, i) => (
@@ -645,7 +645,7 @@ export const SmartAnalysisBlock: React.FC<SmartAnalysisBlockProps> = ({
 
             <div className="p-3 rounded-lg bg-slate-900/80 border border-slate-800">
               <span className="font-semibold text-slate-300 block mb-1.5">
-                Сильні опорні рівні (Support / Resistance):
+                Оціночні рівні Support / Resistance (за свічками):
               </span>
               <div className="space-y-1.5 font-mono text-[11px]">
                 <div className="flex items-center justify-between">
