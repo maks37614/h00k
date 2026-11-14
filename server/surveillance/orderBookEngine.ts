@@ -355,7 +355,7 @@ export class OrderBookEngine {
     // allocating spread arguments for two additional full-book scans.
     let minBidInBook = Infinity;
     let maxAskInBook = 0;
-    const scan = (book: Map<number, number>, side: 'BID'|'ASK') => {
+    const scan = (book: ReadonlyMap<number, number>, side: 'BID'|'ASK') => {
       for (const [price, qty] of book.entries()) {
         if (side === 'BID') minBidInBook = Math.min(minBidInBook, price);
         else maxAskInBook = Math.max(maxAskInBook, price);
