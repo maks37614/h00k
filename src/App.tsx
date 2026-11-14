@@ -882,6 +882,10 @@ export default function App() {
     const uid = user?.uid ?? null;
     if (detailAccountRef.current === uid) return;
     detailAccountRef.current = uid;
+    // A frozen preview also belongs to the previous account; never keep it
+    // visible or in memory after sign-out or account switching.
+    chartBackdropSnapshotRef.current?.remove();
+    chartBackdropSnapshotRef.current = null;
     setSelectedEarly(null);
     setSelectedPair(null);
     setSelectedArchivedItem(null);
@@ -1085,6 +1089,7 @@ export default function App() {
   }, [chartRouteKey, user?.uid, authLoading, archivedFormations]);
 
   const closeChartPage = useCallback(() => {
+    chartBackdropSnapshotRef.current = null;
     setSelectedPair(null);
     setSelectedArchivedItem(null);
     setSelectedEarly(null);
