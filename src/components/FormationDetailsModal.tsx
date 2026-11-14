@@ -3,7 +3,6 @@ import { CopyableCoinSymbol } from './CopyableCoinSymbol';
 import { useTelegram } from '../context/TelegramContext';
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
-  Sparkles,
   Target,
   ShieldAlert,
   AlertTriangle,
@@ -145,27 +144,8 @@ export const FormationDetailsModal: React.FC<FormationDetailsModalProps> = ({
   });
   const [klines, setKlines] = useState<Kline[]>([]);
   const [loadingKlines, setLoadingKlines] = useState<boolean>(true);
-  const [aiScore, setAiScore] = useState<number | null>(null);
-  const [aiError, setAiError] = useState<string | null>(null);
-  const [loadingAi, setLoadingAi] = useState<boolean>(false);
   const [qualityExpanded, setQualityExpanded] = useState(false);
-  const aiRequestRef = useRef(0);
-  const aiAbortRef = useRef<AbortController | null>(null);
-  const aiContextKey = [coin.exchange, coin.marketType, coin.symbol, timeframe, formation.id].join(':');
-  useEffect(() => {
-    // An AI score is specific to this instrument, market, timeframe and formation.
-    aiRequestRef.current++;
-    aiAbortRef.current?.abort();
-    aiAbortRef.current = null;
-    setAiScore(null);
-    setAiError(null);
-    setLoadingAi(false);
-    setQualityExpanded(false);
-    return () => {
-      aiRequestRef.current++;
-      aiAbortRef.current?.abort();
-    };
-  }, [aiContextKey]);
+  useEffect(() => { setQualityExpanded(false); }, [formation.id, coin.symbol, timeframe]);
   const [alertFeedback, setAlertFeedback] = useState<string | null>(null);
   const [settingAlert, setSettingAlert] = useState<string | null>(null);
 
@@ -523,50 +503,6 @@ export const FormationDetailsModal: React.FC<FormationDetailsModalProps> = ({
       isCancelled = true;
     };
   }, [coin, timeframe, historyLimit]);
-
-  // AI is requested ONLY by clicking the icon. No automatic analysis,
-  // background subscription, fallback algorithm or extra text response.
-  const handleRequestAi = async () => {
-    if (loadingAi) return;
-    aiAbortRef.current?.abort();
-    const controller = new AbortController();
-    aiAbortRef.current = controller;
-    const requestId = ++aiRequestRef.current;
-    setAiScore(null);
-    setAiError(null);
-    setLoadingAi(true);
-    try {
-      const res = await fetch('/api/ai/setup-score', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'same-origin',
-        signal: controller.signal,
-        body: JSON.stringify({
-          symbol: coin.symbol,
-          exchange: coin.exchange,
-          marketType: coin.marketType,
-          timeframe,
-          formation,
-          currentPrice: livePrice,
-          recentCandles: klines.slice(-10),
-        }),
-      });
-      const response = await res.json();
-      if (controller.signal.aborted || requestId !== aiRequestRef.current) return;
-      if (!res.ok || response.success !== true ||
-          !Number.isInteger(response.score) || response.score < 0 || response.score > 100) {
-        throw new Error('AI недоступний');
-      }
-      setAiScore(response.score);
-    } catch (error) {
-      if (!controller.signal.aborted && requestId === aiRequestRef.current) {
-        setAiError('AI недоступний');
-      }
-    } finally {
-      if (!controller.signal.aborted && requestId === aiRequestRef.current) setLoadingAi(false);
-      if (aiAbortRef.current === controller) aiAbortRef.current = null;
-    }
-  };
 
   const isBullish = formation.bias === 'bullish';
   const isBearish = formation.bias === 'bearish';
@@ -1001,19 +937,6 @@ export const FormationDetailsModal: React.FC<FormationDetailsModalProps> = ({
                   )}
                 </div>
 
-                {/* Explicit AI-only numerical score. No automatic queries or prose. */}
-                <div className="flex items-center justify-between gap-3 border-t border-slate-800 pt-3">
-                  <button type="button" onClick={handleRequestAi} disabled={loadingAi}
-                    aria-label="Оцінити якість сетапу за допомогою AI"
-                    title="Оцінка AI · запит лише після натискання"
-                    className="inline-flex items-center gap-2 rounded-lg border border-cyan-500/40 bg-cyan-950/30 px-3 py-2 text-xs font-semibold text-cyan-200 hover:bg-cyan-900/40 disabled:opacity-60 cursor-pointer">
-                    <Sparkles className={`h-4 w-4 ${loadingAi ? 'animate-pulse' : ''}`} />
-                    <span>Оцінка AI</span>
-                  </button>
-                  <output aria-live="polite" className="font-mono font-bold text-sm text-cyan-300">
-                    {loadingAi ? '…' : aiScore !== null ? `AI: ${aiScore}/100` : aiError}
-                  </output>
-                </div>
 
               </div>
   );
