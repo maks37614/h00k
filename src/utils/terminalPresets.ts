@@ -83,8 +83,11 @@ export function normalizeTerminalPresets(value: unknown): TerminalSavedPreset[] 
 
 /** Keep existing widget IDs and settings when the market ranking is unchanged. */
 export function blocksForMarketPreset(current: TerminalChartBlock[], coins: MarketCoin[], timeframe: Timeframe): TerminalChartBlock[] {
+  // Reuse blocks in O(n + m) instead of searching every open chart for each
+  // market candidate on every automatic preset update.
+  const currentByMarket = new Map(current.map(block => [coinMarketKey(block), block] as const));
   const next = coins.map(coin => {
-    const existing = current.find(block => coinMarketKey(block) === coinMarketKey(coin));
+    const existing = currentByMarket.get(coinMarketKey(coin));
     if (existing) return existing;
     return { id: `market-${coinMarketKey(coin)}`, symbol: coin.symbol, baseAsset: coin.baseAsset,
       quoteAsset: coin.quoteAsset, exchange: coin.exchange, marketType: coin.marketType,
