@@ -279,13 +279,21 @@ export class ExchangeStreamClient extends EventEmitter {
       return;
     }
 
-    const topic = msg.topic || '';
+    const topic = typeof msg.topic === 'string' ? msg.topic : '';
+    const symbol = this.cleanSymbol();
+    // A socket is subscribed to one symbol. Ignore unrelated, delayed or
+    // malformed market messages rather than cross-contaminating a worker.
+    const eventTime = Number(msg.ts);
+    const freshEvent = Number.isFinite(eventTime) && isFreshDepthTime(eventTime);
 
     // Tickers
-    if (topic.startsWith('tickers.')) {
-      if (msg.type === 'snapshot') this.bybitTicker = {};
+    if (topic === `tickers.${symbol}` && freshEvent) {
       const incoming = Array.isArray(msg.data) ? msg.data[0] : msg.data;
-      Object.assign(this.bybitTicker, incoming || {});
+      if (!incoming || typeof incoming !== 'object' || Array.isArray(incoming) ||
+          (incoming.symbol !== undefined && normalizeExchangeSymbol(incoming.symbol) !== symbol))
+        return;
+      if (msg.type === 'snapshot') this.bybitTicker = {};
+      Object.assign(this.bybitTicker, incoming);
       const data = this.bybitTicker;
       if (data) {
         const lastPrice = parseFloat(data.lastPrice);
@@ -299,7 +307,7 @@ export class ExchangeStreamClient extends EventEmitter {
             low24h,
             volume24hUsd,
             change24h: Number(data.price24hPcnt || 0) * 100,
-            time: msg.ts || Date.now(),
+            time: eventTime,
           });
         }
       }
@@ -308,29 +316,40 @@ export class ExchangeStreamClient extends EventEmitter {
     // Bybit already streams current OI in the ticker snapshot/deltas.
     // Forward this public value to subscribers instead of polling the REST
     // history endpoint every 15 seconds for every monitored user.
-    if (topic.startsWith('tickers.') && this.marketType === 'futures') {
-      const amountCoins = Number(this.bybitTicker.openInterest);
-      const valueUsd = Number(this.bybitTicker.openInterestValue);
-      if (Number.isFinite(amountCoins) && amountCoins > 0 &&
+    if (topic === `tickers.${symbol}` && freshEvent && this.marketType === 'futures') {
+      const incoming = Array.isArray(msg.data) ? msg.data[0] : msg.data;
+      // Delta payload fields are optional. Never pair a new open-interest
+      // amount with a value from an old snapshot, or re-emit a stale pair
+      // merely because price/funding changed on the same ticker topic.
+      const hasFreshPair = incoming && typeof incoming === 'object' &&
+        Object.prototype.hasOwnProperty.call(incoming, 'openInterest') &&
+        Object.prototype.hasOwnProperty.call(incoming, 'openInterestValue') &&
+        (incoming.symbol === undefined || normalizeExchangeSymbol(incoming.symbol) === symbol);
+      const amountCoins = Number(incoming?.openInterest);
+      const valueUsd = Number(incoming?.openInterestValue);
+      if (hasFreshPair && Number.isFinite(amountCoins) && amountCoins > 0 &&
           Number.isFinite(valueUsd) && valueUsd > 0) {
-        this.emit('open-interest', { amountCoins, valueUsd, time: msg.ts || Date.now() });
+        this.emit('open-interest', { amountCoins, valueUsd, time: eventTime });
       }
     }
 
     // Public trades
-    if (topic.startsWith('publicTrade.')) {
+    if (topic === `publicTrade.${symbol}` && freshEvent) {
       const tradeList = Array.isArray(msg.data) ? msg.data : [msg.data];
       for (const t of tradeList) {
-        if (!t) continue;
-        const price = parseFloat(t.p);
-        const quantity = parseFloat(t.v);
-        const side: 'BUY' | 'SELL' = t.S?.toUpperCase() === 'BUY' ? 'BUY' : 'SELL';
-        if (!isNaN(price) && price > 0 && !isNaN(quantity) && quantity > 0) {
+        if (!t || (t.s !== undefined && normalizeExchangeSymbol(t.s) !== symbol)) continue;
+        const tradeTime = Number(t.T ?? eventTime);
+        if (!isFreshDepthTime(tradeTime)) continue;
+        const price = Number(t.p);
+        const quantity = Number(t.v);
+        const side = typeof t.S === 'string' ? t.S.toUpperCase() : '';
+        if (Number.isFinite(price) && price > 0 && Number.isFinite(quantity) && quantity > 0 &&
+            (side === 'BUY' || side === 'SELL')) {
           this.emit('trade', {
             price,
             quantity,
             side,
-            time: t.T || msg.ts || Date.now(),
+            time: tradeTime,
             isBuyerMaker: side === 'SELL',
           } as RawTradeEvent);
         }
