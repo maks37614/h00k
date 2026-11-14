@@ -1,5 +1,6 @@
 import type { ExchangeId } from '../../types';
 import type { Liquidation } from './engine';
+import { multiplexBrowserLiquidations } from './liquidationMultiplexClient';
 
 type Options = {
   exchange: ExchangeId;
@@ -33,6 +34,14 @@ const STABLE_SNAPSHOT_CONNECTION_MS = 30_000;
 export function connectHookChartLiquidations({
   exchange, symbol, onSnapshot, onLiquidation, onStatus,
 }: Options): () => void {
+  // Build-time rollout flag. The legacy transport remains available with
+  // VITE_LIQ_CLIENT_MULTIPLEX=0 if a deployment needs immediate rollback.
+  // Multi mode shares ONE site WebSocket across different coin charts per tab.
+  if (import.meta.env?.VITE_LIQ_CLIENT_MULTIPLEX === '1') {
+    return multiplexBrowserLiquidations.subscribe({
+      exchange, symbol, onSnapshot, onLiquidation, onStatus,
+    });
+  }
   let stopped = false;
   let socket: WebSocket | null = null;
   let retry: ReturnType<typeof setTimeout> | null = null;
