@@ -8,10 +8,10 @@ const secondRow = header.slice(header.lastIndexOf('grid w-full min-w-0 grid-cols
 
 test('desktop terminal header uses one row without changing the mobile two-row grid', () => {
   // Each original mobile row stays a three-column grid.
-  assert.equal((header.match(/grid-cols-\\[minmax\\(0,1fr\\)_auto_minmax\\(0,1fr\\)\\]/g) ?? []).length, 2);
+  assert.equal((header.match(/grid-cols-\[minmax\(0,1fr\)_auto_minmax\(0,1fr\)\]/g) ?? []).length, 2);
   // On lg+, both row wrappers become display: contents; all five groups share
   // the same desktop grid row instead of occupying separate vertical lines.
-  assert.match(header, /lg:grid lg:grid-cols-\\[minmax\\(0,1fr\\)_auto_auto_auto_minmax\\(0,1fr\\)\\] lg:items-center/);
+  assert.match(header, /lg:grid lg:grid-cols-\[minmax\(0,1fr\)_auto_auto_auto_minmax\(0,1fr\)\] lg:items-center/);
   assert.equal((header.match(/lg:contents/g) ?? []).length, 2);
   assert.match(header, /col-start-2 row-start-1 justify-self-center lg:col-start-2 lg:row-start-1/);
   assert.match(header, /col-start-3 row-start-1 flex shrink-0 items-center justify-self-end[^"]*lg:col-start-5 lg:row-start-1/);
