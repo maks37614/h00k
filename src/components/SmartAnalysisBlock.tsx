@@ -30,6 +30,7 @@ import {
 } from 'lucide-react';
 import { SmartAnalysisData, ScannedCoin, DetectedFormation, Kline, Timeframe, CoinGeckoHolderSnapshot } from '../types';
 import { formatCryptoPrice, formatVolume, formatPercent } from '../utils/formatters';
+import { getSmartAnalysisVisibility, selectVisibleTab, type SmartAnalysisTab, type SmartAnalysisModule } from '../utils/smartAnalysisVisibility';
 
 interface SmartAnalysisBlockProps {
   coin: ScannedCoin;
@@ -53,7 +54,7 @@ export const SmartAnalysisBlock: React.FC<SmartAnalysisBlockProps> = ({
   const [data, setData] = useState<SmartAnalysisData | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'all' | 'btc' | 'tech' | 'orderbook' | 'derivatives' | 'institutional'>('all');
+  const [activeTab, setActiveTab] = useState<SmartAnalysisTab>('all');
   const analysisAbortRef = useRef<AbortController | null>(null);
   const [holderSnapshot, setHolderSnapshot] = useState<CoinGeckoHolderSnapshot | null>(null);
   const [holdersLoading, setHoldersLoading] = useState(true);
@@ -185,12 +186,9 @@ export const SmartAnalysisBlock: React.FC<SmartAnalysisBlockProps> = ({
           </button>
           {collapseControl}
         </div>
-        {!holdersLoading && (
+        {holdersAvailable && (
           <div className="w-full rounded-md border border-slate-700/50 bg-slate-950/60 px-3 py-2 text-slate-300">
             <span className="font-semibold">CoinGecko · Holders: {holderCountDisplay}</span>
-            <span className="block mt-1 text-[11px] text-slate-400">
-              {holderSnapshot?.detail || 'Ончейн-дані не повернуто'}
-            </span>
           </div>
         )}
       </div>
@@ -199,6 +197,21 @@ export const SmartAnalysisBlock: React.FC<SmartAnalysisBlockProps> = ({
   }
 
   if (!data) return <>{tradeSetup}</>;
+
+  const visible = getSmartAnalysisVisibility(data, holderSnapshot);
+  const availableModuleCount = Object.values(visible.modules).filter(Boolean).length;
+  // The chosen tab can disappear after a refresh. Fall back to the overview
+  // without mutating state during render or showing an empty selected panel.
+  const selectedTab = selectVisibleTab(activeTab, visible.modules);
+  const showModule = (module: SmartAnalysisModule) =>
+    visible.modules[module] && (selectedTab === 'all' || selectedTab === module);
+  const tabs: Array<{ id: SmartAnalysisModule; label: string }> = [
+    { id: 'btc', label: 'Контекст BTC (15m → 5m → 1m)' },
+    { id: 'tech', label: 'RSI, EMA, Об’єми та Спред' },
+    { id: 'orderbook', label: 'Стакан, POC та Ліквідність' },
+    { id: 'derivatives', label: 'Open Interest та Деривативи' },
+    { id: 'institutional', label: 'Holders / Заявки / ММ / Ризики' },
+  ];
 
   const priceOrNA = (value: number | null) => value === null ? 'н/д' : formatCryptoPrice(value);
   const volumeOrNA = (value: number | null) => value === null ? 'н/д' : formatVolume(value);
@@ -232,14 +245,15 @@ export const SmartAnalysisBlock: React.FC<SmartAnalysisBlockProps> = ({
           {collapseControl}
         </div>
         <p className="col-span-3 min-w-0 text-[11px] leading-relaxed text-slate-400 sm:col-start-2 sm:col-span-1">
-          Автоматичні кількісні розрахунки з біржових даних, не генеративний AI. Стакан — лише знімок, POC — оцінка за свічками; непідтверджені показники позначені н/д.
+          Автоматичні кількісні розрахунки з біржових даних, не генеративний AI. Відображаються тільки показники, для яких є доступні дані.
         </p>
       </div>
 
       <p className="text-[10px] text-slate-500">
-        Біржові дані: {data.exchange} · {data.marketType}. Стакан: {data.orderbook.source}.
-        Оновлено: {new Date(data.lastUpdated).toLocaleTimeString('uk-UA')}.
-        Відсутні джерела позначаються н/д; свічкові рівні є оцінками, не підтвердженими стоп-ордерами.
+        Біржові дані: {data.exchange} · {data.marketType}.
+        {(visible.bid || visible.ask || visible.imbalance) && <> Стакан: {data.orderbook.source}.</>}
+        {' '}Оновлено: {new Date(data.lastUpdated).toLocaleTimeString('uk-UA')}.
+        {' '}Свічкові рівні — оцінки, не підтверджені стоп-ордери.
       </p>
       {/* Replace ONLY the two upper ratings with the detected formation. */}
       {/* Canonical detected setup: includes real formation Entry/TP/SL and Telegram alerts. */}
@@ -261,116 +275,75 @@ export const SmartAnalysisBlock: React.FC<SmartAnalysisBlockProps> = ({
         </p>
       </div>
 
-      {/* Only validated measurements; don't describe anonymous orderbook levels
-          as on-chain holders, iceberg trades or an identified market maker. */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 text-xs">
-        <div className="p-3 rounded-xl bg-slate-900/80 border border-slate-800 space-y-1.5">
-          <span className="flex items-center gap-1.5 text-slate-400"><Wallet className="w-3.5 h-3.5" /> Аналіз Holders</span>
-          <strong className="block text-white font-mono">{holdersLoading ? '…' : holderCountDisplay}</strong>
-          <p className="text-slate-400 text-[10px]">
-            {holdersAvailable ? 'Власників · CoinGecko · ' + holderSnapshot!.network
-              : holdersLoading ? 'Завантаження CoinGecko…'
-                : holderSnapshot?.detail || 'CoinGecko Holders недоступні'}
-          </p>
-        </div>
-        <div className="p-3 rounded-xl bg-slate-900/80 border border-slate-800 space-y-1.5">
-          <span className="flex items-center gap-1.5 text-slate-400"><Eye className="w-3.5 h-3.5" /> Великі заявки</span>
-          <strong className="block text-white font-mono">
-            {data.participants.largePlayer.clusterVolumeUsd === null
-              ? 'н/д' : formatVolume(data.participants.largePlayer.clusterVolumeUsd)}
-          </strong>
-          <p className="text-slate-400 text-[10px]">Лімітні заявки, не угоди китів</p>
-        </div>
-        <div className="p-3 rounded-xl bg-slate-900/80 border border-slate-800 space-y-1.5">
-          <span className="flex items-center gap-1.5 text-slate-400"><Radio className="w-3.5 h-3.5" /> Маркет-мейкер</span>
-          <strong className="block text-white">Не визначено</strong>
-          <p className="text-slate-400 text-[10px]">Одного зрізу стакана недостатньо</p>
-        </div>
-        <div className="p-3 rounded-xl bg-slate-900/80 border border-slate-800 space-y-1.5">
-          <span className="flex items-center gap-1.5 text-slate-400"><ShieldAlert className="w-3.5 h-3.5" /> Вразливість ринку</span>
-          <strong className="block text-white font-mono">
-            {data.participants.manipulativeCoin.riskScore === null
-              ? 'н/д' : data.participants.manipulativeCoin.riskScore + '/100'}
-          </strong>
-          <p className="text-slate-400 text-[10px]">Евристика, не доказ маніпуляцій</p>
-        </div>
-      </div>
-
-      {/* Navigation Filter Tabs */}
-      <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1 border-b border-slate-800 text-xs">
-        <button
-          onClick={() => setActiveTab('all')}
-          className={`px-3 py-1.5 rounded-lg font-semibold transition-all cursor-pointer whitespace-nowrap ${
-            activeTab === 'all'
-              ? 'bg-indigo-600 text-white shadow-sm'
-              : 'text-slate-400 hover:text-white hover:bg-slate-800'
-          }`}
-        >
-          Усі модулі (Повний огляд)
-        </button>
-
-        <button
-          onClick={() => setActiveTab('btc')}
-          className={`px-3 py-1.5 rounded-lg font-semibold transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
-            activeTab === 'btc'
-              ? 'bg-indigo-600 text-white shadow-sm'
-              : 'text-slate-400 hover:text-white hover:bg-slate-800'
-          }`}
-        >
-          <span>Контекст BTC (15m → 5m → 1m)</span>
-          {data.btcContext.hasSharpImpulse && (
-            <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
+      {/* Summaries are only rendered for verified data. An unavailable maker,
+          missing CoinGecko asset or empty orderbook leaves no placeholder card. */}
+      {(visible.holders || visible.largeOrders || visible.marketMaker || visible.vulnerability) && (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 text-xs">
+          {visible.holders && (
+            <div className="p-3 rounded-xl bg-slate-900/80 border border-slate-800 space-y-1.5">
+              <span className="flex items-center gap-1.5 text-slate-400"><Wallet className="w-3.5 h-3.5" /> Аналіз Holders</span>
+              <strong className="block text-white font-mono">{holderCountDisplay}</strong>
+              <p className="text-slate-400 text-[10px]">Адреси-власники · CoinGecko · {holderSnapshot?.network}</p>
+            </div>
           )}
-        </button>
+          {visible.largeOrders && (
+            <div className="p-3 rounded-xl bg-slate-900/80 border border-slate-800 space-y-1.5">
+              <span className="flex items-center gap-1.5 text-slate-400"><Eye className="w-3.5 h-3.5" /> Великі заявки</span>
+              <strong className="block text-white font-mono">{formatVolume(data.participants.largePlayer.clusterVolumeUsd!)}</strong>
+              <p className="text-slate-400 text-[10px]">Лімітні заявки, не угоди китів</p>
+            </div>
+          )}
+          {visible.marketMaker && (
+            <div className="p-3 rounded-xl bg-slate-900/80 border border-slate-800 space-y-1.5">
+              <span className="flex items-center gap-1.5 text-slate-400"><Radio className="w-3.5 h-3.5" /> Маркет-мейкер</span>
+              <strong className="block text-white">{data.participants.marketMaker.activityLabel}</strong>
+            </div>
+          )}
+          {visible.vulnerability && (
+            <div className="p-3 rounded-xl bg-slate-900/80 border border-slate-800 space-y-1.5">
+              <span className="flex items-center gap-1.5 text-slate-400"><ShieldAlert className="w-3.5 h-3.5" /> Вразливість ринку</span>
+              <strong className="block text-white font-mono">{data.participants.manipulativeCoin.riskScore}/100</strong>
+              <p className="text-slate-400 text-[10px]">Евристика, не доказ маніпуляцій</p>
+            </div>
+          )}
+        </div>
+      )}
 
-        <button
-          onClick={() => setActiveTab('tech')}
-          className={`px-3 py-1.5 rounded-lg font-semibold transition-all cursor-pointer whitespace-nowrap ${
-            activeTab === 'tech'
-              ? 'bg-indigo-600 text-white shadow-sm'
-              : 'text-slate-400 hover:text-white hover:bg-slate-800'
-          }`}
-        >
-          RSI, EMA, Об'єми та Спред
-        </button>
-
-        <button
-          onClick={() => setActiveTab('orderbook')}
-          className={`px-3 py-1.5 rounded-lg font-semibold transition-all cursor-pointer whitespace-nowrap ${
-            activeTab === 'orderbook'
-              ? 'bg-indigo-600 text-white shadow-sm'
-              : 'text-slate-400 hover:text-white hover:bg-slate-800'
-          }`}
-        >
-          Стакан, POC та Ліквідність
-        </button>
-
-        <button
-          onClick={() => setActiveTab('derivatives')}
-          className={`px-3 py-1.5 rounded-lg font-semibold transition-all cursor-pointer whitespace-nowrap ${
-            activeTab === 'derivatives'
-              ? 'bg-indigo-600 text-white shadow-sm'
-              : 'text-slate-400 hover:text-white hover:bg-slate-800'
-          }`}
-        >
-          Open Interest та Деривативи
-        </button>
-
-        <button
-          onClick={() => setActiveTab('institutional')}
-          className={`px-3 py-1.5 rounded-lg font-semibold transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
-            activeTab === 'institutional'
-              ? 'bg-indigo-600 text-white shadow-sm'
-              : 'text-indigo-300 bg-indigo-950/40 hover:bg-indigo-900/60 border border-indigo-800/50'
-          }`}
-        >
-          <Fingerprint className="w-3.5 h-3.5 text-cyan-400" />
-          <span>Holders / Заявки / ММ / Ризики</span>
-        </button>
-      </div>
+      {/* Never offer an empty tab. A single remaining module is shown directly. */}
+      {availableModuleCount > 1 && (
+        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1 border-b border-slate-800 text-xs">
+          <button
+            type="button"
+            onClick={() => setActiveTab('all')}
+            className={`px-3 py-1.5 rounded-lg font-semibold transition-all cursor-pointer whitespace-nowrap ${
+              selectedTab === 'all' ? 'bg-indigo-600 text-white shadow-sm'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            Усі модулі (Повний огляд)
+          </button>
+          {tabs.filter(tab => visible.modules[tab.id]).map(tab => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setActiveTab(tab.id)}
+              className={`px-3 py-1.5 rounded-lg font-semibold transition-all cursor-pointer whitespace-nowrap flex items-center gap-1.5 ${
+                selectedTab === tab.id ? 'bg-indigo-600 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-800'
+              }`}
+            >
+              {tab.id === 'institutional' && <Fingerprint className="w-3.5 h-3.5 text-cyan-400" />}
+              <span>{tab.label}</span>
+              {tab.id === 'btc' && data.btcContext.hasSharpImpulse && (
+                <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping" />
+              )}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Module 1: BTC Context (15m -> 5m -> 1m) */}
-      {(activeTab === 'all' || activeTab === 'btc') && (
+      {showModule('btc') && (
         <div className="p-4 rounded-xl bg-slate-950/70 border border-slate-800 space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-2">
@@ -487,7 +460,7 @@ export const SmartAnalysisBlock: React.FC<SmartAnalysisBlockProps> = ({
       )}
 
       {/* Module 2: Technicals (RSI, EMA, Volume Spike, Spread, Range) */}
-      {(activeTab === 'all' || activeTab === 'tech') && (
+      {showModule('tech') && (
         <div className="p-4 rounded-xl bg-slate-950/70 border border-slate-800 space-y-3">
           <div className="flex items-center gap-2">
             <Gauge className="w-4 h-4 text-cyan-400" />
@@ -597,7 +570,7 @@ export const SmartAnalysisBlock: React.FC<SmartAnalysisBlockProps> = ({
       )}
 
       {/* Module 3: Orderbook, POC & Liquidity Pools */}
-      {(activeTab === 'all' || activeTab === 'orderbook') && (
+      {showModule('orderbook') && (
         <div className="p-4 rounded-xl bg-slate-950/70 border border-slate-800 space-y-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -725,7 +698,7 @@ export const SmartAnalysisBlock: React.FC<SmartAnalysisBlockProps> = ({
       )}
 
       {/* Module 4: Derivatives & Open Interest */}
-      {(activeTab === 'all' || activeTab === 'derivatives') && (
+      {showModule('derivatives') && (
         <div className="p-4 rounded-xl bg-slate-950/70 border border-slate-800 space-y-3">
           <div className="flex items-center gap-2">
             <BarChart3 className="w-4 h-4 text-indigo-400" />
@@ -813,7 +786,7 @@ export const SmartAnalysisBlock: React.FC<SmartAnalysisBlockProps> = ({
 
       {/* Institutional diagnostics: distinguish observed quotes from unverified
           participants. Keep all four topics, but never manufacture wallet data. */}
-      {(activeTab === 'all' || activeTab === 'institutional') && (
+      {showModule('institutional') && (
         <div className="p-4 rounded-xl bg-slate-950/80 border border-indigo-900/40 space-y-4">
           <div className="flex items-center gap-2 border-b border-slate-800/80 pb-3">
             <Fingerprint className="w-4 h-4 text-cyan-400" />
