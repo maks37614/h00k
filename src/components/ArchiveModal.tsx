@@ -17,6 +17,7 @@ import {
   Calendar,
   Layers,
   Download,
+  Copy,
   AlertTriangle,
   Lock,
 } from 'lucide-react';
@@ -25,6 +26,7 @@ import { useArchive } from '../context/ArchiveContext';
 import { useAuth } from '../context/AuthContext';
 import { ArchivedFormation, ExchangeId, PatternBias } from '../types';
 import { formatCryptoPrice } from '../utils/formatters';
+import { apiFetch } from '../utils/apiFetch';
 
 interface ArchiveModalProps {
   isOpen: boolean;
@@ -49,6 +51,9 @@ export const ArchiveModal: React.FC<ArchiveModalProps> = ({
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [showClearConfirm, setShowClearConfirm] = useState<boolean>(false);
   const [isClearing, setIsClearing] = useState<boolean>(false);
+  const [proofBusyId, setProofBusyId] = useState<string | null>(null);
+  const [proofCopiedId, setProofCopiedId] = useState<string | null>(null);
+  const [proofError, setProofError] = useState<string>('');
 
   const filteredFormations = useMemo(() => {
     return archivedFormations.filter((item) => {
@@ -100,6 +105,26 @@ export const ArchiveModal: React.FC<ArchiveModalProps> = ({
       console.error('Failed to clear user archive:', err);
     } finally {
       setIsClearing(false);
+    }
+  };
+
+  // Export only an explicit, owner-scoped, short-lived signed archive record.
+  // Never claim this signature independently verifies the trading algorithm.
+  const handleCopyQualityProof = async (id: string, event: React.MouseEvent) => {
+    event.stopPropagation();
+    if (proofBusyId) return;
+    setProofBusyId(id); setProofCopiedId(null); setProofError('');
+    try {
+      const response = await apiFetch('/api/account/archive/' + encodeURIComponent(id) + '/quality-proof');
+      const payload = await response.json();
+      if (!response.ok || !payload?.proof) throw new Error(payload?.error || 'Немає доступної оцінки');
+      if (!navigator.clipboard?.writeText) throw new Error('Буфер обміну недоступний у браузері');
+      await navigator.clipboard.writeText(JSON.stringify(payload.proof));
+      setProofCopiedId(id);
+    } catch (error) {
+      setProofError(error instanceof Error ? error.message : 'Не вдалося скопіювати оцінку');
+    } finally {
+      setProofBusyId(null);
     }
   };
 
@@ -430,6 +455,18 @@ export const ArchiveModal: React.FC<ArchiveModalProps> = ({
                       )}
                     </div>
 
+                    {item.formation?.validation?.confluence && item.formation?.patternKey !== 'manual' && (
+                      <button
+                        type="button"
+                        disabled={proofBusyId !== null}
+                        onClick={(event) => void handleCopyQualityProof(item.id, event)}
+                        title="Архівна оцінка з підписом сервера h00k. Не є незалежною перевіркою сигналу."
+                        className="flex items-center gap-1 px-2.5 py-1 rounded-xl border border-cyan-700/50 bg-cyan-900/20 text-cyan-200 text-xs disabled:opacity-50"
+                      >
+                        <Copy className="w-3.5 h-3.5" aria-hidden="true" />
+                        {proofCopiedId === item.id ? 'Скопійовано' : proofBusyId === item.id ? 'Підписуємо…' : 'Оцінка для Community'}
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={() => onSelectFormation(item)}
