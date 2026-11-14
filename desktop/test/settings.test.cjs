@@ -27,3 +27,18 @@ test('desktop remote content does not load a privileged bridge', () => {
   assert.ok(remote.includes('sandbox: true'));
   assert.ok(!remote.includes('preload:'));
 });
+
+test('first-run welcome and branded assets are bundled for the settings window', () => {
+  const html = fs.readFileSync(path.join(__dirname, '..', 'settings.html'), 'utf8');
+  const css = fs.readFileSync(path.join(__dirname, '..', 'settings.css'), 'utf8');
+  const logo = fs.readFileSync(path.join(__dirname, '..', 'robot-logo.svg'), 'utf8');
+  const pkg = require('../package.json');
+  assert.match(html, /id="onboarding" hidden/);
+  assert.match(html, /function drawOnboarding\(\)/);
+  assert.match(html, /api\.onSnapshot\(value=>\{snap=value;drawOnboarding\(\);drawStatus\(\);\}\)/);
+  assert.match(css, /#070d18/);
+  assert.match(css, /#22d3ee/);
+  assert.match(css, /@media\(max-width:690px\)/);
+  assert.match(logo, /robot-eye-blink/);
+  for (const file of ['settings.css','robot-logo.svg']) assert.ok(pkg.build.files.includes(file));
+});

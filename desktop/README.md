@@ -255,3 +255,87 @@ it automatically. Silent installations support an explicit
 Without a previous choice, silent installs also default to English.
 Windows CI smoke-tests English default, Polish, Russian and Ukrainian choices
 and persisted registry language, while preserving the shortcut preference.
+
+## Animated compact Windows setup (v0.1.9)
+
+The preferred download is **h00k-animated-windows-setup**, not the fallback
+NSIS installer. The graphical launcher is a separate Windows executable,
+approximately **720 × 320 logical pixels** (user-requested height 320px),
+with a charcoal-blue h00k surface, English initially selected and Polish,
+Russian and Ukrainian also available. It uses the original blinking robot
+eyes from `public/h00k-robot-logo.svg`, adds two animated legs and makes
+pupils follow the pointer **inside the installer only**.
+
+The welcome screen shows h00k's wordmark without the walking robot. The
+robot emerges on the **real installation-folder picker**. During installation,
+its position follows the fraction of expected application bytes that have
+actually been observed written to the destination. The progress meter is
+therefore a file-writing estimate, **not an artificial timer or a precise
+measure of every NSIS setup step**. It remains capped at 96% until the silent
+NSIS worker exits successfully and the desktop executable is found. When no
+new bytes are observed, the robot stops walking but can blink.
+
+The animated UI **does not replace NSIS package management**. It bundles
+the ordinary h00k Desktop NSIS installer as a checked internal worker,
+runs it with `/S`, the selected `/H00K_LANG` and shortcut choice, and
+passes the chosen folder via the final unquoted `/D=` argument. The NSIS
+worker continues to own Windows uninstall registration, Start menu and
+desktop shortcut creation, upgrade behavior and installation of the actual
+h00k application. The launcher verifies the worker's SHA-256 before execution.
+
+After installation, it opens a **separate h00k Quick Start window** with
+instructions in the selected language for window docking, panel modes,
+MetaScalp/Tiger symbol linking, Vataga's currently unconfirmed ticker API,
+and read-only exchange API best practices. No private API keys are required
+by h00k Desktop. The installer is currently unsigned.
+
+### Build on a Windows x64 development environment
+
+```powershell
+cd desktop
+npm install
+npm test
+npm run dist
+node installer/prepare.cjs
+npm test --prefix installer
+# GitHub Actions stages the launcher outside the parent npm project
+# and runs installer/build-isolated.ps1 on Windows.
+```
+
+GitHub Actions performs these steps, verifies the original NSIS installer
+via an actual unattended installation, checks that the portable launcher
+contains a non-corrupted worker and publishes an SHA-256 checksum. The
+fallback **h00k-desktop-windows** artifact remains available until the
+animated launcher passes real on-device GUI testing.
+
+If a custom installation folder is protected by Windows permissions, use
+a writable per-user location (recommended under LocalAppData/Programs).
+This launcher does not silently elevate privileges or intercept credentials.
+
+**Manual verification remaining:** actual pointer/eye motion and walking
+frame pacing on Windows 10 and 11 with high-DPI screens; unplugged/secondary
+monitors, reopening Quick Start and visual line wrapping in all languages.
+
+**Build isolation:** the animated setup is staged in RUNNER_TEMP before
+packaging because electron-builder otherwise includes a nested copy of the
+parent h00k project and a duplicate NSIS executable. CI rejects duplicate
+workers and a launcher app.asar larger than 30MB. Use the Windows CI workflow
+for this reproducible packaging path; do not run electron-builder from the
+nested installer folder in an unisolated checkout.
+
+## Unreleased: unified dark desktop surfaces and first-run experience
+
+- A first installation opens the local h00k settings with a cyan-accented three-step
+  welcome panel. Docking remains paused until the user saves/attaches settings.
+- Legacy smartdock.json profiles are treated as already configured; their existing
+  automatic attachment is preserved without requiring a new onboarding step.
+- A full standalone h00k Desktop window now has the same isolated top-right gear
+  as attached panels. Its native menu opens general or terminal-specific settings.
+- The settings window uses the existing robot logo, a dark graphite/cyan palette,
+  accessible keyboard focus, and responsive controls. Assets are packaged locally.
+- No desktop changes in this feature branch update the website or VPS, and the
+  final Windows installer has not been built or merged.
+
+Manual checks remaining: first launch on Windows, caption/theme under light-mode
+Windows, toolbar overlay against actual h00k pages, focus and DPI at 100–150%,
+and re-launch from a pre-existing smartdock.json file.

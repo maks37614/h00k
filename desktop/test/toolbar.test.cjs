@@ -50,3 +50,11 @@ test('Win32 agent uses visible DWM bounds and faster tracking snapshots', () => 
   assert.match(agent, /GetWindowRect\(hwnd/);
   assert.match(agent, /Start-Sleep -Milliseconds 160/);
 });
+
+test('independent full h00k window gets the same isolated settings gear', () => {
+  const main = read('main.cjs');
+  assert.match(main, /attachDockToolbar\(standalone, null\)/);
+  assert.match(main, /if \(!provider\) \{/);
+  assert.match(main, /PROVIDERS\.map\(id =>/);
+  assert.match(main, /settings\.setupComplete && profile\.enabled/);
+});

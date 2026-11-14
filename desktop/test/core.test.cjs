@@ -71,3 +71,11 @@ test('all four docking directions touch the visible target boundary without over
     assert.ok(pane.y + pane.height <= work.y + work.height);
   }
 });
+
+test('onboarding is required only for a new installation; legacy profiles stay active', () => {
+  assert.equal(normalizeSettings().setupComplete, false);
+  assert.equal(normalizeSettings({}).setupComplete, false);
+  assert.equal(normalizeSettings({ profiles: { metascalp: { enabled: true } } }).setupComplete, true);
+  assert.equal(normalizeSettings({ setupComplete: false, profiles: {} }).setupComplete, false);
+  assert.equal(normalizeSettings({ setupComplete: true }).setupComplete, true);
+});

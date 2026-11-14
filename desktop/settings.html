@@ -1,31 +1,27 @@
 <!doctype html>
 <html lang="uk"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>h00k Desktop · Налаштування</title>
-<style>
-:root{font:14px/1.5 "Segoe UI",system-ui,sans-serif;color:#e8f3fc;color-scheme:dark;background:#070a12}
-*{box-sizing:border-box}body{margin:0;padding:20px}button,input,select{font:inherit}button{cursor:pointer}
-h1{font-size:22px;margin:0;color:#51dfd4}h2{font-size:14px;margin:0 0 12px}
-p{font-size:12px;color:#9cacc0;margin:7px 0}
-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px}
-section{border:1px solid #253547;background:#101825;border-radius:14px;padding:15px;margin-bottom:12px}
-.tabs,.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:7px}
-.grid.four{grid-template-columns:repeat(4,1fr)}
-.tabs button,.grid label{background:#152032;border:1px solid #2b4054;border-radius:9px;padding:9px;text-align:center;display:block;color:#d7e6f3}
-.tabs button.on,.grid label.on{border-color:#4fd2c5;background:#19373c;color:#abfdf2}
-input[type=radio]{position:absolute;opacity:0}
-label{cursor:pointer}.checks{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.check{display:flex;gap:7px;align-items:center;font-size:12px}.check input{accent-color:#42d6cb}
-.stack{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
-small{color:#91a5ba;font-size:11px}select,input[type=number]{width:100%;min-width:0;background:#090f18;border:1px solid #2d4459;color:#e6f3ff;border-radius:8px;padding:8px}
-.row{display:flex;gap:8px;flex-wrap:wrap;margin:18px 0}button.action{background:#18343c;border:1px solid #397582;border-radius:9px;padding:9px 12px;color:#c5faf4;font-weight:600}
-button.primary{background:#3bd4c8;color:#052827;border-color:#3bd4c8}
-button.danger{background:#38212b;border-color:#833b4c;color:#ffced8}
-#status{background:#0b111b;border:1px solid #293749;border-radius:8px;padding:9px;margin:9px 0;font-size:12px;color:#b8e5e5}
-.warning{background:#352913;color:#ffe0a1;border:1px solid #785a2b;border-radius:9px;padding:10px;font-size:12px;margin-top:10px}
-#feedback{font-size:12px;color:#79e7c7;min-height:20px}
-@media(max-width:600px){.stack,.checks{grid-template-columns:1fr}.tabs button{font-size:11px}.grid label{font-size:11px;padding:7px 3px}}
-</style></head><body>
-<header><div><h1>h00k <span style="color:#fff">Desktop</span></h1><small>Налаштування прикріплення · Windows</small></div><div class="row" style="margin:0"><button class="action" id="standalone">Окреме вікно</button><button class="action" id="browser">У браузері ↗</button></div></header>
+<title>h00k Desktop · Налаштування прикріплення</title>
+<link rel="stylesheet" href="./settings.css"></head><body>
+<header class="app-header">
+  <div class="head-brand">
+    <img src="./robot-logo.svg" width="116" height="56" alt="h00k robot logo">
+    <div><h1>Desktop</h1><small>ВАШ ТОРГОВИЙ ПРОСТІР · WINDOWS</small></div>
+  </div>
+  <div class="header-actions">
+    <button class="action" id="standalone" title="Відкрити повноцінне вікно h00k">▣ Окреме вікно</button>
+    <button class="action" id="browser" title="Відкрити h00k.top у браузері">↗ У браузері</button>
+  </div>
+</header>
+<section class="onboarding" id="onboarding" hidden aria-labelledby="welcome-heading">
+  <span class="eyebrow"><span class="pulse"></span> ПЕРШИЙ ЗАПУСК · НАЛАШТУВАННЯ</span>
+  <h2 id="welcome-heading">Налаштуйте h00k під свій термінал</h2>
+  <p>Оберіть MetaScalp, Tiger.Trade або Vataga, спосіб прикріплення та розташування. Це можна змінити будь-коли через іконку <strong>⚙ праворуч</strong> у вікні h00k.</p>
+  <div class="onboarding-steps">
+    <span><b>01</b> Оберіть термінал</span>
+    <span><b>02</b> Налаштуйте панелі</span>
+    <span><b>03</b> Збережіть або прикріпіть</span>
+  </div>
+</section>
 <section><h2>1. Торговий термінал</h2><div class="tabs" id="tabs"></div><p>Для кожного термінала окремі налаштування. Можна прикріпити h00k до декількох терміналів одночасно.</p>
 <div id="status">Шукаю запущені термінали…</div>
 <label for="target"><small>Вибрати конкретне вікно вручну</small></label><select id="target"><option value="">Автоматичний пошук</option></select>
@@ -72,6 +68,9 @@ function radio(group, name, options, selected){
   }));
 }
 function selected(name){return document.querySelector('input[name="'+name+'"]:checked')?.value||'right';}
+function drawOnboarding(){
+  byId('onboarding').hidden=!snap || snap.settings.setupComplete;
+}
 function drawStatus(){
   if(!snap)return;
   const t=snap.terminals.find(x=>x.id===active);
@@ -105,6 +104,7 @@ function render(){
   }));
   for(const id of ['enabled','autoAttach','follow','alwaysOnTop'])byId(id).checked=p[id];
   for(const id of ['width','height'])byId(id).value=p[id];
+  drawOnboarding();
   drawStatus();
 }
 function form(){
@@ -122,6 +122,6 @@ byId('target').onchange=async e=>{try{snap=await api.pick(active,e.target.value)
 byId('standalone').onclick=async()=>{try{await api.openStandalone();}catch(e){error(e);}};
 byId('browser').onclick=async()=>{try{await api.openBrowser();}catch(e){error(e);}};
 api.onSelectProvider(provider=>{if(providers.some(([id])=>id===provider)){active=provider;render();}});
-api.onSnapshot(value=>{snap=value;drawStatus();});
+api.onSnapshot(value=>{snap=value;drawOnboarding();drawStatus();});
 api.snapshot().then(value=>{snap=value;render();}).catch(error);
 </script></body></html>

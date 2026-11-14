@@ -1,6 +1,6 @@
 {
   "name": "h00k-desktop",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "description": "h00k Desktop application for Windows trading terminals",
   "private": true,
   "main": "main.cjs",
@@ -27,6 +27,8 @@
       "profiles.cjs",
       "layout.cjs",
       "settings.html",
+      "robot-logo.svg",
+      "settings.css",
       "toolbar.html",
       "toolbar-preload.cjs",
       "workspace.cjs"
@@ -63,7 +65,8 @@
       ],
       "multiLanguageInstaller": true,
       "displayLanguageSelector": false,
-      "language": "1033"
+      "language": "1033",
+      "shortcutName": "h00k"
     }
   }
 }

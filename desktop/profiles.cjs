@@ -60,7 +60,10 @@ function normalizeSettings(raw) {
   const src = raw && typeof raw === 'object' ? raw : {};
   const profiles = {};
   for (const provider of PROVIDERS) profiles[provider] = normalizeProfile(provider, src.profiles?.[provider]);
-  return { version: 1, profiles };
+  // Keep existing installations active; only new installations enter guided setup.
+  const setupComplete = typeof src.setupComplete === 'boolean'
+    ? src.setupComplete : Boolean(src.profiles && typeof src.profiles === 'object');
+  return { version: 1, setupComplete, profiles };
 }
 function matchesTerminal(provider, item) {
   const exe = String(item.exe || '').toLowerCase();
