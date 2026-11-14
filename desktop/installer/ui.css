@@ -9,6 +9,10 @@ select{border:1px solid #315268;background:#0b202e;color:#c9ecf8;border-radius:7
 .window-close{color:#c4dde7;border:0;background:transparent;font-size:20px;line-height:20px;width:27px;height:27px;border-radius:7px}
 .window-close:hover{background:#4a2532;color:#fff}
 .hero{position:relative;height:129px;flex-shrink:0;overflow:visible}
+.hero:before{content:"";position:absolute;left:5%;right:5%;bottom:-14px;height:74px;
+background-image:linear-gradient(to right,#1e8ca355 1px,transparent 1px),linear-gradient(to bottom,#1e8ca355 1px,transparent 1px);
+background-size:32px 20px;transform:perspective(180px) rotateX(67deg);transform-origin:bottom;
+opacity:.18;pointer-events:none;mask-image:linear-gradient(to bottom,transparent 0%,#000 100%)}
 .ambient-ring{position:absolute;left:50%;top:4px;transform:translateX(-50%);width:260px;height:126px;border:1px solid #23607966;border-bottom:0;border-radius:100% 100% 0 0;box-shadow:0 0 55px #20dcef16;pointer-events:none}
 .ambient-ring:before,.ambient-ring:after{content:"";position:absolute;border:1px solid #24617940;border-bottom:0;border-radius:100% 100% 0 0;inset:10px 20px 0}.ambient-ring:after{inset:22px 42px 0;opacity:.4}
 .welcome-logo{position:absolute;left:50%;top:20px;transform:translateX(-50%);text-align:center;display:flex;flex-direction:column;transition:opacity .35s,transform .45s;z-index:2}
@@ -21,6 +25,7 @@ select{border:1px solid #315268;background:#0b202e;color:#c9ecf8;border-radius:7
 .walker{--look-x:0px;--look-y:0px;position:absolute;width:92px;height:103px;left:8px;bottom:6px;z-index:4;opacity:0;transform:translateY(-15px) scale(.78);filter:drop-shadow(0 0 9px #1bd6ef77);transition:left .45s linear,opacity .32s ease,transform .4s ease;pointer-events:none}
 .robot-face{width:92px;height:73px;position:absolute;top:2px;left:0;transform-origin:50% 100%}
 #robotHead{width:100%;height:100%;display:block;overflow:visible;filter:drop-shadow(0 0 5px #32dff5bb)}
+#robotHead rect[x="24.5"]{stroke:#54e9ff!important;stroke-width:2.5px;filter:drop-shadow(0 0 2.5px #21eaf1)}
 #robotHead .robot-eye{transform-box:fill-box;transform-origin:center;animation:blink 6.2s infinite}
 #robotHead .robot-pupil{transform:translate(var(--look-x),var(--look-y));transition:transform .16s ease;animation:none!important}
 .legs{position:absolute;bottom:1px;left:-4px;width:100px;height:29px}
