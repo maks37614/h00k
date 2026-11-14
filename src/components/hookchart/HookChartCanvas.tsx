@@ -1400,6 +1400,7 @@ const HookChartCanvas = forwardRef<HookChartHandle, HookChartCanvasProps>(functi
         levelLabelMode={settings.levelLabelMode || 'always'}
         levelLabelColor={settings.levelLabelColor || '#2090F0'}
         levelLabelSize={settings.levelLabelSize ?? 11}
+        levelLineWidth={settings.levelLineWidth ?? 1}
         levelLabelStyle={settings.levelLabelStyle || 'text'}
         levelLineStyle={settings.levelLineStyle || 'solid'}
         crosshairLineWidth={settings.crosshairLineWidth}
