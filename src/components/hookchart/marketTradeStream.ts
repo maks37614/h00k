@@ -8,8 +8,13 @@ export type AggressiveMarketTrade = { id: string; t: number; p: number; usd: num
 type Listener = { onTrade: (trade: AggressiveMarketTrade) => void; onPrints: (prints: MarketPrint[]) => void; wantsPrints?: () => boolean; liveOnly?: boolean };
 type Burst = {
   id: string; side: 'BUY' | 'SELL'; start: number; last: number;
-  usd: number; weightedPrice: number; count: number;
-  seconds: Map<number, { usd: number; count: number; accountedUsd: number; accountedCount: number }>;
+  usd: number; count: number;
+  // Keep each second's price × notional independently. A burst can cross a
+  // second boundary, and reusing its overall average misprices both buckets.
+  seconds: Map<number, {
+    usd: number; priceUsd: number; count: number;
+    accountedUsd: number; accountedPriceUsd: number; accountedCount: number;
+  }>;
 };
 
 const BINANCE_FUTURES_API = 'https://fapi.binance.com';
@@ -72,16 +77,20 @@ export class LargeMarketTradeTracker {
       const id = burst.side + ':' + second;
       const previous = this.prints.get(id);
       const newUsd = (previous?.usd || 0) + delta;
-      const weightedPrice = burst.weightedPrice / Math.max(burst.usd, 1);
+      // Only newly added trades contribute to the incremental VWAP. Using
+      // the whole burst's average here would retroactively distort earlier
+      // seconds, and even earlier trades within the same second.
+      const deltaPriceUsd = segment.priceUsd - segment.accountedPriceUsd;
       const item: MarketPrint = {
         id, side: burst.side, t: second,
-        p: previous ? (previous.p * previous.usd + weightedPrice * delta) / newUsd : weightedPrice,
+        p: previous ? (previous.p * previous.usd + deltaPriceUsd) / newUsd : deltaPriceUsd / delta,
         usd: newUsd, count: (previous?.count || 0) + countDelta,
         touches: 1, lastTouch: burst.last,
         score: Math.min(100, Math.round(100 * newUsd / Math.max(1, this.cut * 2))),
       };
       this.prints.set(id, item);
       segment.accountedUsd = segment.usd;
+      segment.accountedPriceUsd = segment.priceUsd;
       segment.accountedCount = segment.count;
       this.revision++;
     }
@@ -127,17 +136,22 @@ export class LargeMarketTradeTracker {
       this.active = {
         id: trade.side + ':' + trade.t + ':' + trade.id,
         side: trade.side, start: trade.t, last: trade.t,
-        usd, weightedPrice: trade.p * usd, count: 1,
-        seconds: new Map([[second, { usd, count: 1, accountedUsd: 0, accountedCount: 0 }]]),
+        usd, count: 1,
+        seconds: new Map([[second, {
+          usd, priceUsd: trade.p * usd, count: 1,
+          accountedUsd: 0, accountedPriceUsd: 0, accountedCount: 0,
+        }]]),
       };
     } else {
       this.active.last = trade.t;
       this.active.usd += usd;
-      this.active.weightedPrice += trade.p * usd;
       this.active.count++;
-      const segment = this.active.seconds.get(second) ||
-        { usd: 0, count: 0, accountedUsd: 0, accountedCount: 0 };
+      const segment = this.active.seconds.get(second) || {
+        usd: 0, priceUsd: 0, count: 0,
+        accountedUsd: 0, accountedPriceUsd: 0, accountedCount: 0,
+      };
       segment.usd += usd;
+      segment.priceUsd += trade.p * usd;
       segment.count++;
       this.active.seconds.set(second, segment);
     }
