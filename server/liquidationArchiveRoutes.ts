@@ -25,6 +25,7 @@ export function installLiquidationArchiveRoutes(app: Express) {
   // cache; these are reusable only while someone is viewing the map.
   const MAX_CACHE_BYTES = 8 * 1024 * 1024;
   let cacheBytes = 0;
+  let cacheMonth = new Date().toISOString().slice(0, 7);
   const cached = new Map<string, { at: number; data: Payload; bytes: number }>();
   const putCache = (key: string, data: Payload) => {
     const bytes = Buffer.byteLength(JSON.stringify(data), 'utf8');
@@ -68,9 +69,15 @@ export function installLiquidationArchiveRoutes(app: Express) {
       if (now - value.at > 60_000) throttles.delete(key);
 
     const hours = period === '24h' ? 24 : 168;
-    // Monthly purge must invalidate even an otherwise fresh server cache.
-    const key = new Date(now).toISOString().slice(0, 7) + ':' +
-      exchange + ':' + symbol + ':' + hours;
+    // Clear old month RAM buffers as well as their cache keys. This runs only
+    // on an explicit heatmap request, with no timer when the map is off.
+    const month = new Date(now).toISOString().slice(0, 7);
+    if (cacheMonth !== month) {
+      cached.clear();
+      cacheBytes = 0;
+      cacheMonth = month;
+    }
+    const key = month + ':' + exchange + ':' + symbol + ':' + hours;
     const stored = cached.get(key);
     if (stored && now - stored.at < 30_000) {
       res.set('Cache-Control','public, max-age=20');
