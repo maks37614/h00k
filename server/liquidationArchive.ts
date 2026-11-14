@@ -2,7 +2,9 @@ import { readFileSync } from 'node:fs';
 import { Pool } from 'pg';
 
 export function liquidationUtcMonth(now: number): string {
-  return new Date(now).toISOString().slice(0, 7);
+  const date = new Date(now);
+  // Malformed upstream timestamps must never crash the Liq ingest process.
+  return Number.isFinite(date.getTime()) ? date.toISOString().slice(0, 7) : '';
 }
 
 
