@@ -106,6 +106,8 @@ const screenerUiSession = new Map<string, {
   marketType: 'all' | MarketType;
   maxVolumeUsd: number;
   volumeMode: ScreenerVolumeMode;
+  /** Applied profile defaults/preset at the moment the in-session state was saved. */
+  savedConfigKey: string;
   advancedFilters: ScreenerSearchConfig;
   sortBy: ScreenerSortBy;
   sortOrder: 'asc' | 'desc';
@@ -129,7 +131,7 @@ export const CoinScreenerPage: React.FC<CoinScreenerPageProps> = ({
   const { t } = useLanguage();
   const { user, profile } = useAuth();
   const isGuest = !user;
-  const cachedUi = screenerUiSession.get(user?.uid || 'guest');
+  const previousUiSession = screenerUiSession.get(user?.uid || 'guest');
   const searchSettings = useMemo(() => normalizeScreenerSearchSettings(
     user && profile?.uid === user.uid ? profile.searchSettings : undefined,
     { exchange: getStoredPreferences().defaultExchange, marketType: getStoredPreferences().defaultMarketType },
@@ -137,6 +139,10 @@ export const CoinScreenerPage: React.FC<CoinScreenerPageProps> = ({
   const initialSearch = useMemo(() => effectiveScreenerSearchConfig(searchSettings,
     { exchange: getStoredPreferences().defaultExchange, marketType: getStoredPreferences().defaultMarketType }),
     [searchSettings]);
+  const savedConfigKey = JSON.stringify(initialSearch);
+  // A default/preset saved in the profile while the Screener is unmounted
+  // must replace the older session filters when the Screener is opened again.
+  const cachedUi = previousUiSession?.savedConfigKey === savedConfigKey ? previousUiSession : undefined;
   const cacheAtMount = useRef({ uid: user?.uid || 'guest', existed: !!cachedUi });
   const [coins, setCoins] = useState<MarketCoin[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -233,12 +239,24 @@ export const CoinScreenerPage: React.FC<CoinScreenerPageProps> = ({
     }));
   }, [user?.uid, profile?.uid, applySearchConfig]);
 
+  // When the profile updates the active default or its selected preset while
+  // this page is mounted, apply it immediately, without resetting manual UI
+  // changes for unrelated profile writes or unchanged search defaults.
+  const observedConfigRef = useRef({ uid: user?.uid || 'guest', key: savedConfigKey });
+  useEffect(() => {
+    const uid = user?.uid || 'guest';
+    const previous = observedConfigRef.current;
+    observedConfigRef.current = { uid, key: savedConfigKey };
+    if (!user?.uid || profile?.uid !== user.uid || previous.uid !== uid || previous.key === savedConfigKey) return;
+    applySearchConfig(initialSearch);
+  }, [user?.uid, profile?.uid, savedConfigKey, initialSearch, applySearchConfig]);
+
   useEffect(() => {
     screenerUiSession.set(user?.uid || 'guest', {
-      presetFilter, searchQuery, exchange, marketType, maxVolumeUsd, volumeMode, advancedFilters, sortBy,
+      presetFilter, searchQuery, exchange, marketType, maxVolumeUsd, volumeMode, savedConfigKey, advancedFilters, sortBy,
       sortOrder, secondarySortBy, secondarySortOrder, viewMode, displayLimit,
     });
-  }, [user?.uid, presetFilter, searchQuery, exchange, marketType, maxVolumeUsd, volumeMode, advancedFilters,
+  }, [user?.uid, presetFilter, searchQuery, exchange, marketType, maxVolumeUsd, volumeMode, savedConfigKey, advancedFilters,
     sortBy, sortOrder, secondarySortBy, secondarySortOrder, viewMode, displayLimit]);
 
   const currentRequest = useRef<{ key: string; controller: AbortController } | null>(null);
