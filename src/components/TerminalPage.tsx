@@ -7,9 +7,7 @@ import {
   Star,
   Search,
   PanelLeftClose,
-  PanelLeftOpen,
   Trash2,
-  RefreshCw,
   Plus,
   SlidersHorizontal,
   Maximize2,
@@ -33,7 +31,6 @@ import {
 } from '../types';
 import { TerminalChartWidget } from './terminal/TerminalChartWidget';
 import { ExchangeCandlestickChart } from './ExchangeCandlestickChart';
-import { getTradingViewSymbol } from '../utils/marketSymbols';
 import { AddChartModal } from './terminal/AddChartModal';
 import { TerminalSettingsDrawer } from './terminal/TerminalSettingsDrawer';
 import { formatVolume } from '../utils/formatters';
@@ -70,7 +67,7 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
   onOpenFullscreenModal,
   onReturnToPatterns,
 }) => {
-  // The Terminal is HookChart-only. Legacy TradingView settings never create an iframe here.
+  // The Terminal always renders native HookChart, regardless of previous chart settings.
   const chartProvider = normalizeChartProvider('hookchart');
   const { preferences } = useAppPreferences();
   const { user, profile } = useAuth();
@@ -214,16 +211,6 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
   }, [preferences.defaultTimeframe]);
   const [isFavoritesDrawerOpen, setIsFavoritesDrawerOpen] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [showDrawingToolbar, setShowDrawingToolbar] = useState<boolean>(() => {
-    try {
-      const saved = localStorage.getItem('fullscreen_show_drawing_toolbar');
-      return saved !== null ? saved === 'true' : true;
-    } catch {
-      return true;
-    }
-  });
-  const [iframeLoading, setIframeLoading] = useState<boolean>(true);
-
   // Modal / Drawer state for multi-chart mode
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -326,16 +313,6 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
     toggleFullscreenSafe();
   };
 
-  const handleToggleDrawingToolbar = useCallback(() => {
-    setShowDrawingToolbar((prev) => {
-      const next = !prev;
-      try {
-        localStorage.setItem('fullscreen_show_drawing_toolbar', String(next));
-      } catch {}
-      return next;
-    });
-  }, []);
-
   // Favorites are keyed by symbol, not exchange; prefer the exact market
   // already open in this workspace instead of silently selecting Binance.
   const favoriteCoins = useMemo(() => {
@@ -391,7 +368,8 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
     setIsFavoritesDrawerOpen(false);
     if (blocks.length === 1) {
       setActiveCoin(favCoin);
-      setIframeLoading(true);
+
+
       // Preserve the existing chart identity, timeframe, span, and drawing
       // preferences when switching the sole chart to a favorite instrument.
       setBlocks(previous => previous.map(block => ({
@@ -422,44 +400,6 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
     };
     setBlocks(previous => previous.length >= MAX_TERMINAL_CHARTS ? previous : [...previous, nextBlock]);
   };
-
-  // Build TradingView Embed URL
-  const tradingViewUrl = useMemo(() => {
-    if (chartProvider === 'hookchart') return null;
-    const tvSymbol = getTradingViewSymbol(activeCoin.symbol, activeCoin.exchange, activeCoin.marketType);
-    if (!tvSymbol) return null;
-
-    let interval = '15';
-    switch (activeTimeframe) {
-      case '1m': interval = '1'; break;
-      case '5m': interval = '5'; break;
-      case '15m': interval = '15'; break;
-      case '1h': interval = '60'; break;
-      case '4h': interval = '240'; break;
-      case '1d': interval = 'D'; break;
-      default: interval = '15';
-    }
-
-    const params = new URLSearchParams({
-      symbol: tvSymbol,
-      interval: interval,
-      theme: 'dark',
-      style: '1',
-      timezone: 'exchange',
-      withdateranges: '0',
-      hide_top_toolbar: '1',
-      hide_side_toolbar: '0',
-      allow_symbol_change: '0',
-      save_image: '0',
-      hide_legend: '1',
-      locale: 'uk',
-      toolbar_bg: '#090d16',
-      gridColor: 'rgba(0,0,0,0)',
-      gridTransparency: '100',
-    });
-
-    return `https://s.tradingview.com/widgetembed/?${params.toString()}`;
-  }, [chartProvider, activeCoin.symbol, activeCoin.exchange, activeCoin.marketType, activeTimeframe]);
 
   // Block management
   const handleAddChart = (coin: MarketCoin | ScannedCoin | Pick<TerminalChartBlock, 'symbol' | 'baseAsset' | 'quoteAsset' | 'exchange' | 'marketType'>, tf: Timeframe, formationId?: string) => {
@@ -532,7 +472,8 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
   const handleTimeframeSelect = (tf: Timeframe) => {
     setTimeframe(tf);
     handleApplyGlobalTimeframe(tf);
-    setIframeLoading(true);
+
+
   };
 
   const handleApplyPreset = (presetKey: 'focus_btc' | 'top_3' | 'top_4_patterns' | 'grid_4') => {
@@ -693,7 +634,8 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
     setConfig(current => ({ ...current, columns: preset.columns, blockHeight: preset.blockHeight, layoutPreset: 'custom' }));
     setTimeframe(preset.blocks[0]?.timeframe || timeframe);
     setMaximizedBlockId(null);
-    setIframeLoading(true);
+
+
   };
 
   const handleResetWorkspace = () => {
@@ -974,7 +916,8 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
                 onClick={() => {
                   setTimeframe(tf);
                   handleApplyGlobalTimeframe(tf);
-                  setIframeLoading(true);
+
+
                 }}
                 className={`px-2 py-1 rounded-lg transition-colors cursor-pointer ${
                   activeTimeframe === tf
@@ -1233,62 +1176,19 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
 
         {/* Workspace Display: If 1 block or maximized block, show full single chart. If multiple blocks, show multi-chart grid */}
         {blocks.length === 1 ? (
-          /* Single Screen 100% View TradingView Pro */
+          /* Single Screen 100% View HookChart */
           <div className="flex h-full w-full flex-col overflow-hidden">
             <div className="relative min-h-0 flex-1 overflow-hidden">
-            {tradingViewUrl ? (
-              <>
-                {iframeLoading && (
-                  <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950 text-slate-400 gap-3 z-10 pointer-events-none">
-                    <RefreshCw className="w-8 h-8 animate-spin text-cyan-400" />
-                    <span className="text-sm font-medium">Завантаження графіку {activeCoin.symbol}...</span>
-                  </div>
-                )}
-                <div
-                  className={`absolute top-0 h-full transition-[width,left] duration-200 ease-in-out ${
-                    showDrawingToolbar ? 'left-0 w-full' : '-left-[54px] w-[calc(100%+54px)]'
-                  }`}
-                >
-                  <iframe
-                    key={tradingViewUrl}
-                    src={tradingViewUrl}
-                    className="h-full w-full border-0"
-                    title={`TradingView Chart ${activeCoin.symbol}`}
-                    onLoad={() => setIframeLoading(false)}
-                    allow="fullscreen"
-                    loading="lazy"
-                  />
-                </div>
-                <div
-                  className={`pointer-events-none absolute inset-y-0 left-0 z-10 w-[54px] bg-transparent transition-transform duration-200 ${
-                    showDrawingToolbar ? '-translate-x-full' : 'translate-x-0'
-                  }`}
-                  aria-hidden={showDrawingToolbar}
-                />
-                <div className="absolute bottom-2 left-2 z-20 flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={handleToggleDrawingToolbar}
-                    className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-900/85 hover:bg-slate-800 border border-slate-700/80 text-slate-300 hover:text-cyan-300 shadow-md backdrop-blur-sm transition-all cursor-pointer group"
-                    title={showDrawingToolbar ? 'Сховати панель TradingView' : 'Показати панель TradingView'}
-                    aria-label={showDrawingToolbar ? 'Сховати панель TradingView' : 'Показати панель TradingView'}
-                  >
-                    {showDrawingToolbar ? <PanelLeftClose className="h-4 w-4" /> : <PanelLeftOpen className="h-4 w-4" />}
-                  </button>
-                </div>
-              </>
-            ) : (
-              <ExchangeCandlestickChart
-                forceHookChart
-                visualContext="terminalLarge"
-                symbol={activeCoin.symbol}
-                terminalAutoScale={autoScaleCharts && chartProvider === 'hookchart'}
-                terminalInitialView={config.initialChartView}
-                exchange={activeCoin.exchange}
-                marketType={activeCoin.marketType}
-                timeframe={activeTimeframe}
-              />
-            )}
+            <ExchangeCandlestickChart
+              forceHookChart
+              visualContext="terminalLarge"
+              symbol={activeCoin.symbol}
+              terminalAutoScale={autoScaleCharts && chartProvider === 'hookchart'}
+              terminalInitialView={config.initialChartView}
+              exchange={activeCoin.exchange}
+              marketType={activeCoin.marketType}
+              timeframe={activeTimeframe}
+            />
             </div>
             {presetPagination && <div className="shrink-0 px-2 pb-2">{presetPagination}</div>}
           </div>
