@@ -7,6 +7,16 @@ import { summarizeVerifiedUsdOI } from './oiIntegrity';
 // In-memory cache for smart analysis
 const analysisCache = new Map<string, { timestamp: number; data: SmartAnalysisData }>();
 const CACHE_TTL_MS = 15 * 1000; // 15s cache
+const MIN_TECHNICAL_BARS = 50;
+// A missing exchange history is a temporary data-source outage, not a code
+// exception; never map it to HTTP 500 or fabricate 200 EMA bars.
+export class SmartAnalysisDataUnavailableError extends Error {
+  readonly code = 'SMART_ANALYSIS_CANDLES_UNAVAILABLE';
+  constructor(message: string) {
+    super(message);
+    this.name = 'SmartAnalysisDataUnavailableError';
+  }
+}
 
 // Technical calculations
 function calculateRSI(closes: number[], period: number = 14): number {
@@ -386,18 +396,42 @@ export async function generateSmartAnalysis(params: {
     return cached.data;
   }
 
-  // At least 200 bars for EMA200; do not invent RSI/EMA on insufficient history.
+  // This panel opens on explicit user action, so its candles have the SAME
+  // reserved REST priority as /api/klines chart requests. The previous
+  // background-class fetch was throttled while chart-class fetch still worked,
+  // producing HTTP 500 on BTC/USDT despite 220 healthy candles on the chart.
   let klines = params.klines || [];
   if (klines.length < 201) {
-    klines = (await fetchKlines(exchange, marketType, symbol, tf, 220)) || [];
+    klines = (await fetchKlines(exchange, marketType, symbol, tf, 220,
+      undefined, undefined, { chart: true }).catch(() => [])) || [];
   }
   const finiteBar = (c: Kline) => c &&
     [c.time, c.open, c.high, c.low, c.close, c.volume].every(Number.isFinite) &&
-    c.close > 0 && c.high >= c.low && c.volume >= 0;
-  if (klines.length < 201 || !klines.every(finiteBar)) {
-    throw new Error('Недостатньо достовірних свічок для індикаторів (EMA200)');
+    c.close > 0 && c.open > 0 && c.high >= Math.max(c.open, c.close) &&
+    c.low <= Math.min(c.open, c.close) && c.low > 0 && c.volume >= 0;
+  const secondsPerBar: Record<Timeframe, number> = {
+    '1m': 60, '5m': 300, '15m': 900, '1h': 3600, '4h': 14400, '1d': 86400,
+  };
+  const seconds = secondsPerBar[tf] ?? 3600;
+  const nowSeconds = Date.now() / 1000;
+  const verified = klines.filter((bar) => finiteBar(bar) &&
+    bar.time + seconds <= nowSeconds).sort((a, b) => a.time - b.time);
+  // EMA requires consecutive closed candles; ignore gaps and malformed
+  // candles instead of making a synthetic uninterrupted price series.
+  let contiguousStart = verified.length - 1;
+  while (contiguousStart > 0 &&
+    verified[contiguousStart].time - verified[contiguousStart - 1].time === seconds) {
+    contiguousStart -= 1;
   }
-  // Use a real exchange close, not a user-supplied price or arbitrary $100.
+  klines = verified.slice(Math.max(0, contiguousStart));
+  if (klines.length < MIN_TECHNICAL_BARS) {
+    throw new SmartAnalysisDataUnavailableError(
+      'Недостатньо підтверджених закритих свічок (' + klines.length +
+      '/' + MIN_TECHNICAL_BARS + ') на ' + exchange + ' ' + marketType +
+      ' ' + tf + '. Перевірте доступність біржового API або спробуйте пізніше.'
+    );
+  }
+  // Use the last CONFIRMED exchange close, not browser price / invented $100.
   const currentPrice = klines[klines.length - 1].close;
 
   const closes = klines.map((k) => k.close);
@@ -408,25 +442,28 @@ export async function generateSmartAnalysis(params: {
   const rsi = calculateRSI(closes, 14);
   const ema20 = calculateEMA(closes, 20);
   const ema50 = calculateEMA(closes, 50);
-  const ema200 = calculateEMA(closes, 200);
+  const ema200 = klines.length >= 200 ? calculateEMA(closes, 200) : null;
   const atr = calculateATR(klines, 14);
 
   // Cross signals & alignment
   let crossSignal: SmartAnalysisData['trend']['crossSignal'] = 'compression';
   let crossSignalLabel = 'Консолідація та стиснення середніх (EMA Compression)';
 
-  if (ema20 > ema50 && ema50 > ema200) {
+  if (ema200 !== null && ema20 > ema50 && ema50 > ema200) {
     crossSignal = 'bullish_alignment';
     crossSignalLabel = 'Ідеальне бичаче вирівнювання (EMA 20 > 50 > 200)';
-  } else if (ema20 < ema50 && ema50 < ema200) {
+  } else if (ema200 !== null && ema20 < ema50 && ema50 < ema200) {
     crossSignal = 'bearish_alignment';
     crossSignalLabel = 'Повне низхідне вирівнювання (EMA 20 < 50 < 200)';
-  } else if (ema20 > ema50 && closes[closes.length - 1] > ema50) {
+  } else if (ema200 !== null && ema20 > ema50 && closes[closes.length - 1] > ema50) {
     crossSignal = 'golden_cross';
     crossSignalLabel = 'Бичачий золотий перетин (Golden Cross EMA 20/50)';
-  } else if (ema20 < ema50 && closes[closes.length - 1] < ema50) {
+  } else if (ema200 !== null && ema20 < ema50 && closes[closes.length - 1] < ema50) {
     crossSignal = 'death_cross';
     crossSignalLabel = 'Ведмежий перетин (Death Cross EMA 20/50)';
+  }
+  if (ema200 === null) {
+    crossSignalLabel = 'EMA200: н/д — менше 200 закритих послідовних свічок; EMA20/50 доступні';
   }
 
   const priceVsEma =
@@ -437,7 +474,8 @@ export async function generateSmartAnalysis(params: {
   // Independently measure 24h from 24 *completed* one-hour candles, never
   // from 24 bars of an arbitrary selected timeframe.
   const hourly = tf === '1h' ? klines :
-    (await fetchKlines(exchange, marketType, symbol, '1h', 26).catch(() => [])) || [];
+    (await fetchKlines(exchange, marketType, symbol, '1h', 26,
+      undefined, undefined, { chart: true }).catch(() => [])) || [];
   const closedHours = hourly.filter((c) => finiteBar(c) &&
     c.time * 1000 + 60 * 60_000 <= Date.now()).slice(-24);
   // USD-equivalent volume only for USD-like quoted pairs. Never label BTC
@@ -712,7 +750,7 @@ export async function generateSmartAnalysis(params: {
       rsiLabel: rsi >= 70 ? 'Перекупленість (>70)' : rsi <= 30 ? 'Перепроданість (<30)' : 'Нейтральний баланс',
       ema20: Number(ema20.toPrecision(6)),
       ema50: Number(ema50.toPrecision(6)),
-      ema200: Number(ema200.toPrecision(6)),
+      ema200: ema200 === null ? null : Number(ema200.toPrecision(6)),
       priceVsEma,
       crossSignal,
       crossSignalLabel,
