@@ -54,7 +54,7 @@ test('changing page size preserves the first visible coin and produces 50 distin
 test('changing Terminal timeframe keeps the selected automatic market preset and current page', () => {
   const page = readFileSync(new URL('../src/components/TerminalPage.tsx', import.meta.url), 'utf8');
   const start = page.indexOf('const handleApplyGlobalTimeframe =');
-  const end = page.indexOf('const handleTimeframeSelect =', start);
+  const end = page.indexOf('const handleApplyPreset =', start);
   assert.ok(start >= 0 && end > start);
   const handler = page.slice(start, end);
   assert.match(handler, /updateBlocks\(\(prev\) => prev\.map/);
