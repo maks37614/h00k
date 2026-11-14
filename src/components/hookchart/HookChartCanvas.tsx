@@ -1247,41 +1247,6 @@ const HookChartCanvas = forwardRef<HookChartHandle, HookChartCanvasProps>(functi
           </div>)}
         </div>}
 
-        {liquidationMapSupported && <div className="liqHeatmapTools" role="group" aria-label="Карта ліквідацій">
-          <button
-            type="button"
-            className={'liqHeatmapSwitch' + (liquidationMapOn ? ' active' : '')}
-            aria-label={liquidationMapOn ? 'Вимкнути карту ліквідацій' : 'Увімкнути карту ліквідацій'}
-            title={settings.tooltips !== false ? (liquidationMapOn
-              ? 'Вимкнути карту ліквідацій (отримані події, не прогноз)'
-              : 'Увімкнути карту ліквідацій (отримані події, не прогноз)') : undefined}
-            aria-pressed={liquidationMapOn}
-            onClick={() => {
-              if (liquidationMapOn) {
-                setLiquidationMapOn(false);
-                setLiquidationMapState(null);
-                setLiquidationMapStatus(null);
-              } else {
-                setLiquidationMapOn(true);
-              }
-            }}
-          >
-            <MapIcon size={17} strokeWidth={1.9} aria-hidden="true" />
-          </button>
-          {liquidationMapOn && (['24h','7d'] as const).map(period => (
-            <button
-              key={period}
-              type="button"
-              className={'liqHeatmapPeriod' + (liquidationMapPeriod === period ? ' active' : '')}
-              aria-label={'Період карти ліквідацій ' + period}
-              aria-pressed={liquidationMapPeriod === period}
-              onClick={() => setLiquidationMapPeriod(period)}
-            >
-              {period}
-            </button>
-          ))}
-        </div>}
-
         <div className="autoOverlayTools" role="group" aria-label="Автоматичні рівні">
           {OVERLAYS.map(([id, label]) => <button
             key={id}
@@ -1302,7 +1267,41 @@ const HookChartCanvas = forwardRef<HookChartHandle, HookChartCanvasProps>(functi
         </button>}
       </div>}
 
-      <div className="toolbarRight">
+      <div className={liquidationMapSupported ? "toolbarRight hasLiqMap" : "toolbarRight"}>
+        {liquidationMapSupported && <div className="liqHeatmapTools" role="group" aria-label="Карта ліквідацій">
+          {liquidationMapOn && (['24h','7d'] as const).map(period => (
+            <button
+              key={period}
+              type="button"
+              className={'liqHeatmapPeriod' + (liquidationMapPeriod === period ? ' active' : '')}
+              aria-label={'Період карти ліквідацій ' + period}
+              aria-pressed={liquidationMapPeriod === period}
+              onClick={() => setLiquidationMapPeriod(period)}
+            >
+              {period}
+            </button>
+          ))}
+          <button
+            type="button"
+            className={'liqHeatmapSwitch' + (liquidationMapOn ? ' active' : '')}
+            aria-label={liquidationMapOn ? 'Вимкнути карту ліквідацій' : 'Увімкнути карту ліквідацій'}
+            title={settings.tooltips !== false ? (liquidationMapOn
+              ? 'Вимкнути карту ліквідацій (отримані події, не прогноз)'
+              : 'Увімкнути карту ліквідацій (отримані події, не прогноз)') : undefined}
+            aria-pressed={liquidationMapOn}
+            onClick={() => {
+              if (liquidationMapOn) {
+                setLiquidationMapOn(false);
+                setLiquidationMapState(null);
+                setLiquidationMapStatus(null);
+              } else {
+                setLiquidationMapOn(true);
+              }
+            }}
+          >
+            <MapIcon size={17} strokeWidth={1.9} aria-hidden="true" />
+          </button>
+        </div>}
         {!replay && <button
           type="button"
           title={settings.tooltips !== false ? 'Налаштування графіка' : undefined}
