@@ -106,7 +106,7 @@ test('one catalog call + one holder call shared by concurrent users, with 12h po
   assert.equal(collision.count,null);
   const multi = await service.get('MULTIUSDT');
   assert.equal(multi.status,'ambiguous');
-  assert.equal((await service.get('BTCUSDT')).status,'unmapped');
+  assert.equal((await service.get('BTCUSDT')).status,'native_unsupported');
   assert.equal(requests.length,2,'no token-info request for ambiguous or native symbols');
 });
 
@@ -124,6 +124,35 @@ test('verified contract override works without requesting massive coin catalog',
   assert.equal(requests.length,1);
   assert.ok(requests[0].includes('/onchain/networks/eth/tokens/'));
   assert.ok(!requests[0].includes('coins/list'));
+});
+
+test('native Bitcoin is not silently mapped to holders of wrapped tokens', async () => {
+  const service = createCoinGeckoHoldersService({
+    apiKey:'test-demo-key', now:()=>now,
+    fetcher: (async () => { throw Error('Native coin must not call token-info API'); }) as typeof fetch,
+  });
+  const result = await service.get('BTCUSDT');
+  assert.equal(result.status, 'native_unsupported');
+  assert.equal(result.count, null);
+  assert.equal(result.contractAddress, null);
+  assert.match(result.detail, /нативна монета/);
+});
+
+test('verified official Chainlink contract resolves LINK holders without ambiguous ticker', async () => {
+  const requested: string[] = [];
+  const service = createCoinGeckoHoldersService({
+    apiKey:'test-demo-key', now:()=>now,
+    fetcher: (async (url: string | URL | Request) => {
+      requested.push(String(url));
+      return response(holderPayload('LINK', '0x514910771AF9Ca656af840dff83E8264EcF986CA'));
+    }) as typeof fetch,
+  });
+  const result = await service.get('LINKUSDT');
+  assert.equal(result.status, 'available');
+  assert.equal(result.count, 1258);
+  assert.equal(result.network, 'eth');
+  assert.equal(requested.length, 1);
+  assert.ok(requested[0].includes('/tokens/0x514910771AF9Ca656af840dff83E8264EcF986CA/info'));
 });
 
 test('missing key yields n/d and never calls external services', async () => {
