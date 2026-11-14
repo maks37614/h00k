@@ -128,6 +128,7 @@ export const SurveillanceProvider: React.FC<{ children: React.ReactNode }> = ({ 
     let retry: ReturnType<typeof setTimeout> | undefined;
     let attempt = 0;
     let lastFetch = 0;
+    let lastUrgentFetch = 0;
     const connect = async () => {
       if (stopped) return;
       controller = new AbortController();
@@ -150,7 +151,16 @@ export const SurveillanceProvider: React.FC<{ children: React.ReactNode }> = ({ 
           while (boundary >= 0) {
             const frame = buffer.slice(0, boundary);
             buffer = buffer.slice(boundary + 2);
-            if (frame.startsWith('event: changed\n')) {
+            if (frame.startsWith('event: alert\n')) {
+              // Critical/new signal invalidations are a separate fast lane.
+              // Never make them wait behind the 12s routine refresh throttle.
+              const now = Date.now();
+              if (now - lastUrgentFetch >= 500) {
+                lastUrgentFetch = now;
+                lastFetch = now;
+                void fetchCoins();
+              }
+            } else if (frame.startsWith('event: changed\n')) {
               if (Date.now() - lastFetch >= 12000) {
                 lastFetch = Date.now();
                 void fetchCoins();
