@@ -134,3 +134,13 @@ test('Terminal does not poll market quotes while hidden and refreshes safely on 
   assert.match(page, /document\.removeEventListener\('visibilitychange', onVisibilityChange\)/);
   assert.match(page, /controller\.abort\(\)/);
 });
+
+test('Terminal header actions cannot target the wrong symbol in multi-chart mode', () => {
+  const page = source('../src/components/TerminalPage.tsx');
+  const widget = source('../src/components/terminal/TerminalChartWidget.tsx');
+  assert.match(page, /const hasHeaderTarget = blocks\.length === 1 && coinMarketKey\(activeCoin\) === coinMarketKey\(blocks\[0\]\)/);
+  assert.match(page, /onOpenTelegramAlerts && hasHeaderTarget/);
+  assert.match(page, /onSendMetaScalp && hasHeaderTarget/);
+  assert.match(widget, /onSendMetaScalp\(coin\)/);
+  assert.match(widget, /onOpenTelegramAlerts\(\{/);
+});
