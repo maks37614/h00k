@@ -1,6 +1,9 @@
 services:
   app:
-    build: .
+    build:
+      context: .
+      args:
+        VITE_LIQ_CLIENT_MULTIPLEX: ${VITE_LIQ_CLIENT_MULTIPLEX:-0}
     restart: unless-stopped
     init: true
     env_file:
