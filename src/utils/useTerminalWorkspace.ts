@@ -167,7 +167,8 @@ export function useTerminalWorkspace() {
     // If the user edited cached charts while their account was loading, they
     // never saw the server version they would be replacing. Treat it as a
     // conflict rather than silently authorizing an overwrite of cloud charts.
-    if (revision.current > 0 && profile.terminalSettings && !syncConflictRef.current) {
+    if ((revision.current > 0 || lastCommittedWorkspace.current !== workspace)
+        && profile.terminalSettings && !syncConflictRef.current) {
       syncConflictRef.current = true;
       const saved = saveConflictBackup(uid, workspaceRef.current);
       setBackupFailed(!saved);
