@@ -440,7 +440,10 @@ export async function generateSmartAnalysis(params: {
     (await fetchKlines(exchange, marketType, symbol, '1h', 26).catch(() => [])) || [];
   const closedHours = hourly.filter((c) => finiteBar(c) &&
     c.time * 1000 + 60 * 60_000 <= Date.now()).slice(-24);
-  const has24h = closedHours.length === 24;
+  // USD-equivalent volume only for USD-like quoted pairs. Never label BTC
+  // quote turnover as USD or compare it against USD thresholds.
+  const quoteIsUsdLike = /(USDT|USDC|BUSD|FDUSD|USD)$/.test(symbol);
+  const has24h = quoteIsUsdLike && closedHours.length === 24;
   const barUsd = (bar: Kline) => Number.isFinite(bar.quoteVolume)
     ? bar.quoteVolume! : bar.volume * bar.close;
   const total24hVolUsd = has24h
