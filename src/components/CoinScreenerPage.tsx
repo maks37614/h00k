@@ -814,7 +814,7 @@ export const CoinScreenerPage: React.FC<CoinScreenerPageProps> = ({
 
             {/* The arrow toggles an inclusive 24-hour volume ceiling/floor without fetching more quotes. */}
             <div data-screener-filter="volume" className="flex min-h-12 w-full min-w-0 flex-col items-stretch justify-center gap-0.5 rounded-xl border border-slate-800 bg-slate-950/80 px-2.5 py-1 text-xs sm:min-h-9 sm:flex-row sm:items-center sm:gap-1.5 lg:w-80">
-              <span id="screener-volume-cap-label" className="shrink-0 whitespace-nowrap text-[11px] text-slate-500">Обсяг 24год:</span>
+              <span id="screener-volume-cap-label" className="shrink-0 whitespace-nowrap text-[11px] text-slate-500">{t('screenerVolume24h')}</span>
               <div className="flex min-w-0 flex-1 items-center gap-1.5">
                 <button type="button" data-screener-volume-direction
                   aria-label={volumeMode === 'to' ? 'Перемкнути обсяг на Від' : 'Перемкнути обсяг на До'}
@@ -825,7 +825,7 @@ export const CoinScreenerPage: React.FC<CoinScreenerPageProps> = ({
                   }}
                   className="flex h-6 shrink-0 items-center justify-center gap-0.5 rounded-md border border-slate-700/80 px-1.5 text-[11px] font-medium text-cyan-300 transition-colors hover:border-cyan-400 hover:text-white focus:outline-none focus-visible:ring-1 focus-visible:ring-cyan-500">
                   {volumeMode === 'to' ? <ArrowDownToLine className="h-3 w-3" /> : <ArrowUpToLine className="h-3 w-3" />}
-                  <span>{volumeMode === 'to' ? 'До' : 'Від'}</span>
+                  <span>{volumeMode === 'to' ? t('screenerVolumeTo') : t('screenerVolumeFrom')}</span>
                 </button>
                 <ScreenerVolumeDropdown
                   id="screener-volume-cap"
