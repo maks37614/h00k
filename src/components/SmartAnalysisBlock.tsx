@@ -472,7 +472,7 @@ export const SmartAnalysisBlock: React.FC<SmartAnalysisBlockProps> = ({
             {/* 1h Volume & Spike */}
             <div className="p-3 rounded-lg bg-slate-900/80 border border-slate-800 space-y-1.5">
               <div className="flex items-center justify-between text-slate-400">
-                <span>Об'єм за останню 1 год</span>
+                <span>Обсяг останньої закритої 1h свічки (≈ USD)</span>
                 {data.volumeMetrics.hasVolumeSpike && (
                   <span className="px-1.5 py-0.2 rounded text-[10px] bg-amber-500/20 text-amber-300 font-bold border border-amber-500/40">
                     СПЛЕСК x{data.volumeMetrics.volume1hSpikeRatio}
@@ -480,10 +480,10 @@ export const SmartAnalysisBlock: React.FC<SmartAnalysisBlockProps> = ({
                 )}
               </div>
               <span className="font-bold text-white text-sm font-mono block">
-                {formatVolume(data.volumeMetrics.volume1hUsd)}
+                {volumeOrNA(data.volumeMetrics.volume1hUsd)}
               </span>
               <span className="text-[10px] text-slate-400 block font-sans">
-                24h оборот: {formatVolume(data.volumeMetrics.volume24hUsd)}
+                Обсяг 24 закритих 1h свічок (≈ USD): {volumeOrNA(data.volumeMetrics.volume24hUsd)}
               </span>
             </div>
 
@@ -492,10 +492,10 @@ export const SmartAnalysisBlock: React.FC<SmartAnalysisBlockProps> = ({
               <span className="text-slate-400 block">Поточний Спред (Spread)</span>
               <div className="flex items-baseline gap-2">
                 <span className="font-bold text-white text-sm font-mono">
-                  {data.spread.spreadPct}%
+                  {data.spread.spreadPct === null ? 'н/д' : data.spread.spreadPct + '%'}
                 </span>
                 <span className="text-[10px] text-slate-400 font-mono">
-                  (${data.spread.spreadUsd})
+                  {data.spread.spreadUsd === null ? '' : '($' + data.spread.spreadUsd + ')'}
                 </span>
               </div>
               <span className="text-[10px] text-emerald-400 block font-medium">
@@ -503,7 +503,7 @@ export const SmartAnalysisBlock: React.FC<SmartAnalysisBlockProps> = ({
                   ? 'Ультра-вузький (найвища ліквідність)'
                   : data.spread.quality === 'normal'
                   ? 'Звичайний робочий спред'
-                  : 'Широкий спред (ризик прослизання)'}
+                  : data.spread.quality === 'wide' ? 'Широкий спред (ризик прослизання)' : 'Дані стакана недоступні'}
               </span>
             </div>
           </div>
@@ -515,20 +515,20 @@ export const SmartAnalysisBlock: React.FC<SmartAnalysisBlockProps> = ({
                 Де знаходиться ціна відносно денного High/Low:
               </span>
               <span className="font-mono font-bold text-cyan-400">
-                {data.volatility.positionInDayRangePct}% від мінімуму дня
+                {data.volatility.positionInDayRangePct === null ? 'н/д' : data.volatility.positionInDayRangePct + '% від мінімуму 24 закритих 1h'}
               </span>
             </div>
 
             <div className="w-full bg-slate-800 h-2.5 rounded-full relative overflow-hidden flex">
               <div
                 className="bg-gradient-to-r from-rose-500 via-amber-400 to-emerald-500 h-full rounded-full"
-                style={{ width: `${data.volatility.positionInDayRangePct}%` }}
+                style={{ width: `${data.volatility.positionInDayRangePct ?? 0}%` }}
               />
             </div>
 
             <div className="flex justify-between text-[10px] font-mono text-slate-400">
-              <span>Day Low: ${formatCryptoPrice(data.volatility.low24h)}</span>
-              <span>Day High: ${formatCryptoPrice(data.volatility.high24h)}</span>
+              <span>24h Low: {data.volatility.low24h === null ? 'н/д' : '$' + priceOrNA(data.volatility.low24h)}</span>
+              <span>24h High: {data.volatility.high24h === null ? 'н/д' : '$' + priceOrNA(data.volatility.high24h)}</span>
             </div>
           </div>
         </div>
