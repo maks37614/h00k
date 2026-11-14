@@ -595,6 +595,10 @@ export class CoinWorker {
   private addEvent(event: EngineAlertEvent) {
     if (this.recentEvents.some((existing) => existing.eventId === event.eventId)) return;
     this.recentEvents.unshift(event);
+    // Users must see a newly confirmed exchange signal without waiting for
+    // the 15s routine surveillance refresh or the next analysis cycle.
+    // The event stream sends only an owner-scoped invalidation, never payloads.
+    if (!this.isDestroyed) publishSurveillanceAlert(this.coin.userId);
     if (this.recentEvents.length > 25) {
       this.recentEvents.pop();
     }
