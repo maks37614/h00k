@@ -152,3 +152,18 @@ test('closed per-chart coin switchers do not rescan the entire Terminal market',
   assert.match(widget, /const filteredCoins = useMemo\(\(\) => \{\s*if \(!isCoinPickerOpen\) return \[\];/);
   assert.match(widget, /\}, \[allCoins, coinSearch, isCoinPickerOpen\]\)/);
 });
+
+test('1x–4x Terminal layout buttons never remove, replace or reorder existing chart blocks', () => {
+  const page = source('../src/components/TerminalPage.tsx');
+  const start = page.indexOf('title="1 колонка (зберегти всі графіки)"');
+  const sectionStart = page.lastIndexOf('<button', start);
+  const end = page.indexOf('{/* Timeframe Selector */}', start);
+  assert.ok(sectionStart >= 0 && end > sectionStart, 'layout controls must exist');
+  const layout = page.slice(sectionStart, end);
+  assert.doesNotMatch(layout, /setBlocks\(/, 'column selectors must not discard chart blocks');
+  assert.doesNotMatch(layout, /handleApplyPreset\(/, 'column selectors must not replace selected coins');
+  for (const columns of [1, 2, 3, 4]) {
+    assert.match(layout, new RegExp('columns: ' + columns + ', autoFitScreen: true'));
+  }
+  assert.match(layout, /config\.columns === 1/);
+});
