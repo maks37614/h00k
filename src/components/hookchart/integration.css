@@ -2715,3 +2715,22 @@
     font-size:9px;
   }
 }
+
+/* Pin Liq map immediately before the settings gear, not inside the
+ * horizontally scrolling additional tools. Terminal's old 28px fixed
+ * toolbarRight width must grow when the optional map icon is present. */
+.hookchart-root .hookchart-toolbar .toolbarRight.hasLiqMap {
+  display:flex;
+  align-items:center;
+  flex:0 0 auto;
+  min-width:max-content;
+}
+.hookchart-terminal .hookchart-terminal-toolbar .toolbarRight.hasLiqMap {
+  flex:0 0 auto;
+  min-width:max-content;
+}
+.hookchart-root .toolbarRight.hasLiqMap .liqHeatmapTools {
+  border-left:0;
+  border-right:0;
+  padding:0 2px 0 0;
+}
