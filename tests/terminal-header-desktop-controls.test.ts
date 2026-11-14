@@ -19,7 +19,7 @@ test('desktop clock is centered above the timeframe, not above the whole control
 test('on wide screens autoscale comes before 1x–4x on the left, presets and plus after timeframe', () => {
   const counter = secondRow.indexOf('Монет: {terminalCoinCount}');
   const auto = secondRow.indexOf('{renderAutoScaleButton()}');
-  const one = secondRow.indexOf('title="1 Графік (на весь екран)"');
+  const one = secondRow.indexOf('title="1 колонка (зберегти всі графіки)"');
   const four = secondRow.indexOf('title="4 Колонки"');
   const timeframe = secondRow.indexOf('{/* Timeframe Selector */}');
   const preset = secondRow.indexOf('ref={presetsButtonRef}');
