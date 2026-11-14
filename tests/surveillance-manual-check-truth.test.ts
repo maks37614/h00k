@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import type { SurveillanceCoin } from '../src/types';
-import { hasFreshSurveillanceCheck, wasSurveillanceCheckCommitted } from '../server/surveillance/checkResult';
+import { hasFreshSurveillanceCheck, wasSurveillanceCheckCommitted, SurveillanceCheckIncompleteError } from '../server/surveillance/checkResult';
 
 const prior = { lastCheckedAt: '2026-11-14T00:00:00.000Z' };
 const state = { currentPrice: 100 } as SurveillanceCoin['state'];
@@ -47,5 +47,5 @@ test('surveillance endpoints do not report a successful manual scan without new 
   assert.match(createCoin, /return res\.json\(\{ success: true, pending: true/);
   assert.match(checkAll, /if \(!hasFreshSurveillanceCheck\(coin, updated\)\)/);
   assert.match(checkAll, /if \(!wasSurveillanceCheckCommitted\(updated, committed\)\)/);
-  assert.match(checkAll, /if \(failedChecks\) throw new Error/);
+  assert.match(checkAll, /if \(failedChecks\) throw new SurveillanceCheckIncompleteError/);\n  assert.match(server, /err instanceof SurveillanceCheckIncompleteError/);
 });
