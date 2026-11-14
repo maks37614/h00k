@@ -134,8 +134,10 @@ test('a check-all waiting on exchange data cannot resurrect a deletion or lose a
     const selected = { ...coin, id: 'explicit-new-selection', symbol: 'SOLUSDT' };
     service.saveSurveillanceList('owner', [selected]);
     pending.forEach(resolve => resolve());
-    assert.deepEqual((await checking).map(c => c.id), [selected.id]);
-    assert.deepEqual(service.loadSurveillanceList('owner').map(c => c.id), [selected.id]);
+    await assert.rejects(checking, /Не вдалося завершити перевірку 1 монет/,
+      'deleting a coin mid-check must report an incomplete check, not false success');
+    assert.deepEqual(service.loadSurveillanceList('owner').map(c => c.id), [selected.id],
+      'the replacement selection must survive the rejected stale check');
   } finally { globalThis.fetch = originalFetch; }
 });
 
