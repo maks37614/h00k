@@ -2547,3 +2547,52 @@
     min-height:51px!important;
   }
 }
+
+/* Scale-tab selectors: keep chart type and device controls compact without
+   changing the full-size chart preview, sliders, or other HookChart tabs. */
+.hookchart-root .visualProfileCompact .visualProfileSelection {
+  width:min(100%, 670px);
+  gap:4px 10px;
+}
+.hookchart-root .visualProfileCompact .visualProfileSelection .settingRow {
+  min-height:34px!important;
+  padding:2px 0!important;
+  gap:5px;
+}
+.hookchart-root .visualProfileCompact .visualProfileSelection .settingControl > .visualContextPicker {
+  max-width:240px;
+}
+.hookchart-root .visualProfileCompact .visualProfileSelection .visualContextTrigger {
+  min-height:36px;
+  padding:6px 9px;
+  border-radius:8px;
+  gap:7px;
+  font-size:12px;
+}
+.hookchart-root .visualProfileCompact .visualProfileSelection .visualContextChevron {
+  font-size:17px;
+}
+.hookchart-root .visualProfileCompact .visualProfileSelection .settingsChips {
+  gap:4px;
+}
+.hookchart-root .visualProfileCompact .visualProfileSelection .settingsChips button {
+  min-height:30px;
+  height:30px;
+  padding:0 8px;
+  font-size:11px;
+}
+@media (max-width:620px) {
+  .hookchart-root .visualProfileCompact .visualProfileSelection {
+    width:100%;
+  }
+  .hookchart-root .visualProfileCompact .visualProfileSelection .visualContextTrigger {
+    min-height:42px;
+    font-size:14px;
+  }
+  .hookchart-root .visualProfileCompact .visualProfileSelection .settingsChips button {
+    min-height:34px;
+    height:34px;
+    padding:0 9px;
+    font-size:12px;
+  }
+}
