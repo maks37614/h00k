@@ -4,7 +4,7 @@ const { normalizeFloatingBoundsMap } = require('./workspace.cjs');
 // One independently persisted workspace for each external terminal.
 const PROVIDERS = Object.freeze(['metascalp', 'tiger', 'vataga']);
 const MODES = Object.freeze(['full', 'blocks', 'floating']);
-const SIDES = Object.freeze(['right', 'left', 'top', 'bottom']);
+const SIDES = Object.freeze(['auto', 'right', 'left', 'top', 'bottom']);
 const PANELS = Object.freeze([
   { id: 'screener', name: 'Скрінер', hash: 'screener' },
   { id: 'formations', name: 'Формації W/M', hash: 'patterns' },
@@ -20,7 +20,7 @@ function defaults(provider) {
     follow: true,
     alwaysOnTop: false,
     mode: 'full',
-    side: 'right',
+    side: 'auto',
     width: 440,
     height: 360,
     widgets: ['screener', 'formations'],

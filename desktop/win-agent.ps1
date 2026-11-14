@@ -63,10 +63,14 @@ public static class H00kWindowAgent {
         uint pid;
         GetWindowThreadProcessId(hwnd, out pid);
         if (pid == 0 || pid == Process.GetCurrentProcess().Id) return true;
-        var process = Process.GetProcessById((int)pid);
+        // Protected/elevated processes can deny name lookup. Keep the visible
+        // window available in the manual picker instead of silently dropping it.
+        string processName;
+        try { processName = Process.GetProcessById((int)pid).ProcessName; }
+        catch { processName = "Unknown"; }
         windows.Add(new WindowSnapshot {
           id = hwnd.ToInt64().ToString(),
-          pid = (int)pid, exe = process.ProcessName, title = title.ToString(),
+          pid = (int)pid, exe = processName, title = title.ToString(),
           left = bounds.Left, top = bounds.Top,
           width = bounds.Right - bounds.Left, height = bounds.Bottom - bounds.Top,
           minimized = IsIconic(hwnd)

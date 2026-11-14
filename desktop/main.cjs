@@ -4,7 +4,7 @@ const { spawn } = require('node:child_process');
 const path = require('node:path');
 const fs = require('node:fs');
 const readline = require('node:readline');
-const { dockRects, floatingRects } = require('./layout.cjs');
+const { dockRects, floatingRects, chooseDockPlacement } = require('./layout.cjs');
 const { normalizeFloatingBounds, restoreFloatingBounds, floatingLayoutKey } = require('./workspace.cjs');
 const { standaloneWindowChrome, standaloneToolbarInset, standaloneHeaderCSS } = require('./standalone-chrome.cjs');
 const { PROVIDERS, PANELS, normalizeSettings, normalizeProfile, matchesTerminal, availablePanels } = require('./profiles.cjs');
@@ -29,6 +29,7 @@ let lastDockStatus = {};
 let standalone = null;
 const toolbarOwners = new Map(); // local-only WebContentsView IDs, never exposed to h00k.top
 const lastLayoutKeys = new Map(); // detect explicit side/mode/size changes, even when follow is off
+const autoPlacements = new Map(); // stabilize automatic side/monitor choices
 const hiddenProviders = new Map(); // reclaim hidden webviews after prolonged terminal absence
 const HIDDEN_RECLAIM_MS = 30_000;
 
@@ -214,6 +215,7 @@ function openToolbarMenu(event) {
   const profile = settings.profiles[provider];
   const label = LABELS[provider];
   const sides = [
+    ['auto', 'Автоматично (де більше місця)'],
     ['right', 'Праворуч'], ['left', 'Ліворуч'], ['top', 'Зверху'], ['bottom', 'Знизу'],
   ];
   const modes = [
@@ -287,6 +289,7 @@ function ensureContentWindows(provider, ids, mode = 'full') {
 function closeProvider(provider) {
   hiddenProviders.delete(provider);
   lastLayoutKeys.delete(provider);
+  autoPlacements.delete(provider);
   const group = windows.get(provider);
   if (!group) return;
   for (const win of group.values()) if (!win.isDestroyed()) win.destroy();
@@ -336,16 +339,18 @@ function syncWindows() {
     if (!ready) { closeProvider(provider); lastDockStatus[provider] = 'Вимкнено'; continue; }
     const target = findTarget(provider);
     const layoutKey = floatingLayoutKey(profile);
-    const layoutChanged = lastLayoutKeys.has(provider) && lastLayoutKeys.get(provider) !== layoutKey;
-    lastLayoutKeys.set(provider, layoutKey);
+    const previousLayoutKey = lastLayoutKeys.get(provider);
     if (!target) {
+      const layoutChanged = previousLayoutKey !== undefined && previousLayoutKey !== layoutKey;
+      lastLayoutKeys.set(provider, layoutKey);
       if (profile.mode === 'floating') {
         // Truly independent floating panels can be launched without a terminal.
         hiddenProviders.delete(provider);
         const ids = availablePanels(profile);
         const group = ensureContentWindows(provider, ids, profile.mode);
         const work = screen.getPrimaryDisplay().workArea;
-        const boxes = floatingRects(null, work, profile.width, profile.height, ids.length, profile.side);
+        const boxes = floatingRects(null, work, profile.width, profile.height, ids.length,
+          profile.side === 'auto' ? 'right' : profile.side);
         ids.forEach((id, index) => {
           const win = group.get(id);
           if (!win || win.isDestroyed()) return;
@@ -360,7 +365,7 @@ function syncWindows() {
         lastDockStatus[provider] = 'Плаваючі панелі без термінала';
         continue;
       }
-      hideDockedWindows(provider, 'Термінал не знайдено');
+      hideDockedWindows(provider, 'Термінал не знайдено: запустіть його або виберіть вікно вручну');
       continue;
     }
     if (target.minimized && profile.mode !== 'floating') {
@@ -371,12 +376,31 @@ function syncWindows() {
     const ids = availablePanels(profile);
     const rect = externalRect(target);
     const work = screen.getDisplayMatching(rect).workArea;
+    const automatic = profile.mode !== 'floating' && profile.side === 'auto';
+    const placement = automatic
+      ? chooseDockPlacement(rect, screen.getAllDisplays().map(display => display.workArea),
+          profile.width, profile.height, ids.length, autoPlacements.get(provider))
+      : null;
+    if (automatic) {
+      if (placement) autoPlacements.set(provider, {side:placement.side, workIndex:placement.workIndex});
+      else autoPlacements.delete(provider);
+    } else autoPlacements.delete(provider);
+    const effectiveSide = automatic ? placement?.side : profile.side;
+    const resolvedKey = automatic
+      ? layoutKey + ':auto:' + (effectiveSide || 'none') + ':' + (placement?.workIndex ?? -1)
+      : layoutKey;
+    const layoutChanged = previousLayoutKey !== undefined && previousLayoutKey !== resolvedKey;
+    lastLayoutKeys.set(provider, resolvedKey);
     const boxes = profile.mode === 'floating'
-      ? floatingRects(rect, work, profile.width, profile.height, ids.length, profile.side)
+      ? floatingRects(rect, work, profile.width, profile.height, ids.length,
+          profile.side === 'auto' ? 'right' : profile.side)
+      : automatic ? placement?.boxes || []
       : dockRects(rect, work, profile.side, profile.width, profile.height, ids.length);
     if (boxes.length !== ids.length) {
       // Never cover the terminal's order-entry controls just to make room.
-      hideDockedWindows(provider, 'Замало місця з вибраного боку; змініть сторону або розмір');
+      hideDockedWindows(provider, automatic
+        ? 'Немає достатньо місця навколо термінала; звільніть простір або зменшіть його вікно'
+        : 'Замало місця з вибраного боку; виберіть Автоматично або іншу сторону');
       continue;
     }
     const group = ensureContentWindows(provider, ids, profile.mode);
@@ -393,7 +417,9 @@ function syncWindows() {
         ? preferredFloatingBounds(provider, id, profile, boxes[index], restore)
         : boxes[index], profile.alwaysOnTop);
     });
-    lastDockStatus[provider] = profile.mode === 'floating' ? 'Плаваючі панелі' : 'Прикріплено до ' + target.title;
+    const sideNames = {right:'праворуч',left:'ліворуч',top:'зверху',bottom:'знизу'};
+    lastDockStatus[provider] = profile.mode === 'floating' ? 'Плаваючі панелі'
+      : 'Прикріплено ' + (automatic ? 'автоматично ' : '') + sideNames[effectiveSide] + ' до ' + target.title;
   }
 }
 function snapshot() {

@@ -1,7 +1,7 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { dockRects, floatingRects } = require('../layout.cjs');
+const { dockRects, floatingRects, chooseDockPlacement } = require('../layout.cjs');
 const { normalizeSettings, matchesTerminal, availablePanels } = require('../profiles.cjs');
 
 test('one independent workspace per provider and safe persisted values', () => {
@@ -78,4 +78,39 @@ test('onboarding is required only for a new installation; legacy profiles stay a
   assert.equal(normalizeSettings({ profiles: { metascalp: { enabled: true } } }).setupComplete, true);
   assert.equal(normalizeSettings({ setupComplete: false, profiles: {} }).setupComplete, false);
   assert.equal(normalizeSettings({ setupComplete: true }).setupComplete, true);
+});
+
+test('auto docking chooses the largest safe strip and does not overlay terminal',()=>{
+  const work=[{x:0,y:0,width:1920,height:1080}];
+  const left=chooseDockPlacement({x:1150,y:160,width:700,height:600},work,440,360,1);
+  assert.equal(left?.side,'left');
+  assert.equal(left.boxes[0].x+left.boxes[0].width,1150);
+  const right=chooseDockPlacement({x:140,y:160,width:700,height:600},work,440,360,1);
+  assert.equal(right?.side,'right');
+  assert.equal(right.boxes[0].x,840);
+  const top=chooseDockPlacement({x:650,y:830,width:600,height:200},work,440,360,1);
+  assert.equal(top?.side,'top');
+  assert.equal(chooseDockPlacement({x:0,y:0,width:1920,height:1080},work,440,360,1),null);
+});
+test('auto docking supports multiple displays, panel strips and stable side choice',()=>{
+  const works=[{x:-1920,y:0,width:1920,height:1080},{x:0,y:0,width:1920,height:1040}];
+  const target={x:-1150,y:160,width:900,height:600};
+  const selection=chooseDockPlacement(target,works,340,260,2);
+  assert.equal(selection.workIndex,0);
+  assert.equal(selection.boxes.length,2);
+  for(const b of selection.boxes) {
+    assert.ok(b.x>=-1920&&b.x+b.width<=0);
+    assert.ok(b.y>=0&&b.y+b.height<=1080);
+    assert.ok(b.x+b.width<=target.x||b.x>=target.x+target.width
+      ||b.y+b.height<=target.y||b.y>=target.y+target.height);
+  }
+  const current=chooseDockPlacement({x:800,y:200,width:500,height:500},[works[1]],400,260,1);
+  const stable=chooseDockPlacement({x:807,y:200,width:500,height:500},[works[1]],400,260,1,
+    {side:current.side,workIndex:0});
+  assert.equal(stable.side,current.side);
+  assert.equal(chooseDockPlacement(null,works,340,260,1),null);
+});
+test('new profiles default to automatic placement; existing manual sides remain',()=>{
+  assert.equal(normalizeSettings().profiles.metascalp.side,'auto');
+  assert.equal(normalizeSettings({profiles:{metascalp:{side:'left'}}}).profiles.metascalp.side,'left');
 });

@@ -140,3 +140,27 @@ test('always-on-top can be toggled for an independent floating pane without a ru
   engine.patchQuickProfile('metascalp',{alwaysOnTop:true});
   assert.equal(win.isAlwaysOnTop(),true);
 });
+
+test('auto side follows terminal movement without reloading h00k',()=>{
+  const {engine}=simulateDesktop();
+  engine.setSettings({profiles:{metascalp:{enabled:true,mode:'full',side:'auto',follow:true}}});
+  engine.acceptWindows([{...meta,left:100,width:700}]);
+  const win=engine.getWindows().get('metascalp').get('full');
+  assert.equal(win.getBounds().x,800);
+  const loads=win.webContents.urls.length;
+  engine.acceptWindows([{...meta,left:1150,width:700}]);
+  assert.equal(win.getBounds().x+win.getBounds().width,1150);
+  assert.equal(win.webContents.urls.length,loads);
+});
+test('auto attach never starts a web page with no monitor space',()=>{
+  const {engine,created}=simulateDesktop();
+  engine.setSettings({profiles:{metascalp:{enabled:true,side:'auto'}}});
+  engine.acceptWindows([{...meta,left:0,top:0,width:1920,height:1080}]);
+  assert.equal(created.length,0);
+});
+test('manual side keeps its choice instead of silently falling back',()=>{
+  const {engine}=simulateDesktop();
+  engine.setSettings({profiles:{metascalp:{enabled:true,side:'right'}}});
+  engine.acceptWindows([{...meta,left:1150,width:700}]);
+  assert.equal(engine.getWindows().get('metascalp'),undefined);
+});

@@ -75,4 +75,57 @@ function floatingRects(target, work, width, height, count, side = 'right') {
     height: Math.round(h),
   }));
 }
-module.exports = { dockRects, floatingRects, finiteRect };
+
+const AUTO_SIDES = Object.freeze(['right', 'left', 'top', 'bottom']);
+/**
+ * Find the largest usable strip directly beside the external terminal.
+ * Keep every pane within one monitor's work area and against the terminal
+ * edge; never resize or overlap the terminal. Prefer the previous choice
+ * when the difference is small to avoid unstable side switching.
+ */
+function chooseDockPlacement(target, workAreas, width, height, count, previousPlacement = null) {
+  if (!finiteRect(target) || !Array.isArray(workAreas)) return null;
+  const choices = [];
+  for (const [workIndex, work] of workAreas.entries()) {
+    if (!finiteRect(work)) continue;
+    const wr = work.x + work.width, wb = work.y + work.height;
+    const tr = target.x + target.width, tb = target.y + target.height;
+    const sharedX = Math.max(0, Math.min(tr, wr) - Math.max(target.x, work.x));
+    const sharedY = Math.max(0, Math.min(tb, wb) - Math.max(target.y, work.y));
+    for (const side of AUTO_SIDES) {
+      const boxes = dockRects(target, work, side, width, height, count);
+      if (boxes.length !== count) continue;
+      const free = side === 'right' ? wr - tr
+        : side === 'left' ? target.x - work.x
+        : side === 'bottom' ? wb - tb
+        : target.y - work.y;
+      const overlap = side === 'right' || side === 'left' ? sharedY : sharedX;
+      if (free <= 0 || overlap <= 0) continue;
+      const touching = boxes.every(box => {
+        const inside = box.x >= work.x && box.y >= work.y
+          && box.x + box.width <= wr && box.y + box.height <= wb;
+        const adjacent = side === 'right' ? Math.abs(box.x - tr) <= 1
+          : side === 'left' ? Math.abs(box.x + box.width - target.x) <= 1
+          : side === 'bottom' ? Math.abs(box.y - tb) <= 1
+          : Math.abs(box.y + box.height - target.y) <= 1;
+        const sharesEdge = (side === 'right' || side === 'left')
+          ? Math.min(box.y + box.height, tb) > Math.max(box.y, target.y)
+          : Math.min(box.x + box.width, tr) > Math.max(box.x, target.x);
+        return inside && adjacent && sharesEdge;
+      });
+      if (!touching) continue;
+      choices.push({side, workIndex, boxes, freeArea:free * overlap});
+    }
+  }
+  if (!choices.length) return null;
+  choices.sort((a,b) => b.freeArea - a.freeArea ||
+    AUTO_SIDES.indexOf(a.side) - AUTO_SIDES.indexOf(b.side) ||
+    a.workIndex - b.workIndex);
+  const best = choices[0];
+  const familiar = previousPlacement && choices.find(choice =>
+    choice.side === previousPlacement.side &&
+    choice.workIndex === previousPlacement.workIndex);
+  // 15% hysteresis prevents flicker when geometry changes by a few pixels.
+  return familiar && familiar.freeArea >= best.freeArea * 0.85 ? familiar : best;
+}
+module.exports = { dockRects, floatingRects, finiteRect, chooseDockPlacement };

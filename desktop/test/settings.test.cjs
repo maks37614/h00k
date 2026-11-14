@@ -42,3 +42,11 @@ test('first-run welcome and branded assets are bundled for the settings window',
   assert.match(logo, /robot-eye-blink/);
   for (const file of ['settings.css','robot-logo.svg']) assert.ok(pkg.build.files.includes(file));
 });
+
+test('quick attach uses auto mode and reports actual connection status',()=>{
+  const html=fs.readFileSync(path.join(__dirname,'..','settings.html'),'utf8');
+  assert.match(html,/Автоприкріпити зараз/);
+  assert.ok(html.includes("['auto','Автоматично · де більше місця']"));
+  assert.ok(html.includes("api.save(active,{...form(),enabled:true,side:'auto'})"));
+  assert.ok(html.includes("terminal?.status || 'Очікування термінала'"));
+});

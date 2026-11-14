@@ -36,14 +36,14 @@
 <div id="widgetArea" style="margin-top:16px"><h2>Вибрані блоки</h2><div class="checks" id="widgets"></div><p>Кожен блок відкриває відповідний розділ h00k у власному вікні.</p></div></section>
 <section><h2>3. Розташування</h2><div class="grid four" id="sides"></div>
 <div class="stack"><label><small>Ширина панелі, px</small><input type="number" id="width" min="240" max="1100"></label><label><small>Висота панелі, px</small><input type="number" id="height" min="200" max="1000"></label></div>
-<p>Якщо бракує вільного місця, h00k не перекриватиме стакан: змініть сторону або монітор.</p></section>
+<p>«Автоматично» оцінює вільне місце біля термінала на підключених моніторах і розміщує h00k з найкращого боку, не перекриваючи стакан. Ручний вибір сторони також доступний.</p></section>
 <section><h2>4. Автоматизація</h2><div class="checks">
 <label class="check"><input type="checkbox" id="enabled"> Увімкнути термінал</label>
 <label class="check"><input type="checkbox" id="autoAttach"> Прикріплювати автоматично</label>
 <label class="check"><input type="checkbox" id="follow"> Слідувати за вікном</label>
 <label class="check"><input type="checkbox" id="alwaysOnTop"> Завжди поверх вікон</label>
 </div><p>Коли «Слідувати» вимкнено, можна вільно розміщувати плаваючі панелі. Їхнє розташування на моніторах автоматично зберігається й відновлюється під час наступного запуску.</p></section>
-<div class="row"><button class="action primary" id="save">Зберегти налаштування</button><button class="action" id="attach">Прикріпити зараз</button><button class="action danger" id="detach">Відкріпити</button></div>
+<div class="row"><button class="action primary" id="save">Зберегти налаштування</button><button class="action" id="attach">Автоприкріпити зараз</button><button class="action danger" id="detach">Відкріпити</button></div>
 <div id="feedback" role="status"></div><small>Налаштування зберігаються лише на цьому комп’ютері. Програма не запитує біржові API-ключі.</small>
 <p>Примітка: Google OAuth може не працювати у вбудованому вікні Windows через правила Google для embedded webviews. Для входу безпосередньо в h00k Desktop використовуйте email і пароль; вхід у зовнішньому браузері не переносить авторизацію автоматично.</p>
 <script>
@@ -51,7 +51,7 @@
 const api=window.h00kDesktop, byId=id=>document.getElementById(id);
 const providers=[['metascalp','MetaScalp'],['tiger','Tiger.Trade'],['vataga','Vataga']];
 const modes=[['full','Весь h00k.top'],['blocks','Вибрані блоки'],['floating','Плаваючі вікна']];
-const sides=[['right','Праворуч'],['bottom','Знизу'],['left','Ліворуч'],['top','Зверху']];
+const sides=[['auto','Автоматично · де більше місця'],['right','Праворуч'],['bottom','Знизу'],['left','Ліворуч'],['top','Зверху']];
 const panels=[['screener','Скрінер'],['formations','Формації'],['early','Раннє виявлення'],['terminal','Термінал HookChart'],['surveillance','Спостереження'],['replay','Тестування']];
 let snap=null, active='metascalp', loadedMode='full', lastWindowsList='';
 function error(e){byId('feedback').textContent=e?.message||String(e);}
@@ -116,7 +116,16 @@ function form(){
     widgets:[...byId('widgets').querySelectorAll('input:checked')].map(c=>c.value)};
 }
 byId('save').onclick=async()=>{try{snap=await api.save(active,form());render();byId('feedback').textContent='Збережено';}catch(e){error(e);}};
-byId('attach').onclick=async()=>{try{snap=await api.save(active,form());snap=await api.attach(active);render();byId('feedback').textContent='Підключення увімкнено';}catch(e){error(e);}};
+byId('attach').onclick=async()=>{
+  try{
+    // Explicit quick attach picks the best safe side even if an old profile used "right".
+    snap=await api.save(active,{...form(),enabled:true,side:'auto'});
+    snap=await api.attach(active);
+    render();
+    const terminal=snap.terminals.find(item=>item.id===active);
+    byId('feedback').textContent=terminal?.status || 'Очікування термінала';
+  }catch(e){error(e);}
+};
 byId('detach').onclick=async()=>{try{snap=await api.detach(active);render();byId('feedback').textContent='Відкріплено';}catch(e){error(e);}};
 byId('target').onchange=async e=>{try{snap=await api.pick(active,e.target.value);drawStatus();}catch(err){error(err);}};
 byId('standalone').onclick=async()=>{try{await api.openStandalone();}catch(e){error(e);}};
