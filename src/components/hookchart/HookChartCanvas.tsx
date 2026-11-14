@@ -10,6 +10,7 @@ import { alertConditionForPrice, chartTelegramAlerts, telegramIdFromChartMarker 
 import { useLanguage } from '../../context/LanguageContext';
 import { resolveHookChartLanguage } from '../../locales/hookchartLanguage';
 import { toHookCandles } from '../../utils/hookchartData';
+import { replayHistoryChange } from '../../utils/replayHistoryChange';
 import { resolveTimeZone } from '../../utils/tradingSessions';
 import { fetchHistoricalReplayCandles } from '../../utils/replayService';
 import { normalizeExchangeSymbol } from '../../utils/marketSymbols';
@@ -297,12 +298,34 @@ const HookChartCanvas = forwardRef<HookChartHandle, HookChartCanvasProps>(functi
   }, [terminalMode, integratedToolbar, terminalExtraToolsOpen, settings.showTopToolbarIcons, settings.showMarketStatsBar]);
   const indicators = replay ? replayIndicators : enabledIndicators(settings, !!externalData, marketType);
   const timezone = settings.timezone || resolveTimeZone(profile?.timeZone);
+  // Replay is intentionally independent from the live indicator data pipeline.
+  const replayConversionRef = useRef<{ scope: string; input: readonly Kline[]; candles: Candle[] } | null>(null);
   // Replay must remain causal; live chart history can be extended and capped independently.
   const maxChartCandles = settings.maxChartCandles === undefined ? undefined : clampHookChartHistory(settings.maxChartCandles);
   const candles = useMemo(() => {
-    const rows = toHookCandles(replay ? klines : [...extraHistoryRows, ...klines]);
-    return !replay && maxChartCandles ? rows.slice(-maxChartCandles) : rows;
-  }, [klines, extraHistoryRows, replay, maxChartCandles]);
+    if (replay) {
+      const previous = replayConversionRef.current;
+      const change = replayHistoryChange(previous?.scope === historyScope ? previous.input : null, klines);
+      if (previous && previous.scope === historyScope && change === 'same') return previous.candles;
+      if (previous && previous.scope === historyScope &&
+          (change === 'append' || change === 'replace-last')) {
+        const next = toHookCandles(klines.slice(-1))[0];
+        if (next) {
+          const rows = change === 'append'
+            ? [...previous.candles, next]
+            : [...previous.candles.slice(0, -1), next];
+          replayConversionRef.current = { scope: historyScope, input: klines, candles: rows };
+          return rows;
+        }
+      }
+      const rows = toHookCandles(klines);
+      replayConversionRef.current = { scope: historyScope, input: klines, candles: rows };
+      return rows;
+    }
+    replayConversionRef.current = null;
+    const rows = toHookCandles([...extraHistoryRows, ...klines]);
+    return maxChartCandles ? rows.slice(-maxChartCandles) : rows;
+  }, [klines, extraHistoryRows, replay, maxChartCandles, historyScope]);
   const historyRequestKey = useRef('');
   useEffect(() => {
     // The renderer always shows the most recent candles first; the full
