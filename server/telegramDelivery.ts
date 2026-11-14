@@ -41,28 +41,45 @@ function indexRecords(records: TelegramDelivery[]) {
 
 function load(): TelegramDelivery[] {
   if (!deliveries) {
-    const stored = fs.existsSync(filePath) ? JSON.parse(fs.readFileSync(filePath, 'utf8')) : [];
-    if (!Array.isArray(stored)) throw new Error('Invalid Telegram delivery history');
-    deliveries = stored;
-    indexRecords(stored);
+    let raw: string | null;
+    try {
+      raw = fs.readFileSync(filePath, 'utf8');
+    } catch (error) {
+      // Only an actually missing file means a new empty delivery queue.
+      // An inaccessible or damaged file must never be overwritten as empty.
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+      raw = null;
+    }
+    const stored: unknown = raw === null ? [] : JSON.parse(raw);
+    if (!Array.isArray(stored) || stored.some(item => !item ||
+      typeof item !== 'object' || Array.isArray(item) ||
+      typeof item.id !== 'string' || typeof item.userId !== 'string' ||
+      !Array.isArray(item.messageIds) ||
+      !['pending', 'sent', 'failed'].includes(item.status))) {
+      throw new Error('Invalid Telegram delivery history');
+    }
+    deliveries = stored as TelegramDelivery[];
+    indexRecords(deliveries);
   }
-  return deliveries!;
+  return deliveries;
 }
 
-function persist() {
-  const file = filePath;
-  fs.mkdirSync(path.dirname(file), { recursive: true });
+/** Write the next snapshot before publishing it to in-memory readers.
+ * A failed rename cannot claim a notification was queued, sent or failed. */
+function commitRecords(records: TelegramDelivery[]) {
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
   // Pending records are never discarded by history retention.
   const retained = new Map<string, number>();
-  deliveries = [...load()].reverse().filter(item => {
+  const next = [...records].reverse().filter(item => {
     if (item.status === 'pending') return true;
     const count = retained.get(item.userId) || 0;
     retained.set(item.userId, count + 1);
     return count < 500;
   }).reverse();
-  indexRecords(deliveries);
-  fs.writeFileSync(`${file}.tmp`, JSON.stringify(deliveries), { mode: 0o600 });
-  fs.renameSync(`${file}.tmp`, file);
+  fs.writeFileSync(`${filePath}.tmp`, JSON.stringify(next), { mode: 0o600 });
+  fs.renameSync(`${filePath}.tmp`, filePath);
+  deliveries = next;
+  indexRecords(next);
 }
 
 export function getTelegramDelivery(userId: string, id: string): TelegramDelivery | undefined {
@@ -79,11 +96,10 @@ export function lastTelegramDeliveryAt(userId: string, eventKey: string): number
 export function recordSentTelegramMessage(userId: string, text: string, messageIds: number[]): void {
   const target = getUserTelegram(userId);
   if (!target?.botToken || !target.chatId || !messageIds.length) return;
-  load().push({
+  commitRecords([...load(), {
     id: randomUUID(), userId, text, botId: target.botToken.split(':')[0], chatId: target.chatId,
     messageIds: [...messageIds], status: 'sent', createdAt: Date.now(), sentAt: Date.now(), attempts: 1, nextAttemptAt: 0,
-  });
-  persist();
+  }]);
 }
 
 async function deliver(record: TelegramDelivery): Promise<DeliveryResult> {
@@ -91,29 +107,32 @@ async function deliver(record: TelegramDelivery): Promise<DeliveryResult> {
   if (existing) return existing;
   const task = (async (): Promise<DeliveryResult> => {
     const target = getUserTelegram(record.userId);
+    // A network send may take seconds. Keep the last durable state in memory
+    // until the outcome is itself committed (never mutate the live record).
+    const next = { ...record, messageIds: [...record.messageIds] };
     // Do not combine a saved old bot/chat with a newly changed destination.
     if (!target?.confirmedAt || !target.botToken || !target.chatId || target.botToken.split(':')[0] !== record.botId || target.chatId !== record.chatId) {
-      record.status = 'failed';
-      record.error = 'Telegram відключено або одержувач змінився. Старе повідомлення не перенаправлено.';
+      next.status = 'failed';
+      next.error = 'Telegram відключено або одержувач змінився. Старе повідомлення не перенаправлено.';
     } else {
-      record.attempts++;
+      next.attempts++;
       const result = await telegramDispatchQueue.schedule(record.botId, record.chatId,
         () => sendTelegramMessage(record.text, {
           botToken: target.botToken, chatId: target.chatId, startPart: record.messageIds.length,
         }));
-      record.messageIds.push(...result.messageIds);
+      next.messageIds.push(...result.messageIds);
       if (result.success) {
-        record.status = 'sent';
-        record.sentAt = Date.now();
-        record.error = undefined;
+        next.status = 'sent';
+        next.sentAt = Date.now();
+        next.error = undefined;
       } else {
-        record.error = result.error;
-        record.status = result.retryable && record.attempts < 8 && Date.now() - record.createdAt < 24 * 3600 * 1000 ? 'pending' : 'failed';
-        record.nextAttemptAt = Date.now() + Math.max(result.retryAfterSeconds || 0, Math.min(900, 5 * 2 ** record.attempts)) * 1000;
+        next.error = result.error;
+        next.status = result.retryable && next.attempts < 8 && Date.now() - next.createdAt < 24 * 3600 * 1000 ? 'pending' : 'failed';
+        next.nextAttemptAt = Date.now() + Math.max(result.retryAfterSeconds || 0, Math.min(900, 5 * 2 ** next.attempts)) * 1000;
       }
     }
-    persist();
-    return { success: record.status === 'sent', queued: record.status === 'pending', error: record.error, deliveryId: record.id, messageIds: [...record.messageIds] };
+    commitRecords(load().map(item => item.id === record.id ? next : item));
+    return { success: next.status === 'sent', queued: next.status === 'pending', error: next.error, deliveryId: next.id, messageIds: [...next.messageIds] };
   })().finally(() => { inFlight.delete(record.id); });
   inFlight.set(record.id, task);
   return task;
@@ -143,8 +162,7 @@ export async function sendUserTelegramMessage(userId: string, text: string, even
     messageIds: [], status: 'pending', createdAt: Date.now(), attempts: 0, nextAttemptAt: Date.now(),
   };
   if (load().filter(item => item.status === 'pending').length >= 5000) return { success: false, error: 'Черга Telegram переповнена. Повторіть пізніше.' };
-  load().push(record);
-  persist();
+  commitRecords([...load(), record]);
   return deliver(record);
 }
 
