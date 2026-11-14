@@ -11,7 +11,7 @@ import { connectSharedHookChartLiquidations } from './sharedLiquidationStream';
 import { HookChartDensityBook, type DensityAutoStats } from './densityBook';
 import { EMPTY_SESSION_LIQUIDATIONS, getSessionLiquidationTotals, recordSessionLiquidation, sessionLiquidationScope, subscribeSessionLiquidations } from './liquidationSession';
 import { canonicalLiquidationId, deduplicateLiquidations, filterVisibleLiquidations } from './liquidationDisplay';
-import { shouldPublishDepthView, shouldPublishLiquidationView } from './feedPublishPolicy';
+import { equalDepthAutoStats, shouldPublishDepthView, shouldPublishLiquidationView } from './feedPublishPolicy';
 import { LiquidationEventBuffer } from './liquidationEventBuffer';
 
 type BookLevel = { p: number; q: number };
@@ -141,10 +141,12 @@ export function useOriginalHookChartLiveFeed({
       }
       depthScopeRef.current = next.depthReady ? depthScope : '';
       if (next.price) priceRef.current = next.price;
-      setDensities(next.densities);
+      // Empty books and identical counters should not invalidate every
+      // Terminal chart's React tree on each hold-time clock tick.
+      setDensities(current => !current.length && !next.densities.length ? current : next.densities);
       setBook(next.book);
       setDensityCut(next.densityCut);
-      setDensityAutoStats(next.autoStats);
+      setDensityAutoStats(current => equalDepthAutoStats(current, next.autoStats) ? current : next.autoStats);
       setDepthReady(next.depthReady);
       if (!next.depthReady) setDepthStatus(current => current === 'live' ? 'reconnecting' : current);
       return next.depthReady;

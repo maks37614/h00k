@@ -30,6 +30,10 @@ const states = new Map<string, SessionState>();
 const listeners = new Map<string, Set<() => void>>();
 const pendingStorage = new Set<string>();
 let persistTimer: ReturnType<typeof setTimeout> | null = null;
+// Serializing every liquidation ID after each 400 ms burst becomes very
+// expensive during long sessions. Pagehide and backgrounding still flush
+// immediately, so normal continuous streams can safely batch these writes.
+const PERSIST_DELAY_MS = 3000;
 
 function storage(): Storage | null {
   try { return typeof sessionStorage === 'undefined' ? null : sessionStorage; }
@@ -79,7 +83,10 @@ function currentState(scope: string): SessionState {
 }
 
 function persist(): void {
-  persistTimer = null;
+  if (persistTimer !== null) {
+    clearTimeout(persistTimer);
+    persistTimer = null;
+  }
   const target = storage();
   if (!target) { pendingStorage.clear(); return; }
   for (const scope of pendingStorage) {
@@ -96,11 +103,18 @@ function persist(): void {
 function queuePersist(scope: string): void {
   pendingStorage.add(scope);
   if (persistTimer !== null) return;
-  persistTimer = setTimeout(persist, 400);
+  persistTimer = setTimeout(persist, PERSIST_DELAY_MS);
 }
 
 if (typeof window !== 'undefined') {
   window.addEventListener('pagehide', persist);
+  // Mobile browsers can freeze or discard a background tab without pagehide.
+  // Persist on visibility loss to retain exact unique-ID session totals.
+  if (typeof document !== 'undefined') {
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden' && pendingStorage.size) persist();
+    });
+  }
 }
 
 export function sessionLiquidationScope(exchange: string, marketType: string, symbol: string): string {
