@@ -209,8 +209,11 @@ test('price, volatility and 24h high/low filters are inclusive and combine witho
   })), true);
 });
 
-const formCoin = (ratio: number, confirmed = true, closedCandleOnly = true): ScannedCoin => ({
-  formations: [{ validation: { breakoutConfirmed: confirmed, closedCandleOnly, volumeRatio: ratio } }],
+const formCoin = (ratio: number, confirmed = true, closedCandleOnly = true, lookAheadSafe = true): ScannedCoin => ({
+  formations: [{ validation: {
+    breakoutConfirmed: confirmed, closedCandleOnly, volumeRatio: ratio,
+    lookAheadSafe, finiteData: true, enoughData: true,
+  } }],
 } as unknown as ScannedCoin);
 
 test('only cached detected formations count; breakout RVOL must be confirmed and from closed candles', () => {
@@ -222,6 +225,7 @@ test('only cached detected formations count; breakout RVOL must be confirmed and
   assert.equal(matchesAdvancedScreenerFilters(sample, onlyRvol), false);
   assert.equal(matchesAdvancedScreenerFilters(sample, onlyRvol, formCoin(2, false)), false);
   assert.equal(matchesAdvancedScreenerFilters(sample, onlyRvol, formCoin(2, true, false)), false);
+  assert.equal(matchesAdvancedScreenerFilters(sample, onlyRvol, formCoin(2, true, true, false)), false);
   assert.equal(matchesAdvancedScreenerFilters(sample, onlyRvol, formCoin(1.49)), false);
   assert.equal(matchesAdvancedScreenerFilters(sample, onlyRvol, formCoin(1.5)), true);
 });
