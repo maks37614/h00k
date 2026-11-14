@@ -37,8 +37,11 @@ test('each Basic setting renders one small question-mark trigger, even when unav
     open: true, embedded: true, prefs: normalizeOriginalHookChartPreferences(),
     onChange: () => {}, onApplyStrategy: () => {}, onClose: () => {},
   }));
-  assert.equal((html.match(/aria-label="Пояснення: /g) || []).length, 66);
-  assert.equal((html.match(/class="visualSettingHelp mainSettingHelp"/g) || []).length, 66);
+  // Every visible Basic control, including the optional historical Liq
+  // recurrence switch, needs exactly one contextual help trigger.
+  assert.equal((html.match(/aria-label="Пояснення: /g) || []).length, 67);
+  assert.equal((html.match(/class="visualSettingHelp mainSettingHelp"/g) || []).length, 67);
+  assert.match(html, /Пояснення: Прогнозні зони Liq · модель за історією/);
   assert.match(html, /Пояснення: Зі сповіщень відкривати графіки в новому вікні/);
   assert.match(html, /Пояснення: Показувати колонку OI/);
   assert.match(html, /Пояснення: Кількість свічок Pavg/);
