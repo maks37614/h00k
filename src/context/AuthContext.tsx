@@ -24,10 +24,10 @@ interface AuthContextType {
   user: H00kUser | null;
   profile: UserProfile | null;
   loading: boolean;
-  signInWithEmail: (email: string, password: string, remember?: boolean) => Promise<void>;
-  registerWithEmail: (email: string, password: string, name?: string) => Promise<void>;
-  resendVerification: (email: string) => Promise<void>;
-  requestPasswordReset: (email: string) => Promise<void>;
+  signInWithEmail: (email: string, password: string, remember?: boolean, captchaToken?: string) => Promise<void>;
+  registerWithEmail: (email: string, password: string, name?: string, captchaToken?: string) => Promise<void>;
+  resendVerification: (email: string, captchaToken?: string) => Promise<void>;
+  requestPasswordReset: (email: string, captchaToken?: string) => Promise<void>;
   resetPassword: (password: string) => Promise<void>;
   resetToken: string | null;
   updateProfileData: (updates: Partial<UserProfile>) => Promise<void>;
@@ -172,29 +172,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setAuthErrorCode(null);
     setAuthNotice(null);
   };
-  const signInWithEmail = async (email: string, pass: string, remember = true) => {
+  const signInWithEmail = async (email: string, pass: string, remember = true, captchaToken = '') => {
     clearAuthError();
-    try { setIdentity(await authRequest('/api/auth/login', { email, password: pass, remember })); }
+    try { setIdentity(await authRequest('/api/auth/login', { email, password: pass, remember, captchaToken })); }
     catch (error) { handleError(error); }
   };
-  const registerWithEmail = async (email: string, pass: string, name?: string) => {
+  const registerWithEmail = async (email: string, pass: string, name?: string, captchaToken = '') => {
     clearAuthError();
     try {
-      await authRequest('/api/auth/register', { email, password: pass, displayName: name });
+      await authRequest('/api/auth/register', { email, password: pass, displayName: name, captchaToken });
       setAuthNotice('Акаунт створено. Перевірте email і перейдіть за посиланням підтвердження.');
     } catch (error) { handleError(error); }
   };
-  const resendVerification = async (email: string) => {
+  const resendVerification = async (email: string, captchaToken = '') => {
     clearAuthError();
     try {
-      await authRequest('/api/auth/resend-verification', { email });
+      await authRequest('/api/auth/resend-verification', { email, captchaToken });
       setAuthNotice('Якщо адреса зареєстрована, перевірте пошту.');
     } catch (error) { handleError(error); }
   };
-  const requestPasswordReset = async (email: string) => {
+  const requestPasswordReset = async (email: string, captchaToken = '') => {
     clearAuthError();
     try {
-      await authRequest('/api/auth/forgot-password', { email });
+      await authRequest('/api/auth/forgot-password', { email, captchaToken });
       setAuthNotice('Якщо такий акаунт існує, ми надіслали посилання для відновлення.');
     } catch (error) { handleError(error); }
   };
