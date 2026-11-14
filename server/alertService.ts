@@ -1,4 +1,5 @@
 import { publicPriceFeed } from './publicPriceFeed';
+import { persistenceMetrics } from './persistenceMetrics';
 import { exchangeFetch } from './exchangeHttp';
 import { forEachBounded, selectRoundRobinBatch } from './priceAlertFallback';
 import fs from 'fs';
@@ -117,16 +118,22 @@ export function loadAlerts(): PriceAlert[] {
 }
 
 export function saveAlerts(alerts: PriceAlert[]): boolean {
+  const started = performance.now();
+  let bytes = 0;
   try {
     ensureDataDir();
     const temp = `${ALERTS_FILE}.tmp`;
-    fs.writeFileSync(temp, JSON.stringify(alerts), 'utf-8');
+    const payload = JSON.stringify(alerts);
+    bytes = Buffer.byteLength(payload);
+    fs.writeFileSync(temp, payload, 'utf-8');
     fs.renameSync(temp, ALERTS_FILE);
     alertsCache = alerts;
     alertsByUser = null;
     indexedAlerts = null;
+    persistenceMetrics.record('alerts', performance.now() - started, bytes, true);
     return true;
   } catch (err) {
+    persistenceMetrics.record('alerts', performance.now() - started, bytes, false);
     console.error('Failed to save alerts.json:', err);
     return false;
   }
@@ -152,18 +159,24 @@ export function loadHistory(): AlertHistoryItem[] {
 }
 
 export function saveHistory(items: AlertHistoryItem[]): boolean {
+  const started = performance.now();
+  let bytes = 0;
   try {
     ensureDataDir();
     const temp = `${HISTORY_FILE}.tmp`;
-    fs.writeFileSync(temp, JSON.stringify(items), 'utf-8');
+    const payload = JSON.stringify(items);
+    bytes = Buffer.byteLength(payload);
+    fs.writeFileSync(temp, payload, 'utf-8');
     fs.renameSync(temp, HISTORY_FILE);
     // A failed write must never make unpersisted history look durable.
     historyCache = items;
     historyByUser = null;
     processedHistoryIndex = null;
     indexedHistory = null;
+    persistenceMetrics.record('alertHistory', performance.now() - started, bytes, true);
     return true;
   } catch (err) {
+    persistenceMetrics.record('alertHistory', performance.now() - started, bytes, false);
     console.error('Failed to save alert_history.json:', err);
     return false;
   }
