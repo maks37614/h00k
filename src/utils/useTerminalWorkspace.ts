@@ -30,6 +30,54 @@ function saveConflictBackup(uid: string, value: WorkspaceSnapshot): boolean {
 const DEFAULT_CONFIG: TerminalWorkspaceConfig = {
   layoutPreset: 'custom', columns: 2, autoFitScreen: true, blocks: [], showFormations: true, blockHeight: 'medium',
 };
+/** Validate imported files before replacing any chart or saving to a profile. */
+export function parseTerminalWorkspaceBackup(json: string): WorkspaceSnapshot {
+  if (json.length > 2_000_000) throw new Error('JSON-копія перевищує 2 МБ.');
+  let payload: unknown;
+  try { payload = JSON.parse(json); }
+  catch { throw new Error('Неправильний формат JSON.'); }
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload))
+    throw new Error('Файл не містить робочої області Термінала.');
+  const value = payload as Record<string, unknown>;
+  if (!Array.isArray(value.blocks) || !Array.isArray(value.presets)
+      || !value.config || typeof value.config !== 'object' || Array.isArray(value.config))
+    throw new Error('У JSON відсутні графіки, налаштування або пресети.');
+  if (value.blocks.length > 250 || value.presets.length > 30)
+    throw new Error('Забагато графіків або пресетів у файлі.');
+  const blocks = normalizeTerminalBlocks(value.blocks);
+  const presets = normalizeTerminalPresets(value.presets);
+  // Never silently remove an invalid entry during backup restoration.
+  if (blocks.length !== value.blocks.length || presets.length !== value.presets.length
+      || value.presets.some((preset: unknown) => {
+        if (!preset || typeof preset !== 'object' || !Array.isArray((preset as TerminalSavedPreset).blocks)) return true;
+        return normalizeTerminalBlocks((preset as TerminalSavedPreset).blocks).length !==
+          (preset as TerminalSavedPreset).blocks.length;
+      })) throw new Error('Файл містить пошкоджені графіки або пресети.');
+  const source = value.config as Record<string, unknown>;
+  const config: TerminalWorkspaceConfig = { ...DEFAULT_CONFIG };
+  const layouts = ['1x1', '1x2', '2x1', '2x2', '2x3', '3x3', '4x4', '5x5', '6x6', 'custom'];
+  if (layouts.includes(String(source.layoutPreset)))
+    config.layoutPreset = source.layoutPreset as TerminalWorkspaceConfig['layoutPreset'];
+  if ([1, 2, 3, 4, 5, 6].includes(source.columns as number))
+    config.columns = source.columns as TerminalWorkspaceConfig['columns'];
+  if (typeof source.autoFitScreen === 'boolean') config.autoFitScreen = source.autoFitScreen;
+  if (typeof source.showFormations === 'boolean') config.showFormations = source.showFormations;
+  if (['compact', 'medium', 'large'].includes(String(source.blockHeight)))
+    config.blockHeight = source.blockHeight as TerminalWorkspaceConfig['blockHeight'];
+  if (['1m', '5m', '15m', '1h', '4h', '1d'].includes(String(source.globalTimeframe)))
+    config.globalTimeframe = source.globalTimeframe as TerminalWorkspaceConfig['globalTimeframe'];
+  if (['all', 'binance', 'bybit'].includes(String(source.coinPresetExchange)))
+    config.coinPresetExchange = source.coinPresetExchange as TerminalWorkspaceConfig['coinPresetExchange'];
+  if (['all', 'spot', 'futures'].includes(String(source.coinPresetMarketType)))
+    config.coinPresetMarketType = source.coinPresetMarketType as TerminalWorkspaceConfig['coinPresetMarketType'];
+  if (typeof source.coinPresetLimit === 'number' && Number.isInteger(source.coinPresetLimit)
+      && source.coinPresetLimit >= 4 && source.coinPresetLimit <= 50)
+    config.coinPresetLimit = source.coinPresetLimit;
+  if (source.initialChartView != null)
+    config.initialChartView = normalizeVisualProfile(source.initialChartView, 'terminalMedium');
+  return { blocks, config, presets };
+}
+
 function readCache(key: string, uid?: string): unknown {
   try { return JSON.parse(localStorage.getItem(terminalStorageKey(key, uid)) || 'null'); } catch { return null; }
 }
@@ -202,6 +250,16 @@ export function useTerminalWorkspace() {
     } catch { setSyncError(true); }
   }, [uid]);
 
+  const importWorkspaceBackup = useCallback((json: string): boolean => {
+    const recovered = parseTerminalWorkspaceBackup(json);
+    if (!window.confirm(`Імпортувати ${recovered.blocks.length} графіків і ${recovered.presets.length} пресетів? Поточна робоча область буде замінена. Рекомендовано спочатку експортувати її JSON-копію.`))
+      return false;
+    // One atomic workspace update, so charts and presets cannot be mixed
+    // between the old and new workspace during a partial import.
+    setWorkspace(recovered);
+    return true;
+  }, []);
+
   const downloadLocalBackup = useCallback(() => {
     const snapshot = workspaceRef.current;
     const json = JSON.stringify({ exportedAt: new Date().toISOString(), ...snapshot }, null, 2);
@@ -217,5 +275,5 @@ export function useTerminalWorkspace() {
 
   return { blocks: workspace.blocks, config: workspace.config, customPresets: workspace.presets,
     setBlocks, setConfig, setCustomPresets, syncError, syncConflict, retrySync,
-    downloadLocalBackup, restoreCloudWorkspace, backupFailed };
+    downloadLocalBackup, importWorkspaceBackup, restoreCloudWorkspace, backupFailed };
 }
