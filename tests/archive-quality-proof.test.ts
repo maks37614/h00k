@@ -9,6 +9,18 @@ const db = readFileSync(new URL("../server/pgIdentity.ts", import.meta.url), "ut
 const modal = readFileSync(new URL("../src/components/ArchiveModal.tsx", import.meta.url), "utf8");
 const now = Date.UTC(2026, 10, 14, 11, 20);
 
+const weights: Record<string, number> = {
+  formation:12, extremeLocation:8, trigger:16, retest:7,
+  volume:5, volatility:3, level:6, riskReward:8, dataQuality:7,
+  openInterest:5, delta:5, cvd20:3,
+  roundNumber:4, density:5, rsi:3, atr:2, rvol:1,
+};
+const adjusted: Record<string, number> = {
+  formation:10, trigger:12, retest:3, density:0, rvol:0, rsi:1,
+};
+const components = Object.fromEntries(Object.entries(weights).map(([key,max]) => [
+  key, { score: adjusted[key] ?? max, max, available: true },
+]));
 function fixture() {
   return {
     id: "arch_btc_formation_001", symbol: "BTCUSDT",
@@ -18,9 +30,9 @@ function fixture() {
       patternKey: "double-bottom", bias: "bullish", confidence: 82,
       detectedAt: now - 60_000,
       levels: { entryPrice: 100, stopLossPrice: 95, targetPrice: 112 },
-      validation: { confluence: { total: 82, grade: "A", components: {
-        formation: { score: 10, max: 12 }, trigger: { score: 14, max: 16 },
-      } } },
+      validation: { confluence: {
+        total: 82, grade: "A", rawTotal: 82, availableMax: 100, components,
+      } },
     },
   };
 }
@@ -28,9 +40,9 @@ function fixture() {
 test("h00k exporter signs only consistent archived STANDARD pattern scores, never manual placeholders", () => {
   const p = archivedScorePayload(fixture(), now);
   assert.deepEqual([
-    p.version, p.issuer, p.purpose, p.symbol, p.exchange,
+    p.version, p.issuer, p.purpose, p.rubric, p.symbol, p.exchange,
     p.marketType, p.timeframe, p.score, p.entry, p.stop, p.target,
-  ], [1,"h00k.top","archive-score-record","BTCUSDT","binance","futures","15m",82,100,95,112]);
+  ], [1,"h00k.top","archive-score-record","regular-flow-72-13-15-v1","BTCUSDT","binance","futures","15m",82,100,95,112]);
   assert.equal(p.issuedAt, now);
   assert.equal(p.expiresAt - p.issuedAt, 600_000);
   assert.equal(p.assessedAt, now - 60_000);
@@ -42,6 +54,16 @@ test("h00k exporter signs only consistent archived STANDARD pattern scores, neve
     ...fixture(), formation: { ...fixture().formation, validation: undefined },
   }, now));
   assert.throws(() => archivedScorePayload({ ...fixture(), confidence: 99 }, now));
+  assert.throws(() => archivedScorePayload({
+    ...fixture(), formation: { ...fixture().formation,
+      validation: { confluence: { total: 82, grade: "A", rawTotal: 81,
+        availableMax: 100, components } } },
+  }, now), /повної узгодженої/);
+  assert.throws(() => archivedScorePayload({
+    ...fixture(), formation: { ...fixture().formation,
+      validation: { confluence: { total: 82, grade: "A", rawTotal: 82,
+        availableMax: 100, components: { ...components, density: { score: 5, max: 5, available: false } } } } },
+  }, now), /повної узгодженої/);
   assert.throws(() => archivedScorePayload({ ...fixture(), entryPrice: 101 }, now));
   assert.throws(() => archivedScorePayload({
     ...fixture(), formation: { ...fixture().formation, detectedAt: now + 180_000 },
