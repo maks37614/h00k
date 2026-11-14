@@ -2207,14 +2207,14 @@
   align-items:center;
   justify-content:center;
   box-sizing:border-box;
-  width:27px;
-  height:27px;
+  width:24px;
+  height:24px;
   padding:0;
   border:1px solid #317b91;
   border-radius:50%;
   background:#103041;
   color:#8ae7f4;
-  font:700 13px/1 system-ui;
+  font:700 12px/1 system-ui;
   cursor:pointer;
   touch-action:manipulation;
 }
@@ -2600,29 +2600,29 @@
 /* Small hover/focus/tap help buttons only for HookChart → Основні.
    The tooltip itself is a fixed body portal so clipped settings cannot hide it. */
 .hookchart-root .visualSettingHelp.mainSettingHelp {
-  margin-left:6px;
+  margin-left:5px;
   vertical-align:middle;
 }
 .hookchart-root .visualSettingHelp.mainSettingHelp .visualSettingHelpButton {
-  width:18px;
-  height:18px;
-  min-width:18px;
-  min-height:18px;
+  width:16px;
+  height:16px;
+  min-width:16px;
+  min-height:16px;
   padding:0;
   border-radius:50%;
   border-color:#46738d;
   color:#9ac7dd;
-  font:700 11px/1 system-ui;
+  font:700 10px/1 system-ui;
   touch-action:manipulation;
   cursor:help;
 }
 @media (hover:none) and (pointer:coarse) {
   .hookchart-root .visualSettingHelp.mainSettingHelp .visualSettingHelpButton {
-    width:23px;
-    height:23px;
-    min-width:23px;
-    min-height:23px;
-    font-size:12px;
+    width:21px;
+    height:21px;
+    min-width:21px;
+    min-height:21px;
+    font-size:11px;
   }
 }
 
