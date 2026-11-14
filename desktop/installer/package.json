@@ -7,8 +7,8 @@
   "scripts": {
     "start": "electron .",
     "test": "node --check main.cjs && node --check preload.cjs && node --test test/*.test.cjs",
-    "prepare": "node prepare.cjs",
-    "dist": "electron-builder --win portable --x64 --publish never"
+    "dist": "electron-builder --win portable --x64 --publish never",
+    "bundle-payload": "node prepare.cjs"
   },
   "devDependencies": {
     "electron": "^45.0.0",
@@ -31,7 +31,8 @@
       "guide.html",
       "guide.js",
       "locales.json",
-      "guide.css"
+      "guide.css",
+      "!node_modules/**"
     ],
     "extraResources": [
       {
