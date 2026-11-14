@@ -159,7 +159,10 @@ test('visual chart editor moves descriptions into accessible question-mark help 
   assert.match(help, /aria-expanded=\{open\}/);
   assert.match(help, /createPortal\(/);
   assert.match(help, /role="tooltip"/);
-  assert.match(help, /onClick=\{\(\) => setOpen\(previous => !previous\)\}/);
+  assert.match(help, /onClick=\{\(\) => setOpen\(true\)\}/);
+  assert.match(help, /onPointerEnter=\{event =>/);
+  assert.match(help, /onPointerLeave=\{event =>/);
+  assert.match(help, /onFocus=\{\(\) => setOpen\(true\)\}/);
   assert.match(help, /event\.key === 'Escape'/);
   const css = source('../src/components/hookchart/integration.css');
   assert.match(css, /\.hookchartVisualHelpPopover\s*\{/);
