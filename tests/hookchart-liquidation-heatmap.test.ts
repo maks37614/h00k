@@ -105,6 +105,22 @@ test('map switch is under expanded tools, disabled by default, absent on replay/
   assert.match(ui,/LazyLiquidationHeatmapLoader = React\.lazy/);
   assert.match(ui,/liquidationMapOn && liquidationMapSupported/);
   assert.match(ui,/aria-pressed=\{liquidationMapOn\}/);
+  // Map remains immediately left of the fixed settings gear, including
+  // the 24h/7d active state; it is no longer buried in scrollable tools.
+  const right = ui.indexOf('className={liquidationMapSupported ? "toolbarRight hasLiqMap" : "toolbarRight"}');
+  const mapGroup = ui.indexOf('className="liqHeatmapTools"', right);
+  const period = ui.indexOf("(['24h','7d'] as const).map", mapGroup);
+  const mapIcon = ui.indexOf('<MapIcon size={17}', mapGroup);
+  const settings = ui.indexOf('aria-label="Налаштування hookchart"', mapIcon);
+  assert.ok(right > 0 && right < mapGroup && mapGroup < period &&
+    period < mapIcon && mapIcon < settings);
+  assert.equal(ui.indexOf('className="liqHeatmapTools"'), mapGroup,
+    'Liq map switch is rendered in one place only');
+  const posAfter = ui.slice(mapIcon, settings);
+  assert.doesNotMatch(posAfter, /className=\{'liqHeatmapPeriod'/);
+  const anchoredCss = readFileSync(new URL('../src/components/hookchart/integration.css',import.meta.url),'utf8');
+  assert.match(anchoredCss,/\.hookchart-terminal \.hookchart-terminal-toolbar \.toolbarRight\.hasLiqMap/);
+
   // Compact map glyph, never the old flame-and-text pill. Accessible
   // label/pressed state remain available for mobile assistive technology.
   assert.match(ui,/Map as MapIcon/);
