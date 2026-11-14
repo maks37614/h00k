@@ -1,37 +1,42 @@
 /**
- * Auto Entry/TP/SL groups are idempotent in persistent storage, but checking
- * that persistence layer for every identical CONFIRMED setup on every six-
- * second worker tick costs O(number of saved alerts) per call. Remember only
- * successful creates/checks in this worker; a disk failure must remain retryable.
+ * Avoid repeating the same persisted Entry/TP/SL group lookup every six seconds.
+ * Successful checks are periodically reconciled with the durable alert store:
+ * an external restore/reset can still recreate a missing automatic group,
+ * while manual deletion tombstones and paused/fired alerts remain authoritative.
  *
- * This cache never stores a user's alerts or setup contents. Persistent alert
- * IDs and deletion tombstones remain the source of truth across restarts.
+ * Only setup identities and check timestamps are retained per worker.
  */
 export class AutoSetupGroupGate {
-  private readonly completed = new Set<string>();
+  private readonly completed = new Map<string, number>();
 
-  constructor(private readonly limit = 256) {
+  constructor(
+    private readonly limit = 256,
+    private readonly recheckMs = 15 * 60_000,
+  ) {
     if (!Number.isSafeInteger(limit) || limit < 1)
       throw new Error('Auto setup group cache limit must be a positive integer');
+    if (!Number.isFinite(recheckMs) || recheckMs < 1_000)
+      throw new Error('Auto setup group reconciliation interval must be at least one second');
   }
 
   /**
-   * Returns true only when a persistence check ran and succeeded.
-   * Existing groups and user-deleted groups are treated as completed: the
-   * durable creation function already enforces idempotency/tombstones.
+   * Returns true only when the durable group creation/check ran and succeeded.
+   * A failed or thrown write is never marked as complete and remains retryable.
    */
-  ensure(setupId: string, commit: () => { success: boolean }): boolean {
+  ensure(setupId: string, commit: () => { success: boolean }, now = Date.now()): boolean {
     if (!setupId) throw new Error('A setup identity is required');
-    if (this.completed.has(setupId)) return false;
+    const last = this.completed.get(setupId);
+    if (last !== undefined && now >= last && now - last < this.recheckMs)
+      return false;
 
-    // Do not mark a group until the storage operation succeeds. In particular
-    // a failed atomic rename or invalid levels must be retried on a later tick.
+    // Existing alerts, manual pauses and tombstones remain governed by the
+    // idempotent persistent creation function. No local cache state can rearm.
     const result = commit();
     if (!result.success) return false;
-    this.completed.add(setupId);
-    if (this.completed.size > this.limit) {
-      this.completed.delete(this.completed.values().next().value!);
-    }
+    this.completed.delete(setupId);
+    this.completed.set(setupId, now);
+    if (this.completed.size > this.limit)
+      this.completed.delete(this.completed.keys().next().value!);
     return true;
   }
 
