@@ -54,8 +54,8 @@ test('tooltips respond to hover, focus and tap without disturbing other HookChar
   assert.match(source, /if \(event\.key === 'Escape' && document\.querySelector\('\.hookchartVisualHelpPopover'\)\) return/);
   assert.match(css, /\.visualSettingHelp\.mainSettingHelp \.visualSettingHelpButton/);
   assert.match(css, /@media \(hover:none\) and \(pointer:coarse\)/);
-  assert.match(css, /width:18px/);
-  assert.match(css, /min-width:23px/);
+  assert.match(css, /width:16px/);
+  assert.match(css, /min-width:21px/);
   assert.doesNotMatch(source.slice(source.indexOf("tab === 'chart' ? ("), source.indexOf("tab === 'strategies' ? (")), /<MainSettingsHelpContext.Provider/);
 });
 
