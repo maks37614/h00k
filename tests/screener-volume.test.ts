@@ -31,3 +31,19 @@ test('unlimited is separate from the highest selectable 50B limit', () => {
   assert.equal(isVolumeWithinCap(50_000_000_001, 50_000_000_000), false);
   assert.equal(isVolumeWithinCap(2_000_000_000_000, 50_000_000_000), false);
 });
+
+test('From 24h-volume mode includes the minimum and rejects smaller values', () => {
+  assert.equal(isVolumeWithinCap(49_999.99, 50_000, 'from'), false);
+  assert.equal(isVolumeWithinCap(50_000, 50_000, 'from'), true);
+  assert.equal(isVolumeWithinCap(50_000.01, 50_000, 'from'), true);
+  assert.equal(isVolumeWithinCap(100_000, 1_000_000, 'from'), false);
+  assert.equal(isVolumeWithinCap(1_000_000, 1_000_000, 'from'), true);
+  assert.equal(isVolumeWithinCap(1_000_001, 1_000_000, 'from'), true);
+});
+
+test('zero means unlimited in both modes and the legacy two-argument call stays Up-to', () => {
+  assert.equal(isVolumeWithinCap(999_999_999_999, 0, 'from'), true);
+  assert.equal(isVolumeWithinCap(0, 0, 'from'), true);
+  assert.equal(isVolumeWithinCap(50_001, 50_000), false);
+  assert.equal(isVolumeWithinCap(50_001, 50_000, 'to'), false);
+});
