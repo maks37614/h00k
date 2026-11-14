@@ -80,14 +80,15 @@ export function TerminalPresetPanel({ blocks, watchlist, presets, selection, tim
   const selectedBlocks = candidates.filter(block => selectedKeys.includes(block.id));
 
   const openForm = useCallback((nextSource: 'favorites' | 'workspace') => {
-    onActivePresetChange(null);
+    // Opening a draft is not a workspace change. Do not disable a running
+    // market preset just because the user wants to save their current view.
     setSource(nextSource);
     setSelectedKeys((nextSource === 'favorites' ? favoriteBlocks : blocks).slice(0, 50).map(block => block.id));
     setName('');
     setFormError(null);
     setShowForm(true);
     setShowPresets(true);
-  }, [favoriteBlocks, blocks, onActivePresetChange]);
+  }, [favoriteBlocks, blocks]);
 
   const savePreset = (event: React.FormEvent) => {
     event.preventDefault();
