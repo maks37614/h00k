@@ -33,7 +33,7 @@ export interface CronSystemStatus {
   };
 }
 
-class CronManager {
+export class CronManager {
   private startTime: number = Date.now();
   private timers: Map<string, NodeJS.Timeout> = new Map();
   private startupTimers = new Map<string, NodeJS.Timeout>();
