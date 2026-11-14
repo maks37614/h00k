@@ -6,7 +6,7 @@ import type { Server } from 'node:http';
 import express from 'express';
 import nodemailer from 'nodemailer';
 import { installPostgresIdentityRoutes } from '../server/pgIdentityRoutes';
-import { identityPool, COOKIE_NAME } from '../server/pgIdentity';
+import { identityPool, COOKIE_NAME, processAuthMailJobs, sendReset } from '../server/pgIdentity';
 
 type CapturedMail = { from: string; to: string; subject: string; text: string };
 function tokenFrom(message: CapturedMail, param: 'verifyEmail' | 'resetPassword'): string {
@@ -144,17 +144,41 @@ test('real PostgreSQL and captured SMTP: register, verify, login, recover, resen
 
     const unknown = await post('/api/auth/forgot-password', { email: 'nobody@example.invalid' });
     assert.equal(unknown.status, 200, 'password reset does not reveal non-existent emails');
+    assert.equal((await processAuthMailJobs()).processed, 0, 'unknown accounts have no mail job');
     assert.equal(mail.length, 1, 'unknown emails produce no outgoing message');
     const forgot = await post('/api/auth/forgot-password', { email });
     assert.equal(forgot.status, 200);
+    assert.deepEqual(await forgot.json(), await unknown.json(),
+      'registered and unknown recovery requests must return the same public response');
+    assert.equal(mail.length, 1, 'a public recovery request must not wait for SMTP');
+    await sendReset(email); // A concurrent request must reuse the pending queue job.
+    const pending = await db.query(`
+      SELECT count(*)::int AS count FROM auth_mail_outbox
+      WHERE user_id = (SELECT id FROM auth_users WHERE email = $1)
+        AND purpose = 'reset-password' AND completed_at IS NULL
+    `, [email]);
+    assert.equal(pending.rows[0].count, 1, 'one pending queue job per account/purpose');
+    assert.deepEqual(await processAuthMailJobs(), { processed: 1, delivered: 1 });
     assert.equal(mail.length, 2);
     assert.match(mail[1].subject, /пароля/);
     const resetToken = tokenFrom(mail[1], 'resetPassword');
 
-    // Simulate failure of a replacement email: the previous link must still work.
+    // A duplicate scheduled request inside the 60-second mailbox cooldown
+    // must not enqueue another mail (without burning a production HTTP quota).
+    await sendReset(email);
+    assert.equal((await processAuthMailJobs()).processed, 0);
+    await db.query(`
+      UPDATE auth_mail_outbox SET completed_at = now() - interval '2 minutes'
+      WHERE user_id = (SELECT id FROM auth_users WHERE email = $1)
+        AND purpose = 'reset-password' AND completed_at IS NOT NULL
+    `, [email]);
+
+    // Simulate background SMTP failure: HTTP must still return the same
+    // status/body, and the previously delivered reset link remains usable.
     mailFails = true;
     const failedResetMail = await post('/api/auth/forgot-password', { email });
     const failedBody = await failedResetMail.json();
+    assert.deepEqual(await processAuthMailJobs(), { processed: 1, delivered: 0 });
     assert.equal(failedResetMail.status, 200,
       'a failing SMTP transport must not reveal a registered recovery email');
     const unknownDuringOutage = await post('/api/auth/forgot-password', { email: 'unknown-' + id1 + '@example.invalid' });
@@ -183,6 +207,13 @@ test('real PostgreSQL and captured SMTP: register, verify, login, recover, resen
     assert.equal((await fetch(origin + '/api/auth/session', {
       headers: { Cookie: credentials.cookie },
     })).status, 401, 'a password reset revokes remembered sessions');
+    // The earlier retry belongs to the now-reset account. Retire it so this
+    // test does not race against the separate verification-resend queue job.
+    await db.query(`
+      UPDATE auth_mail_outbox SET completed_at = now()
+      WHERE user_id = (SELECT id FROM auth_users WHERE email = $1)
+        AND purpose = 'reset-password' AND completed_at IS NULL
+    `, [email]);
 
     // If registration email delivery failed, the user can resend without losing the account.
     mailFails = true;
@@ -199,9 +230,16 @@ test('real PostgreSQL and captured SMTP: register, verify, login, recover, resen
     assert.equal(unknownResend.status, 200);
     assert.deepEqual(await failedResend.json(), await unknownResend.json(),
       'verification resend must not reveal which emails are registered when SMTP fails');
+    assert.deepEqual(await processAuthMailJobs(), { processed: 1, delivered: 0 });
     mailFails = false;
-    const resend = await post('/api/auth/resend-verification', { email: email2 });
-    assert.equal(resend.status, 200);
+    // The pending queue row is durable and retryable after a crash. Advance its
+    // retry date instead of creating duplicate requests/tokens.
+    await db.query(`
+      UPDATE auth_mail_outbox SET available_at = now(), claimed_until = NULL
+      WHERE user_id = (SELECT id FROM auth_users WHERE email = $1)
+        AND purpose = 'verify-email' AND completed_at IS NULL
+    `, [email2]);
+    assert.deepEqual(await processAuthMailJobs(), { processed: 1, delivered: 1 });
     const lastMail = mail[mail.length - 1];
     assert.equal(lastMail.to, email2);
     const verifyAfterRetry = await post('/api/auth/verify-email', {

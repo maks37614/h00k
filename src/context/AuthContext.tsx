@@ -195,7 +195,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     clearAuthError();
     try {
       await authRequest('/api/auth/forgot-password', { email, captchaToken });
-      setAuthNotice('Якщо такий акаунт існує, ми надіслали посилання для відновлення.');
+      setAuthNotice('Якщо такий акаунт існує, лист із посиланням на відновлення надійде найближчим часом.');
     } catch (error) { handleError(error); }
   };
   const resetPassword = async (pass: string) => {

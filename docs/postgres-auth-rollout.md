@@ -72,6 +72,36 @@ traffic and SMTP delivery after deployment.
 SMTP TLS is mandatory. Verification links last 24 hours; password reset
 links last 30 minutes. Without working SMTP, registration fails closed.
 
+## Durable mail queue for recovery and verification resend
+
+Password-recovery requests and repeated confirmation-email requests are queued in
+the existing PostgreSQL database and return the same generic response for
+registered and unknown email addresses without waiting for SMTP delivery.
+The queue stores only a user ID and message purpose (never a password, raw
+verification/recovery token, email address or SMTP secret).
+The background worker processes at most one mail job at a time, every ~3 seconds,
+with a 60-second crash-recovery claim, five bounded retries and exponential
+backoff. A 60-second per-account/purpose cooldown prevents duplicate emails.
+Registration's first confirmation message remains synchronous so the user gets
+an immediate delivery failure notice if SMTP cannot send.
+
+To inspect mail delivery *without displaying personal emails or tokens*:
+
+```bash
+docker compose exec -T postgres psql -U h00k -d h00k_users -c "
+  SELECT purpose, COUNT(*) AS queued, MAX(attempts) AS max_attempts
+  FROM auth_mail_outbox
+  WHERE completed_at IS NULL
+  GROUP BY purpose;"
+docker compose logs --tail=100 app | grep '\[Auth email\]' || true
+```
+
+Do not delete the PostgreSQL volume. The new table and indexes are created
+idempotently by the existing auth migration on startup. Failed mail requests
+remain queued for retries and are retired after five failures; an account may
+request a new link afterward. The site owner should monitor delivery and
+consider a dedicated transactional mail provider if MX Plan quotas are reached.
+
 The Compose database is private (no published 5432 port), stores users and
 account settings in a persistent volume, and has 0.5 CPU / 512 MiB limits.
 The Node auth connection pool is capped at 4 clients. Password hashing

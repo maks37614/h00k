@@ -166,8 +166,9 @@ async function sendActionMail(email: string, purpose: 'verify-email' | 'reset-pa
 async function actionFor(userId: string, email: string, purpose: 'verify-email' | 'reset-password') {
   const token = randomToken();
   const hash = hashToken(token);
-  // Create a replacement token without invalidating the previous emailed link.
-  // A failed SMTP attempt must not break password recovery or email verification.
+  // Each email token is one-use, expiring and stored only as a SHA-256 hash.
+  // Keep earlier, not-yet-used links valid until they expire or the action succeeds:
+  // a worker crash after SMTP acceptance must not invalidate a delivered link.
   await database().query('INSERT INTO auth_action_tokens (token_hash, user_id, purpose, expires_at) VALUES ($1, $2, $3, now() + make_interval(secs => $4::int))',
     [hash, userId, purpose, purpose === 'verify-email' ? 86400 : 1800]);
   try {
@@ -176,8 +177,6 @@ async function actionFor(userId: string, email: string, purpose: 'verify-email' 
     await database().query('DELETE FROM auth_action_tokens WHERE token_hash = $1', [hash]).catch(() => {});
     throw error;
   }
-  await database().query('DELETE FROM auth_action_tokens WHERE user_id = $1 AND purpose = $2 AND token_hash <> $3',
-    [userId, purpose, hash]);
 }
 
 function accountShape(row: any) {
@@ -226,17 +225,93 @@ export async function registerAccount(emailInput: unknown, passwordInput: unknow
   }
 }
 
-export async function resendVerification(emailInput: unknown) {
+// Public mail-request endpoints enqueue a small durable job rather than waiting
+// for SMTP. This prevents mailbox existence from being exposed through SMTP
+// latency, keeps the HTTP path responsive, and survives container restarts.
+// No email address, raw token or SMTP secret is persisted in the outbox.
+async function enqueueActionMail(emailInput: unknown, purpose: 'verify-email' | 'reset-password') {
   let email: string;
   try { email = validateEmail(emailInput); } catch { return; }
-  const { rows } = await database().query('SELECT id, email_verified_at FROM auth_users WHERE email = $1', [email]);
-  if (rows[0] && !rows[0].email_verified_at) await actionFor(rows[0].id, email, 'verify-email');
+  await database().query(`
+    INSERT INTO auth_mail_outbox (user_id, purpose)
+    SELECT u.id, $2
+    FROM auth_users u
+    WHERE u.email = $1
+      AND ($2 = 'reset-password' OR u.email_verified_at IS NULL)
+      AND NOT EXISTS (
+        SELECT 1 FROM auth_mail_outbox sent
+        WHERE sent.user_id = u.id AND sent.purpose = $2
+          AND sent.completed_at > now() - interval '60 seconds'
+      )
+    ON CONFLICT DO NOTHING
+  `, [email, purpose]);
 }
-export async function sendReset(emailInput: unknown) {
-  let email: string;
-  try { email = validateEmail(emailInput); } catch { return; }
-  const { rows } = await database().query('SELECT id FROM auth_users WHERE email = $1', [email]);
-  if (rows[0]) await actionFor(rows[0].id, email, 'reset-password');
+export function resendVerification(emailInput: unknown) {
+  return enqueueActionMail(emailInput, 'verify-email');
+}
+export function sendReset(emailInput: unknown) {
+  return enqueueActionMail(emailInput, 'reset-password');
+}
+
+export async function processAuthMailJobs(): Promise<{ processed: number; delivered: number }> {
+  const { rows } = await database().query(`
+    WITH next_job AS (
+      SELECT id FROM auth_mail_outbox
+      WHERE completed_at IS NULL AND available_at <= now()
+        AND (claimed_until IS NULL OR claimed_until < now())
+      ORDER BY available_at, id LIMIT 1 FOR UPDATE SKIP LOCKED
+    )
+    UPDATE auth_mail_outbox job
+    SET attempts = job.attempts + 1,
+        claimed_until = now() + interval '60 seconds'
+    FROM next_job WHERE job.id = next_job.id
+    RETURNING job.id, job.user_id, job.purpose, job.attempts
+  `);
+  if (!rows[0]) return { processed: 0, delivered: 0 };
+  const job = rows[0] as { id: number; user_id: string; purpose: 'verify-email' | 'reset-password'; attempts: number };
+  try {
+    const account = await database().query(
+      'SELECT email, email_verified_at FROM auth_users WHERE id = $1',
+      [job.user_id],
+    );
+    let delivered = 0;
+    if (account.rows[0] && (job.purpose !== 'verify-email' || !account.rows[0].email_verified_at)) {
+      await actionFor(job.user_id, account.rows[0].email, job.purpose);
+      delivered = 1;
+    }
+    await database().query(
+      'UPDATE auth_mail_outbox SET completed_at = now(), claimed_until = NULL WHERE id = $1',
+      [job.id],
+    );
+    return { processed: 1, delivered };
+  } catch (error) {
+    // Never log the email, authentication token or SMTP credentials.
+    console.warn('[Auth email] Queued mail attempt failed:', error instanceof AuthFailure ? error.code : 'DELIVERY_ERROR');
+    const terminal = job.attempts >= 5;
+    const delay = Math.min(600, 15 * (2 ** (Math.max(0, job.attempts - 1))));
+    await database().query(`
+      UPDATE auth_mail_outbox
+      SET claimed_until = NULL,
+          available_at = now() + make_interval(secs => $2::integer),
+          completed_at = CASE WHEN $3::boolean THEN now() ELSE NULL END
+      WHERE id = $1
+    `, [job.id, delay, terminal]);
+    return { processed: 1, delivered: 0 };
+  }
+}
+
+// Token hashes and completed queue metadata should not grow without bound.
+// Run sparingly; this is database-local work with no exchange/API traffic.
+export async function pruneAuthMailHistory() {
+  await database().query(`
+    DELETE FROM auth_action_tokens
+    WHERE expires_at < now() - interval '2 days'
+       OR consumed_at < now() - interval '2 days'
+  `);
+  await database().query(`
+    DELETE FROM auth_mail_outbox
+    WHERE completed_at < now() - interval '7 days'
+  `);
 }
 
 export async function verifyEmailToken(token: unknown) {
@@ -263,6 +338,8 @@ export async function verifyEmailToken(token: unknown) {
     // after the address is verified. A stale link must not serve as a login token.
     await client.query("UPDATE auth_action_tokens SET consumed_at = now() WHERE user_id = $1 AND purpose = 'verify-email' AND consumed_at IS NULL", [rows[0].user_id]);
     await client.query('UPDATE auth_users SET email_verified_at = COALESCE(email_verified_at, now()), updated_at = now() WHERE id = $1', [rows[0].user_id]);
+    // A queued follow-up verification email is no longer relevant.
+    await client.query("UPDATE auth_mail_outbox SET completed_at = now(), claimed_until = NULL WHERE user_id = $1 AND purpose = 'verify-email' AND completed_at IS NULL", [rows[0].user_id]);
     await client.query('COMMIT');
     return String(rows[0].user_id);
   } catch (error) { await client.query('ROLLBACK'); throw error; }
@@ -298,6 +375,8 @@ export async function changePasswordWithToken(token: unknown, passwordInput: unk
     await client.query('UPDATE auth_sessions SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL', [id]);
     // Reset all previously issued password links, not just the submitted link.
     await client.query("UPDATE auth_action_tokens SET consumed_at = now() WHERE user_id = $1 AND purpose = 'reset-password' AND consumed_at IS NULL", [id]);
+    // Cancel previously requested recovery mail that is still in the queue.
+    await client.query("UPDATE auth_mail_outbox SET completed_at = now(), claimed_until = NULL WHERE user_id = $1 AND purpose = 'reset-password' AND completed_at IS NULL", [id]);
     await client.query('COMMIT');
   } catch (error) { await client.query('ROLLBACK'); throw error; }
   finally { client.release(); }
