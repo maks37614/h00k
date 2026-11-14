@@ -269,8 +269,7 @@ article,
 .chart-page-backdrop__frozen {
   position:absolute;
   inset:0;
-  opacity:.52;
-  filter:blur(1.5px) saturate(.72);
+  opacity:.48;
   pointer-events:none;
 }
 .chart-page-backdrop__frozen,
@@ -292,5 +291,5 @@ article,
   background:linear-gradient(180deg,rgba(5,9,18,.36),rgba(5,9,18,.60));
 }
 @media (max-width:640px) {
-  .chart-page-backdrop__frozen {opacity:.43;filter:blur(1px) saturate(.7)}
+  .chart-page-backdrop__frozen {opacity:.40}
 }
