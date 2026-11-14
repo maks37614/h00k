@@ -283,3 +283,18 @@ test('Terminal sync conflicts are visible outside hidden menus and can be recove
   assert.match(hook, /window\.confirm\(/);
   assert.match(hook, /window\.location\.reload\(\)/);
 });
+
+test('late profile hydration never overwrites a locally edited workspace or claims the cloud version', () => {
+  const hook = source('../src/utils/useTerminalWorkspace.ts');
+  const start = hook.indexOf('if (hydrated.current || !uid || profile?.uid !== uid) return;');
+  const end = hook.indexOf('const setField =', start);
+  assert.ok(start >= 0 && end > start);
+  const hydration = hook.slice(start, end);
+  assert.match(hydration, /revision\.current > 0 && profile\.terminalSettings && !syncConflictRef\.current/);
+  assert.match(hydration, /syncConflictRef\.current = true/);
+  assert.match(hydration, /saveConflictBackup\(uid, workspaceRef\.current\)/);
+  assert.match(hydration, /setSyncConflict\(true\)/);
+  assert.match(hydration, /if \(syncConflictRef\.current\) return;/);
+  assert.match(hydration, /if \(revision\.current === 0\)/);
+  assert.match(hydration, /hydrated\.current && profile\?\.uid === uid && !syncConflictRef\.current/);
+});
