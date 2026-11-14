@@ -16,7 +16,32 @@ export function installLiquidationArchiveRoutes(app: Express) {
     });
     return;
   }
-  const cached = new Map<string, { at: number; data: Payload }>();
+  // Runs only for an enabled PostgreSQL archive. The first check catches up
+  // after VPS downtime; subsequent checks do not affect normal HookChart Liq.
+  liquidationArchive.startMonthlyMaintenance();
+
+  // 8 MiB serialized-data ceiling (heap usage is higher and engine-specific).
+  // Never let hundreds of different enabled chart maps grow an unbounded RAM
+  // cache; these are reusable only while someone is viewing the map.
+  const MAX_CACHE_BYTES = 8 * 1024 * 1024;
+  let cacheBytes = 0;
+  let cacheMonth = new Date().toISOString().slice(0, 7);
+  const cached = new Map<string, { at: number; data: Payload; bytes: number }>();
+  const putCache = (key: string, data: Payload) => {
+    const bytes = Buffer.byteLength(JSON.stringify(data), 'utf8');
+    const previous = cached.get(key);
+    if (previous) { cacheBytes -= previous.bytes; cached.delete(key); }
+    // Large maps are still served, but not kept in shared server RAM.
+    if (bytes > MAX_CACHE_BYTES) return;
+    while (cached.size >= 40 || cacheBytes + bytes > MAX_CACHE_BYTES) {
+      const oldest = cached.keys().next().value;
+      if (oldest === undefined) break;
+      cacheBytes -= cached.get(oldest)!.bytes;
+      cached.delete(oldest);
+    }
+    cached.set(key, { at: Date.now(), data, bytes });
+    cacheBytes += bytes;
+  };
   const inflight = new Map<string, Promise<Payload>>();
   const throttles = new Map<string, { at: number; count: number }>();
 
@@ -44,7 +69,15 @@ export function installLiquidationArchiveRoutes(app: Express) {
       if (now - value.at > 60_000) throttles.delete(key);
 
     const hours = period === '24h' ? 24 : 168;
-    const key = exchange + ':' + symbol + ':' + hours;
+    // Clear old month RAM buffers as well as their cache keys. This runs only
+    // on an explicit heatmap request, with no timer when the map is off.
+    const month = new Date(now).toISOString().slice(0, 7);
+    if (cacheMonth !== month) {
+      cached.clear();
+      cacheBytes = 0;
+      cacheMonth = month;
+    }
+    const key = month + ':' + exchange + ':' + symbol + ':' + hours;
     const stored = cached.get(key);
     if (stored && now - stored.at < 30_000) {
       res.set('Cache-Control','public, max-age=20');
@@ -62,8 +95,7 @@ export function installLiquidationArchiveRoutes(app: Express) {
     }
     try {
       const result = await job;
-      cached.set(key,{at:Date.now(),data:result});
-      if (cached.size > 100) cached.delete(cached.keys().next().value!);
+      putCache(key, result);
       res.set('Cache-Control','public, max-age=20');
       res.json({ success:true, data:result });
     } catch {

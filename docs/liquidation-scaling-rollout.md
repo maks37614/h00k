@@ -168,3 +168,39 @@ docker compose logs --tail 120 app
 6. If archiving increases disk/CPU/latency, reset
    `LIQ_ARCHIVE_ENABLED=0` and restart. It stops NEW archive writes;
    it does not automatically delete archived rows or undo migrations.
+
+
+## Automatic monthly cleanup of Liq heatmap data
+
+- **Only** PostgreSQL table `h00k_liquidation_events` is fully erased
+  **once per UTC calendar month**. This is a deliberate archive reset:
+  the 24h/7d heatmap begins with an empty history after each reset and builds
+  again from newly observed events; older data cannot be recovered.
+- The archive maintenance marker lives in
+  `h00k_liquidation_archive_maintenance` (migration 004).
+  A transactional row lock + month marker ensure that multiple servers or
+  container restarts cannot reset the table twice in the same month.
+  TRUNCATE is applied ONLY to `h00k_liquidation_events`; Community profiles,
+  surveillance, user accounts, chart settings, notifications, and the
+  existing 30-minute chart Liq buffer are not touched.
+- First enablement during a calendar month records the current month without
+  immediately deleting data. The first **next-month** rollover triggers a
+  purge. If the VPS was offline, the next startup/check catches up.
+- With `LIQ_ARCHIVE_ENABLED=1`, the service checks on startup and every 6h,
+  and checks again before reading or writing archive data. With archive OFF,
+  there is **no timer, database connection or cleanup work**.
+- The existing rolling 8-day retention remains as an extra disk-safety guard
+  between monthly wipes. Neither mechanism collects events for inactive markets.
+- At month rollover, both server and browser response caches use a
+  new UTC-month key; old history is not reused. Serialized-map cache budgets
+  are **8 MiB on the server** and **3 MiB per browser tab**, with eviction.
+  In-memory JS object overhead can be larger than those figures.
+- The schedule is **automatic inside the app**, no Ubuntu cron/systemd timer
+  and no extra VPS installation task. It starts once the updated Docker app is
+  deployed with the optional archive enabled.
+- Reclaiming table storage via TRUNCATE is not equivalent to shrinking the
+  entire PostgreSQL database or removing old backups/snapshots. Check the
+  Docker volume and backups independently; do not auto-delete backups.
+- To monitor, query the authenticated ops endpoint and inspect
+  `liquidationArchive.monthChecked`, `monthlyResets`,
+  `lastMonthlyResetAt`, `failures`, and `droppedOnOverflow`.

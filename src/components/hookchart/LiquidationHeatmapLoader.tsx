@@ -17,7 +17,26 @@ type Props = {
 type Result = { data: LiquidationHeatmapSnapshot | null; status: Status };
 
 const CACHE_MS = 55_000;
-const cache = new Map<string,{at:number;result:Result}>();
+// Cap serialized browser cache to 3 MiB per tab; JS object overhead depends on
+// the engine. A hidden/off map does not keep accumulating new responses.
+const MAX_CACHE_BYTES = 3 * 1024 * 1024;
+let cacheBytes = 0;
+let cacheMonth = new Date().toISOString().slice(0,7);
+const cache = new Map<string,{at:number;result:Result;bytes:number}>();
+const putCache = (key:string,result:Result) => {
+  const bytes = new TextEncoder().encode(JSON.stringify(result)).byteLength;
+  const previous=cache.get(key);
+  if(previous){cacheBytes-=previous.bytes;cache.delete(key);}
+  if(bytes>MAX_CACHE_BYTES)return;
+  while(cache.size>=16 || cacheBytes+bytes>MAX_CACHE_BYTES){
+    const oldest=cache.keys().next().value;
+    if(oldest===undefined)break;
+    cacheBytes-=cache.get(oldest)!.bytes;
+    cache.delete(oldest);
+  }
+  cache.set(key,{at:Date.now(),result,bytes});
+  cacheBytes+=bytes;
+};
 const inFlight = new Map<string,Promise<Result>>();
 
 /** Shared requests per browser tab; even 20 Terminal charts showing the same
@@ -28,7 +47,15 @@ export async function fetchSharedObservedHeatmap(
   symbol: string,
   period: LiquidationHeatmapPeriod,
 ): Promise<Result> {
-  const key=`${exchange}:${symbol}:${period}`;
+  // A monthly PostgreSQL archive reset must also bypass any browser memory
+  // cache built before midnight UTC, even if its 55s TTL has not expired.
+  const utcMonth=new Date().toISOString().slice(0,7);
+  if(cacheMonth!==utcMonth){
+    cache.clear();
+    cacheBytes=0;
+    cacheMonth=utcMonth;
+  }
+  const key=`${utcMonth}:${exchange}:${symbol}:${period}`;
   const hit=cache.get(key);
   if(hit && Date.now()-hit.at<CACHE_MS)return hit.result;
   const pending=inFlight.get(key);
@@ -49,8 +76,7 @@ export async function fetchSharedObservedHeatmap(
   inFlight.set(key,task);
   try {
     const result=await task;
-    if(cache.size>=40)cache.delete(cache.keys().next().value!);
-    cache.set(key,{at:Date.now(),result});
+    putCache(key,result);
     return result;
   }finally{
     if(inFlight.get(key)===task)inFlight.delete(key);
