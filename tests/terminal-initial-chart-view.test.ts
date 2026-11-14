@@ -191,3 +191,17 @@ test('favorite click is visible in multi-chart mode and never wipes existing cha
   assert.doesNotMatch(handler, /setBlocks\(\[/, 'favorite selection must not discard the grid');
   assert.match(page, /blocks\.some\(block => coinMarketKey\(block\) === coinMarketKey\(favCoin\)\)/);
 });
+
+test('Terminal favorites prefer the exact open exchange and market, not arbitrary first ticker', () => {
+  const page = source('../src/components/TerminalPage.tsx');
+  const start = page.indexOf('// Favorites are keyed by symbol');
+  const end = page.indexOf('const filteredFavorites =', start);
+  assert.ok(start >= 0 && end > start);
+  const resolver = page.slice(start, end);
+  assert.match(resolver, /const openMarketsBySymbol = new Map\(blocks\.map/);
+  assert.match(resolver, /open && matches\.find\(coin => coinMarketKey\(coin\) === coinMarketKey\(open\)\)/);
+  assert.match(resolver, /matches\.find\(coin => coin\.exchange === preferredExchange && coin\.marketType === preferredMarket\)/);
+  assert.match(resolver, /exchange: open\?\.exchange \|\| preferredExchange/);
+  assert.match(resolver, /marketType: open\?\.marketType \|\| preferredMarket/);
+  assert.doesNotMatch(resolver, /if \(!coinsMap\.has\(c\.symbol\)\)/);
+});
