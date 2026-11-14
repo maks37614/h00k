@@ -29,5 +29,5 @@ test('manual check errors are reported and cannot masquerade as successful compl
     service.indexOf('export function startSurveillanceMonitor'));
   assert.match(block, /let failedChecks = 0/);
   assert.match(block, /failedChecks\+\+/);
-  assert.match(block, /if \(failedChecks\) throw new Error/);
+  assert.match(block, /if \(failedChecks\) throw new SurveillanceCheckIncompleteError/);
 });

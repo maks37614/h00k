@@ -18,6 +18,7 @@ import { normalizeKlineTimeMs } from '../src/utils/formationValidation';
 import { getTimeframeMs } from './surveillance/multiTimeframeEngine';
 import { fetchKlines } from './marketService';
 import { surveillanceCheckCandleCache } from './surveillance/checkCandleCache';
+import { hasFreshSurveillanceCheck, wasSurveillanceCheckCommitted, SurveillanceCheckIncompleteError } from './surveillance/checkResult';
 import { candleCloseCheckPlanner } from './surveillance/candleCloseCheckPlanner';
 import { sharedSurveillanceState } from './surveillance/sharedSurveillanceState';
 import { getUserTelegram } from './alertService';
@@ -858,7 +859,11 @@ export async function checkAllUserCoins(userId: string): Promise<SurveillanceCoi
       // #6: check-all runs with forceCheck: true (re-evaluates current levels) but forceNotify: false
       // This strictly enforces cooldown to prevent mass Telegram spam!
       const { coin: updated } = await checkCoinSurveillance(coin, { forceCheck: true, forceNotify: false });
-      commitSurveillanceCheck(updated);
+      if (!hasFreshSurveillanceCheck(coin, updated))
+        throw new Error('Біржа не надала актуальних свічок для перевірки');
+      const committed = commitSurveillanceCheck(updated);
+      if (!wasSurveillanceCheckCommitted(updated, committed))
+        throw new Error('Монету видалено або налаштування змінено під час перевірки');
     } catch (error) {
       failedChecks++;
       console.error(`[Surveillance] Manual check failed for ${coin.symbol}:`, error);
@@ -866,7 +871,7 @@ export async function checkAllUserCoins(userId: string): Promise<SurveillanceCoi
   }
   // A manual user request must not report a complete success if a durable
   // checkpoint failed. Other coins are still checked independently.
-  if (failedChecks) throw new Error(`Не вдалося завершити перевірку ${failedChecks} монет.`);
+  if (failedChecks) throw new SurveillanceCheckIncompleteError(failedChecks);
 
   return loadSurveillanceList(uid);
 }

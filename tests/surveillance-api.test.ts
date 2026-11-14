@@ -88,9 +88,22 @@ test('HTTP tracking is explicit; deleting the last coin stays empty after refres
     assert.equal((await fetch(`${base}/api/surveillance?userId=guest`)).status, 401);
     assert.equal((await fetch(`${base}/api/surveillance?userId=owner`, { headers: session.headers('new-user') })).status, 403);
     const added = await post('/api/surveillance', { userId: 'owner', symbol: 'SOLUSDT', exchange: 'bybit', marketType: 'futures' });
-    assert.equal(added.status, 200);
+    assert.equal(added.status, 200, 'saved coin creation keeps its existing HTTP contract');
+    const addedBody = await added.json();
+    assert.equal(addedBody.success, true);
+    assert.equal(addedBody.pending, true, 'offline candles cannot masquerade as completed analysis');
     assert.deepEqual((await list('owner')).map((c: any) => c.symbol), ['SOLUSDT']);
     const selected = (await list('owner'))[0];
+    const manualCheck = await post(`/api/surveillance/${selected.id}/check`, { userId: 'owner' });
+    assert.equal(manualCheck.status, 503, 'offline manual checks must report unavailable market data');
+    assert.equal(manualCheck.headers.get('retry-after'), '10');
+    assert.equal((await manualCheck.json()).success, false);
+    const checkAll = await post('/api/surveillance/check-all', { userId: 'owner' });
+    assert.equal(checkAll.status, 503, 'check-all must signal a retryable exchange-data failure');
+    assert.equal(checkAll.headers.get('retry-after'), '10');
+    assert.equal((await checkAll.json()).success, false);
+    assert.deepEqual((await list('owner')).map((c: any) => c.symbol), ['SOLUSDT'],
+      'failed analysis never removes or overwrites the saved coin');
     const workerUrl = `${base}/api/surveillance/worker/${selected.id}?userId=owner`;
     assert.equal((await fetch(workerUrl, { headers: session.headers('owner') })).status, 200);
     const configured = await fetch(`${base}/api/surveillance/${selected.id}`, { method: 'PUT',
