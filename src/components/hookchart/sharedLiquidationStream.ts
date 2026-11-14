@@ -11,12 +11,62 @@ type Entry = {
   hasSnapshot: boolean;
   connected: boolean;
   rows: Map<string, Liquidation>;
+  // A bounded min-heap keeps the OLDEST exchange event at the top even when
+  // packets arrive out of order or cumulative fills move a Map entry to end.
+  times: TimeNode[];
+  versions: Map<string, number>;
+  nextVersion: number;
   lastPrunedAt: number;
   stop: () => void;
 };
 
 const RETAIN_MS = 30 * 60_000;
 const MAX_ROWS = 1500;
+type TimeNode = { id: string; t: number; version: number };
+
+function pushOldest(entry: Entry, node: TimeNode): void {
+  const heap = entry.times;
+  let index = heap.length;
+  heap.push(node);
+  while (index > 0) {
+    const parent = (index - 1) >> 1;
+    if (heap[parent].t <= node.t) break;
+    heap[index] = heap[parent];
+    index = parent;
+  }
+  heap[index] = node;
+}
+
+function popOldest(entry: Entry): TimeNode | undefined {
+  const heap = entry.times;
+  const root = heap[0];
+  const end = heap.pop();
+  if (!root || !end || !heap.length) return root;
+  let index = 0;
+  while (true) {
+    const left = index * 2 + 1;
+    if (left >= heap.length) break;
+    const right = left + 1;
+    const child = right < heap.length && heap[right].t < heap[left].t ? right : left;
+    if (end.t <= heap[child].t) break;
+    heap[index] = heap[child];
+    index = child;
+  }
+  heap[index] = end;
+  return root;
+}
+
+function rememberTime(entry: Entry, id: string, t: number): void {
+  const version = ++entry.nextVersion;
+  entry.versions.set(id, version);
+  pushOldest(entry, { id, t, version });
+}
+
+function rebuildTimes(entry: Entry): void {
+  entry.times = [];
+  entry.versions.clear();
+  for (const [id, row] of entry.rows) rememberTime(entry, id, row.t);
+}
 
 /** Expiration needs a full scan only occasionally, not on every liquidation.
  * Hard cap enforcement still runs on every update to avoid unbounded memory.
@@ -24,10 +74,29 @@ const MAX_ROWS = 1500;
 function trimSharedLiquidations(entry: Entry, now = Date.now(), force = false): void {
   if (force || now - entry.lastPrunedAt >= 2000) {
     const oldest = now - RETAIN_MS;
-    for (const [id, row] of entry.rows) if (row.t < oldest) entry.rows.delete(id);
+    for (const [id, row] of entry.rows) {
+      if (row.t < oldest) {
+        entry.rows.delete(id);
+        entry.versions.delete(id);
+      }
+    }
     entry.lastPrunedAt = now;
   }
-  while (entry.rows.size > MAX_ROWS) entry.rows.delete(entry.rows.keys().next().value!);
+  while (entry.rows.size > MAX_ROWS) {
+    // Ignore heap records superseded by later cumulative fills or pruning.
+    let oldest = popOldest(entry);
+    while (oldest && entry.versions.get(oldest.id) !== oldest.version)
+      oldest = popOldest(entry);
+    if (!oldest) {
+      rebuildTimes(entry);
+      continue;
+    }
+    entry.rows.delete(oldest.id);
+    entry.versions.delete(oldest.id);
+  }
+  // Repeated cumulative updates can leave stale heap nodes. Compact them
+  // occasionally to keep memory bounded without sorting on every message.
+  if (entry.times.length > MAX_ROWS * 3) rebuildTimes(entry);
 }
 
 /** Share a single site-bound liquidation WS per coin in the current browser tab. */
@@ -59,7 +128,8 @@ export function createSharedLiquidationSubscriptions(connect: Connector = connec
     }
     entry = {
       listeners: new Set([listener]), hasSnapshot: false, connected: false,
-      rows: new Map(), lastPrunedAt: 0, stop: () => {},
+      rows: new Map(), times: [], versions: new Map(), nextVersion: 0,
+      lastPrunedAt: 0, stop: () => {},
     };
     const current = entry;
     active.set(key, current);
@@ -84,6 +154,7 @@ export function createSharedLiquidationSubscriptions(connect: Connector = connec
             if (!newer || row.usd > newer.usd) merged.set(id, row);
           }
           current.rows = merged;
+          rebuildTimes(current);
           trimSharedLiquidations(current, Date.now(), true);
           current.hasSnapshot = true;
           current.connected = connected;
@@ -102,6 +173,7 @@ export function createSharedLiquidationSubscriptions(connect: Connector = connec
           if (old && row.usd <= old.usd) return;
           if (old) current.rows.delete(id);
           current.rows.set(id, row);
+          rememberTime(current, id, row.t);
           trimSharedLiquidations(current);
           for (const subscriber of [...current.listeners]) {
             try { subscriber.onLiquidation(row); } catch {}
