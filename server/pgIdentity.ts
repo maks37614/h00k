@@ -539,6 +539,16 @@ export async function loadArchive(userId: string) {
   const { rows } = await database().query('SELECT payload FROM auth_archives WHERE user_id = $1 ORDER BY saved_at DESC LIMIT 2000', [userId]);
   return rows.map(row => row.payload);
 }
+/** Owner-scoped single archive read for explicit proof export; avoids loading 2000 entries. */
+export async function loadArchiveItem(userId: string, id: string): Promise<any | null> {
+  if (!/^[a-zA-Z0-9_-]{1,140}$/.test(id))
+    throw new AuthFailure(400, 'Неправильний ID формації.');
+  const { rows } = await database().query(
+    'SELECT payload FROM auth_archives WHERE user_id=$1 AND id=$2 LIMIT 1',
+    [userId, id],
+  );
+  return rows[0]?.payload ?? null;
+}
 export async function saveArchive(userId: string, id: unknown, payload: any) {
   if (typeof id !== 'string' || !/^[a-zA-Z0-9_-]{1,140}$/.test(id)) throw new AuthFailure(400, 'Неправильний ID формації.');
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) throw new AuthFailure(400, 'Неправильний формат формації.');
