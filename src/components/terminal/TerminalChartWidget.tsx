@@ -4,7 +4,6 @@ import {
   Trash2,
   Zap,
   Send,
-  RefreshCw,
   ExternalLink,
   ChevronDown,
   Search,
@@ -15,8 +14,6 @@ import {
   Columns,
   Eye,
   Activity,
-  PanelLeftClose,
-  PanelLeftOpen,
 } from 'lucide-react';
 import {
   TerminalChartBlock,
@@ -24,14 +21,11 @@ import {
   DetectedFormation,
   ExchangeId,
   MarketType,
-  Kline,
 } from '../../types';
-import { formatVolume } from '../../utils/formatters';
 import { ExchangeCandlestickChart } from '../ExchangeCandlestickChart';
 import type { TerminalToolbarVisibility } from '../hookchart/HookChartCanvas';
 import type { VisualChartProfile } from '../hookchart/visualProfiles';
-import { getTradingViewSymbol, normalizeExchangeSymbol } from '../../utils/marketSymbols';
-import { fetchDirectKlines } from '../../utils/directExchangeClient';
+import { normalizeExchangeSymbol } from '../../utils/marketSymbols';
 import { formatTerminalQuotedPrice } from '../../utils/terminalPresets';
 import { normalizeChartProvider } from '../../utils/chartPreferences';
 
@@ -60,86 +54,6 @@ interface TerminalChartWidgetProps {
   terminalInitialView?: VisualChartProfile;
 }
 
-
-const calculatePearsonCorrelation = (left: number[], right: number[]): number | null => {
-  const length = Math.min(left.length, right.length);
-  if (length < 10) return null;
-
-  const a = left.slice(-length);
-  const b = right.slice(-length);
-  const meanA = a.reduce((sum, value) => sum + value, 0) / length;
-  const meanB = b.reduce((sum, value) => sum + value, 0) / length;
-
-  let covariance = 0;
-  let varianceA = 0;
-  let varianceB = 0;
-
-  for (let i = 0; i < length; i += 1) {
-    const deltaA = a[i] - meanA;
-    const deltaB = b[i] - meanB;
-    covariance += deltaA * deltaB;
-    varianceA += deltaA * deltaA;
-    varianceB += deltaB * deltaB;
-  }
-
-  const denominator = Math.sqrt(varianceA * varianceB);
-  if (!Number.isFinite(denominator) || denominator === 0) return null;
-
-  return Math.max(-1, Math.min(1, covariance / denominator));
-};
-
-const calculateCorrelationToBtc = (assetKlines: Kline[], btcKlines: Kline[]): number | null => {
-  const assetClosed = assetKlines.slice(0, -1);
-  const btcClosed = btcKlines.slice(0, -1);
-  if (assetClosed.length < 11 || btcClosed.length < 11) return null;
-
-  const btcByTime = new Map(btcClosed.map((candle) => [candle.time, candle.close]));
-  const aligned = assetClosed
-    .map((candle) => {
-      const btcClose = btcByTime.get(candle.time);
-      return btcClose && candle.close > 0 && btcClose > 0
-        ? { assetClose: candle.close, btcClose }
-        : null;
-    })
-    .filter((item): item is { assetClose: number; btcClose: number } => item !== null)
-    .slice(-51);
-
-  if (aligned.length < 11) return null;
-
-  const assetReturns: number[] = [];
-  const btcReturns: number[] = [];
-
-  for (let i = 1; i < aligned.length; i += 1) {
-    assetReturns.push(Math.log(aligned[i].assetClose / aligned[i - 1].assetClose));
-    btcReturns.push(Math.log(aligned[i].btcClose / aligned[i - 1].btcClose));
-  }
-
-  return calculatePearsonCorrelation(assetReturns, btcReturns);
-};
-
-const calculateAtrPercent = (klines: Kline[], period: number = 14): number | null => {
-  const closed = klines.slice(0, -1);
-  if (closed.length < period + 1) return null;
-
-  const startIndex = closed.length - period;
-  let trueRangeSum = 0;
-
-  for (let i = startIndex; i < closed.length; i += 1) {
-    const candle = closed[i];
-    const previousClose = closed[i - 1]?.close ?? candle.open;
-    const trueRange = Math.max(
-      candle.high - candle.low,
-      Math.abs(candle.high - previousClose),
-      Math.abs(candle.low - previousClose)
-    );
-    trueRangeSum += trueRange;
-  }
-
-  const lastClose = closed[closed.length - 1]?.close;
-  if (!lastClose || lastClose <= 0) return null;
-
-  return (trueRangeSum / period / lastClose) * 100;
-};
 
 export const TerminalChartWidget: React.FC<TerminalChartWidgetProps> = ({
   block,
@@ -180,14 +94,6 @@ export const TerminalChartWidget: React.FC<TerminalChartWidgetProps> = ({
     onExtraToolsOpenChange: setExtraToolsOpen,
     onDrawingToolsOpenChange: setDrawingToolsOpen,
   }), [extraToolsOpen, drawingToolsOpen]);
-  const [showDrawingToolbar, setShowDrawingToolbar] = useState<boolean>(() => {
-    try {
-      const saved = localStorage.getItem('terminal_widget_show_toolbar');
-      return saved !== null ? saved === 'true' : true;
-    } catch {
-      return true;
-    }
-  });
   const blockRootRef = useRef<HTMLDivElement>(null);
   const [isNearViewport, setIsNearViewport] = useState(isSingleBlock || isMaximized);
   const shouldLoadWidgets = !isSuspended && (isSingleBlock || isMaximized || isNearViewport);
@@ -206,16 +112,6 @@ export const TerminalChartWidget: React.FC<TerminalChartWidgetProps> = ({
     }, { rootMargin: '160px 0px' });
     observer.observe(node);
     return () => observer.disconnect();
-  }, []);
-
-  const handleToggleToolbar = useCallback(() => {
-    setShowDrawingToolbar((prev) => {
-      const next = !prev;
-      try {
-        localStorage.setItem('terminal_widget_show_toolbar', String(next));
-      } catch {}
-      return next;
-    });
   }, []);
 
   const headerRef = useRef<HTMLDivElement>(null);
@@ -262,16 +158,6 @@ export const TerminalChartWidget: React.FC<TerminalChartWidgetProps> = ({
   // Live prices for the order book and Telegram alerts
   const [currentPrice, setCurrentPrice] = useState<number | null>(coin?.currentPrice || null);
   const [livePrice, setLivePrice] = useState<number>(coin?.currentPrice || 0);
-  const [timeframeMetrics, setTimeframeMetrics] = useState<{
-    correlation: number | null;
-    volatilityPct: number | null;
-    loading: boolean;
-  }>({
-    correlation: null,
-    volatilityPct: null,
-    loading: true,
-  });
-
   // Update when coin prop changes
   useEffect(() => {
     if (coin?.currentPrice) {
@@ -394,69 +280,6 @@ export const TerminalChartWidget: React.FC<TerminalChartWidgetProps> = ({
     };
   }, [block.symbol, block.exchange, block.marketType, shouldLoadWidgets, useIntegratedHookChartToolbar, handleChartPrice]);
 
-  // Correlation/ATR are only needed in TradingView's extra status strip.
-  useEffect(() => {
-    if (!shouldLoadWidgets || useIntegratedHookChartToolbar) return;
-    let disposed = false;
-
-    const loadTimeframeMetrics = async () => {
-      setTimeframeMetrics((previous) => ({ ...previous, loading: true }));
-
-      try {
-        const symbol = normalizeExchangeSymbol(block.symbol);
-        if (!symbol) {
-          if (!disposed) {
-            setTimeframeMetrics({ correlation: null, volatilityPct: null, loading: false });
-          }
-          return;
-        }
-
-        const assetKlinesPromise = fetchDirectKlines(
-          block.exchange,
-          block.marketType,
-          symbol,
-          block.timeframe,
-          70
-        );
-
-        const [assetKlines, btcKlines] = symbol === 'BTCUSDT'
-          ? await assetKlinesPromise.then((data) => [data, data] as const)
-          : await Promise.all([
-              assetKlinesPromise,
-              fetchDirectKlines(
-                block.exchange,
-                block.marketType,
-                'BTCUSDT',
-                block.timeframe,
-                70
-              ),
-            ]);
-
-        if (disposed) return;
-
-        setTimeframeMetrics({
-          correlation: symbol === 'BTCUSDT' ? 1 : calculateCorrelationToBtc(assetKlines, btcKlines),
-          volatilityPct: calculateAtrPercent(assetKlines),
-          loading: false,
-        });
-      } catch {
-        if (!disposed) {
-          setTimeframeMetrics({ correlation: null, volatilityPct: null, loading: false });
-        }
-      }
-    };
-
-    void loadTimeframeMetrics();
-    const refreshTimer = window.setInterval(() => {
-      void loadTimeframeMetrics();
-    }, 60_000);
-
-    return () => {
-      disposed = true;
-      window.clearInterval(refreshTimer);
-    };
-  }, [block.symbol, block.exchange, block.marketType, block.timeframe, shouldLoadWidgets, useIntegratedHookChartToolbar]);
-
   const detailCoin = useMemo<ScannedCoin>(() => {
     if (coin) {
       return {
@@ -503,46 +326,6 @@ export const TerminalChartWidget: React.FC<TerminalChartWidgetProps> = ({
     }
     return coin.formations[0];
   }, [coin?.formations, block.formationId]);
-
-  // Construct TradingView Embed URL
-  const tradingViewUrl = useMemo(() => {
-    if (chartProvider === 'hookchart') return null;
-    const tvSymbol = getTradingViewSymbol(block.symbol, block.exchange, block.marketType);
-    if (!tvSymbol) return null;
-
-    let interval = '15';
-    switch (block.timeframe) {
-      case '1m': interval = '1'; break;
-      case '5m': interval = '5'; break;
-      case '15m': interval = '15'; break;
-      case '1h': interval = '60'; break;
-      case '4h': interval = '240'; break;
-      case '1d': interval = 'D'; break;
-      default: interval = '15';
-    }
-
-    const params = new URLSearchParams({
-      symbol: tvSymbol,
-      interval: interval,
-      theme: 'dark',
-      style: '1',
-      timezone: 'exchange',
-      withdateranges: '0',
-      hide_top_toolbar: '1',
-      hide_side_toolbar: '0',
-      allow_symbol_change: '0',
-      save_image: '0',
-      hide_legend: '1',
-      locale: 'uk',
-      toolbar_bg: '#090d16',
-      gridColor: 'rgba(0,0,0,0)',
-      gridTransparency: '100',
-    });
-
-    return `https://s.tradingview.com/widgetembed/?${params.toString()}`;
-  }, [chartProvider, block.symbol, block.exchange, block.marketType, block.timeframe]);
-  // Embedded TradingView is reserved for a focused chart; grid cards use the lighter local chart.
-  const shouldUseTradingViewEmbed = isSingleBlock || isMaximized;
 
   // With up to 50 chart cards, do not scan the full market list for closed
   // switchers whenever the Terminal refreshes its shared market snapshot.
@@ -876,7 +659,7 @@ export const TerminalChartWidget: React.FC<TerminalChartWidgetProps> = ({
           : '300px',
       }}
     >
-      {/* TradingView keeps its original standalone header; HookChart uses the chart toolbar. */}
+      {/* HookChart integrates chart-specific controls into its toolbar. */}
       {!useIntegratedHookChartToolbar && (
         <div ref={headerRef} className="terminal-chart-header relative flex items-center gap-1.5 px-2 py-1.5 bg-slate-950 border-b border-slate-800/90 text-xs shrink-0 select-none">
           {terminalToolbarControls}
@@ -888,40 +671,6 @@ export const TerminalChartWidget: React.FC<TerminalChartWidgetProps> = ({
       <div className="flex-1 w-full relative bg-[#090d16] overflow-hidden min-h-0 flex flex-col">
         {shouldLoadWidgets ? (
           <div className="flex-1 w-full h-full relative overflow-hidden bg-[#090d16]">
-            {tradingViewUrl && shouldUseTradingViewEmbed ? (
-              <>
-                <div
-                  className={`absolute top-0 h-full transition-[width,left] duration-200 ease-in-out ${
-                    showDrawingToolbar ? 'left-0 w-full' : '-left-[54px] w-[calc(100%+54px)]'
-                  }`}
-                >
-                  <iframe
-                    key={`tv-${block.symbol}-${block.exchange}-${block.marketType}-${block.timeframe}`}
-                    src={tradingViewUrl}
-                    className="w-full h-full border-0"
-                    title={`${block.symbol} TradingView Chart`}
-                    loading="lazy"
-                    allowFullScreen
-                  />
-                </div>
-
-                <div className="absolute bottom-2 left-2 z-20 flex items-center gap-1.5">
-                  <button
-                    type="button"
-                    onClick={handleToggleToolbar}
-                    className="flex h-7 w-7 items-center justify-center bg-transparent border-0 text-slate-300 hover:text-cyan-300 shadow-none transition-colors cursor-pointer group"
-                    title={showDrawingToolbar ? 'Сховати панель інструментів' : 'Показати панель інструментів'}
-                    aria-label={showDrawingToolbar ? 'Сховати панель інструментів' : 'Показати панель інструментів'}
-                  >
-                    {showDrawingToolbar ? (
-                      <PanelLeftClose className="h-3.5 w-3.5 group-hover:scale-110 transition-transform" />
-                    ) : (
-                      <PanelLeftOpen className="h-3.5 w-3.5 group-hover:scale-110 transition-transform" />
-                    )}
-                  </button>
-                </div>
-              </>
-            ) : (
               <ExchangeCandlestickChart
                 forceHookChart
                 onLivePriceUpdate={useIntegratedHookChartToolbar ? handleChartPrice : undefined}
@@ -947,7 +696,6 @@ export const TerminalChartWidget: React.FC<TerminalChartWidgetProps> = ({
                 timeframe={block.timeframe}
                 historyLimit={isMaximized || isSingleBlock ? 1000 : 180}
               />
-            )}
           </div>
         ) : (
           <div className="flex flex-1 min-h-0 flex-col items-center justify-center gap-2 px-4 text-center text-slate-500">
@@ -957,49 +705,6 @@ export const TerminalChartWidget: React.FC<TerminalChartWidgetProps> = ({
         )}
       </div>
 
-      {/* HookChart already shows market statistics in its own footer. */}
-      {!useIntegratedHookChartToolbar && (
-      <div className="px-2 py-0.5 bg-slate-950/80 border-t border-slate-800/60 text-[10px] text-slate-400 flex items-center justify-between font-mono shrink-0 select-none">
-        <div className="flex items-center gap-2">
-          {coin?.volume24hUsd && (
-            <span>
-              Vol 24г: <span className="text-slate-200">{formatVolume(coin.volume24hUsd)}</span>
-            </span>
-          )}
-          <span
-            className="hidden sm:inline"
-            title={`Кореляція доходностей ${block.symbol} до BTCUSDT за останніми закритими свічками (${block.timeframe})`}
-          >
-            Corr:{' '}
-            <span className="text-cyan-300">
-              {timeframeMetrics.loading
-                ? '…'
-                : timeframeMetrics.correlation !== null
-                ? timeframeMetrics.correlation.toFixed(2)
-                : '—'}
-            </span>
-          </span>
-          <span
-            className="hidden sm:inline"
-            title={`Волатильність ATR(14) на таймфреймі ${block.timeframe}`}
-          >
-            Vol:{' '}
-            <span className="text-amber-300">
-              {timeframeMetrics.loading
-                ? '…'
-                : timeframeMetrics.volatilityPct !== null
-                ? `${timeframeMetrics.volatilityPct.toFixed(2)}%`
-                : '—'}
-            </span>
-          </span>
-        </div>
-
-        <div className="flex items-center gap-1.5 text-slate-500" title={shouldLoadWidgets ? 'Віджет оновлюється' : 'Оновлення призупинено поза екраном'}>
-          <span className={`w-1.5 h-1.5 rounded-full ${shouldLoadWidgets ? 'bg-emerald-500 animate-pulse' : 'bg-slate-600'}`} />
-          <span className="text-[9px] uppercase tracking-wider text-slate-400">{shouldLoadWidgets ? 'Live' : 'Пауза'}</span>
-        </div>
-      </div>
-      )}
     </div>
   );
 };
