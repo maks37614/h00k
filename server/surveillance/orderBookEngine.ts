@@ -1,7 +1,7 @@
 import { ExchangeId, MarketType } from '../../src/types';
 import { RawDepthDelta } from './exchangeStream';
 import { DensityItem, OrderBookLevel, OrderBookState, OrderBookStatus } from './types';
-import { ORDER_BOOK_MAX_AGE_MS, isFreshDepthTime, parseDepthLevels } from '../../src/utils/orderBookValidation';
+import { ORDER_BOOK_MAX_AGE_MS, isFreshDepthTime, parseDepthLevels, type NormalizedDepthLevels } from '../../src/utils/orderBookValidation';
 import { lowerMedian } from './lowerMedian';
 
 export interface DensityConfig {
@@ -61,6 +61,9 @@ export class OrderBookEngine {
   private lastDensityEvaluationAt = 0;
   private densityInputsDirty = false;
   private densityEvaluations = 0;
+  // Diagnostics only: a shared public packet should not need reparsing once
+  // for every personalized 24/7 worker. Offline/direct callers still parse.
+  private depthParseFallbacks = 0;
 
   constructor(
     public readonly symbol: string,
@@ -102,13 +105,15 @@ export class OrderBookEngine {
     }
   }
 
-  public applyDepth(delta: RawDepthDelta) {
+  public applyDepth(delta: RawDepthDelta, validated?: NormalizedDepthLevels | null) {
     const now = Date.now();
-    // Exchange fallback packets may contain numeric strings. Validating them
-    // and then iterating the original tuples silently drops all string levels.
-    // Apply only the normalized numeric levels used in validation.
-    const bids = parseDepthLevels(delta.bids);
-    const asks = parseDepthLevels(delta.asks);
+    // The shared exchange stream has already validated these public tuples.
+    // Otherwise (manual, isolated or late-replay callers), parse and fail
+    // closed exactly as before. Price/sequence/timestamp checks below always
+    // run independently for each owner's book.
+    if (!validated) this.depthParseFallbacks++;
+    const bids = validated?.bids ?? parseDepthLevels(delta.bids);
+    const asks = validated?.asks ?? parseDepthLevels(delta.asks);
     if (!Number.isSafeInteger(delta.sequence) || delta.sequence! <= 0 ||
         !bids || !asks ||
         (delta.eventTime !== undefined && !isFreshDepthTime(delta.eventTime, now))) {
@@ -284,7 +289,8 @@ export class OrderBookEngine {
     return { medianComputations: this.medianComputations, bookRevision: this.bookRevision,
       sortedPriceComputations: this.sortedPriceComputations,
       bestPriceFullScans: this.bestPriceFullScans,
-      densityEvaluations: this.densityEvaluations };
+      densityEvaluations: this.densityEvaluations,
+      depthParseFallbacks: this.depthParseFallbacks };
   }
 
   private newlyAppearedDensities: DensityItem[] = [];
