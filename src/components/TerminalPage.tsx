@@ -430,7 +430,7 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
   }, [chartProvider, activeCoin.symbol, activeCoin.exchange, activeCoin.marketType, activeTimeframe]);
 
   // Block management
-  const handleAddChart = (coin: MarketCoin | ScannedCoin, tf: Timeframe, formationId?: string) => {
+  const handleAddChart = (coin: MarketCoin | ScannedCoin | Pick<TerminalChartBlock, 'symbol' | 'baseAsset' | 'quoteAsset' | 'exchange' | 'marketType'>, tf: Timeframe, formationId?: string) => {
     const { symbol, quoteAsset: quote } = normalizeTerminalMarketPair(coin.symbol, coin.quoteAsset);
     const base = coin.baseAsset || symbol.slice(0, -quote.length);
     const exchange = coin.exchange || 'binance';
