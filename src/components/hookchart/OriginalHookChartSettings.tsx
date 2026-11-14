@@ -334,13 +334,24 @@ function SwitchRow({ label, desc, help, rowClassName, unavailable, value, onChan
   return <Setting label={label} desc={desc} help={help} rowClassName={rowClassName} unavailable={unavailable}><label className="settingsSwitch"><input type="checkbox" aria-label={label} checked={value} onChange={event => onChange(event.target.checked)} /><span /></label></Setting>;
 }
 function LiquidationMinimum({ value, disabled, onChange }: { value?: number | null; disabled?: boolean; onChange: (value: number | null) => void }) {
-  return <input className="numInput" type="number" min={0} max={1_000_000_000_000} step={100} inputMode="decimal" placeholder="Авто" disabled={disabled} value={value ?? ''}
-    aria-label="Мінімальна сума ліквідації у доларах США" onChange={event => {
-      const text = event.target.value.trim();
-      if (!text) { onChange(null); return; }
-      const next = Number(text);
-      if (Number.isFinite(next) && next >= 0) onChange(Math.min(1_000_000_000_000, next));
-    }} />;
+  const [draft, setDraft] = useState<string | null>(null);
+  const commit = (raw: string) => {
+    setDraft(null);
+    const text = raw.trim().replace(',', '.');
+    if (!text) { if (value != null) onChange(null); return; }
+    const next = Number(text);
+    if (!Number.isFinite(next) || next < 0) return;
+    const clamped = Math.min(1_000_000_000_000, next);
+    if (clamped !== value) onChange(clamped);
+  };
+  return <input className="numInput" type="text" inputMode="decimal" placeholder="Авто"
+    disabled={disabled} value={draft ?? (value ?? '')}
+    aria-label="Мінімальна сума ліквідації у доларах США"
+    onFocus={event => { setDraft(String(value ?? '')); event.currentTarget.select(); }}
+    onChange={event => setDraft(event.currentTarget.value)}
+    onBlur={event => commit(event.currentTarget.value)}
+    onKeyDown={event => { if (event.key === 'Enter') event.currentTarget.blur(); }}
+  />;
 }
 function Num({ value, set, min, max, step = 1, disabled = false, ariaLabel }: { value: number; set: (value: number) => void; min?: number; max?: number; step?: number; disabled?: boolean; ariaLabel?: string }) {
   // Keep a temporary string while editing. Number('') is zero, so committing
@@ -349,13 +360,13 @@ function Num({ value, set, min, max, step = 1, disabled = false, ariaLabel }: { 
   const commit = (raw: string) => {
     setDraft(null);
     if (!raw.trim()) return; // Empty input cancels the edit, not a new zero.
-    let next = Number(raw);
+    let next = Number(raw.trim().replace(',', '.'));
     if (!Number.isFinite(next)) return;
     if (min !== undefined) next = Math.max(min, next);
     if (max !== undefined) next = Math.min(max, next);
     if (next !== value) set(next);
   };
-  return <input className="numInput" type="number" value={draft ?? value} min={min} max={max} step={step} disabled={disabled} aria-label={ariaLabel}
+  return <input className="numInput" type="text" inputMode="decimal" value={draft ?? value} disabled={disabled} aria-label={ariaLabel}
     onFocus={event => { setDraft(String(value)); event.currentTarget.select(); }}
     onChange={event => setDraft(event.currentTarget.value)}
     onBlur={event => commit(event.currentTarget.value)}
