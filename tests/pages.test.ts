@@ -76,7 +76,13 @@ test('sort and 24h volume controls share styling and sit side by side on mobile'
   const volumeShell = html.match(/<div data-screener-filter="volume" class="([^"]+)"/);
   assert.ok(sortShell, 'sort shell is rendered');
   assert.ok(volumeShell, 'volume shell is rendered');
-  assert.equal(sortShell[1], volumeShell[1], 'both filters have identical styling');
+  // Sort and volume share visual styling, while their desktop widths may
+  // differ to accommodate the longer 24-hour volume label and direction arrow.
+  const withoutDesktopWidth = (classes: string) => classes.replace(/\blg:w-\d+\b/g, '').trim();
+  assert.equal(withoutDesktopWidth(sortShell[1]), withoutDesktopWidth(volumeShell[1]),
+    'both filters retain identical visual styling apart from their desktop width');
+  assert.match(sortShell[1], /\blg:w-\d+\b/, 'sort has a bounded desktop width');
+  assert.match(volumeShell[1], /\blg:w-\d+\b/, 'volume has a bounded desktop width');
   assert.match(sortShell[1], /rounded-xl/);
   assert.match(sortShell[1], /border-slate-800/);
   assert.match(html, /grid min-w-0 grid-cols-2 gap-2/, 'filters remain side by side on narrow screens');
