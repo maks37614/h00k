@@ -232,7 +232,8 @@ export function useTerminalWorkspace() {
 
   const retrySync = useCallback(() => {
     if (syncConflict) return; // A conflicting version needs explicit reconciliation.
-    revision.current += 1;
+    // Cloning schedules a committed workspace change; the commit effect
+    // advances revision once, even with React StrictMode replays.
     setWorkspace(current => ({ ...current }));
   }, [syncConflict]);
 
