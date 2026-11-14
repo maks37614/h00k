@@ -22,3 +22,12 @@ test('CRON inventory cannot modify the persisted legacy trigger mode configurati
     'normalizing legacy defaults should not modify saved user objects');
   assert.match(inventory, /\.\.\.coin\.config/);
 });
+
+test('manual check errors are reported and cannot masquerade as successful completion', () => {
+  const service = readFileSync(new URL('../server/surveillanceService.ts', import.meta.url), 'utf8');
+  const block = service.slice(service.indexOf('export async function checkAllUserCoins'),
+    service.indexOf('export function startSurveillanceMonitor'));
+  assert.match(block, /let failedChecks = 0/);
+  assert.match(block, /failedChecks\+\+/);
+  assert.match(block, /if \(failedChecks\) throw new Error/);
+});
