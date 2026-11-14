@@ -52,19 +52,19 @@ export function createSharedDepthSubscriptions(connect: Connector = connectHookC
       if (snapshot) {
         // The book always precedes LIVE: a chart cannot claim live liquidity
         // before its own local density engine has accepted that snapshot.
+        // Isolate book acceptance from status delivery. In particular, a
+        // throwing onStatus must not abort subscribe() before returning its
+        // disposer, leaving a permanently registered chart and open socket.
+        let accepted = false;
+        try { accepted = listener.onBook(snapshot); } catch { /* broken chart */ }
+        if (accepted) entry.failed.delete(listener);
+        else entry.failed.add(listener);
+        try { listener.onStatus(accepted ? 'live' : 'reconnecting'); } catch { /* isolate chart */ }
+      } else {
         try {
-          if (listener.onBook(snapshot)) {
-            entry.failed.delete(listener);
-            listener.onStatus('live');
-          } else {
-            entry.failed.add(listener);
-            listener.onStatus('reconnecting');
-          }
-        } catch {
-          entry.failed.add(listener);
-          listener.onStatus('reconnecting');
-        }
-      } else listener.onStatus(entry.status === 'live' ? 'reconnecting' : entry.status);
+          listener.onStatus(entry.status === 'live' ? 'reconnecting' : entry.status);
+        } catch { /* still return the disposer for this subscriber */ }
+      }
       return () => {
         entry!.listeners.delete(listener);
         entry!.failed.delete(listener);
