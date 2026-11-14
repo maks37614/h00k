@@ -34,6 +34,24 @@ CREATE TABLE IF NOT EXISTS auth_action_tokens (
 );
 CREATE INDEX IF NOT EXISTS auth_action_user_idx ON auth_action_tokens(user_id, purpose);
 
+-- Persist *requests* for recovery/confirmation mail, not the raw reset tokens.
+-- The worker creates a fresh opaque token only when a mail job is delivered.
+-- Incomplete jobs survive app restarts and are retried with bounded backoff.
+CREATE TABLE IF NOT EXISTS auth_mail_outbox (
+  id BIGSERIAL PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES auth_users(id) ON DELETE CASCADE,
+  purpose TEXT NOT NULL CHECK (purpose IN ('verify-email', 'reset-password')),
+  available_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  claimed_until TIMESTAMPTZ,
+  attempts INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  completed_at TIMESTAMPTZ
+);
+CREATE UNIQUE INDEX IF NOT EXISTS auth_mail_outbox_pending_user_idx
+  ON auth_mail_outbox(user_id, purpose) WHERE completed_at IS NULL;
+CREATE INDEX IF NOT EXISTS auth_mail_outbox_ready_idx
+  ON auth_mail_outbox(available_at, id) WHERE completed_at IS NULL;
+
 CREATE TABLE IF NOT EXISTS auth_archives (
   user_id TEXT NOT NULL REFERENCES auth_users(id) ON DELETE CASCADE,
   id TEXT NOT NULL,
