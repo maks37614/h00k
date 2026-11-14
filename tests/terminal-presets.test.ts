@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import type { MarketCoin, TerminalChartBlock } from '../src/types';
 import { matchesMarketPreset, selectMarketPresetCoins } from '../src/utils/marketPresets';
 import { blocksForMarketPreset, normalizeTerminalBlocks, normalizeTerminalMarketPair, formatTerminalQuotedPrice, normalizeTerminalPresets, terminalStorageKey, TERMINAL_PRESETS_STORAGE_KEY } from '../src/utils/terminalPresets';
-import { loadTerminalWorkspace } from '../src/utils/useTerminalWorkspace';
+import { loadTerminalWorkspace, parseTerminalWorkspaceBackup } from '../src/utils/useTerminalWorkspace';
 
 const coin = (symbol: string, change24h: number, values: Partial<MarketCoin> = {}): MarketCoin => ({
   symbol, baseAsset: symbol.replace('USDT', ''), quoteAsset: 'USDT', exchange: 'binance', marketType: 'futures',
@@ -205,4 +205,37 @@ test('Terminal reload recovers conflicting local charts rather than overwriting 
     if (original) Object.defineProperty(globalThis, 'localStorage', original);
     else Reflect.deleteProperty(globalThis, 'localStorage');
   }
+});
+
+test('Terminal JSON backup roundtrip restores charts, layout and presets without silent loss', () => {
+  const input = {
+    exportedAt: new Date().toISOString(),
+    blocks: [
+      { id: 'btc', symbol: 'BTCUSDT', baseAsset: 'BTC', quoteAsset: 'USDT', exchange: 'binance', marketType: 'futures', timeframe: '5m', colSpan: 2 },
+      { id: 'eth', symbol: 'ETHUSDC', baseAsset: 'ETH', quoteAsset: 'USDC', exchange: 'bybit', marketType: 'spot', timeframe: '1h', colSpan: 1 },
+    ],
+    config: { layoutPreset: 'custom', columns: 3, autoFitScreen: false, blockHeight: 'large', showFormations: true,
+      initialChartView: { visibleBars: 90, verticalZoom: 1.2, autoPriceScale: true, rightGapBars: 12 } },
+    presets: [{ id: 'mine', name: 'Мій пресет', blocks: [
+      { id: 'btc', symbol: 'BTCUSDT', baseAsset: 'BTC', quoteAsset: 'USDT', exchange: 'binance', marketType: 'futures', timeframe: '5m', colSpan: 2 },
+    ], columns: 2, blockHeight: 'medium', createdAt: 1 }],
+  };
+  const restored = parseTerminalWorkspaceBackup(JSON.stringify(input));
+  assert.deepEqual(restored.blocks, input.blocks);
+  assert.equal(restored.config.columns, 3);
+  assert.equal(restored.config.blockHeight, 'large');
+  assert.equal(restored.config.autoFitScreen, false);
+  assert.equal(restored.presets.length, 1);
+  assert.equal(restored.presets[0].name, 'Мій пресет');
+  assert.deepEqual(parseTerminalWorkspaceBackup(JSON.stringify(restored)), restored);
+});
+
+test('Terminal JSON import rejects corrupt and oversized backups without changing the workspace', () => {
+  for (const input of [
+    '{broken', '{}', JSON.stringify({ blocks: [], presets: [], config: null }),
+    JSON.stringify({ blocks: [{ id: 'bad', symbol: 'BTCUSDT' }], presets: [], config: {} }),
+    JSON.stringify({ blocks: [], presets: [{ id: 'invalid', name: 'Empty', blocks: [] }], config: {} }),
+    JSON.stringify({ blocks: Array(251).fill({ id: 'btc', symbol: 'BTCUSDT' }), presets: [], config: {} }),
+    ' '.repeat(2_000_001),
+  ]) assert.throws(() => parseTerminalWorkspaceBackup(input));
 });
