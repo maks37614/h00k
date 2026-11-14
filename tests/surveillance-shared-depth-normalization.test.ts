@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ExchangeStreamClient } from '../server/surveillance/exchangeStream';
+import { ExchangeStreamClient, type RawDepthDelta } from '../server/surveillance/exchangeStream';
 import { acquireExchangeStream, getSharedExchangeStreamStats } from '../server/surveillance/sharedExchangeStream';
 import { OrderBookEngine } from '../server/surveillance/orderBookEngine';
 
@@ -21,8 +21,10 @@ test('one validated public WS packet feeds 150 isolated personal books without r
       owners.push({handle,book});
     }
     const now=Date.now();
+    // Exchange wire tuples may be numeric strings, even though the legacy
+    // TypeScript RawDepthDelta annotation expects numeric pairs.
     const first={isSnapshot:true,sequence:10,eventTime:now,
-      bids:[['100','20'],['99','2']],asks:[['101','5']]};
+      bids:[['100','20'],['99','2']],asks:[['101','5']]} as unknown as RawDepthDelta;
     source.emit('depth',first);
     assert.equal(owners.every(({book})=>book.getState().status==='LIVE'),true);
     assert.equal(owners.every(({book})=>book.thresholdStats().depthParseFallbacks===0),true,
