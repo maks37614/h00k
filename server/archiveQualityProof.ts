@@ -10,6 +10,7 @@ export type ArchivedScorePayload = {
   version: 1;
   issuer: "h00k.top";
   purpose: "archive-score-record";
+  rubric: "regular-flow-72-13-15-v1";
   archiveId: string;
   symbol: string;
   exchange: "binance" | "bybit";
@@ -32,6 +33,38 @@ export type SignedArchivedScore = {
 const validPrice = (value: unknown): value is number =>
   typeof value === "number" && Number.isFinite(value) && value > 0;
 
+// This explicit rubric pins the archived score to the known standard 100-point
+// breakdown, never an early W/M rating or an arbitrary user-provided confidence.
+const weight: Record<string, number> = {
+  formation: 12, extremeLocation: 8, trigger: 16, retest: 7,
+  volume: 5, volatility: 3, level: 6, riskReward: 8, dataQuality: 7,
+  openInterest: 5, delta: 5, cvd20: 3,
+  roundNumber: 4, density: 5, rsi: 3, atr: 2, rvol: 1,
+};
+const round1 = (n: number) => Number(n.toFixed(1));
+function consistentRubric(c: any): boolean {
+  if (!c || typeof c !== "object" || !c.components || typeof c.components !== "object") return false;
+  const keys = Object.keys(weight);
+  if (Object.keys(c.components).length !== keys.length) return false;
+  let rawTotal = 0, availableMax = 0;
+  for (const [name, max] of Object.entries(weight)) {
+    const row = c.components[name];
+    if (!row || row.max !== max || typeof row.score !== "number" ||
+        !Number.isFinite(row.score) || row.score < 0 || row.score > max ||
+        typeof row.available !== "boolean" || (row.available === false && row.score !== 0))
+      return false;
+    rawTotal += row.score;
+    if (row.available) availableMax += max;
+  }
+  if (availableMax < 72 || availableMax > 100 ||
+      typeof c.rawTotal !== "number" || typeof c.availableMax !== "number" ||
+      Math.abs(c.availableMax - availableMax) > 0.01 ||
+      Math.abs(c.rawTotal - round1(rawTotal)) > 0.11)
+    return false;
+  const total = round1(Math.min(100, Math.max(0, round1(rawTotal) / availableMax * 100)));
+  return Math.abs(c.total - total) <= 0.11;
+}
+
 const gradeExpected = (total: number) =>
   total >= 90 ? "A+" : total >= 82 ? "A" : total >= 72 ? "B" : total >= 60 ? "C" : "D";
 
@@ -53,7 +86,7 @@ export function archivedScorePayload(archive: any, now = Date.now()): ArchivedSc
       !Number.isInteger(formation.confidence) || Math.abs(formation.confidence - Math.round(total)) > 1 ||
       !Number.isInteger(archive.confidence) || Math.abs(archive.confidence - Math.round(total)) > 1 ||
       confluence.grade !== gradeExpected(total) ||
-      !confluence.components || typeof confluence.components !== "object" ||
+      !consistentRubric(confluence) ||
       !validPrice(archive.entryPrice) || !validPrice(archive.stopLossPrice) || !validPrice(archive.targetPrice) ||
       formation.levels?.entryPrice !== archive.entryPrice ||
       formation.levels?.stopLossPrice !== archive.stopLossPrice ||
@@ -65,6 +98,7 @@ export function archivedScorePayload(archive: any, now = Date.now()): ArchivedSc
   // These values are from the user's saved archive, not a server rerun.
   return {
     version: 1, issuer: "h00k.top", purpose: "archive-score-record",
+    rubric: "regular-flow-72-13-15-v1",
     archiveId, symbol: archive.symbol, exchange: archive.exchange,
     marketType: archive.marketType, timeframe: archive.timeframe,
     score: total, entry: archive.entryPrice, stop: archive.stopLossPrice,
