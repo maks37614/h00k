@@ -7,6 +7,7 @@ import { exchangeHistoryCache } from './exchangeHistoryCache';
 import { getLiveOiCacheStats } from './marketService';
 import { marketTickerFeed } from './marketTickerFeed';
 import { liquidationFeed } from './liquidationFeed';
+import { liquidationArchive } from './liquidationArchive';
 import { getSharedExchangeStreamStats } from './surveillance/sharedExchangeStream';
 import { RuntimeMetrics } from './runtimeMetrics';
 import { publicQuoteResponseCache } from './marketQuoteResponse';
@@ -82,6 +83,7 @@ export function installOpsMetrics(app: Express,
       liveOiCache: getLiveOiCacheStats(),
       marketTickerFeed: marketTickerFeed.diagnostics(),
       liquidationFeed: liquidationFeed.stats(),
+      liquidationArchive: liquidationArchive.stats(),
       publicQuoteDelivery: publicQuoteResponseCache.stats(),
       publicPriceWebSockets: publicPriceFeed.status(),
       priceAlertFallback: priceAlertFallbackStats(),
