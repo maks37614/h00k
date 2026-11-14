@@ -236,6 +236,13 @@ test('Terminal JSON import rejects corrupt and oversized backups without changin
     JSON.stringify({ blocks: [{ id: 'bad', symbol: 'BTCUSDT' }], presets: [], config: {} }),
     JSON.stringify({ blocks: [], presets: [{ id: 'invalid', name: 'Empty', blocks: [] }], config: {} }),
     JSON.stringify({ blocks: Array(251).fill({ id: 'btc', symbol: 'BTCUSDT' }), presets: [], config: {} }),
+    JSON.stringify({ blocks: [], config: {}, presets: [{
+      id: 'too-many', name: '51 графік', columns: 2, blockHeight: 'medium', createdAt: 1,
+      blocks: Array.from({ length: 51 }, (_, i) => ({
+        id: 'chart-' + i, symbol: 'BTCUSDT', baseAsset: 'BTC', quoteAsset: 'USDT',
+        exchange: 'binance', marketType: 'futures', timeframe: '15m',
+      })),
+    }] }),
     ' '.repeat(2_000_001),
   ]) assert.throws(() => parseTerminalWorkspaceBackup(input));
 });
