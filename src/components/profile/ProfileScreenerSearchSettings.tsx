@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowDownToLine, ArrowUpToLine, BookmarkPlus, CheckCircle2, Search, Trash2 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { useLanguage } from '../../context/LanguageContext';
 import type { ScreenerSearchConfig, SearchUserSettings } from '../../types';
 import { getStoredPreferences } from '../../utils/userPreferences';
 import { SCREENER_VOLUME_CAPS } from '../../utils/screenerVolume';
@@ -32,6 +33,7 @@ function preferredFallback(profile: { defaultExchange?: ScreenerSearchConfig['ex
 /** Profile-only editor. No quote polling, chart mounting or exchange requests. */
 export function ProfileScreenerSearchSettings() {
   const { user, profile, updateProfileData } = useAuth();
+  const { t } = useLanguage();
   const fallback = preferredFallback(profile);
   const stored = useMemo(() => normalizeScreenerSearchSettings(profile?.searchSettings, fallback),
     [profile?.searchSettings, fallback.exchange, fallback.marketType]);
@@ -177,7 +179,7 @@ export function ProfileScreenerSearchSettings() {
           </select>
         </label>
         <div className={label}>
-          <span>Обсяг 24год:</span>
+          <span>{t('screenerVolume24h')}</span>
           <div className="flex min-w-0 items-center gap-2">
             <button type="button"
               aria-label={draft.volumeMode === 'to' ? 'Змінити обсяг на Від' : 'Змінити обсяг на До'}
@@ -185,13 +187,13 @@ export function ProfileScreenerSearchSettings() {
               onClick={() => setField('volumeMode', draft.volumeMode === 'to' ? 'from' : 'to')}
               className="flex shrink-0 items-center gap-1 rounded-lg border border-slate-700 bg-slate-950 px-2.5 py-2.5 text-sm text-cyan-300 hover:border-cyan-500 focus:outline-none focus-visible:ring-1 focus-visible:ring-cyan-500">
               {draft.volumeMode === 'to' ? <ArrowDownToLine size={16} /> : <ArrowUpToLine size={16} />}
-              <span>{draft.volumeMode === 'to' ? 'До' : 'Від'}</span>
+              <span>{draft.volumeMode === 'to' ? t('screenerVolumeTo') : t('screenerVolumeFrom')}</span>
             </button>
             <select aria-label="Межа обсягу за 24 години" className={control} value={draft.maxVolumeUsd}
               onChange={event => setField('maxVolumeUsd', Number(event.target.value))}>
-              <option value={0}>Без обмежень</option>
+              <option value={0}>{t('screenerVolumeUnlimited')}</option>
               {SCREENER_VOLUME_CAPS.map(option => <option key={option.value} value={option.value}>
-                {draft.volumeMode === 'from' ? option.label.replace(/^До /, 'Від ') : option.label}
+                {option.label.replace(/^До /, `${draft.volumeMode === 'from' ? t('screenerVolumeFrom') : t('screenerVolumeTo')} `)}
               </option>)}
             </select>
           </div>
