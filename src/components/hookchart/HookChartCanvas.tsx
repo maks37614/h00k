@@ -1,7 +1,7 @@
 import { ReplaySpeedPicker } from '../replay/ReplaySpeedPicker';
 import React, { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { ChevronLeft, ChevronRight, Crosshair, Minus, MoveUpRight, Square, Type, Ruler, Bell, BarChart3, Layers, Settings, Target, Trash2, X, Flame } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Crosshair, Minus, MoveUpRight, Square, Type, Ruler, Bell, BarChart3, Layers, Settings, Target, Trash2, X, Map as MapIcon } from 'lucide-react';
 import type { ChartMarkerInfo, ChartRestoreParams, DetectedFormation, ExchangeId, HookChartPreferences, Kline, MarketType, Timeframe } from '../../types';
 import { useAuth } from '../../context/AuthContext';
 import { useAlerts } from '../../context/AlertsContext';
@@ -1252,7 +1252,9 @@ const HookChartCanvas = forwardRef<HookChartHandle, HookChartCanvasProps>(functi
             type="button"
             className={'liqHeatmapSwitch' + (liquidationMapOn ? ' active' : '')}
             aria-label={liquidationMapOn ? 'Вимкнути карту ліквідацій' : 'Увімкнути карту ліквідацій'}
-            title={settings.tooltips !== false ? 'Теплова карта отриманих ліквідацій (не прогноз); обчислення тільки коли ввімкнено' : undefined}
+            title={settings.tooltips !== false ? (liquidationMapOn
+              ? 'Вимкнути карту ліквідацій (отримані події, не прогноз)'
+              : 'Увімкнути карту ліквідацій (отримані події, не прогноз)') : undefined}
             aria-pressed={liquidationMapOn}
             onClick={() => {
               if (liquidationMapOn) {
@@ -1264,7 +1266,7 @@ const HookChartCanvas = forwardRef<HookChartHandle, HookChartCanvasProps>(functi
               }
             }}
           >
-            <Flame size={14}/><span>Карта Liq</span>
+            <MapIcon size={17} strokeWidth={1.9} aria-hidden="true" />
           </button>
           {liquidationMapOn && (['24h','7d'] as const).map(period => (
             <button
