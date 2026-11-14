@@ -14,6 +14,7 @@ import {
   MonitorSmartphone,
   Target,
   ChartCandlestick,
+  Search,
   PlugZap,
 } from 'lucide-react';
 import { FormationArchiveIcon } from './FormationArchiveIcon';
@@ -31,13 +32,14 @@ import { saveStoredPreferences } from '../utils/userPreferences';
 import { getTimeZoneChoices } from '../utils/tradingSessions';
 const TpSlConstructorModal = React.lazy(() => import('./TpSlConstructorModal'));
 const ProfileHookChartSettings = React.lazy(() => import('./profile/ProfileHookChartSettings').then(module => ({ default: module.ProfileHookChartSettings })));
+const ProfileScreenerSearchSettings = React.lazy(() => import('./profile/ProfileScreenerSearchSettings').then(module => ({ default: module.ProfileScreenerSearchSettings })));
 
 interface UserProfileModalProps {
   isOpen: boolean;
   onClose: () => void;
   onOpenAlerts?: () => void;
   onOpenArchive?: () => void;
-  initialSection?: 'account' | 'chart' | 'notifications' | 'linking';
+  initialSection?: 'account' | 'chart' | 'search' | 'notifications' | 'linking';
 }
 
 export const UserProfileModal: React.FC<UserProfileModalProps> = ({
@@ -57,7 +59,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
   const [defaultMarketType, setDefaultMarketType] = useState<'all' | MarketType>('all');
   const [defaultTimeframe, setDefaultTimeframe] = useState<Timeframe>('1h');
   const [isTpSlOpen, setIsTpSlOpen] = useState(false);
-  const [activeProfileSection, setActiveProfileSection] = useState<'account' | 'chart' | 'notifications' | 'linking'>(initialSection);
+  const [activeProfileSection, setActiveProfileSection] = useState<'account' | 'chart' | 'search' | 'notifications' | 'linking'>(initialSection);
 
   useEffect(() => {
     if (isOpen) setActiveProfileSection(initialSection);
@@ -202,6 +204,10 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
             className={activeProfileSection === 'chart' ? 'rounded-lg border border-cyan-500/40 bg-cyan-950/50 px-4 py-2 text-xs font-bold text-cyan-200' : 'rounded-lg border border-slate-700 px-4 py-2 text-xs font-semibold text-slate-300 hover:text-white'}>
             <ChartCandlestick size={15} className="mr-1.5 inline-block" /> Графік
           </button>
+          <button type="button" role="tab" aria-selected={activeProfileSection === 'search'} onClick={() => setActiveProfileSection('search')}
+            className={activeProfileSection === 'search' ? 'rounded-lg border border-cyan-500/40 bg-cyan-950/50 px-4 py-2 text-xs font-bold text-cyan-200' : 'rounded-lg border border-slate-700 px-4 py-2 text-xs font-semibold text-slate-300 hover:text-white'}>
+            <Search size={15} className="mr-1.5 inline-block" /> Пошук
+          </button>
           <button type="button" role="tab" aria-selected={activeProfileSection === 'linking'}
             onClick={() => setActiveProfileSection('linking')}
             className={activeProfileSection === 'linking'
@@ -225,6 +231,10 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
           {activeProfileSection === 'chart' ? (
             <Suspense fallback={<div role="status" className="p-5 text-sm text-cyan-300">Завантаження налаштувань графіка…</div>}>
               <ProfileHookChartSettings />
+            </Suspense>
+          ) : activeProfileSection === 'search' ? (
+            <Suspense fallback={<div role="status" className="p-5 text-sm text-cyan-300">Завантаження налаштувань пошуку…</div>}>
+              <ProfileScreenerSearchSettings />
             </Suspense>
           ) : activeProfileSection === 'linking' ? (
             <ProfileTerminalLinkingSettings />
