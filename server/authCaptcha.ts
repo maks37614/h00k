@@ -1,9 +1,9 @@
 import type { Request } from 'express';
 import { AuthFailure } from './pgIdentity';
+import { AUTH_CAPTCHA_ACTION } from '../src/utils/captchaAction';
 
 // The public key is used only by the browser; the secret must never leave the server.
 const VERIFY_URL = 'https://challenges.cloudflare.com/turnstile/v0/siteverify';
-export const AUTH_CAPTCHA_ACTION = 'h00k_auth';
 const VERIFY_TIMEOUT_MS = 5_000;
 const MAX_CONCURRENT_VERIFICATIONS = 12;
 let inFlightVerifications = 0;
