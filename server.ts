@@ -112,6 +112,16 @@ async function startServer() {
     try {
       const jobId = (req.body?.job || 'all').toString();
       if (!['all', 'price_alerts', 'surveillance'].includes(jobId)) return res.status(400).json({ success: false, error: 'Невідоме завдання' });
+      // The legacy manual CRON route must share the same per-user budget as
+      // /api/surveillance/check-all; otherwise it bypasses the 60s throttle
+      // and allows repeated four-timeframe REST bursts against the VPS.
+      const checksSurveillance = jobId !== 'price_alerts';
+      const windowMs = checksSurveillance ? 60_000 : 15_000;
+      const throttleKey = checksSurveillance ? 'check-all' : 'manual-price-alerts';
+      if (!userWorkThrottle.allow(res.locals.userId, throttleKey, windowMs))
+        return res.status(429).setHeader('Retry-After', String(windowMs / 1000)).json({
+          success: false, error: 'Повторна ручна перевірка буде доступна пізніше.',
+        });
       if (jobId !== 'surveillance') await checkAlertsOnce(res.locals.userId);
       if (jobId !== 'price_alerts') await checkAllUserCoins(res.locals.userId);
       const result = { success: true, message: 'Ваші сповіщення перевірено' };
@@ -643,7 +653,8 @@ async function startServer() {
         if (config) {
           existing.config = { ...existing.config, ...config };
         }
-        saveSurveillanceList(uid, list);
+        if (!saveSurveillanceList(uid, list))
+          return res.status(503).json({ success: false, error: 'Не вдалося зберегти нагляд. Спробуйте пізніше.' });
         surveillanceManager.startWorkerForCoin(existing);
         const { coin: checked } = await checkCoinSurveillance(existing, true);
         const committed = commitSurveillanceCheck(checked);
@@ -673,7 +684,8 @@ async function startServer() {
       };
 
       list.unshift(newCoin);
-      saveSurveillanceList(uid, list);
+      if (!saveSurveillanceList(uid, list))
+        return res.status(503).json({ success: false, error: 'Не вдалося зберегти монету. Спробуйте пізніше.' });
       surveillanceManager.startWorkerForCoin(newCoin);
       const { coin: checkedCoin } = await checkCoinSurveillance(newCoin, true);
       const committed = commitSurveillanceCheck(checkedCoin);
@@ -709,8 +721,10 @@ async function startServer() {
         updatedAt: new Date().toISOString(),
       };
 
-      found.list[found.index] = updatedCoin;
-      saveSurveillanceList(found.userId, found.list);
+      const nextList = found.list.slice();
+      nextList[found.index] = updatedCoin;
+      if (!saveSurveillanceList(found.userId, nextList))
+        return res.status(503).json({ success: false, error: 'Зміни не збережено. Спробуйте пізніше.' });
 
       // Keep 24/7 worker synced with updated coin config & active state (#4)
       if (updatedCoin.isActive) {
@@ -751,7 +765,8 @@ async function startServer() {
       }
 
       const filtered = found.list.filter((c) => c.id !== id);
-      saveSurveillanceList(found.userId, filtered);
+      if (!saveSurveillanceList(found.userId, filtered))
+        return res.status(503).json({ success: false, error: 'Не вдалося видалити монету. Спробуйте пізніше.' });
       surveillanceManager.stopWorkerForCoin(id, found.userId);
       res.json({ success: true });
     } catch (err: any) {
