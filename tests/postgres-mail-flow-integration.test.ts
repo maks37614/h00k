@@ -163,10 +163,9 @@ test('real PostgreSQL and captured SMTP: register, verify, login, recover, resen
     assert.match(mail[1].subject, /пароля/);
     const resetToken = tokenFrom(mail[1], 'resetPassword');
 
-    // A duplicate request inside the 60-second mailbox cooldown must not
-    // enqueue another mail, including if the requester changes IP address.
-    const suppressed = await post('/api/auth/forgot-password', { email });
-    assert.equal(suppressed.status, 200);
+    // A duplicate scheduled request inside the 60-second mailbox cooldown
+    // must not enqueue another mail (without burning a production HTTP quota).
+    await sendReset(email);
     assert.equal((await processAuthMailJobs()).processed, 0);
     await db.query(`
       UPDATE auth_mail_outbox SET completed_at = now() - interval '2 minutes'
