@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import type { MarketCoin, TerminalChartBlock } from '../src/types';
 import { matchesMarketPreset, selectMarketPresetCoins } from '../src/utils/marketPresets';
-import { blocksForMarketPreset, normalizeTerminalBlocks, normalizeTerminalMarketPair, normalizeTerminalPresets, terminalStorageKey, TERMINAL_PRESETS_STORAGE_KEY } from '../src/utils/terminalPresets';
+import { blocksForMarketPreset, normalizeTerminalBlocks, normalizeTerminalMarketPair, formatTerminalQuotedPrice, normalizeTerminalPresets, terminalStorageKey, TERMINAL_PRESETS_STORAGE_KEY } from '../src/utils/terminalPresets';
 
 const coin = (symbol: string, change24h: number, values: Partial<MarketCoin> = {}): MarketCoin => ({
   symbol, baseAsset: symbol.replace('USDT', ''), quoteAsset: 'USDT', exchange: 'binance', marketType: 'futures',
@@ -127,4 +127,11 @@ test('Terminal keeps each exchange instrument quote currency instead of appendin
   assert.deepEqual(normalizeTerminalMarketPair('BTCUSDC', 'USDT'), { symbol: 'BTCUSDC', quoteAsset: 'USDC' });
   assert.deepEqual(normalizeTerminalMarketPair('WBTC'), { symbol: 'WBTCUSDT', quoteAsset: 'USDT' });
   assert.deepEqual(normalizeTerminalMarketPair('WBTCUSDT'), { symbol: 'WBTCUSDT', quoteAsset: 'USDT' });
+});
+
+test('Terminal displays non-USD quote assets without a misleading dollar sign', () => {
+  assert.equal(formatTerminalQuotedPrice(0.025, 'BTC'), '0.0250 BTC');
+  assert.equal(formatTerminalQuotedPrice(3.5, 'ETH'), '3.5000 ETH');
+  assert.equal(formatTerminalQuotedPrice(10, 'USDT'), '$10.00');
+  assert.equal(formatTerminalQuotedPrice(10, 'USDC'), '$10.00');
 });
