@@ -38,15 +38,17 @@ export function loadTerminalWorkspace(uid?: string, settings?: TerminalWorkspace
 
 /** TerminalPage is keyed by account, so pending writes cannot cross an account change. */
 export function useTerminalWorkspace() {
-  const { user, profile, updateProfileData } = useAuth();
+  const { user, profile, updateTerminalWorkspace } = useAuth();
   const uid = user?.uid;
   const [workspace, setWorkspace] = useState(() => loadTerminalWorkspace(uid, profile?.uid === uid ? profile?.terminalSettings : undefined));
   const [syncError, setSyncError] = useState(false);
+  const [syncConflict, setSyncConflict] = useState(false);
+  const serverVersion = useRef<string | null>(profile?.terminalSettings?.version ?? null);
   const revision = useRef(0);
   const savedRevision = useRef(0);
   const hydrated = useRef(Boolean(!uid || profile?.uid === uid));
-  const authRef = useRef({ uid, profile, updateProfileData });
-  authRef.current = { uid, profile, updateProfileData };
+  const authRef = useRef({ uid, profile, updateTerminalWorkspace });
+  authRef.current = { uid, profile, updateTerminalWorkspace };
   const workspaceRef = useRef(workspace);
   workspaceRef.current = workspace;
   const saveQueue = useRef(Promise.resolve());
@@ -57,12 +59,18 @@ export function useTerminalWorkspace() {
       const auth = authRef.current;
       if (!uid || auth.uid !== uid || auth.profile?.uid !== uid || currentRevision < revision.current) return;
       const { blocks: _blocks, ...config } = value.config;
-      await auth.updateProfileData({ terminalSettings: { ...auth.profile.terminalSettings,
+      const nextVersion = await auth.updateTerminalWorkspace({
         columns: config.columns, blockHeight: config.blockHeight, config,
-        blocks: value.blocks, customPresets: value.presets } });
+        blocks: value.blocks, customPresets: value.presets,
+      }, serverVersion.current);
+      serverVersion.current = nextVersion;
       savedRevision.current = currentRevision;
-      if (mounted.current) setSyncError(false);
-    }).catch(() => { if (mounted.current) setSyncError(true); });
+      if (mounted.current) { setSyncError(false); setSyncConflict(false); }
+    }).catch((error: Error & { code?: string }) => {
+      if (!mounted.current) return;
+      setSyncError(true);
+      if (error.code === 'TERMINAL_WORKSPACE_CONFLICT') setSyncConflict(true);
+    });
   }, [uid]);
 
   useEffect(() => {
@@ -76,9 +84,16 @@ export function useTerminalWorkspace() {
   useEffect(() => {
     if (hydrated.current || !uid || profile?.uid !== uid) return;
     hydrated.current = true;
+    serverVersion.current = profile.terminalSettings?.version ?? null;
     // A late profile response must not overwrite a user's new selection.
     if (revision.current === 0) setWorkspace(loadTerminalWorkspace(uid, profile.terminalSettings));
   }, [uid, profile]);
+
+  useEffect(() => {
+    if (uid && profile?.uid === uid && !syncConflict) {
+      serverVersion.current = profile.terminalSettings?.version ?? null;
+    }
+  }, [uid, profile?.uid, profile?.terminalSettings?.version, syncConflict]);
 
   const setField = useCallback(<K extends keyof typeof workspace>(field: K, update: SetStateAction<(typeof workspace)[K]>) => {
     setWorkspace(current => {
@@ -99,17 +114,31 @@ export function useTerminalWorkspace() {
       localStorage.setItem(terminalStorageKey(CONFIG_KEY, uid), JSON.stringify(workspace.config));
       localStorage.setItem(terminalStorageKey(TERMINAL_PRESETS_STORAGE_KEY, uid), JSON.stringify(workspace.presets));
     } catch { setSyncError(true); }
-    if (!uid || !hydrated.current) return;
+    if (!uid || !hydrated.current || syncConflict) return;
     const currentRevision = revision.current;
     const timer = setTimeout(() => persistToProfile(workspace, currentRevision), 1200);
     return () => clearTimeout(timer);
-  }, [workspace, uid, profile?.uid, persistToProfile]);
+  }, [workspace, uid, profile?.uid, persistToProfile, syncConflict]);
 
   const retrySync = useCallback(() => {
+    if (syncConflict) return; // A conflicting version needs explicit reconciliation.
     revision.current += 1;
     setWorkspace(current => ({ ...current }));
+  }, [syncConflict]);
+
+  const downloadLocalBackup = useCallback(() => {
+    const snapshot = workspaceRef.current;
+    const json = JSON.stringify({ exportedAt: new Date().toISOString(), ...snapshot }, null, 2);
+    const url = URL.createObjectURL(new Blob([json], { type: 'application/json' }));
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = 'h00k-terminal-local-backup.json';
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
   }, []);
 
   return { blocks: workspace.blocks, config: workspace.config, customPresets: workspace.presets,
-    setBlocks, setConfig, setCustomPresets, syncError, retrySync };
+    setBlocks, setConfig, setCustomPresets, syncError, syncConflict, retrySync, downloadLocalBackup };
 }
