@@ -1,5 +1,6 @@
 import { initializeIdentity } from './server/pgIdentity';
 import { installPostgresIdentityRoutes } from './server/pgIdentityRoutes';
+import { startAuthMailWorker } from './server/authMailWorker';
 import express from 'express';
 import path from 'path';
 import { installProductionAssets } from './server/productionAssets';
@@ -908,6 +909,7 @@ async function startServer() {
   const httpServer = app.listen(PORT, '0.0.0.0', () => {
     console.log(`Crypto Pattern Screener server running on http://0.0.0.0:${PORT}`);
     // Start unified background CRON for all notifications (Price Alerts 5s, Surveillance 15s, Screener 60s)
+    startAuthMailWorker();
     startTelegramDeliveryWorker();
     startSharedTelegramBot();
     cronManager.init();
