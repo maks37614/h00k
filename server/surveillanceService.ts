@@ -157,7 +157,11 @@ export function saveSurveillanceStore(store: UserSurveillanceStore): boolean {
     const temporaryFile = `${SURVEILLANCE_FILE}.tmp`;
     const payload = JSON.stringify(safeStore);
     bytes = Buffer.byteLength(payload);
-    fs.writeFileSync(temporaryFile, payload, 'utf-8');
+    // This file contains private account selections, alert event history and
+    // strategy settings. A pre-existing .tmp file may have permissive mode;
+    // chmod before rename so the final name is never published as world-readable.
+    fs.writeFileSync(temporaryFile, payload, { encoding: 'utf-8', mode: 0o600 });
+    fs.chmodSync(temporaryFile, 0o600);
     fs.renameSync(temporaryFile, SURVEILLANCE_FILE);
     // A failed disk write must never replace the authoritative in-memory copy.
     storeCache = safeStore;
@@ -308,12 +312,22 @@ export function commitSurveillanceCheck(
   if (!found) return null;
   const current = found.coin;
   if (current.isActive !== checked.isActive || JSON.stringify(current.config) !== JSON.stringify(checked.config)) return current;
+  // A slower manual or background response must not rewind the last processed
+  // candles, recent signals, or notification cooldown stored by a newer pass.
+  const currentCheckAt = Date.parse(current.lastCheckedAt || '');
+  const checkedAt = Date.parse(checked.lastCheckedAt || '');
+  if (Number.isFinite(currentCheckAt) && (!Number.isFinite(checkedAt) || checkedAt < currentCheckAt))
+    return current;
+
+  const currentNotifyAt = Date.parse(current.lastNotifiedAt || '');
+  const checkedNotifyAt = Date.parse(checked.lastNotifiedAt || '');
+  const newNotification = Number.isFinite(checkedNotifyAt)
+    && (!Number.isFinite(currentNotifyAt) || checkedNotifyAt > currentNotifyAt);
+  const lastNotifiedAt = newNotification ? checked.lastNotifiedAt : current.lastNotifiedAt;
   const updated = { ...current, state: checked.state, lastCheckedAt: checked.lastCheckedAt,
-    lastNotifiedAt: checked.lastNotifiedAt || current.lastNotifiedAt };
+    lastNotifiedAt };
   // A real Telegram dispatch updates lastNotifiedAt and must be written
   // durably before the next monitor pass, never buffered with routine metrics.
-  const newNotification = !!checked.lastNotifiedAt
-    && checked.lastNotifiedAt !== current.lastNotifiedAt;
   if (options.deferPersist && !newNotification) {
     found.list[found.index] = updated;
     pendingSurveillanceUsers.add(found.userId);
