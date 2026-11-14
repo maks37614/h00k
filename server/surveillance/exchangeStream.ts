@@ -300,7 +300,11 @@ export class ExchangeStreamClient extends EventEmitter {
         const high24h = parseFloat(data.highPrice24h || 0);
         const low24h = parseFloat(data.lowPrice24h || 0);
         const volume24hUsd = parseFloat(data.turnover24h || 0);
-        if (!isNaN(lastPrice) && lastPrice > 0) {
+        // Funding/OI-only deltas may preserve a cached lastPrice, but they
+        // are not new price observations. Never refresh the displayed quote
+        // timestamp or downstream freshness based on recycled lastPrice.
+        if (Object.prototype.hasOwnProperty.call(incoming, 'lastPrice') &&
+            Number.isFinite(lastPrice) && lastPrice > 0) {
           this.emit('price', {
             price: lastPrice,
             high24h,
