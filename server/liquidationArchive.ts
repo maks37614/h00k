@@ -126,8 +126,10 @@ export class LiquidationArchive {
         await this.database().query(`
           INSERT INTO h00k_liquidation_events
             (exchange, symbol, event_id, event_time, side, price, quantity, observed_notional)
-          SELECT v.exchange, v.symbol, v.event_id, to_timestamp(v.t / 1000.0),
-            v.side, v.price, v.quantity, v.usd
+          SELECT v.exchange::text, v.symbol::text, v.event_id::text,
+            to_timestamp(v.t::double precision / 1000.0),
+            v.side::text, v.price::double precision, v.quantity::double precision,
+            v.usd::double precision
           FROM (VALUES ${placeholders.join(',')})
             AS v(exchange, symbol, event_id, t, side, price, quantity, usd)
           ON CONFLICT (exchange,symbol,event_id) DO UPDATE
@@ -141,12 +143,12 @@ export class LiquidationArchive {
         this.counters.lastWriteAt = Date.now();
         this.retryAfter = 0;
         if (Date.now() > this.cleanupAfter) {
-          this.cleanupAfter = Date.now() + 6 * 60 * 60_000;
+          this.cleanupAfter = Date.now() + 15 * 60_000;
           // Delete in bounded chunks to avoid locking the 512 MB postgres.
           await this.database().query(`
             WITH expired AS (
               SELECT ctid FROM h00k_liquidation_events
-              WHERE event_time < NOW() - INTERVAL '8 days' LIMIT 2000
+              WHERE event_time < NOW() - INTERVAL '8 days' LIMIT 5000
             )
             DELETE FROM h00k_liquidation_events e USING expired
             WHERE e.ctid = expired.ctid
