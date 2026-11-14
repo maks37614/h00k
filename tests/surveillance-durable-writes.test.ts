@@ -23,6 +23,8 @@ test('surveillance JSON edits commit atomically, GET snapshots never mutate stor
     } as SurveillanceCoin;
     assert.equal(service.saveSurveillanceList(coin.userId, [coin]), true);
     const file = path.join(temp, 'server/data/surveillance.json');
+    assert.equal(fs.statSync(file).mode & 0o777, 0o600,
+      'private surveillance data must not be readable by other OS users');
     const saved = fs.readFileSync(file, 'utf8');
     const readView = service.loadSurveillanceList(coin.userId);
     readView[0].config.cooldownMinutes = 999;
@@ -48,6 +50,49 @@ test('surveillance JSON edits commit atomically, GET snapshots never mutate stor
     assert.equal(service.saveSurveillanceList(coin.userId, proposed), true);
     assert.equal(service.loadSurveillanceList(coin.userId)[0].config.cooldownMinutes, 888);
     assert.notEqual(fs.readFileSync(file, 'utf8'), saved);
+
+    // A stale request must not roll back a more recent successful analysis.
+    const recentCheck = '2026-11-14T12:05:00.000Z';
+    const recentDelivery = '2026-11-14T12:06:00.000Z';
+    const recentState = { currentPrice: 105, lastProcessedCandleTimes: {
+      '15m': 105, '1h': 105, '4h': 105,
+    } } as any;
+    const recent = {
+      ...service.loadSurveillanceList(coin.userId)[0],
+      state: recentState, lastCheckedAt: recentCheck, lastNotifiedAt: recentDelivery,
+    };
+    assert.equal(service.commitSurveillanceCheck(recent)?.lastCheckedAt, recentCheck);
+    const durableRecent = fs.readFileSync(file, 'utf8');
+
+    const oldCheck = {
+      ...recent, state: { currentPrice: 1 } as any,
+      lastCheckedAt: '2026-11-14T12:04:00.000Z',
+      lastNotifiedAt: '2026-11-14T12:03:00.000Z',
+    };
+    fs.renameSync = (() => { throw new Error('stale pass must not write'); }) as typeof fs.renameSync;
+    assert.equal(service.commitSurveillanceCheck(oldCheck)?.lastCheckedAt, recentCheck);
+    assert.equal(fs.readFileSync(file, 'utf8'), durableRecent,
+      'an older asynchronous check must not write over a newer checkpoint');
+    fs.renameSync = originalRename;
+    assert.equal(service.loadSurveillanceList(coin.userId)[0].state?.currentPrice, 105);
+
+    const latestCheck = {
+      ...recent, lastCheckedAt: '2026-11-14T12:07:00.000Z',
+      lastNotifiedAt: '2026-11-14T12:01:00.000Z',
+      state: { currentPrice: 107 } as any,
+    };
+    assert.equal(service.commitSurveillanceCheck(latestCheck)?.lastNotifiedAt, recentDelivery,
+      'a newer market snapshot must not rewind the notification cooldown');
+    const final = service.loadSurveillanceList(coin.userId)[0];
+    assert.equal(final.state?.currentPrice, 107);
+    assert.equal(final.lastNotifiedAt, recentDelivery);
+
+    // A leftover temp file from an older release may be world-readable.
+    // It must be chmodded before becoming the published surveillance.json.
+    fs.writeFileSync(`${file}.tmp`, 'old incomplete temp', { mode: 0o644 });
+    fs.chmodSync(`${file}.tmp`, 0o644);
+    assert.equal(service.saveSurveillanceList(coin.userId, [final]), true);
+    assert.equal(fs.statSync(file).mode & 0o777, 0o600);
   } finally {
     fs.renameSync = originalRename;
     process.chdir(previousCwd);
