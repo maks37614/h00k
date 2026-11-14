@@ -110,7 +110,7 @@ test('map switch is under expanded tools, disabled by default, absent on replay/
   const right = ui.indexOf('className={liquidationMapSupported ? "toolbarRight hasLiqMap" : "toolbarRight"}');
   const mapGroup = ui.indexOf('className="liqHeatmapTools"', right);
   const period = ui.indexOf("(['24h','7d'] as const).map", mapGroup);
-  const mapIcon = ui.indexOf('<MapIcon size={17}', mapGroup);
+  const mapIcon = ui.indexOf('<MapIcon size={15}', mapGroup);
   const settings = ui.indexOf('aria-label="Налаштування hookchart"', mapIcon);
   assert.ok(right > 0 && right < mapGroup && mapGroup < period &&
     period < mapIcon && mapIcon < settings);
@@ -124,7 +124,7 @@ test('map switch is under expanded tools, disabled by default, absent on replay/
   // Compact map glyph, never the old flame-and-text pill. Accessible
   // label/pressed state remain available for mobile assistive technology.
   assert.match(ui,/Map as MapIcon/);
-  assert.match(ui,/<MapIcon size=\{17\} strokeWidth=\{1\.9\} aria-hidden="true" \/>/);
+  assert.match(ui,/<MapIcon size=\{15\} strokeWidth=\{1\.9\} aria-hidden="true" \/>/);
   assert.doesNotMatch(ui,/<Flame size=\{14\}\/><span>Карта Liq<\/span>/);
   assert.match(ui,/aria-label=\{liquidationMapOn \? 'Вимкнути карту ліквідацій' : 'Увімкнути карту ліквідацій'\}/);
   const css=readFileSync(new URL('../src/components/hookchart/integration.css',import.meta.url),'utf8');
