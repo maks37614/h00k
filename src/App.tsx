@@ -1198,7 +1198,9 @@ export default function App() {
               // blocked from futures OI. Refresh ONLY the missing regular OI
               // directly from the browser; do not rescan or change Entry/SL/TP.
               // It re-scores the corresponding quality components safely.
-              const supplemented = await hydrateMissingRegularOIFromBrowser(data.data as ScannedCoin[]);
+              const supplemented = await hydrateMissingRegularOIFromBrowser(
+                data.data as ScannedCoin[], { signal: controller.signal },
+              );
               if (supplemented !== data.data && requestId === scanRequestRef.current) {
                 setCoins(supplemented);
                 // Verified browser OI can arrive after the server scan; re-evaluate
