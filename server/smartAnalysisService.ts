@@ -9,6 +9,7 @@ import { summarizeVerifiedUsdOI } from './oiIntegrity';
 // In-memory cache for smart analysis
 const analysisCache = new Map<string, { timestamp: number; data: SmartAnalysisData }>();
 const CACHE_TTL_MS = 15 * 1000; // 15s cache
+const isUsdLikeQuote = (symbol: string) => /(USDT|USDC|BUSD|FDUSD|USD)$/.test(symbol);
 const MIN_TECHNICAL_BARS = 50;
 // A missing exchange history is a temporary data-source outage, not a code
 // exception; never map it to HTTP 500 or fabricate 200 EMA bars.
@@ -95,6 +96,10 @@ async function fetchOrderbookAnalysis(
     bidWallUsd: null, bidWallPrice: null, askWallUsd: null, askWallPrice: null,
     largeOrders: [], spread: { spreadUsd: null, spreadPct: null, quality: 'unavailable' },
   };
+  // price × quantity is denominated in the QUOTE asset, not always USD.
+  // Without an exchange-rate conversion, showing BTC or ETH quote balances
+  // as "$" would be fabricated. Keep such orderbooks n/d in USD-based cards.
+  if (!isUsdLikeQuote(symbol)) return missing;
   try {
     const url = exchange === 'bybit'
       ? 'https://api.bybit.com/v5/market/orderbook?category=' +
@@ -349,7 +354,7 @@ export async function generateSmartAnalysis(params: {
       i === 0 || bar.time - closedHours[i - 1].time === 3600);
   // USD-equivalent volume only for USD-like quoted pairs. Never label BTC
   // quote turnover as USD or compare it against USD thresholds.
-  const quoteIsUsdLike = /(USDT|USDC|BUSD|FDUSD|USD)$/.test(symbol);
+  const quoteIsUsdLike = isUsdLikeQuote(symbol);
   const has24h = quoteIsUsdLike && valid24hWindow;
   const barUsd = (bar: Kline) => Number.isFinite(bar.quoteVolume)
     ? bar.quoteVolume! : bar.volume * bar.close;
@@ -593,7 +598,8 @@ export async function generateSmartAnalysis(params: {
     (derivatives.totalOIUsd === null ? 'OI не підтверджено. '
       : 'Перевірений OI: ' + (derivatives.totalOIUsd / 1e6).toFixed(1) + 'M (' +
       (derivatives.oiCoverage === 'partial' ? 'одна біржа' : 'дві біржі') + '). ') +
-    'Ончейн-активність, особу власників заявок та маніпуляції не перевірено.';
+    'Ончейн-дані не входять у Quant: Holders від CoinGecko завантажуються окремо. ' +
+    'Особа власників заявок і маніпуляції не підтверджені.';
 
   const result: SmartAnalysisData = {
     symbol,
