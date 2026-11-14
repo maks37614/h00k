@@ -47,6 +47,7 @@
     },
     "portable": {
       "artifactName": "h00k Setup ${version}.${ext}"
-    }
+    },
+    "compression": "store"
   }
 }
