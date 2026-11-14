@@ -80,15 +80,16 @@ test('onboarding text is scrollable and language selector fits standard Windows 
   assert.equal((nsis.match(/ES_MULTILINE/g)||[]).length, 3);
   assert.equal((nsis.match(/ES_READONLY/g)||[]).length, 3);
   assert.equal((nsis.match(/WS_VSCROLL/g)||[]).length, 3);
-  const radios=[...nsis.matchAll(/NSD_Create(?:First|Additional)RadioButton\} 0 (\d+)u 100% (\d+)u/g)];
+  const radios=[...nsis.matchAll(/NSD_CreateRadioButton\} 0 (\d+)u 100% (\d+)u/g)];
   assert.equal(radios.length,4);
   for(const [,y,h] of radios)assert.ok(Number(y)+Number(h)<=140,
     'the installer language switch must remain visible on standard NSIS page');
 });
 
 test('language radio buttons form exactly one exclusive Windows group',()=>{
-  assert.equal((nsis.match(/NSD_CreateFirstRadioButton/g)||[]).length,1);
-  assert.equal((nsis.match(/NSD_CreateAdditionalRadioButton/g)||[]).length,3);
-  assert.equal((nsis.match(/NSD_CreateRadioButton/g)||[]).length,0);
-  assert.ok(nsis.indexOf('NSD_CreateFirstRadioButton') < nsis.indexOf('NSD_CreateAdditionalRadioButton'));
+  assert.equal((nsis.match(/NSD_CreateRadioButton/g)||[]).length,4);
+  assert.equal((nsis.match(/NSD_AddStyle\\} \\$h00kRadioEn \\$\\{WS_GROUP\\}/g)||[]).length,1);
+  assert.equal((nsis.match(/WS_GROUP/g)||[]).length,2); // comment + macro: one exclusive group
+  assert.ok(nsis.indexOf('NSD_AddStyle') > nsis.indexOf('Pop $h00kRadioEn'));
+  assert.ok(nsis.indexOf('NSD_AddStyle') < nsis.indexOf('Pop $h00kRadioPl'));
 });
