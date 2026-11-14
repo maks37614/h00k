@@ -176,26 +176,39 @@ class SharedMarketTradeStream {
   subscribe(listener: Listener): () => void {
     this.listeners.add(listener);
     if (!listener.liveOnly) {
+      const cutoff = Date.now() - 300_000;
       for (let i = this.recentHead; i < this.recent.length; i++) {
         const trade = this.recent[i];
-        if (trade.t >= Date.now() - 300_000) listener.onTrade(trade);
+        if (trade.t >= cutoff) {
+          // One chart's callback must not break replay for a newly mounted
+          // Terminal chart or leave it registered without a cleanup handle.
+          try { listener.onTrade(trade); } catch { /* isolate faulty chart */ }
+        }
       }
     }
-    if (listener.wantsPrints?.() !== false) listener.onPrints(this.tracker.snapshot());
+    try {
+      if (listener.wantsPrints?.() !== false) listener.onPrints(this.tracker.snapshot());
+    } catch { /* an unavailable chart must not interrupt the shared feed */ }
     return () => this.listeners.delete(listener);
   }
 
   private publish() {
     if (this.publishTimer || this.stopped ||
-        ![...this.listeners].some(listener => listener.wantsPrints?.() !== false)) return;
+        ![...this.listeners].some(listener => {
+          try { return listener.wantsPrints?.() !== false; } catch { return false; }
+        })) return;
     // One bounded update per 500ms per coin, and none when all charts hide the labels.
     this.publishTimer = setTimeout(() => {
       this.publishTimer = null;
       if (this.stopped) return;
-      const watching = [...this.listeners].filter(listener => listener.wantsPrints?.() !== false);
+      const watching = [...this.listeners].filter(listener => {
+        try { return listener.wantsPrints?.() !== false; } catch { return false; }
+      });
       if (!watching.length) return;
       const prints = this.tracker.snapshot();
-      for (const listener of watching) listener.onPrints(prints);
+      for (const listener of watching) {
+        try { listener.onPrints(prints); } catch { /* keep other charts updating */ }
+      }
     }, 500);
   }
 
@@ -209,7 +222,10 @@ class SharedMarketTradeStream {
       this.recent = this.recent.slice(this.recentHead);
       this.recentHead = 0;
     }
-    for (const listener of this.listeners) if (!fromHistory || !listener.liveOnly) listener.onTrade(accepted);
+    for (const listener of [...this.listeners]) {
+      if (fromHistory && listener.liveOnly) continue;
+      try { listener.onTrade(accepted); } catch { /* isolate faulty chart */ }
+    }
     if (revision !== this.tracker.revision) this.publish();
   }
 
@@ -373,13 +389,19 @@ export function subscribeMarketTrades(scope: FeedScope, listener: Listener): () 
     void stream.start();
     return () => {
       unsubscribe();
-      if (!stream!.listeners.size) { stream!.stop(); marketStreams.delete(key); }
+      if (!stream!.listeners.size && marketStreams.get(key) === stream) {
+        marketStreams.delete(key);
+        stream!.stop();
+      }
     };
   }
   const unsubscribe = stream.subscribe(listener);
   return () => {
     unsubscribe();
-    if (!stream!.listeners.size) { stream!.stop(); marketStreams.delete(key); }
+    if (!stream!.listeners.size && marketStreams.get(key) === stream) {
+      marketStreams.delete(key);
+      stream!.stop();
+    }
   };
 }
 
