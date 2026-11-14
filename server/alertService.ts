@@ -327,7 +327,9 @@ export function createAlert(
   const alertId = data.id || `alert_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
   if (deletedAlertIds.has(alertIdentity(userId, alertId))) throw new Error('Сповіщення вже видалено');
   const existing = alerts.find(a => a.id === alertId && a.userId === userId);
-  if (existing) return existing;
+  // The source-of-truth array belongs to the persistence layer. A duplicate
+  // create is idempotent and must not expose a mutable reference to that array.
+  if (existing) return { ...existing };
 
   const newAlert: PriceAlert = {
     id: alertId,
@@ -564,6 +566,10 @@ export function syncUserAlerts(
     const { telegramBotToken: _token, telegramChatId: _chat, ...incoming } = rawIncoming;
     if (incoming.userId && incoming.userId !== userId) continue;
     if (deletedAlertIds.has(alertIdentity(userId, incoming.id))) continue;
+    // Multiple copies of one client alert can occur after reconnect/retry.
+    // Accept only one identity per sync so a duplicate cannot create multiple
+    // monitor entries or distort the user's alert count.
+    if (processedIds.has(incoming.id)) continue;
     processedIds.add(incoming.id);
     const existing = existingUserAlerts.get(incoming.id);
 
