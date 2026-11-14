@@ -881,26 +881,21 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
             <div className="hidden shrink-0 items-center bg-slate-900 p-0.5 lg:flex rounded-xl border border-slate-800 text-xs font-mono">
             <button
               onClick={() => {
-                setConfig((prev) => ({ ...prev, layoutPreset: '1x1', columns: 1, autoFitScreen: true }));
-                if (blocks.length > 1) {
-                  setBlocks([blocks[0]]);
-                }
+                // Column selectors are layout-only: never remove existing charts.
+                setConfig((prev) => ({ ...prev, layoutPreset: 'custom', columns: 1, autoFitScreen: true }));
               }}
               className={`px-2 py-1 rounded-lg transition-colors ${
                 blocks.length <= 1 && config.columns === 1
                   ? 'bg-emerald-600 text-white font-bold'
                   : 'text-slate-400 hover:text-white'
               }`}
-              title="1 Графік (на весь екран)"
+              title="1 колонка (зберегти всі графіки)"
             >
               1x
             </button>
             <button
               onClick={() => {
-                setConfig((prev) => ({ ...prev, layoutPreset: '1x2', columns: 2, autoFitScreen: true }));
-                if (blocks.length < 2) {
-                  handleApplyPreset('top_3');
-                }
+                setConfig((prev) => ({ ...prev, layoutPreset: 'custom', columns: 2, autoFitScreen: true }));
               }}
               className={`px-2 py-1 rounded-lg transition-colors ${
                 config.columns === 2
@@ -914,9 +909,6 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
             <button
               onClick={() => {
                 setConfig((prev) => ({ ...prev, layoutPreset: 'custom', columns: 3, autoFitScreen: true }));
-                if (blocks.length < 3) {
-                  handleApplyPreset('top_3');
-                }
               }}
               className={`px-2 py-1 rounded-lg transition-colors ${
                 config.columns === 3
@@ -930,9 +922,6 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
             <button
               onClick={() => {
                 setConfig((prev) => ({ ...prev, layoutPreset: 'custom', columns: 4, autoFitScreen: true }));
-                if (blocks.length < 4) {
-                  handleApplyPreset('grid_4');
-                }
               }}
               className={`px-2 py-1 rounded-lg transition-colors ${
                 config.columns === 4
