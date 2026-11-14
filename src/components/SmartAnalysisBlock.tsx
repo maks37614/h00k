@@ -155,6 +155,9 @@ export const SmartAnalysisBlock: React.FC<SmartAnalysisBlockProps> = ({
 
   if (!data) return <>{tradeSetup}</>;
 
+  const priceOrNA = (value: number | null) => value === null ? 'н/д' : formatCryptoPrice(value);
+  const volumeOrNA = (value: number | null) => value === null ? 'н/д' : formatVolume(value);
+
   return (
     <div className="p-4 sm:p-6 rounded-2xl bg-gradient-to-b from-slate-900 via-slate-900/90 to-slate-950 border border-indigo-500/30 shadow-xl shadow-indigo-950/20 space-y-5">
       {/* Header controls have their own grid column: no absolute overlay over the title on mobile. */}
@@ -325,9 +328,10 @@ export const SmartAnalysisBlock: React.FC<SmartAnalysisBlockProps> = ({
             </div>
             <div className="flex items-center gap-2 text-xs font-mono">
               <span className="text-slate-400">BTC/USDT:</span>
-              <span className="font-bold text-white">${formatCryptoPrice(data.btcContext.btcPrice)}</span>
-              <span className={`font-bold ${data.btcContext.change24h >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                {data.btcContext.change24h >= 0 ? '+' : ''}{data.btcContext.change24h.toFixed(2)}%
+              <span className="font-bold text-white">{data.btcContext.btcPrice === null ? 'н/д' : '$' + priceOrNA(data.btcContext.btcPrice)}</span>
+              <span className="font-bold text-slate-200">
+                {data.btcContext.change24h === null ? 'н/д' :
+                  (data.btcContext.change24h >= 0 ? '+' : '') + data.btcContext.change24h.toFixed(2) + '%'}
               </span>
             </div>
           </div>
@@ -347,6 +351,7 @@ export const SmartAnalysisBlock: React.FC<SmartAnalysisBlockProps> = ({
             {(['15m', '5m', '1m'] as const).map((tf) => {
               const item = data.btcContext.timeframes[tf];
               const isUp = item.direction === 'up';
+              const unknown = item.structure === 'unknown';
               const isHH = item.structure === 'HH_HL';
               const isLL = item.structure === 'LH_LL';
 
@@ -377,11 +382,11 @@ export const SmartAnalysisBlock: React.FC<SmartAnalysisBlockProps> = ({
                   </div>
 
                   <div className="flex items-center gap-1.5">
-                    {isUp ? (
+                    {unknown ? null : isUp ? (
                       <TrendingUp className="w-4 h-4 text-emerald-400" />
-                    ) : (
+                    ) : item.direction === 'down' ? (
                       <TrendingDown className="w-4 h-4 text-rose-400" />
-                    )}
+                    ) : null}
                     <span className="text-xs font-semibold text-slate-200 truncate">
                       {item.label}
                     </span>
@@ -403,9 +408,12 @@ export const SmartAnalysisBlock: React.FC<SmartAnalysisBlockProps> = ({
             <div className="p-3 rounded-lg bg-slate-900/80 border border-slate-800">
               <span className="text-[11px] text-amber-400 flex items-center gap-1 mb-1 font-medium">
                 <Calendar className="w-3.5 h-3.5" />
-                Наближення важливих новин та тригерів:
+                Календар подій (лише підтверджені дані):
               </span>
               <div className="space-y-1">
+                {data.btcContext.upcomingNews.length === 0 && (
+                  <p className="text-[11px] text-slate-400">Календар новин не підключено; час CPI/FED не вгадується.</p>
+                )}
                 {data.btcContext.upcomingNews.map((news, idx) => (
                   <div key={idx} className="flex items-center justify-between text-[11px] text-slate-300">
                     <span className="truncate mr-2">• {news.title}</span>
