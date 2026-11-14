@@ -74,10 +74,46 @@ test('duplicate create requests preserve a paused or triggered alert', () => {
   service.toggleAlert(created.id, 'retry-user', false);
   assert.equal(service.createAlert(alert(created.id, 'retry-user')).isActive, false);
   assert.equal(service.createAlertsBatch('retry-user', [alert(created.id, 'retry-user')])[0].isActive, false);
+  // The original object returned by createAlert is a detached snapshot:
+  // mutating it must not silently edit the persisted user alert.
   created.triggered = true;
   created.triggeredAt = 123;
-  service.saveAlerts(service.loadAlerts());
+  assert.equal(service.getAllAlerts('retry-user')[0].triggered, false);
+  const updated = service.loadAlerts().map(item =>
+    item.id === created.id && item.userId === 'retry-user'
+      ? { ...item, triggered: true, triggeredAt: 123, isActive: false }
+      : item);
+  assert.equal(service.saveAlerts(updated), true);
   assert.equal(service.createAlert(alert(created.id, 'retry-user')).triggered, true);
+});
+
+
+test('API alert and history snapshots cannot silently change stored user state', () => {
+  const owner = 'immutable-alert-snapshot';
+  const created = service.createAlert(alert('immut-create', owner));
+  created.isActive = false;
+  assert.equal(service.getAllAlerts(owner).find(item => item.id === created.id)?.isActive, true);
+
+  const read = service.getAllAlerts(owner);
+  read[0].targetPrice = 1;
+  read[0].triggered = true;
+  assert.equal(service.getAllAlerts(owner)[0].targetPrice, 110);
+  assert.equal(service.getAllAlerts(owner)[0].triggered, false);
+
+  const batched = service.createAlertsBatch(owner, [alert('immut-batch', owner)]);
+  batched[0].isActive = false;
+  assert.equal(service.getAllAlerts(owner).find(item => item.id === 'immut-batch')?.isActive, true);
+
+  const historyItem = {
+    id: 'immut-history', userId: owner, alertId: 'immut-create',
+    symbol: 'BTCUSDT', exchange: 'binance' as const, marketType: 'futures' as const,
+    condition: 'gte' as const, targetPrice: 110, triggeredPrice: 120,
+    triggeredAt: Date.now(), telegramSent: false,
+  };
+  service.addHistoryItem(historyItem);
+  const history = service.getAlertHistory(owner);
+  history[0].telegramSent = true;
+  assert.equal(service.getAlertHistory(owner)[0].telegramSent, false);
 });
 
 test('deletion before delayed creation prevents POST and batch resurrection', () => {

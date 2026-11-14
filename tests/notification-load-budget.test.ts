@@ -29,7 +29,7 @@ test('unchanged server alert sync returns user data without rewriting global ale
   const sync = server.slice(server.indexOf('export function syncUserAlerts'), server.indexOf('// Delete alert'));
   assert.match(sync, /mergedUserAlerts\.length !== existingUserAlerts\.size/);
   assert.match(sync, /JSON\.stringify\(previous\) !== JSON\.stringify\(alert\)/);
-  assert.match(sync, /if \(changed\) \{[\s\S]*?saveAlerts\(\[\.\.\.mergedUserAlerts, \.\.\.otherAlerts\]\)/);
+  assert.match(sync, /if \(changed\) \{[\s\S]*?persistAlertEdit\(\[\.\.\.mergedUserAlerts, \.\.\.otherAlerts\]\)/);
   assert.match(server, /export function startAlertMonitor\(intervalMs: number = 6000\)/);
 });
 
