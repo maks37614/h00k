@@ -123,13 +123,13 @@ Function h00kLanguagePageCreate
   ${EndIf}
   ${NSD_CreateLabel} 0 3u 100% 20u "$(h00kLanguagePrompt)"
   Pop $1
-  ${NSD_CreateFirstRadioButton} 0 28u 100% 20u "English"
+  ${NSD_CreateRadioButton} 0 28u 100% 20u "English"
   Pop $h00kRadioEn
-  ${NSD_CreateAdditionalRadioButton} 0 54u 100% 20u "Polski"
+  ${NSD_CreateRadioButton} 0 54u 100% 20u "Polski"
   Pop $h00kRadioPl
-  ${NSD_CreateAdditionalRadioButton} 0 80u 100% 20u "Русский"
+  ${NSD_CreateRadioButton} 0 80u 100% 20u "Русский"
   Pop $h00kRadioRu
-  ${NSD_CreateAdditionalRadioButton} 0 106u 100% 20u "Українська"
+  ${NSD_CreateRadioButton} 0 106u 100% 20u "Українська"
   Pop $h00kRadioUk
   ${If} $LANGUAGE == 1045
     ${NSD_Check} $h00kRadioPl
