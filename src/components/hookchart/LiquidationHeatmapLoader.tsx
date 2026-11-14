@@ -28,7 +28,10 @@ export async function fetchSharedObservedHeatmap(
   symbol: string,
   period: LiquidationHeatmapPeriod,
 ): Promise<Result> {
-  const key=`${exchange}:${symbol}:${period}`;
+  // A monthly PostgreSQL archive reset must also bypass any browser memory
+  // cache built before midnight UTC, even if its 55s TTL has not expired.
+  const utcMonth=new Date().toISOString().slice(0,7);
+  const key=`${utcMonth}:${exchange}:${symbol}:${period}`;
   const hit=cache.get(key);
   if(hit && Date.now()-hit.at<CACHE_MS)return hit.result;
   const pending=inFlight.get(key);
