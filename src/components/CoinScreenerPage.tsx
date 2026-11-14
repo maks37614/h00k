@@ -156,11 +156,11 @@ export const CoinScreenerPage: React.FC<CoinScreenerPageProps> = ({
     const before = previousSitePreferences.current;
     if (before.exchange === preferences.defaultExchange && before.marketType === preferences.defaultMarketType) return;
     previousSitePreferences.current = { exchange: preferences.defaultExchange, marketType: preferences.defaultMarketType };
-    // Only react when website-wide defaults actually change. Never overwrite
-    // an account search preset on initial mount.
+    // Screener-specific account presets override the site-wide exchange/market defaults.
+    if (user?.uid && profile?.uid === user.uid && profile.searchSettings?.defaultConfig) return;
     setExchange(preferences.defaultExchange);
     setMarketType(preferences.defaultMarketType);
-  }, [preferences.defaultExchange, preferences.defaultMarketType]);
+  }, [preferences.defaultExchange, preferences.defaultMarketType, user?.uid, profile?.uid, profile?.searchSettings]);
   // 0 means no upper limit; thresholds include the selected value.
   const [maxVolumeUsd, setMaxVolumeUsd] = useState<number>(() => cachedUi?.maxVolumeUsd ?? initialSearch.maxVolumeUsd);
   const [sortBy, setSortBy] = useState<ScreenerSortBy>(() => cachedUi?.sortBy ?? initialSearch.sortBy);
