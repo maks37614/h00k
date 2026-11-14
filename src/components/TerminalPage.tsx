@@ -489,7 +489,9 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
   const handleApplyGlobalTimeframe = (tf: Timeframe) => {
     setTimeframe(tf);
     setConfig((prev) => ({ ...prev, globalTimeframe: tf }));
-    setBlocks((prev) => prev.map((b) => ({ ...b, timeframe: tf })));
+    // A global timeframe change must not discard the active auto-updating
+    // market preset or reset its current pagination.
+    updateBlocks((prev) => prev.map((b) => b.timeframe === tf ? b : { ...b, timeframe: tf }));
   };
 
   const handleTimeframeSelect = (tf: Timeframe) => {
