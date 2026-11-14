@@ -1,6 +1,7 @@
 import type { ExchangeId, Kline, MarketType } from '../../types';
 import { normalizeExchangeSymbol } from '../../utils/marketSymbols';
 import { validCandle } from '../../utils/hookchartData';
+import { recordChartKline, recordChartReconnect, recordChartTransportError } from './chartDiagnostics';
 
 export type LiveKline = Kline & { eventTime?: number };
 type Scope = { exchange: ExchangeId; marketType: MarketType; symbol: string; timeframe: string };
@@ -103,6 +104,7 @@ export function createSharedKlineSubscriptions(socketFactory: SocketFactory = ur
       shared.ping = null;
     };
     const reconnect = () => {
+      recordChartReconnect();
       clearPing();
       status(false);
       if (shared.closed || shared.retry !== null) return;
@@ -186,6 +188,7 @@ export function createSharedKlineSubscriptions(socketFactory: SocketFactory = ur
                 Number.isSafeInteger(packet.candle.time) ? packet.candle : null
             : parseSharedKlineMessage(scope.exchange, packet, symbol, scope.timeframe);
           if (!candle) return;
+          recordChartKline(useRelay ? 'relay' : 'exchange', Number(candle.eventTime));
           if (startupWatch !== null) { clearTimeout(startupWatch); startupWatch = null; }
           if (useRelay) status(true);
           if (shared.last) {
@@ -204,7 +207,7 @@ export function createSharedKlineSubscriptions(socketFactory: SocketFactory = ur
           }
         } catch {}
       };
-      ws.onerror = () => { if (!shared.closed && shared.socket === ws) try { ws.close(); } catch {} };
+      ws.onerror = () => { if (!shared.closed && shared.socket === ws) { recordChartTransportError(); try { ws.close(); } catch {} } };
       ws.onclose = () => {
         if (startupWatch !== null) clearTimeout(startupWatch);
         if (shared.socket === ws) {
