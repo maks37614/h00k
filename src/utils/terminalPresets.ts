@@ -10,6 +10,9 @@ export function normalizeTerminalMarketPair(symbolInput: string, quoteInput?: st
   return { symbol, quoteAsset };
 }
 
+/** Maximum number of newly added live HookCharts in one Terminal workspace. */
+export const MAX_TERMINAL_CHARTS = 50;
+
 export const TERMINAL_PRESETS_STORAGE_KEY = 'crypto_screener_terminal_presets';
 export function terminalStorageKey(key: string, uid?: string): string {
   return `${key}_${uid || 'guest'}`;
