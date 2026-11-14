@@ -17,9 +17,9 @@ import {
 } from 'lucide-react';
 import { FormationsIcon } from '../PageIcons';
 import { ScannedCoin, Timeframe, ExchangeId, MarketType, MarketCoin } from '../../types';
-import { formatCryptoPrice, formatVolume } from '../../utils/formatters';
+import { formatVolume } from '../../utils/formatters';
 import { fetchDirectBinanceTickers, fetchDirectBybitTickers } from '../../utils/directExchangeClient';
-import { normalizeTerminalMarketPair } from '../../utils/terminalPresets';
+import { normalizeTerminalMarketPair, formatTerminalQuotedPrice } from '../../utils/terminalPresets';
 
 interface AddChartModalProps {
   isOpen: boolean;
@@ -652,7 +652,7 @@ export const AddChartModal: React.FC<AddChartModalProps> = ({
                     <div className="terminal-add-chart-coin-action flex min-w-0 shrink-0 items-center gap-2 sm:gap-3.5">
                       <div className="text-right">
                         <div className="font-mono font-bold text-xs sm:text-sm text-white">
-                          ${formatCryptoPrice(coin.currentPrice)}
+                          {formatTerminalQuotedPrice(coin.currentPrice, coin.quoteAsset)}
                         </div>
                         <div
                           className={`text-[10px] sm:text-xs font-mono flex items-center justify-end gap-0.5 font-bold ${
