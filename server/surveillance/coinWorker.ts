@@ -8,6 +8,7 @@ import { acquireExchangeStream, type SharedExchangeStreamHandle } from './shared
 import { publishSurveillance } from '../surveillanceEvents';
 import { sharedMarketAnalysis } from './sharedMarketAnalysis';
 import { sharedWorkerAnalysisClock } from './sharedWorkerAnalysisClock';
+import { AutoSetupGroupGate } from './autoSetupGroupGate';
 import { acquireSharedCandleFeed, type SharedCandleFeedHandle } from './sharedCandleFeed';
 import { LevelsAndFormationsEngine } from './levelsAndFormationsEngine';
 import { MacroAndNewsEngine } from './macroAndNewsEngine';
@@ -82,6 +83,8 @@ export class CoinWorker {
   public volume24hUsd = 0;
   public lastAnalysisTimestamp = 0;
   private analysisInFlight = false;
+  /** Skip repeated saved-group lookups for the same confirmed setup. */
+  private readonly autoSetupGroups = new AutoSetupGroupGate();
 
   private structures: Record<Timeframe, TimeframeStructure> = {} as any;
   private levelZones: LevelZone[] = [];
@@ -549,8 +552,13 @@ export class CoinWorker {
         // 3. Optional automatic 3-alert group creation if configured
         if (this.coin.config?.autoSetupsAlerts) {
           try {
-            createSetupAlertsGroup(this.coin.userId, setup, price, true);
+            // createSetupAlertsGroup validates persisted ID/tombstones. Running
+            // that O(saved-alerts) lookup every six seconds is unnecessary
+            // once the setup was successfully checked for this worker.
+            this.autoSetupGroups.ensure(setup.id, () =>
+              createSetupAlertsGroup(this.coin.userId, setup, price, true));
           } catch (e) {
+            // Do not cache failed disk writes; the next analysis can retry.
             console.error(`[CoinWorker ${this.coin.symbol}] Error creating auto setup alerts group:`, e);
           }
         }
@@ -620,6 +628,7 @@ export class CoinWorker {
 
   public destroy() {
     this.isDestroyed = true;
+    this.autoSetupGroups.clear();
     this.releaseAnalysisClock?.();
     this.releaseAnalysisClock = null;
     this.releaseOiSubscription?.();
