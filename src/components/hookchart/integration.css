@@ -2639,3 +2639,75 @@
   display:none;
   margin:0;
 }
+
+/* Opt-in observed Liq heatmap in the collapsible tools strip.
+ * No heatmap UI/canvas styling is active when the user leaves it off. */
+.hookchart-root .liqHeatmapTools {
+  display:flex;
+  align-items:center;
+  flex:0 0 auto;
+  gap:3px;
+  padding:0 3px;
+  border-inline:1px solid #26394a;
+}
+.hookchart-root .hookchart-toolbar .liqHeatmapTools button.liqHeatmapSwitch {
+  display:inline-flex;
+  width:auto;
+  min-width:max-content;
+  height:25px;
+  min-height:25px;
+  align-items:center;
+  justify-content:center;
+  gap:4px;
+  padding:0 6px;
+  border:1px solid #304457;
+  border-radius:5px;
+  color:#aabace;
+  font-size:10px;
+  font-weight:650;
+  white-space:nowrap;
+}
+.hookchart-root .hookchart-toolbar .liqHeatmapTools button.liqHeatmapSwitch.active {
+  border-color:#c45153;
+  background:#39252f;
+  color:#ffc3a1;
+}
+.hookchart-root .hookchart-toolbar .liqHeatmapTools button.liqHeatmapPeriod {
+  width:28px;
+  min-width:28px;
+  height:25px;
+  min-height:25px;
+  font-size:9px;
+  color:#97a8ba;
+  border:1px solid #293747;
+}
+.hookchart-root .hookchart-toolbar .liqHeatmapTools button.liqHeatmapPeriod.active {
+  color:#d8f2ff;
+  background:#193950;
+  border-color:#35759b;
+}
+.hookchart-root .chartStage .liqHeatmapAttribution {
+  position:absolute;
+  z-index:8;
+  top:7px;
+  left:60px;
+  display:block;
+  width:max-content;
+  max-width:calc(100% - 80px);
+  padding:4px 7px;
+  border:1px solid #273d4d;
+  border-radius:5px;
+  background:rgba(11,18,27,.87);
+  color:#bdd0dc;
+  font-size:10px;
+  line-height:1.3;
+  pointer-events:none;
+  user-select:none;
+}
+@container (max-width: 420px) {
+  .hookchart-root .chartStage .liqHeatmapAttribution {
+    left:38px;
+    max-width:calc(100% - 55px);
+    font-size:9px;
+  }
+}
