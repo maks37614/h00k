@@ -3,17 +3,21 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
 const source = readFileSync(new URL('../src/components/TerminalPage.tsx', import.meta.url), 'utf8');
-const header = source.slice(source.indexOf('{/* Block count, centered clock'), source.indexOf('</header>'));
+const header = source.slice(source.indexOf('{/* Mobile has two control rows'), source.indexOf('</header>'));
 const secondRow = header.slice(header.lastIndexOf('grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]'));
 
-test('desktop clock is centered above the timeframe, not above the whole control group', () => {
+test('desktop terminal header uses one row without changing the mobile two-row grid', () => {
+  // Each original mobile row stays a three-column grid.
   assert.equal((header.match(/grid-cols-\[minmax\(0,1fr\)_auto_minmax\(0,1fr\)\]/g) ?? []).length, 2);
-  // The first column's auto-scale control is lg:hidden; without an explicit
-  // grid-column assignment, CSS Grid would place the clock in column one.
-  assert.match(header, /<div className="col-start-2 row-start-1 justify-self-center">\s*<TerminalClock timeZone=\{profile\?\.timeZone\}/);
-  assert.match(header, /col-start-3 row-start-1 flex shrink-0 items-center justify-self-end/);
-  assert.match(secondRow, /col-start-2 row-start-1 flex shrink-0 items-center justify-self-center/);
-  assert.doesNotMatch(secondRow, /contents lg:col-start-2 lg:row-start-1 lg:flex/);
+  // On lg+, both row wrappers become display: contents; all five groups share
+  // the same desktop grid row instead of occupying separate vertical lines.
+  assert.match(header, /lg:grid lg:grid-cols-\[minmax\(0,1fr\)_auto_auto_auto_minmax\(0,1fr\)\] lg:items-center/);
+  assert.equal((header.match(/lg:contents/g) ?? []).length, 2);
+  assert.match(header, /col-start-2 row-start-1 justify-self-center lg:col-start-2 lg:row-start-1/);
+  assert.match(header, /col-start-3 row-start-1 flex shrink-0 items-center justify-self-end[^"]*lg:col-start-5 lg:row-start-1/);
+  assert.match(secondRow, /col-start-1 row-start-1 flex[^"]*lg:col-start-1 lg:row-start-1/);
+  assert.match(secondRow, /col-start-2 row-start-1 flex[^"]*lg:col-start-3 lg:row-start-1/);
+  assert.match(secondRow, /col-start-3 row-start-1 flex[^"]*lg:col-start-4 lg:row-start-1/);
 });
 
 test('on wide screens autoscale comes before 1x–4x on the left, presets and plus after timeframe', () => {

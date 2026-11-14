@@ -776,22 +776,21 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
       role="region"
       aria-label="Термінал трейдера"
     >
-      {/* Block count, centered clock and actions above the chart controls */}
-      <header className="z-20 flex shrink-0 flex-col gap-1.5 border-b border-slate-800 bg-slate-950/95 px-2 py-1.5 sm:px-3">
-        <div className="grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center sm:gap-2">
+      {/* Mobile has two control rows; desktop puts all toolbar groups on one row. */}
+      <header className="z-20 flex shrink-0 flex-col gap-1.5 border-b border-slate-800 bg-slate-950/95 px-2 py-1.5 sm:px-3 lg:grid lg:grid-cols-[minmax(0,1fr)_auto_auto_auto_minmax(0,1fr)] lg:items-center lg:gap-x-2 lg:gap-y-0">
+        <div className="grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center sm:gap-2 lg:contents">
           <div className="justify-self-start lg:hidden">
             {renderAutoScaleButton()}
           </div>
 
-          {/* Explicit center-column placement keeps the clock at the page midpoint
-              even when the autoscale button is hidden on desktop. */}
-          <div className="col-start-2 row-start-1 justify-self-center">
+          {/* Mobile centers the clock; desktop places it beside the timeframe controls. */}
+          <div className="col-start-2 row-start-1 justify-self-center lg:col-start-2 lg:row-start-1">
             <TerminalClock timeZone={profile?.timeZone} open={showTradingSessions} buttonRef={clockButtonRef}
               onOpenChange={setShowTradingSessions} onOpen={() => setShowCoinPresets(false)} />
           </div>
 
           {/* Telegram, MetaScalp, Settings, Fullscreen */}
-          <div className="col-start-3 row-start-1 flex shrink-0 items-center justify-self-end gap-0 min-[375px]:gap-0.5 sm:gap-2">
+          <div className="col-start-3 row-start-1 flex shrink-0 items-center justify-self-end gap-0 min-[375px]:gap-0.5 sm:gap-2 lg:col-start-5 lg:row-start-1 lg:gap-1">
             {/* Telegram Alert shortcut */}
             {onOpenTelegramAlerts && hasHeaderTarget && (
               <button
@@ -857,9 +856,9 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
           </div>
         </div>
 
-        <div className="grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-1 sm:gap-2">
-          {/* Keep both rows' center columns aligned: the clock sits directly above timeframes. */}
-          <div className="col-start-1 row-start-1 flex w-full min-w-0 items-center justify-self-stretch gap-1 sm:gap-2">
+        <div className="grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-1 sm:gap-2 lg:contents">
+          {/* The mobile lower row becomes the left, middle and right desktop groups. */}
+          <div className="col-start-1 row-start-1 flex w-full min-w-0 items-center justify-self-stretch gap-1 sm:gap-2 lg:col-start-1 lg:row-start-1">
             <span
               title="Кількість відкритих блоків монет"
               aria-label={`Відкритих блоків монет: ${terminalCoinCount}`}
@@ -928,7 +927,7 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
           </div>
 
           {/* Timeframe Selector */}
-          <div className="col-start-2 row-start-1 flex shrink-0 items-center justify-self-center bg-slate-900 p-0.5 rounded-xl border border-slate-800 text-xs font-mono">
+          <div className="col-start-2 row-start-1 flex shrink-0 items-center justify-self-center bg-slate-900 p-0.5 rounded-xl border border-slate-800 text-xs font-mono lg:col-start-3 lg:row-start-1">
             {(['1m', '5m', '15m', '1h', '4h', '1d'] as Timeframe[]).map((tf) => (
               <button
                 key={tf}
@@ -949,7 +948,7 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
             ))}
           </div>
 
-          <div className="col-start-3 row-start-1 flex items-center justify-self-start gap-1 sm:gap-2">
+          <div className="col-start-3 row-start-1 flex items-center justify-self-start gap-1 sm:gap-2 lg:col-start-4 lg:row-start-1">
             <button
               ref={presetsButtonRef}
               type="button"
