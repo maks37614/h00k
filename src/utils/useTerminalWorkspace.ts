@@ -74,6 +74,8 @@ export function useTerminalWorkspace() {
   authRef.current = { uid, profile, updateTerminalWorkspace };
   const workspaceRef = useRef(workspace);
   workspaceRef.current = workspace;
+  const lastCommittedWorkspace = useRef(workspace);
+  const skipHydrationCommit = useRef(false);
   const saveQueue = useRef(Promise.resolve());
   const mounted = useRef(true);
 
@@ -128,14 +130,19 @@ export function useTerminalWorkspace() {
     if (syncConflictRef.current) return;
     serverVersion.current = profile.terminalSettings?.version ?? null;
     // With no local changes, the account workspace is authoritative.
-    if (revision.current === 0)
+    if (revision.current === 0) {
+      // Server hydration is not a local edit and must not enqueue an upload.
+      skipHydrationCommit.current = true;
       setWorkspace(loadTerminalWorkspace(uid, profile.terminalSettings));
+    }
   }, [uid, profile]);
 
   useEffect(() => {
     // A still-unhydrated or conflicted tab must not inherit the cloud version
     // and then mistakenly use that version to publish its stale local state.
-    if (uid && hydrated.current && profile?.uid === uid && !syncConflictRef.current) {
+    if (uid && hydrated.current && profile?.uid === uid && !syncConflictRef.current
+        && revision.current === savedRevision.current) {
+      // Never replace the compare-and-swap version while local edits are pending.
       serverVersion.current = profile.terminalSettings?.version ?? null;
     }
   }, [uid, profile?.uid, profile?.terminalSettings?.version, syncConflict]);
@@ -144,13 +151,24 @@ export function useTerminalWorkspace() {
     setWorkspace(current => {
       const value = typeof update === 'function' ? (update as (previous: (typeof workspace)[K]) => (typeof workspace)[K])(current[field]) : update;
       if (value === current[field]) return current;
-      revision.current += 1;
+      // React may run state updaters repeatedly in StrictMode or abandon a
+      // render. Only increment the write revision after a committed render.
       return { ...current, [field]: value };
     });
   }, []);
   const setBlocks: Dispatch<SetStateAction<TerminalChartBlock[]>> = useCallback(update => setField('blocks', update), [setField]);
   const setConfig: Dispatch<SetStateAction<TerminalWorkspaceConfig>> = useCallback(update => setField('config', update), [setField]);
   const setCustomPresets: Dispatch<SetStateAction<TerminalSavedPreset[]>> = useCallback(update => setField('presets', update), [setField]);
+
+  useEffect(() => {
+    if (lastCommittedWorkspace.current === workspace) return;
+    lastCommittedWorkspace.current = workspace;
+    if (skipHydrationCommit.current) {
+      skipHydrationCommit.current = false;
+      return;
+    }
+    revision.current += 1;
+  }, [workspace]);
 
   useEffect(() => {
     if (revision.current === savedRevision.current) return;
