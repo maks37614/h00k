@@ -181,7 +181,8 @@ test('standalone chart settings hide Terminal presets without deleting their sav
   assert.equal(getVisualProfile({ visualProfiles: prefs }, 'terminalCompact', 'desktop').visibleBars, 54);
 
   const chart = src('../src/components/hookchart/OriginalHookChartSettings.tsx');
-  assert.match(chart, /includeTerminalContexts=\{!activeVisualContext \|\| activeVisualContext\.startsWith\('terminal'\)\}/);
+  assert.match(chart, /includeTerminalContexts=\{Boolean\(activeVisualContext\?\.startsWith\('terminal'\)\)\}/,
+    'account and Screener/Formation settings must not offer Terminal sizes');
   assert.match(chart, /includeTerminalContexts=\{includeTerminalContexts\}/);
   assert.match(chart, /contexts\.map\(\(context, index\)/);
   assert.match(chart, /selectableVisualContexts\(includeTerminalContexts\)/);
@@ -219,6 +220,10 @@ test('iOS chart-type picker replaces the native bright select without losing sev
   assert.match(styles, /z-index:2147483500/);
   assert.match(styles, /background:#0d1726/);
   assert.match(styles, /min-height:48px/);
+  assert.match(styles, /\.visualProfileCompact \.visualProfileSelection \{/);
+  assert.match(styles, /max-width:240px/);
+  assert.match(styles, /min-height:36px/);
+  assert.match(styles, /min-height:30px/);
   assert.doesNotMatch(styles, /\.settingControl select\.visualProfileSelect/);
   assert.equal(VISUAL_CONTEXTS.length, 7);
 });
