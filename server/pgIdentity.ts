@@ -250,7 +250,9 @@ export async function verifyEmailToken(token: unknown) {
       [hashToken(value)],
     );
     if (!rows[0]) throw new AuthFailure(400, 'Посилання недійсне або застаріле.');
-    await client.query('UPDATE auth_action_tokens SET consumed_at = now() WHERE token_hash = $1', [hashToken(value)]);
+    // Every outstanding confirmation link for the same account becomes invalid
+    // after the address is verified. A stale link must not serve as a login token.
+    await client.query("UPDATE auth_action_tokens SET consumed_at = now() WHERE user_id = $1 AND purpose = 'verify-email' AND consumed_at IS NULL", [rows[0].user_id]);
     await client.query('UPDATE auth_users SET email_verified_at = COALESCE(email_verified_at, now()), updated_at = now() WHERE id = $1', [rows[0].user_id]);
     await client.query('COMMIT');
     return String(rows[0].user_id);
@@ -261,19 +263,29 @@ export async function verifyEmailToken(token: unknown) {
 export async function changePasswordWithToken(token: unknown, passwordInput: unknown) {
   const value = String(token || '');
   if (!/^[a-zA-Z0-9_-]{40,80}$/.test(value)) throw new AuthFailure(400, 'Посилання недійсне або застаріле.');
-  const passwordHash = await hashPassword(validatePassword(passwordInput));
+  const password = validatePassword(passwordInput);
+  // Reject invented, expired or already-used links BEFORE expensive scrypt work.
+  // The transaction below checks the token again under a row lock to prevent races.
+  const tokenHash = hashToken(value);
+  const candidate = await database().query(
+    "SELECT 1 FROM auth_action_tokens WHERE token_hash = $1 AND purpose = 'reset-password' AND consumed_at IS NULL AND expires_at > now()",
+    [tokenHash],
+  );
+  if (!candidate.rows[0]) throw new AuthFailure(400, 'Посилання недійсне або застаріле.');
+  const passwordHash = await hashPassword(password);
   const client = await database().connect();
   try {
     await client.query('BEGIN');
     const { rows } = await client.query(
       "SELECT user_id FROM auth_action_tokens WHERE token_hash = $1 AND purpose = 'reset-password' AND consumed_at IS NULL AND expires_at > now() FOR UPDATE",
-      [hashToken(value)],
+      [tokenHash],
     );
     if (!rows[0]) throw new AuthFailure(400, 'Посилання недійсне або застаріле.');
     const id = String(rows[0].user_id);
     await client.query('UPDATE auth_users SET password_hash = $1, updated_at = now() WHERE id = $2', [passwordHash, id]);
     await client.query('UPDATE auth_sessions SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL', [id]);
-    await client.query('UPDATE auth_action_tokens SET consumed_at = now() WHERE token_hash = $1', [hashToken(value)]);
+    // Reset all previously issued password links, not just the submitted link.
+    await client.query("UPDATE auth_action_tokens SET consumed_at = now() WHERE user_id = $1 AND purpose = 'reset-password' AND consumed_at IS NULL", [id]);
     await client.query('COMMIT');
   } catch (error) { await client.query('ROLLBACK'); throw error; }
   finally { client.release(); }
@@ -282,6 +294,9 @@ export async function changePasswordWithToken(token: unknown, passwordInput: unk
 export async function checkCredentials(emailInput: unknown, passInput: unknown) {
   const email = validateEmail(emailInput);
   const password = typeof passInput === 'string' ? passInput : '';
+  // Avoid hashing attacker-controlled 384KB login passwords (API JSON limit).
+  // All invalid credentials receive the same public response.
+  if (!password || password.length > 128) throw new AuthFailure(401, 'Неправильна електронна адреса або пароль.', 'INVALID_CREDENTIALS');
   const { rows } = await database().query('SELECT * FROM auth_users WHERE email = $1', [email]);
   const user = rows[0];
   // A constant dummy hash avoids a cheap user-existence timing oracle.
