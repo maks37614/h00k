@@ -111,3 +111,60 @@ docker compose logs --tail 120 app
   `.github/workflows/liquidation-scaling.yml`.
 - Offline CI tests are not a substitute for actual exchange WebSocket and
   VPS load testing.
+
+## HookChart Liq heatmap UI (optional, default OFF)
+
+- Expand the **top** chart tools via the chevron, then select **«Карта Liq»**.
+  Choose 24h (5-minute aggregation) or 7d (15-minute aggregation).
+- Supports normal Binance/Bybit **futures** charts. Replay, spots, saved
+  snapshot charts and Community previews deliberately remain untouched.
+- The map is **observed historic liquidations only**, never simulated future
+  stop-outs or the exchange's complete liquidation universe.
+- Each cell is located by the chart's very same time transform
+  `g.x(eventBucketMs)` and price transform `g.y(priceBucket)` as candles,
+  S/R, density overlays and volume. The heatmap is painted **behind**
+  the candle bodies and wicks, not as a stretched background screenshot.
+- When the switch is off, its separate frontend module is not imported,
+  no heatmap API fetch is sent, no heatmap interval runs and the canvas skips
+  the painter entirely. Existing Liq WebSockets and candle chart drawing
+  keep their existing operation independently of the map.
+- Multiple enabled Terminal cards of the same exchange/symbol/period reuse
+  one in-flight fetch in a browser tab; the server has a 30-second shared
+  cache and a per-IP request cap. Hidden browser tabs skip refreshes.
+- To receive **non-empty history**, enable `LIQ_ARCHIVE_ENABLED=1`
+  *after a Postgres backup and a limited VPS pilot*. Without it, the
+  optional heatmap route returns HTTP 404 and the UI indicates the archive
+  is not enabled. Turning the map off does not stop its backend archive:
+  recorded history necessarily requires modest server-side writes while
+  the switch is off. This background cost is controlled by the feature flag,
+  batch queue and protected metrics.
+- New history begins **only after** the PostgreSQL archive is enabled and
+  an exchange instrument is subscribed. A 24h/7d empty interval does not
+  mean no liquidations occurred, only that no events were recorded there.
+  Even if the UI paints a bin, its value is an approximation of received
+  forced-order notional (Bybit uses bankruptcy price). We do not invent
+  data for unobserved markets or missed intervals.
+
+### Launch checklist for the optional map
+
+1. Keep `LIQ_MULTIPLEX_ENABLED=1`, `VITE_LIQ_CLIENT_MULTIPLEX=0`,
+   `LIQ_ARCHIVE_ENABLED=0` during the initial live Liq transport pilot.
+2. Check PostgreSQL free disk space and make a backup before enabling
+   the archive (as shown above). Then change only
+   `LIQ_ARCHIVE_ENABLED=1` in the VPS `.env` and
+   `docker compose up -d --build --no-deps app`.
+3. Inspect `liquidationArchive` in authenticated
+   `/api/ops/market-data` for pending queue, write failures,
+   dropped-on-overflow count, and write latency. Use the private
+   `H00K_OPS_TOKEN` locally, never place it in a browser or chat.
+4. Open BTCUSDT Binance Futures and verify the regular Liq markers,
+   Long/Short filters, 5m cascade and DOM densities still work.
+   Expand the tools, select **«Карта Liq»**, wait for real observed
+   events to accumulate and check heatmap alignment through zoom/pan.
+5. Disable the map in the UI and check that the browser no longer
+   sends `/api/hookchart/liquidation-heatmap` requests. The regular
+   `/api/hookchart/liquidations` may continue because it serves other
+   existing chart features.
+6. If archiving increases disk/CPU/latency, reset
+   `LIQ_ARCHIVE_ENABLED=0` and restart. It stops NEW archive writes;
+   it does not automatically delete archived rows or undo migrations.

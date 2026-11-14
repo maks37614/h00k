@@ -7,7 +7,15 @@ type Payload = Awaited<ReturnType<typeof liquidationArchive.heatmap>>;
  * opt-in PostgreSQL archive. No polling or extra exchange connections.
  */
 export function installLiquidationArchiveRoutes(app: Express) {
-  if (!liquidationArchive.enabled) return;
+  if (!liquidationArchive.enabled) {
+    // Explicit 404 keeps SPA fallback from returning index.html (HTTP 200).
+    // No database connection, polling, or market-data fetch occurs here.
+    app.get('/api/hookchart/liquidation-heatmap', (_req,res) => {
+      res.setHeader('Cache-Control','no-store');
+      res.status(404).json({ success:false, code:'LIQ_ARCHIVE_DISABLED' });
+    });
+    return;
+  }
   const cached = new Map<string, { at: number; data: Payload }>();
   const inflight = new Map<string, Promise<Payload>>();
   const throttles = new Map<string, { at: number; count: number }>();

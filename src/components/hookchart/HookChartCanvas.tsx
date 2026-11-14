@@ -1,7 +1,7 @@
 import { ReplaySpeedPicker } from '../replay/ReplaySpeedPicker';
 import React, { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { ChevronLeft, ChevronRight, Crosshair, Minus, MoveUpRight, Square, Type, Ruler, Bell, BarChart3, Layers, Settings, Target, Trash2, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Crosshair, Minus, MoveUpRight, Square, Type, Ruler, Bell, BarChart3, Layers, Settings, Target, Trash2, X, Flame } from 'lucide-react';
 import type { ChartMarkerInfo, ChartRestoreParams, DetectedFormation, ExchangeId, HookChartPreferences, Kline, MarketType, Timeframe } from '../../types';
 import { useAuth } from '../../context/AuthContext';
 import { useAlerts } from '../../context/AlertsContext';
@@ -23,7 +23,8 @@ import { visibleScopedRemoteSeries, type ScopedRemoteSeries } from './scopedRemo
 import { fetchSharedChartJson } from '../../utils/sharedChartRequests';
 import { candlesBeforeHistoryEnd, clampHookChartHistory, extendHookChartHistory, scopedHookChartHistoryRows, type ScopedHookChartHistory } from '../../utils/hookChartHistory';
 import { createChartCrosshairStore } from './crosshairState';
-import { Chart, MemoChartTimeAxis, IndicatorDock, buildStructuralChannel, type Alert, type Candle, type Drawing, type HookChartHandle, type Viewport } from './engine';
+import { Chart, MemoChartTimeAxis, IndicatorDock, buildStructuralChannel, type Alert, type Candle, type Drawing, type HookChartHandle, type Viewport, type LiquidationHeatmapChartData } from './engine';
+import type { LiquidationHeatmapSnapshot, LiquidationHeatmapPeriod } from './liquidationHeatmap';
 import { INDICATOR_META, type IndicatorId, type OIPoint } from './indicatorEngine';
 import { captureVisualProfile, getVisualProfile, makeVisualProfileKey, normalizeVisualProfile, patchVisualProfile, visualContextForTerminalWidth, visualDeviceForWidth, type VisualChartProfile, type VisualContextId, type VisualProfileKey } from './visualProfiles';
 import { hookChartPlotWidth } from './priceScale';
@@ -93,6 +94,9 @@ export interface HookChartCanvasProps {
   footerActions?: React.ReactNode;
 }
 
+// No loader bundle or network request is loaded until the user enables the map.
+const LazyLiquidationHeatmapLoader = React.lazy(() => import('./LiquidationHeatmapLoader'));
+
 const EMPTY_OI = { binance: [] as OIPoint[], bybit: [] as OIPoint[] };
 const DEFAULT_VIEWPORT: Viewport = { barWidth: 9, rightOffset: 0, autoY: true, manualCenter: null, manualRange: null, fitAll: false };
 const TOOLS = [
@@ -147,6 +151,16 @@ const HookChartCanvas = forwardRef<HookChartHandle, HookChartCanvasProps>(functi
   const [replayIndicators, setReplayIndicators] = useState<IndicatorId[]>([]);
   const [textLabel, setTextLabel] = useState('Нотатка');
   const [panel, setPanel] = useState<'indicators' | 'settings' | null>(null);
+  // Per-chart view state. Do NOT persist in HookChart settings: reopening any
+  // chart must be zero-cost unless the user explicitly turns on the map.
+  const [liquidationMapOn, setLiquidationMapOn] = useState(false);
+  const [liquidationMapPeriod, setLiquidationMapPeriod] = useState<LiquidationHeatmapPeriod>('24h');
+  const [liquidationMapState, setLiquidationMapState] = useState<{
+    scope: string; data: LiquidationHeatmapSnapshot | null;
+  } | null>(null);
+  const [liquidationMapStatus, setLiquidationMapStatus] = useState<{
+    scope: string; status: 'loading' | 'available' | 'empty' | 'disabled' | 'error';
+  } | null>(null);
   const closeSettings = useCallback(() => setPanel(null), []);
   const [densityQuickOpen, setDensityQuickOpen] = useState(false);
   const [densityPopupLeft, setDensityPopupLeft] = useState(8);
@@ -156,6 +170,25 @@ const HookChartCanvas = forwardRef<HookChartHandle, HookChartCanvasProps>(functi
   const historyScope = [exchange, marketType, normalizeExchangeSymbol(symbol), timeframe].join(':');
   const crosshair = useMemo(() => createChartCrosshairStore(), [historyScope]);
   const [extraHistory, setExtraHistory] = useState<ScopedHookChartHistory>(() => ({ scope: historyScope, rows: [] }));
+  const liquidationMapSupported = !replay && !externalData && marketType === 'futures' &&
+    (exchange === 'binance' || exchange === 'bybit');
+  const liquidationMapScope = exchange + ':' + normalizeExchangeSymbol(symbol).toUpperCase() + ':' + liquidationMapPeriod;
+  const onLiquidationMapData = useCallback((data: LiquidationHeatmapSnapshot | null) => {
+    setLiquidationMapState({ scope: liquidationMapScope, data });
+  }, [liquidationMapScope]);
+  const onLiquidationMapStatus = useCallback((status: 'loading' | 'available' | 'empty' | 'disabled' | 'error') => {
+    setLiquidationMapStatus({ scope: liquidationMapScope, status });
+  }, [liquidationMapScope]);
+  const visibleMap = liquidationMapOn && liquidationMapSupported &&
+    liquidationMapState?.scope === liquidationMapScope ? liquidationMapState.data : null;
+  const mapChartData = useMemo<LiquidationHeatmapChartData | null>(() => {
+    if (!visibleMap?.bins.length) return null;
+    let maxUsd=0;
+    for (const bin of visibleMap.bins) maxUsd=Math.max(maxUsd,bin.usd);
+    return maxUsd>0 ? { bins: visibleMap.bins, maxUsd, period: liquidationMapPeriod } : null;
+  }, [visibleMap, liquidationMapPeriod]);
+  const visibleMapStatus = liquidationMapStatus?.scope === liquidationMapScope
+    ? liquidationMapStatus.status : 'loading';
   const extraHistoryRef = useRef(extraHistory);
   extraHistoryRef.current = extraHistory;
   const extraHistoryRows = scopedHookChartHistoryRows(extraHistory, historyScope);
@@ -1214,6 +1247,39 @@ const HookChartCanvas = forwardRef<HookChartHandle, HookChartCanvasProps>(functi
           </div>)}
         </div>}
 
+        {liquidationMapSupported && <div className="liqHeatmapTools" role="group" aria-label="Карта ліквідацій">
+          <button
+            type="button"
+            className={'liqHeatmapSwitch' + (liquidationMapOn ? ' active' : '')}
+            aria-label={liquidationMapOn ? 'Вимкнути карту ліквідацій' : 'Увімкнути карту ліквідацій'}
+            title={settings.tooltips !== false ? 'Теплова карта отриманих ліквідацій (не прогноз); обчислення тільки коли ввімкнено' : undefined}
+            aria-pressed={liquidationMapOn}
+            onClick={() => {
+              if (liquidationMapOn) {
+                setLiquidationMapOn(false);
+                setLiquidationMapState(null);
+                setLiquidationMapStatus(null);
+              } else {
+                setLiquidationMapOn(true);
+              }
+            }}
+          >
+            <Flame size={14}/><span>Карта Liq</span>
+          </button>
+          {liquidationMapOn && (['24h','7d'] as const).map(period => (
+            <button
+              key={period}
+              type="button"
+              className={'liqHeatmapPeriod' + (liquidationMapPeriod === period ? ' active' : '')}
+              aria-label={'Період карти ліквідацій ' + period}
+              aria-pressed={liquidationMapPeriod === period}
+              onClick={() => setLiquidationMapPeriod(period)}
+            >
+              {period}
+            </button>
+          ))}
+        </div>}
+
         <div className="autoOverlayTools" role="group" aria-label="Автоматичні рівні">
           {OVERLAYS.map(([id, label]) => <button
             key={id}
@@ -1296,6 +1362,31 @@ const HookChartCanvas = forwardRef<HookChartHandle, HookChartCanvasProps>(functi
     {oiError && <span className="hookchart-feed-status" role="status">Дані OI тимчасово недоступні</span>}
 
     <div className="chartStage" data-drawing-tools={drawingToolbarOpen ? 'open' : 'closed'}>
+      {/* Mount on user action only. OFF: no polling, no endpoint, no timer and
+          no additional canvas painting. Different coins never share a scope. */}
+      {liquidationMapOn && liquidationMapSupported && (
+        <React.Suspense fallback={null}>
+          <LazyLiquidationHeatmapLoader
+            key={liquidationMapScope}
+            exchange={exchange as 'binance' | 'bybit'}
+            symbol={normalizeExchangeSymbol(symbol).toUpperCase()}
+            period={liquidationMapPeriod}
+            onData={onLiquidationMapData}
+            onStatus={onLiquidationMapStatus}
+          />
+        </React.Suspense>
+      )}
+      {liquidationMapOn && liquidationMapSupported && (
+        <div className="liqHeatmapAttribution" role="status" aria-live="polite">
+          {visibleMapStatus === 'available' && mapChartData
+            ? `Liq ${liquidationMapPeriod}: отримані події, не прогноз${visibleMap?.truncated ? ' · неповний набір' : ''}`
+            : visibleMapStatus === 'empty' ? 'За цей період збережених Liq немає'
+            : visibleMapStatus === 'disabled' ? 'Архів Liq не увімкнений на сервері'
+            : visibleMapStatus === 'error' ? 'Історія Liq тимчасово недоступна'
+            : 'Завантаження карти Liq…'}
+        </div>
+      )}
+
       {chartToolbarEnabled && <button
         type="button"
         className={`drawPanelToggle ${drawingToolbarOpen ? 'open' : ''}`}
@@ -1388,6 +1479,7 @@ const HookChartCanvas = forwardRef<HookChartHandle, HookChartCanvasProps>(functi
         densities={replay ? [] : chartDensities}
         marketPrints={replay ? [] : liveFeed.marketPrints}
         liquidations={replay ? [] : liveFeed.liquidations}
+        liquidationHeatmap={mapChartData}
         sessionLiquidationsUsd={liveFeed.sessionLiquidationsUsd}
         showLiquidationLong={settings.showLiquidationLong !== false}
         showLiquidationShort={settings.showLiquidationShort !== false}

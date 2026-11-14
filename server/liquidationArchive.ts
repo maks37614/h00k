@@ -197,10 +197,12 @@ export class LiquidationArchive {
       FROM h00k_liquidation_events
       WHERE exchange = $1 AND symbol = $2
         AND event_time >= NOW() - ($5::integer * INTERVAL '1 hour')
-      GROUP BY t,bin,side ORDER BY t,bin,side LIMIT 6001
+      GROUP BY t,bin,side ORDER BY t DESC,bin,side LIMIT 6001
     `, [exchange,symbol,seconds,step,hours]);
     const truncated = result.rows.length > 6000;
-    const bins: HeatmapBin[] = result.rows.slice(0,6000).map(row => ({
+    // Prefer the freshest intervals if the 7d dataset exceeds the response
+    // limit, then order ascending for the chart's binary-search viewport cull.
+    const bins: HeatmapBin[] = result.rows.slice(0,6000).reverse().map(row => ({
       time: Number(row.t) * 1000,
       price: step ** (Number(row.bin) + 0.5),
       side: row.side,
