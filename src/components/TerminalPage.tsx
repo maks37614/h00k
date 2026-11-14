@@ -885,7 +885,7 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
                 setConfig((prev) => ({ ...prev, layoutPreset: 'custom', columns: 1, autoFitScreen: true }));
               }}
               className={`px-2 py-1 rounded-lg transition-colors ${
-                blocks.length <= 1 && config.columns === 1
+                config.columns === 1
                   ? 'bg-emerald-600 text-white font-bold'
                   : 'text-slate-400 hover:text-white'
               }`}
