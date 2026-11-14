@@ -39,6 +39,28 @@ function indexRecords(records: TelegramDelivery[]) {
   }
 }
 
+/** A corrupt queued item must fail closed, rather than silently never retry.
+ * This validates the persisted contract without discarding unknown old fields. */
+function validDelivery(item: unknown): item is TelegramDelivery {
+  if (!item || typeof item !== 'object' || Array.isArray(item)) return false;
+  const row = item as Record<string, unknown>;
+  const validMillis = (value: unknown) => Number.isSafeInteger(value) && (value as number) >= 0;
+  return typeof row.id === 'string' && row.id.length > 0
+    && typeof row.userId === 'string' && row.userId.length > 0
+    && typeof row.text === 'string'
+    && typeof row.botId === 'string' && row.botId.length > 0
+    && typeof row.chatId === 'string' && row.chatId.length > 0
+    && (row.eventKey === undefined || typeof row.eventKey === 'string')
+    && Array.isArray(row.messageIds)
+    && row.messageIds.every(id => Number.isSafeInteger(id) && id > 0)
+    && (row.status === 'pending' || row.status === 'sent' || row.status === 'failed')
+    && validMillis(row.createdAt)
+    && validMillis(row.attempts)
+    && validMillis(row.nextAttemptAt)
+    && (row.sentAt === undefined || validMillis(row.sentAt))
+    && (row.error === undefined || typeof row.error === 'string');
+}
+
 function load(): TelegramDelivery[] {
   if (!deliveries) {
     let raw: string | null;
@@ -51,13 +73,13 @@ function load(): TelegramDelivery[] {
       raw = null;
     }
     const stored: unknown = raw === null ? [] : JSON.parse(raw);
-    if (!Array.isArray(stored) || stored.some(item => !item ||
-      typeof item !== 'object' || Array.isArray(item) ||
-      typeof item.id !== 'string' || typeof item.userId !== 'string' ||
-      !Array.isArray(item.messageIds) ||
-      !['pending', 'sent', 'failed'].includes(item.status))) {
+    if (!Array.isArray(stored) || stored.some(item => !validDelivery(item)) ||
+        new Set((stored as TelegramDelivery[]).map(item => item.id)).size !== stored.length) {
       throw new Error('Invalid Telegram delivery history');
     }
+    // Older releases may have written a readable-by-others JSON file. Close
+    // that exposure at first load, without waiting for the next send.
+    if (raw !== null) fs.chmodSync(filePath, 0o600);
     deliveries = stored as TelegramDelivery[];
     indexRecords(deliveries);
   }
@@ -76,8 +98,17 @@ function commitRecords(records: TelegramDelivery[]) {
     retained.set(item.userId, count + 1);
     return count < 500;
   }).reverse();
-  fs.writeFileSync(`${filePath}.tmp`, JSON.stringify(next), { mode: 0o600 });
-  fs.renameSync(`${filePath}.tmp`, filePath);
+  const temporary = `${filePath}.tmp`;
+  // Creation mode does not fix a temp file left with 0644 permissions by an
+  // older release. Restrict it BEFORE writing private chat IDs and messages.
+  try {
+    fs.chmodSync(temporary, 0o600);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+  }
+  fs.writeFileSync(temporary, JSON.stringify(next), { mode: 0o600 });
+  fs.chmodSync(temporary, 0o600);
+  fs.renameSync(temporary, filePath);
   deliveries = next;
   indexRecords(next);
 }
@@ -171,7 +202,16 @@ export async function retryPendingTelegramMessages(): Promise<void> {
   if (retryFlight) return retryFlight;
   retryFlight = (async () => {
     const due = load().filter(item => item.status === 'pending' && item.nextAttemptAt <= Date.now()).slice(0, 20);
-    for (const record of due) await deliver(record);
+    for (const record of due) {
+      try {
+        await deliver(record);
+      } catch {
+        // One undurable Telegram acknowledgment must not block unrelated
+        // accounts in this retry batch. Keep its last durable 'pending' state;
+        // the next scheduled pass can retry it after storage recovers.
+        console.error('[Telegram] Could not persist a delivery retry; continuing the queue');
+      }
+    }
   })().finally(() => { retryFlight = undefined; });
   return retryFlight;
 }
