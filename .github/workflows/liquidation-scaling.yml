@@ -1,0 +1,31 @@
+name: Liquidation Scaling Safety
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'server/liquidationFeed.ts'
+      - 'server/liquidationUpstreamPool.ts'
+      - 'tests/liquidation-feed.test.ts'
+      - 'tests/liquidation-upstream-pool.test.ts'
+      - 'tests/hookchart-shared-liquidation-view.test.ts'
+      - 'tests/hookchart-liquidation-socket-lifecycle.test.ts'
+      - '.github/workflows/liquidation-scaling.yml'
+  pull_request:
+    branches: [main]
+
+jobs:
+  liquidation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: TypeScript validation
+        run: npm run lint
+      - name: Liquidation protocol, pooling and existing HookChart regression
+        run: node --import ./tests/fixtures/offline-network.mjs --import tsx --test tests/liquidation-feed.test.ts tests/liquidation-upstream-pool.test.ts tests/hookchart-shared-liquidation-view.test.ts tests/hookchart-liquidation-socket-lifecycle.test.ts
