@@ -490,6 +490,13 @@ export function Chart({candles,symbol,tf,tool,drawings,setDrawings,alerts,setAle
    ()=>showMarketPrintSums?aggregateMarketPrintsByCandle(candles,marketPrints,intervalMs):[],
    [showMarketPrintSums,candles,marketPrints,intervalMs],
  );
+ // Real exchange liquidations are grouped by candle once per data change.
+ // Mouse movement / pan / redraw must not re-scan every event or re-sort
+ // candle buckets for each animation frame in a multi-chart Terminal.
+ const liquidationBuckets=useMemo(
+   ()=>showLiquidations?aggregateLiquidationsByCandle(candles,liquidations,intervalMs):[],
+   [showLiquidations,candles,liquidations,intervalMs],
+ );
  const axisTimeFmt=useMemo(()=>new Intl.DateTimeFormat(language,{timeZone:timezone,hour:'2-digit',minute:'2-digit',...(intervalMs<60000?{second:'2-digit' as const}:{}),hour12:false}),[timezone,language,intervalMs]);
  const axisDateFmt=useMemo(()=>new Intl.DateTimeFormat(language,{timeZone:timezone,day:'2-digit',month:'2-digit'}),[timezone,language]);
  const axisFullFmt=useMemo(()=>new Intl.DateTimeFormat(language,{timeZone:timezone,day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit',...(intervalMs<60000?{second:'2-digit' as const}:{}),hour12:false}),[timezone,language,intervalMs]);
@@ -878,7 +885,7 @@ export function Chart({candles,symbol,tf,tool,drawings,setDrawings,alerts,setAle
   if(showLiquidations){
     // The feed contains events passing each side's own display preference/threshold.
     // Bucket real exchange events into their actual candle and show observed notional below it.
-    for(const bucket of aggregateLiquidationsByCandle(candles,liquidations,intervalMs)){
+    for(const bucket of liquidationBuckets){
       const c=candles[bucket.index];if(!c)continue;
       const xx=g.x(c.t);if(xx<0||xx>g.plotW)continue;
       const anchorY=Math.max(1,Math.min(g.plotH-2,g.y(c.l)));
