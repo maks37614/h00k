@@ -218,7 +218,8 @@ export class SharedExchangeStreamHandle {
       ticker.price > 0 && ticker.receivedAt > 0 &&
       ticker.exchangeTime > 0 && now >= ticker.receivedAt &&
       now - ticker.receivedAt <= maxAgeMs &&
-      isFreshDepthTime(ticker.exchangeTime, now, maxAgeMs);
+      ticker.exchangeTime <= now + 1000 &&
+      now - ticker.exchangeTime <= maxAgeMs;
   }
 
   /** Only synchronous listeners of the same validated source packet can
