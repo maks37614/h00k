@@ -1,18 +1,17 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import type { ExchangeId, HookChartPreferences, MarketType } from '../../types';
-import { adaptiveCut, atr, quantile, type MarketPrint } from './marketAnalytics';
+import { atr, type MarketPrint } from './marketAnalytics';
 import { getSharedMarketPrints, subscribeMarketTrades } from './marketTradeStream';
 import { EMPTY_FUNDING, subscribeSharedHookChartFunding, type FundingSnapshot } from './sharedFundingStream';
 import { calcCascadeRisk, type Candle, type Density, type Liquidation } from './engine';
 import { normalizeExchangeSymbol } from '../../utils/marketSymbols';
 import type { ChartDepthStatus } from '../../utils/hookChartDepthProtocol';
 import { connectSharedHookChartDepth } from './sharedDepthStream';
-import { connectSharedHookChartLiquidations } from './sharedLiquidationStream';
+import { sharedLiquidationViews } from './sharedLiquidationView';
 import { HookChartDensityBook, type DensityAutoStats } from './densityBook';
-import { EMPTY_SESSION_LIQUIDATIONS, getSessionLiquidationTotals, recordSessionLiquidation, sessionLiquidationScope, subscribeSessionLiquidations } from './liquidationSession';
-import { canonicalLiquidationId, deduplicateLiquidations, filterVisibleLiquidations } from './liquidationDisplay';
-import { equalDepthAutoStats, nextLiquidationAdaptiveCutExpiry, nextLiquidationCascadeTransition, shouldPublishDepthView, shouldPublishLiquidationView } from './feedPublishPolicy';
-import { LiquidationEventBuffer } from './liquidationEventBuffer';
+import { EMPTY_SESSION_LIQUIDATIONS, getSessionLiquidationTotals, sessionLiquidationScope, subscribeSessionLiquidations } from './liquidationSession';
+import { filterVisibleLiquidations } from './liquidationDisplay';
+import { equalDepthAutoStats, shouldPublishDepthView } from './feedPublishPolicy';
 
 type BookLevel = { p: number; q: number };
 
@@ -238,93 +237,22 @@ export function useOriginalHookChartLiveFeed({
       return;
     }
 
-    let dead = false;
-    const buffered = new LiquidationEventBuffer<Liquidation>();
-    let latestEventAt = 0;
-    let previouslyHadRows = false;
-    let lastPublishedRows: Liquidation[] | null = null;
-    let nextCascadeTransitionAt = Infinity;
-    let lastAdaptiveRows: Liquidation[] | null = null;
-    let adaptiveExpiresAt = -Infinity;
-    let pendingLiquidationPublish: ReturnType<typeof setTimeout> | null = null;
-    const publish = () => {
-      if (dead) return;
-      if (pendingLiquidationPublish !== null) {
-        clearTimeout(pendingLiquidationPublish);
-        pendingLiquidationPublish = null;
-      }
-      const now = Date.now();
-      const rows = buffered.snapshot(now);
-      // No event means nothing changes with wall-clock time. Avoid sending
-      // a brand-new [] into React every two seconds for every idle chart.
-      if (!shouldPublishLiquidationView(rows.length, previouslyHadRows)) return;
-      previouslyHadRows = rows.length > 0;
-      // Keep the sorted event array stable while no liquidation has changed.
-      // Cascade risk still needs an update at the exact 1m/5m age boundaries,
-      // so its clock is independent from snapshot reference identity.
-      if (rows !== lastPublishedRows || now >= nextCascadeTransitionAt) {
-        lastPublishedRows = rows;
-        nextCascadeTransitionAt = nextLiquidationCascadeTransition(rows, now);
-        setCascadeClock(now);
-        setLiquidations(rows);
-      }
-      // Percentile calculations also depend only on the event set and its
-      // 15-minute eligibility window, not on every two-second display tick.
-      if (rows !== lastAdaptiveRows || now > adaptiveExpiresAt) {
-        lastAdaptiveRows = rows;
-        adaptiveExpiresAt = nextLiquidationAdaptiveCutExpiry(rows, now);
-        const values = rows.filter(row => now - row.t <= 15 * 60_000)
-          .map(row => row.usd).filter(value => Number.isFinite(value) && value > 0);
-        const adaptive = !values.length ? 0 : values.length < 6
-          ? quantile(values, .75)
-          : Math.max(quantile(values, .8), adaptiveCut(values, .8, .98, 2.5));
-        setLiquidationCut(values.length ? Math.max(1000, adaptive) : 0);
-        setLiquidationLastEventAt(latestEventAt || null);
-      }
-    };
-    const scheduleLiquidationPublish = () => {
-      if (dead || pendingLiquidationPublish !== null) return;
-      pendingLiquidationPublish = setTimeout(() => {
-        pendingLiquidationPublish = null;
-        publish();
-      }, 200);
-    };
-    const push = (row: Liquidation) => {
-      if (dead || !Number.isFinite(row.usd) || row.usd <= 0) return;
-      recordSessionLiquidation(liquidationScope, row);
-      const id = canonicalLiquidationId(row.id);
-      if (!buffered.upsert({ ...row, id })) return; // duplicate or older cumulative fill
-      latestEventAt = Math.max(latestEventAt, row.t);
-      // Preserve every event and the immediate session counter update; only
-      // group React renders while bursts arrive at high frequency.
-      scheduleLiquidationPublish();
-    };
-
+    // The shared market view owns ONE Liq buffer, adaptive cutoff calculation
+    // and 2s expiry clock per exchange/symbol. Each chart only retains its
+    // personal Long/Short display filters and chart-specific risk price.
     setLiquidations(EMPTY_LIQUIDATIONS);
     setLiquidationCut(0);
     setLiquidationLastEventAt(null);
-    const stop = connectSharedHookChartLiquidations({
+    return sharedLiquidationViews.subscribe({
       exchange, symbol,
-      onSnapshot: (events, connected) => {
-        if (dead) return;
-        buffered.replace(deduplicateLiquidations(events));
-        // Recover session-era events from a reconnect snapshot, without counting
-        // pre-session historical events or repeating IDs already received.
-        for (const row of events) recordSessionLiquidation(liquidationScope, row, 'snapshot');
-        latestEventAt = buffered.newestEventTime();
-        setLiquidationStreamLive(connected);
-        publish();
+      onView: view => {
+        setLiquidations(view.rows);
+        setLiquidationCut(view.automaticCut);
+        setCascadeClock(view.cascadeClock);
+        setLiquidationLastEventAt(view.lastEventAt);
       },
-      onLiquidation: push,
-      onStatus: connected => { if (!dead) setLiquidationStreamLive(connected); },
+      onStatus: setLiquidationStreamLive,
     });
-    const publishTimer = setInterval(publish, 2000);
-    return () => {
-      dead = true;
-      if (pendingLiquidationPublish !== null) clearTimeout(pendingLiquidationPublish);
-      clearInterval(publishTimer);
-      stop();
-    };
   }, [exchange, marketType, symbol, replay]);
 
   // Funding has one exchange/symbol timer and parsed snapshot per tab,

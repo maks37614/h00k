@@ -28,15 +28,16 @@ test('idle liquidation charts avoid empty rerenders but still emit final removal
 test('real-time HookChart applies the guards without disabling live depth or Replay isolation', () => {
   const feed = readFileSync(new URL('../src/components/hookchart/useOriginalHookChartLiveFeed.ts', import.meta.url), 'utf8');
   const replay = readFileSync(new URL('../src/components/replay/ReplayChart.tsx', import.meta.url), 'utf8');
+  const shared = readFileSync(new URL('../src/components/hookchart/sharedLiquidationView.ts', import.meta.url), 'utf8');
   assert.match(feed, /shouldPublishDepthView\(next\.depthReady, wasReady\)/);
-  assert.match(feed, /shouldPublishLiquidationView\(rows\.length, previouslyHadRows\)/);
+  assert.match(shared, /const rows = entry\.buffered\.snapshot\(now\)/);
   assert.match(feed, /if \(next\.depthReady\) \{\s*if \(depthHoldClock === null\) depthHoldClock = setInterval\(applyBook, 1000\)/,
     'holding-time updates run only while an actual book is live');
   assert.match(feed, /const clearDepth = \(\) => \{\s*stopDepthHoldClock\(\)/,
     'depth clock stops when the exchange book disappears');
-  assert.match(feed, /const publishTimer = setInterval\(publish, 2000\)/);
+  assert.match(shared, /current\.timer = setInterval\(\(\) => publish\(current\), 2000\)/);
   assert.match(feed, /const stopDepth = connectSharedHookChartDepth/);
-  assert.match(feed, /const stop = connectSharedHookChartLiquidations/);
+  assert.match(feed, /return sharedLiquidationViews\.subscribe\(/);
   assert.match(feed, /if \(replay \|\| !exchangeSymbol\)/);
   assert.match(replay, /markers=\{hookMarkers\} replay/);
 });
