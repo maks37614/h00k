@@ -425,7 +425,8 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
     const marketType = coin.marketType || 'futures';
 
     const newBlock: TerminalChartBlock = {
-      id: `block-${symbol}-${Date.now()}`,
+      // Rapidly adding the same symbol must never reuse a React chart key.
+      id: `block-${symbol}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
       symbol,
       baseAsset: base,
       quoteAsset: quote,
@@ -702,6 +703,9 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
       return 'calc((100vh - 130px) / 3)';
     }
   }, [blocks.length, config.autoFitScreen, config.blockHeight, config.columns]);
+
+  // A loaded quote snapshot is not proof of an active WebSocket stream.
+  const quotesAvailable = marketSnapshot.timestamp !== null && !marketError && !marketSnapshot.warning;
 
   const formation = activeCoin.formations?.[0] || null;
   const isBullish = formation?.bias === 'bullish';
@@ -1011,8 +1015,10 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
 
           <div className="flex items-center gap-3 text-slate-400 text-[11px] shrink-0">
             <span className="flex items-center gap-1.5 text-slate-300">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-              Синхронізація: <strong className="text-cyan-400 font-bold">WLive</strong>
+              <span className={`h-2 w-2 rounded-full ${quotesAvailable ? 'bg-emerald-500' : 'bg-amber-500'}`}></span>
+              Котирування: <strong className={quotesAvailable ? 'text-cyan-400 font-bold' : 'text-amber-300 font-bold'}>
+                {quotesAvailable ? 'оновлено' : marketLoading && !marketSnapshot.timestamp ? 'завантаження' : 'неповні дані'}
+              </strong>
             </span>
             <span className="text-slate-500">|</span>
             <span>
