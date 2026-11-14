@@ -50,7 +50,7 @@ import {
 } from '../utils/directExchangeClient';
 import { loadMarketCoins } from '../utils/marketCoinLoader';
 import { matchesExchangeInstrumentSearch } from '../utils/marketSymbols';
-import { isVolumeWithinCap, type ScreenerVolumeMode } from '../utils/screenerVolume';
+import { isVolumeWithinCap, preferredVolumeSortOrder, type ScreenerVolumeMode } from '../utils/screenerVolume';
 import { ScreenerVolumeDropdown } from './ScreenerVolumeDropdown';
 import { ScreenerSortDropdown } from './ScreenerSortDropdown';
 import { compareScreenerSearchCoins, effectiveScreenerSearchConfig, matchesAdvancedScreenerFilters, normalizeScreenerSearchSettings } from '../utils/screenerSearchSettings';
@@ -830,6 +830,8 @@ export const CoinScreenerPage: React.FC<CoinScreenerPageProps> = ({
                   value={maxVolumeUsd}
                   onChange={value => {
                     setMaxVolumeUsd(value);
+                    // With volume sorting selected, show coins closest to the selected floor/ceiling first.
+                    if (sortBy === 'volume') setSortOrder(preferredVolumeSortOrder(volumeMode));
                     setDisplayLimit(50);
                   }}
                 />
@@ -838,7 +840,12 @@ export const CoinScreenerPage: React.FC<CoinScreenerPageProps> = ({
                   aria-pressed={volumeMode === 'from'}
                   title={volumeMode === 'to' ? 'Показано монети з обсягом не більше вибраного (≤). Перемкнути на від (≥).' : 'Показано монети з обсягом не менше вибраного (≥). Перемкнути на до (≤).'}
                   onClick={() => {
-                    setVolumeMode(current => current === 'to' ? 'from' : 'to');
+                    const nextMode = volumeMode === 'to' ? 'from' : 'to';
+                    setVolumeMode(nextMode);
+                    // A floor sorted from the largest volume hides the visible effect:
+                    // top-50 coins are usually above every modest threshold.
+                    // Preserve any other chosen sort metric and allow manual order overrides.
+                    if (sortBy === 'volume') setSortOrder(preferredVolumeSortOrder(nextMode));
                     setDisplayLimit(50);
                   }}
                   className="ml-auto flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-slate-700/80 text-cyan-300 transition-colors hover:border-cyan-400 hover:text-white focus:outline-none focus-visible:ring-1 focus-visible:ring-cyan-500"
