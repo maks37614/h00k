@@ -75,7 +75,7 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
   const { preferences } = useAppPreferences();
   const { user, profile } = useAuth();
   const { blocks, config, customPresets, setBlocks: updateBlocks, setConfig, setCustomPresets,
-    syncError, syncConflict, retrySync, downloadLocalBackup, restoreCloudWorkspace } = useTerminalWorkspace();
+    syncError, syncConflict, backupFailed, retrySync, downloadLocalBackup, restoreCloudWorkspace } = useTerminalWorkspace();
   const [activeMarketPreset, setActiveMarketPreset] = useState<TerminalMarketPreset | null>(null);
   const [presetMatches, setPresetMatches] = useState<MarketCoin[]>([]);
   const [presetPage, setPresetPage] = useState(0);
@@ -1022,7 +1022,9 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
       {syncConflict && (
         <div role="alert" className="z-30 flex shrink-0 flex-wrap items-center gap-2 border-b border-amber-500/35 bg-amber-950/85 px-3 py-2 text-xs text-amber-100">
           <span className="flex-1">
-            Робочу область змінено на іншому пристрої. Локальна копія збережена окремо, автоматичну синхронізацію призупинено.
+            {backupFailed
+              ? 'Недостатньо місця у сховищі браузера для локальної копії. Зараз завантажте JSON-файл, щоб не втратити графіки.'
+              : 'Робочу область змінено на іншому пристрої. Локальна копія збережена окремо, автоматичну синхронізацію призупинено.'}
           </span>
           <button type="button" onClick={downloadLocalBackup}
             className="rounded-md border border-amber-500/50 px-2 py-1 hover:bg-amber-900/60">
