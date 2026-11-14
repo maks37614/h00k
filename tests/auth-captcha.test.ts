@@ -95,7 +95,7 @@ test('Turnstile Siteverify binds success to action, hostname, unique token and o
     assert.equal(body.get('secret'), 'unit-test-secret');
     assert.equal(body.get('remoteip'), '127.0.0.1');
     const token = body.get('response') || '';
-    const success = token === 'single-use-demo' && !spent.has(token);
+    const success = ['single-use-demo', 'wrong-host', 'wrong-action'].includes(token) && !spent.has(token);
     if (success) spent.add(token);
     return new Response(JSON.stringify({ success, hostname, action }), { status });
   });
