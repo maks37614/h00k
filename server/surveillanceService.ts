@@ -822,14 +822,21 @@ export async function checkAllUserCoins(userId: string): Promise<SurveillanceCoi
   const list = [...(loadSurveillanceStore()[uid] || [])];
   if (list.length === 0) return [];
 
+  let failedChecks = 0;
   for (const coin of list) {
     try {
       // #6: check-all runs with forceCheck: true (re-evaluates current levels) but forceNotify: false
       // This strictly enforces cooldown to prevent mass Telegram spam!
       const { coin: updated } = await checkCoinSurveillance(coin, { forceCheck: true, forceNotify: false });
       commitSurveillanceCheck(updated);
-    } catch {}
+    } catch (error) {
+      failedChecks++;
+      console.error(`[Surveillance] Manual check failed for ${coin.symbol}:`, error);
+    }
   }
+  // A manual user request must not report a complete success if a durable
+  // checkpoint failed. Other coins are still checked independently.
+  if (failedChecks) throw new Error(`Не вдалося завершити перевірку ${failedChecks} монет.`);
 
   return loadSurveillanceList(uid);
 }
