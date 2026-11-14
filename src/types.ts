@@ -533,6 +533,8 @@ export interface HookChartPreferences {
   levelLabelMode?: 'always' | 'hover' | 'off';
   levelLabelColor?: string;
   levelLabelSize?: number;
+  /** Automatic price-level line width, in CSS pixels. */
+  levelLineWidth?: number;
   levelLabelStyle?: 'text' | 'filled' | 'outline';
   levelLineStyle?: 'solid' | 'dash' | 'dot';
   showBrokenLevels?: boolean;
