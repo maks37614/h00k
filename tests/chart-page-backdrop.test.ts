@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { JSDOM } from 'jsdom';
-import { captureChartPageBackdrop } from '../src/utils/chartPageBackdrop';
+import { captureChartPageBackdrop, CHART_BACKDROP_NODE_LIMIT, CHART_BACKDROP_VISIT_LIMIT } from '../src/utils/chartPageBackdrop';
 
 const source = (path: string) => readFileSync(new URL(path, import.meta.url), 'utf8');
 
@@ -47,12 +47,16 @@ test('chart background is an inert detached DOM snapshot, not a mounted copy of 
     assert.equal(snapshot.inert, true);
     assert.match(snapshot.textContent || '', /BTCUSDT/);
     assert.match(snapshot.textContent || '', /Скрінер/);
-    assert.equal(snapshot.querySelector('iframe,video,canvas,script,object,embed'), null);
-    assert.equal(snapshot.querySelector('[id]'), null);
-    assert.ok([...snapshot.querySelectorAll('input')].every(input => input.value === ''));
-    assert.ok([...snapshot.querySelectorAll('input')].every(input => !input.hasAttribute('value')));
+    assert.equal(snapshot.querySelector('iframe,video,canvas,script,object,embed,img,svg,input,textarea,select'), null,
+      'background contains no browser media or input controls at all');
+    assert.equal(snapshot.querySelector('[id],[src],[srcset],[href],[poster],[data-src],[onclick]'), null,
+      'no cloned URLs, private form properties or event attributes');
+    assert.ok(snapshot.querySelectorAll('*').length <= CHART_BACKDROP_NODE_LIMIT + 3,
+      'frozen DOM must be bounded even for complex pages');
     snapshot.querySelector('main button')!.dispatchEvent(new dom.window.Event('click', {bubbles: true}));
     assert.equal(clicked,0,'native event listener from live Screener must not be copied');
+    root.querySelector('#btc')!.dispatchEvent(new dom.window.Event('click', {bubbles:true}));
+    assert.equal(clicked,1,'original clickable Screener and its handlers remain fully functional');
     dom.window.document.body.appendChild(snapshot);
     assert.equal(snapshot.isConnected, true);
     assert.equal(root.isConnected,true,'capturing must not mutate or unmount the original page');
@@ -65,7 +69,7 @@ test('chart background is an inert detached DOM snapshot, not a mounted copy of 
   }
 });
 
-test('large DOM and offscreen content fail closed instead of adding heavy chart background work', () => {
+test('large DOM captures at most a small fixed number of nodes instead of duplicating entire Screener', () => {
   const dom = new JSDOM('<!doctype html><div id="root"><div><main></main></div></div>', {url:'http://localhost/'});
   const previousWindow=(globalThis as any).window;
   const previousHTMLElement=(globalThis as any).HTMLElement;
@@ -80,7 +84,12 @@ test('large DOM and offscreen content fail closed instead of adding heavy chart 
     const fragment=dom.window.document.createDocumentFragment();
     for(let i=0;i<9100;i++) fragment.appendChild(dom.window.document.createElement('span'));
     root.querySelector('main')!.appendChild(fragment);
-    assert.equal(captureChartPageBackdrop(root), null,'too many DOM nodes: use inert gradient fallback');
+    const preview=captureChartPageBackdrop(root)!;
+    assert.ok(preview, 'a very large page may still display a bounded visual preview');
+    assert.ok(preview.querySelectorAll('*').length <= CHART_BACKDROP_NODE_LIMIT + 3,
+      'rendering 9,100 source nodes must never create more than 220 background copies');
+    assert.equal(preview.querySelector('img,video,canvas,iframe,script'), null);
+    assert.ok(CHART_BACKDROP_VISIT_LIMIT <= 720, 'DOM traversal is budgeted as well');
   } finally {
     proto.getBoundingClientRect=oldRect;
     (globalThis as any).window=previousWindow;
@@ -108,4 +117,39 @@ test('routed chart shows backdrop behind a readable opaque HookChart and unmount
   assert.match(css, /animation:none!important/);
   assert.match(css, /pointer-events:none!important/);
   assert.match(css, /\.chart-page-backdrop::after/);
+});
+
+test('frozen background omits URL/image classes and preserved form content while retaining visual text', () => {
+  const dom = new JSDOM('<!doctype html><div id="root"><div><header><nav><button>Формації</button></nav></header><main><article class="rounded-2xl bg-[url(https://example.com/a.png)] animate-pulse"><h3>BTCUSDT</h3><img src="https://example.com/coin.png"><a href="https://example.com/private" onclick="alert(1)">Монета</a><div style="background-image:url(https://example.com/bg.png);color:rgb(255,0,0)">Дані</div><input value="password"></article></main></div></div>', {url:'https://h00k.top/'});
+  const previous = {window:(globalThis as any).window,HTMLElement:(globalThis as any).HTMLElement};
+  (globalThis as any).window = dom.window;
+  (globalThis as any).HTMLElement = dom.window.HTMLElement;
+  try {
+    const snapshot = captureChartPageBackdrop(dom.window.document.querySelector('#root > div') as HTMLElement)!;
+    assert.ok(snapshot);
+    assert.match(snapshot.textContent || '', /BTCUSDT/);
+    assert.match(snapshot.textContent || '', /Формації/);
+    assert.equal(snapshot.querySelector('img,input'), null);
+    assert.equal(snapshot.querySelector('[href],[onclick],[src]'), null);
+    assert.ok(!snapshot.outerHTML.includes('example.com'), 'no URL can survive into the chart backdrop');
+    assert.ok(!snapshot.outerHTML.includes('password'), 'old input value is never copied');
+    assert.doesNotMatch(snapshot.outerHTML, /animate-pulse/);
+  } finally {
+    Object.assign(globalThis, previous);
+    dom.window.close();
+  }
+});
+
+test('the chart route closes back into real pages with the original navigation and scanning guards', () => {
+  const app = source('../src/App.tsx');
+  assert.match(app, /if \(chartPageActive\) return;/,'regular scan must be paused behind routed chart');
+  assert.match(app, /if \(chartPageActive \|\| !earlyMode/,'early scan must be paused as well');
+  assert.match(app, /if \(chartNavigation\.current\.enteredFromApp\) \{\s*window\.history\.back\(\)/);
+  assert.match(app, /requestAnimationFrame\(\(\) => window\.scrollTo\(\{ top: savedScroll, behavior: 'auto' \}\)\)/);
+  assert.match(app, /chartBackdropSnapshotRef\.current\?\.remove\(\)/,'account change clears snapshot');
+  assert.match(app, /chartBackdropSnapshotRef\.current = null/,'closing clears snapshot');
+  assert.match(app, /!chartPageActive && !desktopPanel && <Header/,'real navigation reappears after chart close');
+  assert.match(app, /<CoinScreenerPage/);
+  assert.match(app, /<FormationCard/);
+  assert.match(app, /<TerminalPage/);
 });
