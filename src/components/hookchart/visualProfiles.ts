@@ -11,8 +11,8 @@ export const VISUAL_CONTEXTS = [
 ] as const;
 export type VisualContextId = typeof VISUAL_CONTEXTS[number]['id'];
 
-/** Hide Terminal-only layouts from standalone Screener/Formation chart settings.
- * Keep all seven profiles available in the account editor and Terminal itself. */
+/** Hide Terminal-only layouts from the shared Screener/Formation profile picker.
+ * Keep all seven profiles in storage, and allow Terminal to edit its own layouts. */
 export function selectableVisualContexts(includeTerminalContexts = true) {
   return includeTerminalContexts
     ? VISUAL_CONTEXTS
