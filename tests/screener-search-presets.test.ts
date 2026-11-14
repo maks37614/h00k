@@ -134,12 +134,28 @@ test('Screener volume arrow changes only local filter mode, preserving preset an
   const screener = source('../src/components/CoinScreenerPage.tsx');
   const dropdown = source('../src/components/ScreenerVolumeDropdown.tsx');
   const editor = source('../src/components/profile/ProfileScreenerSearchSettings.tsx');
-  assert.match(screener, /Обсяг 24год:/);
+  assert.match(screener, /t\('screenerVolume24h'\)/);
   assert.match(screener, /data-screener-volume-direction/);
   assert.match(screener, /setVolumeMode\(current => current === 'to' \? 'from' : 'to'\)/);
   assert.match(screener, /isVolumeWithinCap\(coin\.volumeUsd, maxVolumeUsd, volumeMode\)/);
   assert.match(screener, /mode=\{volumeMode\}/);
   assert.match(screener, /volumeMode, sortBy/);
-  assert.match(dropdown, /mode === 'from' \? option\.label\.replace/);
+  assert.match(dropdown, /option\.label\.replace\(/);
   assert.match(editor, /setField\('volumeMode', draft\.volumeMode === 'to' \? 'from' : 'to'\)/);
+});
+
+test('24h volume filter label is translated while preserving the requested Ukrainian wording', () => {
+  const languages = [
+    ['uk', 'Обсяг 24год:'],
+    ['en', '24h Volume:'],
+    ['pl', 'Wolumen 24 godz.:'],
+    ['ru', 'Объём 24 ч:'],
+  ];
+  for (const [language, expected] of languages) {
+    const locale = source('../src/locales/' + language + '.ts');
+    assert.ok(locale.includes('"screenerVolume24h": "' + expected + '"'));
+    for (const key of ['screenerVolumeFrom', 'screenerVolumeTo', 'screenerVolumeUnlimited']) {
+      assert.ok(locale.includes('"' + key + '":'), language + ' must translate ' + key);
+    }
+  }
 });
