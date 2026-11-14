@@ -66,7 +66,7 @@ test('initial terminal view is stored in existing profile workspace, not a new g
   const page = source('../src/components/TerminalPage.tsx');
   assert.match(types, /initialChartView\?: VisualChartProfile/);
   assert.match(hook, /config\.initialChartView = normalizeVisualProfile\(config\.initialChartView, 'terminalMedium'\)/);
-  assert.match(hook, /loadTerminalWorkspace\(uid, profile\.terminalSettings\)/);
+  assert.match(hook, /auth\.updateTerminalWorkspace\(\{/);
   assert.match(page, /terminalInitialView=\{config\.initialChartView\}/);
   assert.match(page, /<TerminalSettingsDrawer/);
 });
@@ -220,4 +220,41 @@ test('legacy workspaces with over 50 charts paginate without discarding saved ch
   const gridEnd = page.indexOf('{/* Add Chart Modal */}', gridStart);
   assert.ok(gridStart >= 0 && gridEnd > gridStart);
   assert.doesNotMatch(page.slice(gridStart, gridEnd), /\{blocks\.map\(/);
+});
+
+test('terminal profile sync rejects cross-device changes and keeps a recoverable local backup', () => {
+  const hook = source('../src/utils/useTerminalWorkspace.ts');
+  const panel = source('../src/components/terminal/TerminalPresetPanel.tsx');
+  const auth = source('../src/context/AuthContext.tsx');
+  const backend = source('../server/pgIdentity.ts');
+  assert.match(hook, /auth\.updateTerminalWorkspace\(\{/);
+  assert.match(hook, /serverVersion\.current/);
+  assert.match(hook, /error\.code === 'TERMINAL_WORKSPACE_CONFLICT'/);
+  assert.match(hook, /syncConflictRef\.current/);
+  assert.match(hook, /onDownloadLocalBackup|downloadLocalBackup/);
+  assert.match(panel, /syncConflict \? 'Інший пристрій/);
+  assert.match(panel, /Завантажити локальну копію/);
+  assert.match(auth, /updateTerminalWorkspace: \(/);
+  assert.match(backend, /COALESCE\(profile -> 'terminalSettings' ->> 'version', ''\) = \$3/);
+  assert.match(backend, /new AuthFailure\(409, .*'TERMINAL_WORKSPACE_CONFLICT'\)/);
+});
+
+test('old Terminal workspaces stay readable and the server issues new revision tokens', () => {
+  const preset = source('../src/utils/useTerminalWorkspace.ts');
+  const types = source('../src/types.ts');
+  const backend = source('../server/pgIdentity.ts');
+  assert.match(preset, /normalizeTerminalBlocks\(settings\.blocks\)/);
+  assert.match(types, /interface TerminalWorkspaceSettings \{[\s\S]*?version\?: string;/);
+  assert.match(backend, /patch\.terminalSettings = \{ \.\.\.safeWorkspace, version: randomUUID\(\) \}/);
+});
+
+test('Terminal always chooses native HookChart, never legacy TradingView even on old accounts', () => {
+  const page = source('../src/components/TerminalPage.tsx');
+  const widget = source('../src/components/terminal/TerminalChartWidget.tsx');
+  const wrapper = source('../src/components/ExchangeCandlestickChart.tsx');
+  assert.match(page, /const chartProvider = normalizeChartProvider\('hookchart'\)/);
+  assert.match(widget, /const chartProvider = normalizeChartProvider\('hookchart'\)/);
+  assert.match(page, /<ExchangeCandlestickChart\s+forceHookChart/);
+  assert.match(widget, /<ExchangeCandlestickChart\s+forceHookChart/);
+  assert.match(wrapper, /forceHookChart=\{forceHookChart\}/);
 });
