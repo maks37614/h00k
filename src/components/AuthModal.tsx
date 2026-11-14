@@ -44,7 +44,12 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       setCaptchaEpoch(value => value + 1);
       clearAuthError();
     }
-  }, [isOpen, initialMode, resetToken]);
+  }, [isOpen, initialMode]);
+  // A successful reset clears resetToken. Do not clear authNotice again when it
+  // changes: the "password updated" success message must remain visible.
+  useEffect(() => {
+    if (isOpen && resetToken) setMode('reset');
+  }, [isOpen, resetToken]);
 
   useEffect(() => {
     if (!isOpen) return;
