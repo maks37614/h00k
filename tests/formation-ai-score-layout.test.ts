@@ -8,15 +8,36 @@ const ui = source('../src/components/FormationDetailsModal.tsx');
 const server = source('../server.ts');
 const gemini = source('../server/geminiService.ts');
 
-test('the large auto-updating Smart Analysis block is replaced with a single detected setup panel', () => {
-  assert.doesNotMatch(ui, /<SmartAnalysisBlock/);
-  assert.doesNotMatch(ui, /РОЗУМНИЙ АНАЛІЗ/);
-  assert.doesNotMatch(ui, /Інституційний Розбір Формації/);
-  assert.match(ui, /const tradeSetupPanel = \(/);
-  assert.match(ui, /id="formation-trade-setup-card"/);
-  assert.match(ui, /\{tradeSetupPanel\}/);
-  assert.equal((ui.match(/\{tradeSetupPanel\}/g) || []).length, 1,
-    'the detected setup is mounted once, never duplicated');
+const smart = source('../src/components/SmartAnalysisBlock.tsx');
+
+test('restore AI + Quant and replace ONLY its two top ratings with the detected setup', () => {
+  assert.match(ui, /<SmartAnalysisBlock coin=\{coin\} formation=\{formation\} klines=\{klines\} timeframe=\{timeframe\}/);
+  assert.match(ui, /tradeSetup=\{tradeSetupPanel\} onCollapse=\{toggleSmartAnalysis\}/);
+  assert.match(ui, /smartAnalysisCollapsed \? \(/);
+  assert.match(ui, /onClick=\{toggleSmartAnalysis\}/);
+  assert.match(ui, /readSmartAnalysisPanelCollapsed/);
+  assert.match(ui, /saveSmartAnalysisPanelCollapsed/);
+  assert.match(ui, /updateProfileData\(\{ smartAnalysisCollapsed: next \}\)/);
+  assert.equal((smart.match(/\{tradeSetup\}/g) || []).length, 4,
+    'detected setup is rendered once per branch, including loading and error');
+  assert.equal((ui.match(/id="formation-trade-setup-card"/g) || []).length, 1,
+    'Entry/TP/SL and Telegram form only one logical setup card');
+  assert.match(smart, /РОЗУМНИЙ АНАЛІЗ/);
+  assert.match(smart, /AI \+ Quant/);
+  assert.doesNotMatch(smart, /Ринкова оцінка \(не сигнал входу\)/);
+  assert.doesNotMatch(smart, /Автоматично згенероване резюме/);
+  const start = smart.indexOf('      {/* Canonical detected setup:');
+  const atr = smart.indexOf('      {/* Only ATR remains', start);
+  assert.ok(start > 0 && atr > start, 'detected setup replaces top two ratings, followed by ATR');
+  assert.match(smart.slice(start, atr), /\{tradeSetup\}/);
+  assert.match(smart, /fetch\(`\/api\/market\/smart-analysis\?\$\{queryParams\.toString\(\)\}`/);
+  assert.match(smart, /analysisAbortRef\.current\?\.abort\(\)/);
+  for (const retained of ['ATR (14) / Волатильність', 'Аналіз Holders', 'Великий учасник',
+    'Маркет-мейкер', 'Маніпулятивність', 'Контекст BTC', 'RSI, EMA, Об\'єми та Спред',
+    'Стакан, POC та Ліквідність', 'Open Interest та Деривативи']) {
+    assert.ok(smart.includes(retained), 'AI+Quant module missing: ' + retained);
+  }
+  assert.match(smart, /onClick=\{fetchAnalysis\}/);
   for (const label of ['Виявлена формація','Якість сетапу','Торгові рівні (Setup)',
     'Точка входу (Entry):','Ціль (Take Profit):','Стоп-лос (Stop Loss):',
     'Сповіщення в Telegram']) {
