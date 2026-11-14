@@ -13,6 +13,19 @@ export class SurveillanceManager {
   public readonly alertManager = new StateMachineAndAlerts();
 
   private isStarted = false;
+  private startupRetryTimer: ReturnType<typeof setTimeout> | null = null;
+  private readonly startupRetryMs = 30_000;
+
+  /** A broken or temporarily unreadable store must not permanently disable
+   * all 24/7 workers. Keep one unref'ed retry instead of a busy polling loop. */
+  private scheduleStartupRetry() {
+    if (this.startupRetryTimer || this.isStarted) return;
+    this.startupRetryTimer = setTimeout(() => {
+      this.startupRetryTimer = null;
+      if (!this.isStarted) this.start();
+    }, this.startupRetryMs);
+    this.startupRetryTimer.unref();
+  }
 
   public static getInstance(): SurveillanceManager {
     if (!SurveillanceManager.instance) {
@@ -25,10 +38,12 @@ export class SurveillanceManager {
 
   public start() {
     if (this.isStarted) return;
-    this.isStarted = true;
     console.log('[SurveillanceManager] 🛰 Starting 24/7 Surveillance Engine...');
 
-    // Boot up active workers for all persisted coins
+    // Boot up active workers for all persisted coins. Commit startup only
+    // after the persisted source has been loaded and every worker attached.
+    // On a partial failure, startWorkerForCoin reuses existing workers safely
+    // on the next attempt, so neither stream subscriptions nor timers double.
     try {
       const store = loadSurveillanceStore();
       let activeCount = 0;
@@ -42,9 +57,17 @@ export class SurveillanceManager {
           }
         }
       }
+      this.isStarted = true;
+      if (this.startupRetryTimer) {
+        clearTimeout(this.startupRetryTimer);
+        this.startupRetryTimer = null;
+      }
       console.log(`[SurveillanceManager] Successfully initialized ${activeCount} active 24/7 surveillance workers.`);
     } catch (e) {
-      console.error('[SurveillanceManager] Error booting workers:', e);
+      // A failed read previously left isStarted=true forever, even after the
+      // operator repaired surveillance.json or restored disk access.
+      console.error('[SurveillanceManager] Error booting workers; retrying:', e);
+      this.scheduleStartupRetry();
     }
   }
 
