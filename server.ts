@@ -48,6 +48,7 @@ import { normalizeExchangeSymbol } from './src/utils/marketSymbols';
 import { cronManager } from './server/cronService';
 import { surveillanceManager } from './server/surveillance/surveillanceManager';
 import { surveillanceReplayEngine } from './server/surveillance/replayEngine';
+import { hasFreshSurveillanceCheck, wasSurveillanceCheckCommitted } from './server/surveillance/checkResult';
 import { fetchHookChartOIHistory } from './server/hookchartOI';
 import { requireUserAuth } from './server/userAuth';
 import { sendUserTelegramMessage, startTelegramDeliveryWorker } from './server/telegramDelivery';
@@ -663,8 +664,15 @@ async function startServer() {
           return res.status(503).json({ success: false, error: 'Не вдалося зберегти нагляд. Спробуйте пізніше.' });
         surveillanceManager.startWorkerForCoin(existing);
         const { coin: checked } = await checkCoinSurveillance(existing, true);
+        // The subscription is already saved. If exchange candles are down,
+        // report a pending first analysis rather than inventing a fresh one.
+        if (!hasFreshSurveillanceCheck(existing, checked))
+          return res.status(202).json({ success: true, pending: true, coin: existing,
+            message: 'Нагляд активовано. Очікуємо актуальні свічки біржі.' });
         const committed = commitSurveillanceCheck(checked);
         if (!committed) return res.status(404).json({ success: false, error: 'Монету видалено під час перевірки' });
+        if (!wasSurveillanceCheckCommitted(checked, committed))
+          return res.status(409).json({ success: false, error: 'Налаштування монети змінилися під час перевірки' });
         return res.json({ success: true, coin: committed, message: 'Монету активовано для системного нагляду' });
       }
 
@@ -694,8 +702,13 @@ async function startServer() {
         return res.status(503).json({ success: false, error: 'Не вдалося зберегти монету. Спробуйте пізніше.' });
       surveillanceManager.startWorkerForCoin(newCoin);
       const { coin: checkedCoin } = await checkCoinSurveillance(newCoin, true);
+      if (!hasFreshSurveillanceCheck(newCoin, checkedCoin))
+        return res.status(202).json({ success: true, pending: true, coin: newCoin,
+          message: 'Монету збережено в нагляді. Очікуємо актуальні свічки біржі.' });
       const committed = commitSurveillanceCheck(checkedCoin);
       if (!committed) return res.status(404).json({ success: false, error: 'Монету видалено під час перевірки' });
+      if (!wasSurveillanceCheckCommitted(checkedCoin, committed))
+        return res.status(409).json({ success: false, error: 'Налаштування монети змінилися під час перевірки' });
 
       res.json({ success: true, coin: committed, message: 'Монету успішно додано на 24/7 системний нагляд!' });
     } catch (err: any) {
@@ -812,8 +825,14 @@ async function startServer() {
         forceCheck: true,
         forceNotify: Boolean(forceNotify),
       });
+      if (!hasFreshSurveillanceCheck(found.coin, updated))
+        return res.status(503).setHeader('Retry-After', '10').json({
+          success: false, error: 'Біржа не надала актуальних свічок для перевірки. Спробуйте пізніше.',
+        });
       const committed = commitSurveillanceCheck(updated);
       if (!committed) return res.status(404).json({ success: false, error: 'Монету видалено під час перевірки' });
+      if (!wasSurveillanceCheckCommitted(updated, committed))
+        return res.status(409).json({ success: false, error: 'Налаштування монети змінилися під час перевірки' });
 
       res.json({ success: true, coin: committed });
     } catch (err: any) {
