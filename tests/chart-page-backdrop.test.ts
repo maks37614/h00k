@@ -153,3 +153,41 @@ test('the chart route closes back into real pages with the original navigation a
   assert.match(app, /<FormationCard/);
   assert.match(app, /<TerminalPage/);
 });
+
+test('mobile background has a smaller resource budget and never performs a live update', () => {
+  const dom = new JSDOM('<!doctype html><div id="root"><div><header>Скрінер</header><main></main></div></div>', {url:'https://h00k.top/#screener'});
+  const previous={window:(globalThis as any).window,HTMLElement:(globalThis as any).HTMLElement};
+  (globalThis as any).window=dom.window;
+  (globalThis as any).HTMLElement=dom.window.HTMLElement;
+  Object.defineProperty(dom.window,'innerWidth',{value:390, configurable:true});
+  try {
+    const main=dom.window.document.querySelector('main')!;
+    for(let i=0;i<400;i++){
+      const node=dom.window.document.createElement('span');
+      node.textContent='BTCUSDT';
+      main.appendChild(node);
+    }
+    const screenshot=captureChartPageBackdrop(dom.window.document.querySelector('#root > div') as HTMLElement)!;
+    assert.ok(screenshot);
+    assert.ok(screenshot.querySelectorAll('*').length <= 143, 'mobile captures at most 140 visible elements');
+    assert.equal(screenshot.querySelector('script,img,canvas,video,iframe'),null);
+    assert.equal(typeof (screenshot as any).update,'undefined','the snapshot has no updater or live subscriptions');
+  } finally {
+    Object.assign(globalThis,previous);
+    dom.window.close();
+  }
+});
+
+test('the original Screener tears down periodic network refresh and restores personal filters on return', () => {
+  const screener=source('../src/components/CoinScreenerPage.tsx');
+  assert.match(screener,/const screenerUiSession = new Map/);
+  assert.match(screener,/const cachedUi = screenerUiSession\.get\(user\?\.uid \|\| 'guest'\)/);
+  for(const field of ['searchQuery','exchange','marketType','sortBy','sortOrder','secondarySortBy','secondarySortOrder','viewMode','displayLimit']){
+    assert.match(screener,new RegExp('cachedUi\\?\\.'+field), 'screen must restore '+field);
+  }
+  assert.match(screener,/screenerUiSession\.set\(user\?\.uid \|\| 'guest'/);
+  assert.match(screener,/const interval = setInterval\(\(\) => \{ void fetchCoins\(\); \}, 30_000\)/);
+  assert.match(screener,/clearInterval\(interval\)/, 'old Screener must stop polling while chart is open');
+  assert.match(screener,/currentRequest\.current\?\.controller\.abort\(\)/,
+    'in-flight Screener requests must be aborted on unmount');
+});
