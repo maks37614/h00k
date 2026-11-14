@@ -171,10 +171,8 @@ export class CoinWorker {
   }
 
   private setupStreamListeners() {
-    this.streamClient.on('error', (err) => {
-      console.warn(`[CoinWorker ${this.coin.symbol}] Stream error:`, err.message);
-    });
-
+    // Market-wide socket errors are logged once by SharedExchangeStream;
+    // adding an error handler per owner multiplies logs under an outage.
     // Live ticker and trades are now maintained once in SharedExchangeStream.
     // Candle aggregation is independently shared by SharedCandleFeed.
 
