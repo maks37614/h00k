@@ -30,6 +30,10 @@ test('reported progress is based on observed bytes, never elapsed time',()=>{
     fs.mkdirSync(path.join(root,'resources'));
     fs.writeFileSync(path.join(root,'h00k Desktop.exe'),Buffer.alloc(4096));
     fs.writeFileSync(path.join(root,'resources','app.asar'),Buffer.alloc(8192));
+    // NSIS may preserve a source archive's old modification timestamp;
+    // a newly extracted file still counts as real disk activity.
+    const oldTime=new Date('2020-01-01T00:00:00Z');
+    fs.utimesSync(path.join(root,'resources','app.asar'),oldTime,oldTime);
     const actual=core.folderScan(root,started);
     assert.equal(actual.files,2);
     assert.equal(actual.bytes,12288);
