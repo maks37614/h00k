@@ -110,9 +110,11 @@ if (typeof window !== 'undefined') {
   window.addEventListener('pagehide', persist);
   // Mobile browsers can freeze or discard a background tab without pagehide.
   // Persist on visibility loss to retain exact unique-ID session totals.
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'hidden' && pendingStorage.size) persist();
-  });
+  if (typeof document !== 'undefined') {
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden' && pendingStorage.size) persist();
+    });
+  }
 }
 
 export function sessionLiquidationScope(exchange: string, marketType: string, symbol: string): string {
