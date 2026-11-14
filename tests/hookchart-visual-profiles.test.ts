@@ -77,7 +77,7 @@ test('capture records relative viewport properties, not fixed prices or ticker',
   assert.equal(capturedWithGap.verticalZoom, .4);
 });
 
-test('Graph tab uses existing personal settings persistence and preview without market fetch', () => {
+test('Масштаб tab uses existing personal settings persistence and preview without market fetch', () => {
   const prefs = normalizeOriginalHookChartPreferences({
     visualProfiles:patchVisualProfile(undefined,'formationsFull:mobile',{visibleBars:140}),
   });
@@ -85,7 +85,7 @@ test('Graph tab uses existing personal settings persistence and preview without 
   const html = renderToStaticMarkup(React.createElement(OriginalHookChartSettings,{
     open:true,embedded:true,prefs,onChange:()=>{},onApplyStrategy:()=>{},onClose:()=>{},
   }));
-  assert.match(html, />Графік<\/button>/);
+  assert.match(html, />Масштаб<\/button>/);
   const settings = src('../src/components/hookchart/OriginalHookChartSettings.tsx');
   assert.match(settings,/Компактний перегляд масштабу/);
   assert.match(settings,/Зберегти поточний вигляд графіка/);

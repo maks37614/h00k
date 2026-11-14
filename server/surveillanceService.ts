@@ -37,6 +37,17 @@ function ensureDataDir() {
   }
 }
 
+/** Only a genuinely missing file means there is no saved store. Permission,
+ * I/O and filesystem failures are errors and must never become an empty list. */
+function readStoreFileIfPresent(filename: string): string | null {
+  try {
+    return fs.readFileSync(filename, 'utf-8');
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null;
+    throw error;
+  }
+}
+
 interface UserSurveillanceStore {
   [userId: string]: SurveillanceCoin[];
 }
@@ -54,58 +65,77 @@ function formatPrice(val: number): string {
 
 export function loadSurveillanceStore(): UserSurveillanceStore {
   if (isStoreLoaded) return storeCache;
-  try {
-    ensureDataDir();
-    if (fs.existsSync(SURVEILLANCE_FILE)) {
-      const raw = fs.readFileSync(SURVEILLANCE_FILE, 'utf-8');
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) {
-        // Migrate legacy array format to user-keyed object format
-        storeCache = {};
-        for (const item of parsed) {
-          if (item && typeof item === 'object') {
-            const uid = (item.userId && String(item.userId).trim()) || 'guest';
-            if (!storeCache[uid]) storeCache[uid] = [];
-            storeCache[uid].push(item);
-          }
-        }
-        saveSurveillanceStore(storeCache);
-      } else if (parsed && typeof parsed === 'object') {
-        storeCache = parsed;
-      } else {
-        storeCache = {};
+
+  // Do not acknowledge an empty account list when the on-disk source is
+  // unreadable, malformed, or cannot be migrated. A later write must never
+  // erase someone's 24/7-monitor configuration because of a read failure.
+  ensureDataDir();
+  let candidate: UserSurveillanceStore = Object.create(null) as UserSurveillanceStore;
+  let migrated = false;
+
+  const raw = readStoreFileIfPresent(SURVEILLANCE_FILE);
+  if (raw !== null) {
+    const parsed: unknown = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      // Legacy single-list format: migrate once without losing the old file
+      // when the atomic rename fails.
+      for (const item of parsed) {
+        if (!item || typeof item !== 'object' || Array.isArray(item))
+          throw new Error('Invalid legacy surveillance.json coin');
+        const record = item as SurveillanceCoin;
+        const uid = (typeof record.userId === 'string' && record.userId.trim()) || 'guest';
+        (candidate[uid] ??= []).push(record);
       }
+      migrated = true;
+    } else if (parsed && typeof parsed === 'object') {
+      candidate = parsed as UserSurveillanceStore;
     } else {
-      const legacyFile = path.join(DATA_DIR, 'surveillance_legacy.json');
-      if (fs.existsSync(legacyFile)) {
-        const raw = fs.readFileSync(legacyFile, 'utf-8');
-        const list = JSON.parse(raw);
-        if (Array.isArray(list)) {
-          storeCache = { guest: list };
-          saveSurveillanceStore(storeCache);
-        }
-      }
+      throw new Error('Invalid surveillance.json: expected a user-keyed object or legacy array');
     }
-  } catch (err) {
-    console.error('Failed to read surveillance.json:', err);
-    storeCache = {};
+  } else {
+    const legacyFile = path.join(DATA_DIR, 'surveillance_legacy.json');
+    const legacyRaw = readStoreFileIfPresent(legacyFile);
+    if (legacyRaw !== null) {
+      const legacy: unknown = JSON.parse(legacyRaw);
+      if (!Array.isArray(legacy))
+        throw new Error('Invalid surveillance_legacy.json: expected an array');
+      candidate = { guest: legacy as SurveillanceCoin[] };
+      migrated = true;
+    }
   }
-  // Older guest copies shared IDs, causing one user's worker to replace another's.
+
+  // Repair guest ownership and duplicate worker IDs using a separate staging
+  // copy. Never mutate the cached user store until the fixed file is durable.
   const ids = new Set<string>();
   let repaired = false;
-  for (const [userId, coins] of Object.entries(storeCache)) {
-    if (!Array.isArray(coins)) { delete storeCache[userId]; repaired = true; continue; }
-    for (const coin of coins) {
-      if (coin.userId !== userId) { coin.userId = userId; repaired = true; }
-      if (!coin.id || ids.has(coin.id)) { coin.id = `surv_${randomUUID()}`; repaired = true; }
-      ids.add(coin.id);
-    }
+  const normalized: UserSurveillanceStore = Object.create(null) as UserSurveillanceStore;
+  for (const [userId, coins] of Object.entries(candidate)) {
+    if (!Array.isArray(coins))
+      throw new Error(`Invalid surveillance.json: account ${userId} must contain a coin list`);
+    normalized[userId] = coins.map((coin) => {
+      if (!coin || typeof coin !== 'object' || Array.isArray(coin))
+        throw new Error(`Invalid surveillance.json: malformed coin for account ${userId}`);
+      const newId = typeof coin.id === 'string' && coin.id.trim() && !ids.has(coin.id)
+        ? coin.id : `surv_${randomUUID()}`;
+      ids.add(newId);
+      if (coin.userId !== userId || coin.id !== newId) {
+        repaired = true;
+        return { ...coin, userId, id: newId };
+      }
+      return coin;
+    });
   }
-  if (repaired) saveSurveillanceStore(storeCache);
+
+  if (migrated || repaired) {
+    if (!saveSurveillanceStore(normalized))
+      throw new Error('Failed to persist migrated surveillance.json; original file preserved');
+  } else {
+    storeCache = normalized;
+  }
+  // Mark loaded only after validating every owner and committing migrations.
   isStoreLoaded = true;
   return storeCache;
 }
-
 export function saveSurveillanceStore(store: UserSurveillanceStore): boolean {
   const started = performance.now();
   let bytes = 0;
@@ -113,7 +143,7 @@ export function saveSurveillanceStore(store: UserSurveillanceStore): boolean {
     ensureDataDir();
     let safeStore: UserSurveillanceStore = store;
     if (Array.isArray(store)) {
-      safeStore = {};
+      safeStore = Object.create(null) as UserSurveillanceStore;
       for (const item of store as any[]) {
         if (item && typeof item === 'object') {
           const uid = (item.userId && String(item.userId).trim()) || 'guest';
