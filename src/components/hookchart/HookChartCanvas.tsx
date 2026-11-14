@@ -167,7 +167,10 @@ const HookChartCanvas = forwardRef<HookChartHandle, HookChartCanvasProps>(functi
   const remoteSeries = visibleScopedRemoteSeries(remoteState, historyScope, !replay && !externalData);
   // One immutable rolling aggregate per local higher timeframe, not a
   // 5,000-candle rebuild every time a live trade updates the last bar.
-  const aggregateCache = useRef(new Map<string, AggregationCache>());
+  const aggregateCache = useRef<{
+    scope: string;
+    series: Map<string, AggregationCache>;
+  }>({ scope: historyScope, series: new Map() });
   const [oi, setOi] = useState(EMPTY_OI);
   const [oiError, setOiError] = useState(false);
   const [saveError, setSaveError] = useState(false);
@@ -423,6 +426,11 @@ const HookChartCanvas = forwardRef<HookChartHandle, HookChartCanvasProps>(functi
   }, [exchange, marketType, symbol, timeframe, replay, !!externalData, analysisTfKey, settings.levelHistory, settings.trendHistory, historyScope]);
 
   const analysisSeries = useMemo(() => {
+    // Switching instrument/TF must release old candle arrays immediately,
+    // not keep up to sixteen old market histories in every Terminal card.
+    if (aggregateCache.current.scope !== historyScope) {
+      aggregateCache.current = { scope: historyScope, series: new Map() };
+    }
     const series: Record<string, Candle[]> = { [timeframe]: candles };
     for (const tf of analysisTfs) {
       if (tf === timeframe) continue;
@@ -435,13 +443,11 @@ const HookChartCanvas = forwardRef<HookChartHandle, HookChartCanvasProps>(functi
         if (aggregated.length) series[tf] = aggregated;
         continue;
       }
-      const key = `${historyScope}:${tf}`;
-      const next = updateHookChartAggregation(candles, timeframe, tf, aggregateCache.current.get(key));
-      aggregateCache.current.set(key, next);
-      // Keep only a few cached instrument/timeframe pairs if the user switches
-      // coins or timeframe repeatedly within a mounted Terminal chart.
-      while (aggregateCache.current.size > 16)
-        aggregateCache.current.delete(aggregateCache.current.keys().next().value!);
+      const next = updateHookChartAggregation(candles, timeframe, tf, aggregateCache.current.series.get(tf));
+      aggregateCache.current.series.set(tf, next);
+      // At most the current instrument's eight supported timeframe variants.
+      while (aggregateCache.current.series.size > 8)
+        aggregateCache.current.series.delete(aggregateCache.current.series.keys().next().value!);
       if (next.candles.length) series[tf] = next.candles;
     }
     return series;
