@@ -9,6 +9,7 @@ type Entry = {
   source: ExchangeStreamClient;
   refs: number;
   lastResyncAt: number;
+  lastErrorLoggedAt: number;
   bids: Map<number, number>;
   asks: Map<number, number>;
   depthSequence: number;
@@ -42,13 +43,27 @@ export class SharedExchangeStreamHandle {
       // Do not issue a memory-leak warning for many legitimate subscribers.
       // The registry still drops each consumer's listeners at release time.
       source.setMaxListeners(0);
-      entry = { key, source, refs: 0, lastResyncAt: 0,
+      entry = { key, source, refs: 0, lastResyncAt: 0, lastErrorLoggedAt: 0,
         bids: new Map(), asks: new Map(), depthSequence: 0, depthEventTime: 0, depthReceivedAt: 0 };
       entries.set(key, entry);
       // Maintain an instrument-level snapshot so a subscriber joining an
       // already-running WS can initialize its own book without reconnecting
       // or resetting the stream for every existing user.
       const shared = entry;
+      // SharedCandleFeed may create the public socket before any CoinWorker
+      // has registered an error listener. Node's EventEmitter throws on an
+      // unhandled 'error', potentially terminating the entire h00k process.
+      // Keep one lifetime-bound fallback listener per underlying connection.
+      source.on('error', (error: unknown) => {
+        // Individual workers log their own errors when already subscribed.
+        // Rate-limit only the otherwise unobserved bootstrap case.
+        if (source.listenerCount('error') > 1) return;
+        const now = Date.now();
+        if (now - shared.lastErrorLoggedAt < 30_000) return;
+        shared.lastErrorLoggedAt = now;
+        console.warn(`[SharedExchangeStream] ${shared.key}: initial stream error:`,
+          error instanceof Error ? error.message : 'unknown exchange stream error');
+      });
       source.on('status', (status: string) => {
         if (status !== 'LIVE') {
           shared.depthSequence = 0;
@@ -70,6 +85,9 @@ export class SharedExchangeStreamHandle {
         } else if (!shared.depthSequence || delta.sequence! <= shared.depthSequence) {
           return;
         }
+        // Use *parsed numeric* levels rather than the original untrusted
+        // tuples. A string-valued WebSocket fallback must not poison a late
+        // subscriber's numerical book with string Map keys or quantities.
         for (const [p, q] of bids) q > 0 ? shared.bids.set(p, q) : shared.bids.delete(p);
         for (const [p, q] of asks) q > 0 ? shared.asks.set(p, q) : shared.asks.delete(p);
         shared.depthSequence = delta.sequence!;
