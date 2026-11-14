@@ -325,34 +325,37 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
     });
   }, []);
 
-  // Watchlist favorites items
+  // Favorites are keyed by symbol, not exchange; prefer the exact market
+  // already open in this workspace instead of silently selecting Binance.
   const favoriteCoins = useMemo(() => {
-    const uniqueSymbols: string[] = Array.from(new Set<string>(localWatchlist));
-    const coinsMap = new Map<string, ScannedCoin>();
-    coins.forEach((c) => {
-      if (!coinsMap.has(c.symbol)) {
-        coinsMap.set(c.symbol, c);
-      }
-    });
-
-    return uniqueSymbols.map((sym: string) => {
-      const found = coinsMap.get(sym);
+    const bySymbol = new Map<string, ScannedCoin[]>();
+    for (const coin of coins) {
+      const group = bySymbol.get(coin.symbol);
+      if (group) group.push(coin);
+      else bySymbol.set(coin.symbol, [coin]);
+    }
+    const preferredExchange = coinPresetSelection.exchange === 'all' ? 'binance' : coinPresetSelection.exchange;
+    const preferredMarket = coinPresetSelection.marketType === 'all' ? 'futures' : coinPresetSelection.marketType;
+    const openMarketsBySymbol = new Map(blocks.map(block => [block.symbol, block] as const));
+    return [...new Set(localWatchlist)].map(symbol => {
+      const matches = bySymbol.get(symbol) || [];
+      const open = openMarketsBySymbol.get(symbol);
+      const found = (open && matches.find(coin => coinMarketKey(coin) === coinMarketKey(open)))
+        || matches.find(coin => coin.exchange === preferredExchange && coin.marketType === preferredMarket)
+        || matches.find(coin => coin.exchange === preferredExchange)
+        || matches.find(coin => coin.marketType === preferredMarket)
+        || matches[0];
       if (found) return found;
-      const clean = sym.toUpperCase();
-      const base = clean.replace(/(USDT|BUSD|USDC)$/, '') || clean;
-      const quote = clean.slice(base.length) || 'USDT';
+      const clean = symbol.toUpperCase();
+      const { symbol: normalized, quoteAsset } = normalizeTerminalMarketPair(clean);
       return {
-        symbol: clean,
-        baseAsset: base,
-        quoteAsset: quote,
-        exchange: 'binance' as ExchangeId,
-        marketType: 'futures' as MarketType,
-        currentPrice: 0,
-        priceChange24h: 0,
-        formations: [],
+        symbol: normalized, baseAsset: normalized.slice(0, -quoteAsset.length), quoteAsset,
+        exchange: open?.exchange || preferredExchange,
+        marketType: open?.marketType || preferredMarket,
+        currentPrice: 0, priceChange24h: 0, formations: [],
       } as unknown as ScannedCoin;
     });
-  }, [coins, localWatchlist]);
+  }, [coins, localWatchlist, blocks, coinPresetSelection.exchange, coinPresetSelection.marketType]);
 
   const filteredFavorites = useMemo(() => {
     if (!searchQuery.trim()) return favoriteCoins;
