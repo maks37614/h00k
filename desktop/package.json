@@ -1,7 +1,7 @@
 {
   "name": "h00k-desktop",
   "version": "0.1.5",
-  "description": "h00k Smart Dock for Windows trading terminals",
+  "description": "h00k Desktop application for Windows trading terminals",
   "private": true,
   "main": "main.cjs",
   "scripts": {
