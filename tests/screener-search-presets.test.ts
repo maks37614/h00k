@@ -210,7 +210,7 @@ test('price, volatility and 24h high/low filters are inclusive and combine witho
 });
 
 const formCoin = (ratio: number, confirmed = true, closedCandleOnly = true): ScannedCoin => ({
-  formations: [{ validation: { breakoutConfirmed: confirmed, closedCandleOnly, volumeRatio } }],
+  formations: [{ validation: { breakoutConfirmed: confirmed, closedCandleOnly, volumeRatio: ratio } }],
 } as unknown as ScannedCoin);
 
 test('only cached detected formations count; breakout RVOL must be confirmed and from closed candles', () => {
