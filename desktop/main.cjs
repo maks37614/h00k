@@ -1,5 +1,5 @@
 'use strict';
-const { app, BrowserWindow, WebContentsView, Menu, ipcMain, screen, shell } = require('electron');
+const { app, BrowserWindow, WebContentsView, Menu, ipcMain, screen, shell, nativeTheme } = require('electron');
 const { spawn } = require('node:child_process');
 const path = require('node:path');
 const fs = require('node:fs');
@@ -9,6 +9,8 @@ const { normalizeFloatingBounds, restoreFloatingBounds, floatingLayoutKey } = re
 const { PROVIDERS, PANELS, normalizeSettings, normalizeProfile, matchesTerminal, availablePanels } = require('./profiles.cjs');
 
 const WEBSITE = 'https://h00k.top/';
+// Make the native Windows captions match the dark h00k desktop surfaces.
+if (process.platform === 'win32' && nativeTheme) nativeTheme.themeSource = 'dark';
 // Align Windows taskbar notifications and pinned shortcuts with the branded EXE.
 if (process.platform === 'win32') app.setAppUserModelId('top.h00k.desktop');
 const LABELS = { metascalp: 'MetaScalp', tiger: 'Tiger.Trade', vataga: 'Vataga' };
@@ -159,8 +161,8 @@ function makeContentWindow(provider, id, mode = 'full') {
 }
 function createSettingsWindow() {
   settingsWindow = new BrowserWindow({
-    title: 'h00k Desktop • Налаштування прикріплення', width: 740, height: 810, minWidth: 550, minHeight: 590,
-    backgroundColor: '#070a12', autoHideMenuBar: true,
+    title: 'h00k Desktop • Налаштування прикріплення', width: 780, height: 830, minWidth: 580, minHeight: 590,
+    backgroundColor: '#070d18', autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'), nodeIntegration: false,
       contextIsolation: true, sandbox: true,
@@ -193,6 +195,19 @@ function openToolbarMenu(event) {
   const owner = toolbarOwners.get(event.sender.id);
   if (!owner || event.sender.isDestroyed() || owner.win.isDestroyed()) return;
   const { provider, win } = owner;
+  // The independent h00k window has no external terminal profile, but its local gear
+  // still offers full settings and a direct shortcut to each terminal configuration.
+  if (!provider) {
+    const standaloneMenu = Menu.buildFromTemplate([
+      { label: '⚙ Налаштування прикріплення…', click: () => openSettingsWindow() },
+      { type: 'separator' },
+      ...PROVIDERS.map(id => ({ label: 'Налаштувати ' + LABELS[id], click: () => openSettingsWindow(id) })),
+      { type: 'separator' },
+      { label: 'Відкрити h00k.top у браузері', click: () => void shell.openExternal(WEBSITE) },
+    ]);
+    standaloneMenu.popup({ window: win });
+    return;
+  }
   const profile = settings.profiles[provider];
   const label = LABELS[provider];
   const sides = [
@@ -314,7 +329,7 @@ function preferredFloatingBounds(provider, id, profile, fallback, restore) {
 function syncWindows() {
   for (const provider of PROVIDERS) {
     const profile = settings.profiles[provider];
-    const ready = profile.enabled && (profile.autoAttach || manualAttached.has(provider));
+    const ready = settings.setupComplete && profile.enabled && (profile.autoAttach || manualAttached.has(provider));
     if (!ready) { closeProvider(provider); lastDockStatus[provider] = 'Вимкнено'; continue; }
     const target = findTarget(provider);
     const layoutKey = floatingLayoutKey(profile);
@@ -439,6 +454,7 @@ function registerIpc() {
     // Floating panels are manually draggable by default.
     if (previous.mode !== 'floating' && update.mode === 'floating' && !Object.hasOwn(patch,'follow')) update.follow = false;
     settings.profiles[provider] = update;
+    settings.setupComplete = true; // Saving the first-run configuration completes onboarding.
     saveSettings(); syncWindows(); pushSnapshot();
     return snapshot();
   });
@@ -461,6 +477,7 @@ function registerIpc() {
     verifySettingsSender(event);
     if (!PROVIDERS.includes(provider)) throw new Error('Invalid terminal');
     settings.profiles[provider].enabled = true;
+    settings.setupComplete = true;
     manualAttached.add(provider);
     saveSettings(); syncWindows(); pushSnapshot(); return snapshot();
   });
@@ -479,12 +496,13 @@ function registerIpc() {
     verifySettingsSender(event);
     if (!standalone || standalone.isDestroyed()) {
       standalone = new BrowserWindow({
-        title:'h00k.top', width:1280,height:850,minWidth:400,minHeight:300,
-        backgroundColor:'#070a12',autoHideMenuBar:true,
+        title:'h00k Desktop', width:1280,height:850,minWidth:400,minHeight:300,
+        backgroundColor:'#070d18',autoHideMenuBar:true,
         webPreferences:{sandbox:true,nodeIntegration:false,contextIsolation:true,
           partition:'persist:h00k',webSecurity:true},
       });
       guardWebsite(standalone);
+      attachDockToolbar(standalone, null); // A persistent right-hand quick-settings gear, isolated from h00k.top.
       standalone.loadURL(WEBSITE).catch(err=>console.warn('h00k load error:',err.message));
       standalone.on('closed',()=>{standalone=null;});
     } else standalone.show();
