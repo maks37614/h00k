@@ -87,6 +87,6 @@ test('level-line and caption controls appear next to each other and reach real c
   assert.match(engine, /q\.lineWidth=autoLevelLineWidth/);
   assert.match(engine, /levelLabelSize,levelLineWidth,levelLabelStyle/);
   assert.match(engine, /\$\{levelFontSize\}px system-ui/);
-  assert.match(mainSettingHelpText('Автоматичні рівні', 'Розмір міток рівнів'), /товщину ліній/);
-  assert.match(mainSettingHelpText('Автоматичні рівні', 'Розмір тексту міток рівнів'), /текстових підписів/);
+  assert.match(mainSettingHelpText('Автоматичні рівні', 'Розмір міток рівнів') ?? '', /товщину ліній/);
+  assert.match(mainSettingHelpText('Автоматичні рівні', 'Розмір тексту міток рівнів') ?? '', /текстових підписів/);
 });
