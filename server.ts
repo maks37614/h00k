@@ -667,7 +667,7 @@ async function startServer() {
         // The subscription is already saved. If exchange candles are down,
         // report a pending first analysis rather than inventing a fresh one.
         if (!hasFreshSurveillanceCheck(existing, checked))
-          return res.status(202).json({ success: true, pending: true, coin: existing,
+          return res.json({ success: true, pending: true, coin: existing,
             message: 'Нагляд активовано. Очікуємо актуальні свічки біржі.' });
         const committed = commitSurveillanceCheck(checked);
         if (!committed) return res.status(404).json({ success: false, error: 'Монету видалено під час перевірки' });
@@ -703,7 +703,7 @@ async function startServer() {
       surveillanceManager.startWorkerForCoin(newCoin);
       const { coin: checkedCoin } = await checkCoinSurveillance(newCoin, true);
       if (!hasFreshSurveillanceCheck({ lastCheckedAt: undefined }, checkedCoin))
-        return res.status(202).json({ success: true, pending: true, coin: newCoin,
+        return res.json({ success: true, pending: true, coin: newCoin,
           message: 'Монету збережено в нагляді. Очікуємо актуальні свічки біржі.' });
       const committed = commitSurveillanceCheck(checkedCoin);
       if (!committed) return res.status(404).json({ success: false, error: 'Монету видалено під час перевірки' });
