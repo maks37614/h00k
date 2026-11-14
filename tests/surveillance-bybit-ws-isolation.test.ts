@@ -27,10 +27,14 @@ test('Bybit Futures ticker rejects stale or cross-market frames and never recycl
     send({lastPrice:'101'});
     send({openInterest:'11'});
     send({openInterestValue:'1100'});
+    assert.deepEqual(prices,[100,101],
+      'OI-only and funding-only deltas must not refresh an old price as new');
     assert.deepEqual(oi.map(x=>x.valueUsd),[1000],
       'price-only and partial-OI deltas must not turn cached fields into fresh samples');
     now+=100;
     send({openInterest:'12',openInterestValue:'1200'});
+    send({fundingRate:'0.003'});
+    assert.deepEqual(prices,[100,101]);
     assert.deepEqual(oi.map(x=>x.valueUsd),[1000,1200]);
     assert.ok(oi.every(x=>x.time>=now-200));
   } finally { client.destroy(); }
