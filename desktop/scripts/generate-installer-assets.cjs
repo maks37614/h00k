@@ -31,7 +31,7 @@ function sidebar(uninstall){
  +'<rect x="21" y="180" width="30" height="3" rx="1.5" fill="'+C+'"/>'
  +'<text x="20" y="217" font-family="Segoe UI,Arial,sans-serif" font-weight="800" font-size="32" fill="'+TEXT+'">h00k</text>'
  +'<text x="20" y="237" font-family="Segoe UI,Arial,sans-serif" letter-spacing="2" font-size="13" font-weight="700" fill="'+C+'">DESKTOP</text>'
- +'<text x="20" y="261" font-family="Segoe UI,Arial,sans-serif" font-size="10" fill="'+MUTED+'">SMART DOCK</text>'
+ +'<text x="20" y="261" font-family="Segoe UI,Arial,sans-serif" font-size="10" fill="'+MUTED+'">WINDOWS</text>'
  +'<text x="20" y="297" font-family="Segoe UI,Arial,sans-serif" font-size="9" fill="'+LIGHT+'">'
  +(uninstall?'UNINSTALL':'INSTALL')+' - h00k.top</text>');
 }
