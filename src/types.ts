@@ -795,14 +795,16 @@ export interface SmartAnalysisData {
 
   // 3. BTC Multi-Timeframe Context
   btcContext: {
-    btcPrice: number;
-    change24h: number;
+    /** No invented quotes. Null means BTC quote unavailable. */
+    btcPrice: number | null;
+    change24h: number | null;
+    available: boolean;
     timeframes: {
-      '15m': { direction: 'up' | 'down' | 'sideways'; structure: 'HH_HL' | 'LH_LL' | 'range'; label: string };
-      '5m': { direction: 'up' | 'down' | 'sideways'; structure: 'HH_HL' | 'LH_LL' | 'range'; label: string };
-      '1m': { direction: 'up' | 'down' | 'sideways'; structure: 'HH_HL' | 'LH_LL' | 'range'; label: string };
+      '15m': { direction: 'up' | 'down' | 'sideways'; structure: 'HH_HL' | 'LH_LL' | 'range' | 'unknown'; label: string };
+      '5m': { direction: 'up' | 'down' | 'sideways'; structure: 'HH_HL' | 'LH_LL' | 'range' | 'unknown'; label: string };
+      '1m': { direction: 'up' | 'down' | 'sideways'; structure: 'HH_HL' | 'LH_LL' | 'range' | 'unknown'; label: string };
     };
-    overallStructure: 'HH_HL' | 'LH_LL' | 'range';
+    overallStructure: 'HH_HL' | 'LH_LL' | 'range' | 'unknown';
     overallStructureLabel: string;
     hasSharpImpulse: boolean;
     impulseType: 'pump' | 'dump' | 'none';
@@ -816,15 +818,15 @@ export interface SmartAnalysisData {
 
   // 4. Volumes, Spread & Volatility
   volumeMetrics: {
-    volume24hUsd: number;
-    volume1hUsd: number;
-    volume1hSpikeRatio: number;
+    volume24hUsd: number | null;
+    volume1hUsd: number | null;
+    volume1hSpikeRatio: number | null;
     hasVolumeSpike: boolean;
   };
   spread: {
-    spreadUsd: number;
-    spreadPct: number;
-    quality: 'ultra_tight' | 'normal' | 'wide';
+    spreadUsd: number | null;
+    spreadPct: number | null;
+    quality: 'ultra_tight' | 'normal' | 'wide' | 'unavailable';
   };
   volatility: {
     dailyRangePct: number;
@@ -837,12 +839,15 @@ export interface SmartAnalysisData {
 
   // 5. Orderbook & Walls
   orderbook: {
-    bidAskRatio: number;
-    dominantSide: 'bids' | 'asks' | 'balanced';
-    bidWallUsd: number;
-    bidWallPrice: number;
-    askWallUsd: number;
-    askWallPrice: number;
+    /** Depth of the selected exchange+market only. */
+    available: boolean;
+    source: string;
+    bidAskRatio: number | null;
+    dominantSide: 'bids' | 'asks' | 'balanced' | 'unavailable';
+    bidWallUsd: number | null;
+    bidWallPrice: number | null;
+    askWallUsd: number | null;
+    askWallPrice: number | null;
     largeOrders: Array<{
       side: 'bid' | 'ask';
       price: number;
@@ -875,8 +880,9 @@ export interface SmartAnalysisData {
 
   // 7. POC, Liquidity Levels & S/R
   levels: {
-    pocPrice: number;
-    pocVolumePct: number;
+    /** Approximate candle-based POC, not a true tick-volume profile. */
+    pocPrice: number | null;
+    pocVolumePct: number | null;
     liquidityLevels: Array<{
       label: string;
       price: number;
@@ -891,23 +897,23 @@ export interface SmartAnalysisData {
   participants: {
     // 1. Аналіз Holders
     holders: {
-      status: 'accumulation' | 'distribution' | 'neutral';
+      status: 'accumulation' | 'distribution' | 'neutral' | 'unavailable';
       statusLabel: string;
-      top10ConcentrationPct: number;
-      activeWalletsGrowthPct: number;
-      retailVsWhaleRatio: string;
+      top10ConcentrationPct: number | null;
+      activeWalletsGrowthPct: number | null;
+      retailVsWhaleRatio: string | null;
       phaseDescription: string;
     };
     // 2. Авто-виявлення Великого Учасника (Whale / Smart Money)
     largePlayer: {
-      detected: boolean;
-      confidencePct: number;
+      detected: boolean | null;
+      confidencePct: number | null;
       actionType: 'accumulation' | 'absorption' | 'twap_buying' | 'distribution' | 'none';
       actionLabel: string;
-      clusterVolumeUsd: number;
+      clusterVolumeUsd: number | null;
       details: string;
       trackedClusters: Array<{
-        type: 'iceberg' | 'block_trade' | 'absorption' | 'twap';
+        type: 'iceberg' | 'block_trade' | 'absorption' | 'twap' | 'limit_order';
         side: 'buy' | 'sell';
         price: number;
         volumeUsd: number;
@@ -916,38 +922,38 @@ export interface SmartAnalysisData {
     };
     // 3. Авто-виявлення Маркет-Мейкерів
     marketMaker: {
-      detected: boolean;
-      activityLevel: 'high' | 'moderate' | 'low';
+      detected: boolean | null;
+      activityLevel: 'high' | 'moderate' | 'low' | 'unknown';
       activityLabel: string;
-      algorithmType: 'hft_grid' | 'spread_arbitrage' | 'synthetic_liquidity' | 'passive_quoting';
-      spreadSupportScore: number; // 0 - 100
-      orderbookReplenishmentSpeed: 'ultra_fast' | 'normal' | 'slow';
-      antiSqueezeProtection: boolean;
+      algorithmType: 'hft_grid' | 'spread_arbitrage' | 'synthetic_liquidity' | 'passive_quoting' | null;
+      spreadSupportScore: number | null;
+      orderbookReplenishmentSpeed: 'ultra_fast' | 'normal' | 'slow' | 'unknown';
+      antiSqueezeProtection: boolean | null;
       details: string;
     };
     // 4. Авто-виявлення Маніпулятивних Монет
     manipulativeCoin: {
-      isManipulative: boolean;
-      riskScore: number; // 0 to 100
-      riskLevel: 'low' | 'medium' | 'high' | 'extreme';
+      isManipulative: boolean | null;
+      riskScore: number | null;
+      riskLevel: 'low' | 'medium' | 'high' | 'extreme' | 'unknown';
       riskLabel: string;
       signals: Array<{
         name: string;
-        detected: boolean;
+        detected: boolean | null;
         severity: 'low' | 'medium' | 'high';
         description: string;
       }>;
       warningSummary: string;
     };
     // Backwards compatibility legacy fields
-    holdersStatus?: 'accumulation' | 'distribution' | 'neutral';
-    holdersConcentrationPct?: number;
-    largePlayerDetected?: boolean;
+    holdersStatus?: 'accumulation' | 'distribution' | 'neutral' | 'unavailable';
+    holdersConcentrationPct?: number | null;
+    largePlayerDetected?: boolean | null;
     largePlayerNote?: string;
-    marketMakerDetected?: boolean;
+    marketMakerDetected?: boolean | null;
     marketMakerNote?: string;
-    isManipulativeCoin?: boolean;
-    manipulativeRiskLevel?: 'low' | 'medium' | 'high' | 'extreme';
+    isManipulativeCoin?: boolean | null;
+    manipulativeRiskLevel?: 'low' | 'medium' | 'high' | 'extreme' | 'unknown';
     manipulativeReasons?: string[];
   };
 }
