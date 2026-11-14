@@ -487,7 +487,11 @@ export class CoinWorker {
 
     // 7. Macro & BTC Context
     const btcContext = await this.macroEngine.updateBTCContext();
-    if (this.isDestroyed || !this.coin.isActive) return;
+    // A network/macro fetch can take longer than a quote's freshness
+    // window. Never emit a setup based on the pre-await price if the
+    // market disconnected or traded to a different current price meanwhile.
+    if (this.isDestroyed || !this.coin.isActive ||
+        !this.streamClient.hasFreshMarketQuote() || this.currentPrice !== price) return;
 
     // 8. Setup Detection & Confluence Engine
     this.setups = this.setupEngine.evaluateSetups({
