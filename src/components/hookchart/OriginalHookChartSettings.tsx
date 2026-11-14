@@ -101,6 +101,7 @@ export const ORIGINAL_HOOKCHART_DEFAULTS: HookChartPreferences = {
   levelLabelMode: 'always',
   levelLabelColor: '#2090F0',
   levelLabelSize: 11,
+  levelLineWidth: 1,
   levelLabelStyle: 'text',
   levelLineStyle: 'solid',
   allowWick: true,
@@ -172,7 +173,9 @@ export function normalizeOriginalHookChartPreferences(source?: HookChartPreferen
     ? [...new Set(source.levelIntervals.filter(tf => ['5m', '15m', '1h', '4h', '1d'].includes(tf)))]
     : ['1h', '4h', '1d'];
   next.levelLabelColor = /^#[0-9a-f]{6}$/i.test(source?.levelLabelColor || '') ? source!.levelLabelColor : '#2090F0';
-  next.levelLabelSize = Number.isFinite(source?.levelLabelSize) ? Math.max(0.2, Math.min(20, source!.levelLabelSize!)) : 11;
+  // Preserve existing users' level-label font sizes; the new line width is separate.
+  next.levelLabelSize = Number.isFinite(source?.levelLabelSize) ? Math.max(10, Math.min(24, source!.levelLabelSize!)) : 11;
+  next.levelLineWidth = Number.isFinite(source?.levelLineWidth) ? Math.max(0.2, Math.min(5, source!.levelLineWidth!)) : 1;
   next.levelLabelStyle = ['text', 'filled', 'outline'].includes(source?.levelLabelStyle || '') ? source!.levelLabelStyle : 'text';
   next.levelLineStyle = ['solid', 'dash', 'dot'].includes(source?.levelLineStyle || '') ? source!.levelLineStyle : 'solid';
   const overlays = source?.overlays || [];
@@ -952,7 +955,8 @@ export function OriginalHookChartSettings({
           <Section title="Автоматичні рівні">
             <MultiChoice label="Таймфрейми автовизначення рівнів" desc="Можна вибрати всі п’ять таймфреймів. За замовчуванням: 1г, 4г і 1d; 5 хв та 15 хв вимкнено. Зніміть усі, щоб вимкнути автовизначення." values={['5m', '15m', '1h', '4h', '1d']} selected={prefs.levelIntervals || []} toggle={value => toggleArray('levelIntervals', value)} />
             <Setting label="Колір міток рівнів" desc="Колір активних рівнів та їхніх підписів. Пробиті рівні залишаються сірими."><input className="colorInput" aria-label="Колір міток рівнів" type="color" value={prefs.levelLabelColor || '#2090F0'} onChange={event => set('levelLabelColor', event.target.value)} /></Setting>
-            <Setting label="Розмір міток рівнів"><Num value={prefs.levelLabelSize ?? 11} min={0.2} max={20} step={0.1} set={value => set('levelLabelSize', value)} /><b className="valueBadge">px</b></Setting>
+            <Setting label="Розмір міток рівнів"><Num value={prefs.levelLineWidth ?? 1} min={0.2} max={5} step={0.1} set={value => set('levelLineWidth', value)} /><b className="valueBadge">px</b></Setting>
+            <Setting label="Розмір тексту міток рівнів"><Num value={prefs.levelLabelSize ?? 11} min={10} max={24} step={1} set={value => set('levelLabelSize', value)} /><b className="valueBadge">px</b></Setting>
             <Choice label="Тип міток рівнів" values={['text', 'filled', 'outline']} labels={['Текст', 'Із заливкою', 'Із рамкою']} value={prefs.levelLabelStyle || 'text'} set={value => set('levelLabelStyle', value)} />
             <Choice label="Тип ліній рівнів" values={['solid', 'dash', 'dot']} labels={['Суцільна', 'Пунктир', 'Крапки']} value={prefs.levelLineStyle || 'solid'} set={value => set('levelLineStyle', value)} />
             <SwitchRow unavailable label="Показувати у списку найближчі рівні" value={prefs.showNearestLevels !== false} onChange={value => set('showNearestLevels', value)} />
