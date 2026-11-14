@@ -236,7 +236,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
           {/* Install guide lives in the user's profile, not in the main header. */}
           <section className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-cyan-500/30 bg-slate-950/70 p-3">
             <div className="min-w-0 flex-1">
-              <h3 className="text-xs font-bold text-cyan-200">Програма H00K</h3>
+              <h3 className="text-xs font-bold text-cyan-200">Програма h00k</h3>
               <p className="mt-1 text-[11px] leading-relaxed text-slate-400">
                 Встановіть H00K на Windows, Android, iPhone, Mac або Linux прямо із сайту.
               </p>
