@@ -193,16 +193,27 @@ export async function retryPendingTelegramMessages(): Promise<void> {
   if (retryFlight) return retryFlight;
   retryFlight = (async () => {
     const due = load().filter(item => item.status === 'pending' && item.nextAttemptAt <= Date.now()).slice(0, 20);
-    for (const record of due) {
-      try {
-        await deliver(record);
-      } catch {
-        // One undurable Telegram acknowledgment must not block unrelated
-        // accounts in this retry batch. Keep its last durable 'pending' state;
-        // the next scheduled pass can retry it after storage recovers.
-        console.error('[Telegram] Could not persist a delivery retry; continuing the queue');
+    // A slow Telegram chat must not delay the retries of every other user:
+    // the per-bot admission pacer and per-chat FIFO still regulate HTTP sends.
+    // Bound retry concurrency to protect memory and avoid floods on recovery.
+    let next = 0;
+    const runner = async () => {
+      while (next < due.length) {
+        const record = due[next++];
+        // Foreground delivery might have completed after selecting this
+        // batch. Never send an already-acknowledged notification again.
+        const current = recordsById.get(record.id);
+        if (!current || current.status !== 'pending' || current.nextAttemptAt > Date.now()) continue;
+        try {
+          await deliver(current);
+        } catch {
+          // One undurable Telegram acknowledgment must not block unrelated
+          // accounts. The last durable pending record remains retryable.
+          console.error('[Telegram] Could not persist a delivery retry; continuing the queue');
+        }
       }
-    }
+    };
+    await Promise.all(Array.from({ length: Math.min(due.length, 6) }, () => runner()));
   })().finally(() => { retryFlight = undefined; });
   return retryFlight;
 }
