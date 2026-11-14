@@ -297,8 +297,11 @@ function readTokenMap(): Record<string, Contract> {
     return obj && typeof obj === 'object' && !Array.isArray(obj) ? obj : {};
   } catch { return {}; }
 }
+const configuredBudget = Number(process.env.COINGECKO_HOLDERS_MONTHLY_BUDGET);
 export const coingeckoHolders = createCoinGeckoHoldersService({
   apiKey: process.env.COINGECKO_DEMO_API_KEY,
   tokenMap: readTokenMap(),
+  maxMonthlyCalls: Number.isSafeInteger(configuredBudget) && configuredBudget > 0
+    ? configuredBudget : 8000,
   storageFile: resolve('server/data/coingecko-holders-budget.json'),
 });
