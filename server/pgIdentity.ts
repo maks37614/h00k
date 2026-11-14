@@ -163,20 +163,62 @@ async function sendActionMail(email: string, purpose: 'verify-email' | 'reset-pa
   }
 }
 
-async function actionFor(userId: string, email: string, purpose: 'verify-email' | 'reset-password') {
+type AuthMailClaim = { id: number; attempts: number };
+
+// For outbox mail, token issuance must be serialized with password changes and
+// email verification, which lock the same auth_users row first. Never create a
+// fresh actionable token from an outbox job that has already been canceled or
+// reclaimed by another worker. Registration's first email remains synchronous.
+async function actionFor(
+  userId: string, email: string, purpose: 'verify-email' | 'reset-password',
+  claim?: AuthMailClaim,
+): Promise<boolean> {
   const token = randomToken();
   const hash = hashToken(token);
-  // Each email token is one-use, expiring and stored only as a SHA-256 hash.
-  // Keep earlier, not-yet-used links valid until they expire or the action succeeds:
-  // a worker crash after SMTP acceptance must not invalidate a delivered link.
-  await database().query('INSERT INTO auth_action_tokens (token_hash, user_id, purpose, expires_at) VALUES ($1, $2, $3, now() + make_interval(secs => $4::int))',
-    [hash, userId, purpose, purpose === 'verify-email' ? 86400 : 1800]);
+  if (claim) {
+    const client = await database().connect();
+    try {
+      await client.query('BEGIN');
+      const { rows: users } = await client.query(
+        'SELECT email_verified_at FROM auth_users WHERE id = $1 FOR UPDATE',
+        [userId],
+      );
+      const { rows: claims } = await client.query(`
+        SELECT id FROM auth_mail_outbox
+        WHERE id = $1 AND user_id = $2 AND purpose = $3
+          AND attempts = $4 AND completed_at IS NULL
+        FOR UPDATE
+      `, [claim.id, userId, purpose, claim.attempts]);
+      if (!users[0] || !claims[0] || (purpose === 'verify-email' && users[0].email_verified_at)) {
+        await client.query('ROLLBACK');
+        return false;
+      }
+      await client.query(
+        'INSERT INTO auth_action_tokens (token_hash, user_id, purpose, expires_at) VALUES ($1, $2, $3, now() + make_interval(secs => $4::int))',
+        [hash, userId, purpose, purpose === 'verify-email' ? 86400 : 1800],
+      );
+      await client.query('COMMIT');
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw error;
+    } finally {
+      client.release();
+    }
+  } else {
+    await database().query(
+      'INSERT INTO auth_action_tokens (token_hash, user_id, purpose, expires_at) VALUES ($1, $2, $3, now() + make_interval(secs => $4::int))',
+      [hash, userId, purpose, purpose === 'verify-email' ? 86400 : 1800],
+    );
+  }
+  // Existing delivered links remain usable until expiry or the account action
+  // succeeds. A crash after SMTP acceptance must not invalidate older links.
   try {
     await sendActionMail(email, purpose, token);
   } catch (error) {
     await database().query('DELETE FROM auth_action_tokens WHERE token_hash = $1', [hash]).catch(() => {});
     throw error;
   }
+  return true;
 }
 
 function accountShape(row: any) {
@@ -276,13 +318,14 @@ export async function processAuthMailJobs(): Promise<{ processed: number; delive
     );
     let delivered = 0;
     if (account.rows[0] && (job.purpose !== 'verify-email' || !account.rows[0].email_verified_at)) {
-      await actionFor(job.user_id, account.rows[0].email, job.purpose);
-      delivered = 1;
+      delivered = await actionFor(job.user_id, account.rows[0].email, job.purpose, job) ? 1 : 0;
     }
-    await database().query(
-      'UPDATE auth_mail_outbox SET completed_at = now(), claimed_until = NULL WHERE id = $1',
-      [job.id],
-    );
+    // Fence old workers with the claim's attempt number. A successful password
+    // change or email verification may have completed the job during SMTP.
+    await database().query(`
+      UPDATE auth_mail_outbox SET completed_at = now(), claimed_until = NULL
+      WHERE id = $1 AND attempts = $2 AND completed_at IS NULL
+    `, [job.id, job.attempts]);
     return { processed: 1, delivered };
   } catch (error) {
     // Never log the email, authentication token or SMTP credentials.
@@ -294,8 +337,8 @@ export async function processAuthMailJobs(): Promise<{ processed: number; delive
       SET claimed_until = NULL,
           available_at = now() + make_interval(secs => $2::integer),
           completed_at = CASE WHEN $3::boolean THEN now() ELSE NULL END
-      WHERE id = $1
-    `, [job.id, delay, terminal]);
+      WHERE id = $1 AND attempts = $4 AND completed_at IS NULL
+    `, [job.id, delay, terminal, job.attempts]);
     return { processed: 1, delivered: 0 };
   }
 }

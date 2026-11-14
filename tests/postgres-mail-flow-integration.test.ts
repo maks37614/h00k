@@ -34,11 +34,16 @@ test('real PostgreSQL and captured SMTP: register, verify, login, recover, resen
   const email = 'auth-mail-' + id1 + '@example.invalid';
   const email2 = 'auth-resend-' + id2 + '@example.invalid';
   let mailFails = false;
+  let beforeMailDelivery: ((item: CapturedMail) => Promise<void>) | null = null;
   const mail: CapturedMail[] = [];
 
   // Replace only the transport, not the auth or SQL logic. Never send external mail in CI.
   t.mock.method(nodemailer, 'createTransport', () => ({
     async sendMail(item: CapturedMail) {
+      // Simulate a password reset, verification or worker takeover mid-SMTP.
+      const hook = beforeMailDelivery;
+      beforeMailDelivery = null;
+      if (hook) await hook(item);
       if (mailFails) throw new Error('Simulated SMTP transport outage');
       mail.push(item);
       return { accepted: [item.to] };
@@ -246,6 +251,56 @@ test('real PostgreSQL and captured SMTP: register, verify, login, recover, resen
       token: tokenFrom(lastMail, 'verifyEmail'),
     });
     assert.equal(verifyAfterRetry.status, 200, 'SMTP failure does not strand a new account');
+
+    // Regression: if a user completes account recovery while a worker is
+    // sending email, the stale worker must not resurrect the canceled queue
+    // item after SMTP returns an error.
+    const reopenRecovery = async () => {
+      await db!.query(`
+        UPDATE auth_mail_outbox SET completed_at = now() - interval '2 minutes'
+        WHERE user_id = (SELECT id FROM auth_users WHERE email = $1)
+          AND purpose = 'reset-password' AND completed_at IS NOT NULL
+      `, [email]);
+      await sendReset(email);
+    };
+    await reopenRecovery();
+    mailFails = true;
+    beforeMailDelivery = async () => {
+      await db!.query(`
+        UPDATE auth_mail_outbox SET completed_at = now(), claimed_until = NULL
+        WHERE user_id = (SELECT id FROM auth_users WHERE email = $1)
+          AND purpose = 'reset-password' AND completed_at IS NULL
+      `, [email]);
+    };
+    assert.deepEqual(await processAuthMailJobs(), { processed: 1, delivered: 0 });
+    const canceled = await db.query(`
+      SELECT count(*)::int AS count FROM auth_mail_outbox
+      WHERE user_id = (SELECT id FROM auth_users WHERE email = $1)
+        AND purpose = 'reset-password' AND completed_at IS NULL
+    `, [email]);
+    assert.equal(canceled.rows[0].count, 0, 'failed SMTP must never reopen canceled recovery jobs');
+
+    // Regression: if an expired claim was taken over by another worker,
+    // stale success/failure handlers must not mutate the new worker's claim.
+    await reopenRecovery();
+    beforeMailDelivery = async () => {
+      await db!.query(`
+        UPDATE auth_mail_outbox SET attempts = attempts + 1,
+          claimed_until = now() + interval '60 seconds'
+        WHERE user_id = (SELECT id FROM auth_users WHERE email = $1)
+          AND purpose = 'reset-password' AND completed_at IS NULL
+      `, [email]);
+    };
+    assert.deepEqual(await processAuthMailJobs(), { processed: 1, delivered: 0 });
+    const reclaimed = await db.query(`
+      SELECT attempts, claimed_until, completed_at FROM auth_mail_outbox
+      WHERE user_id = (SELECT id FROM auth_users WHERE email = $1)
+        AND purpose = 'reset-password' AND completed_at IS NULL
+    `, [email]);
+    assert.equal(reclaimed.rows.length, 1);
+    assert.equal(reclaimed.rows[0].attempts, 2, 'new claim attempt must not be overwritten');
+    assert.ok(reclaimed.rows[0].claimed_until, 'stale worker must not release the newer claim');
+    mailFails = false;
   } finally {
     if (server) await new Promise<void>((resolve, reject) =>
       server!.close(error => error ? reject(error) : resolve()));
