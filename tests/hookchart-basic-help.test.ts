@@ -26,7 +26,7 @@ test('every Basic HookChart control has its own contextual explanation', () => {
     const explanation = mainSettingHelpText(section, item[2]);
     assert.ok(explanation && explanation.length >= 35, `Missing explanation: ${section} / ${item[2]}`);
   }
-  assert.equal(controls, 88, 'all currently available Basic settings must have explanatory help');
+  assert.equal(controls, 86, 'all Basic and Levels settings must have explanatory help');
   assert.notEqual(mainSettingHelpText('Відносний об’єм (колонка VR)', 'Кількість свічок'),
     mainSettingHelpText('Кількість угод (лише Binance)', 'Кількість свічок'),
     'the same label must explain a different function depending on its section');
@@ -37,8 +37,8 @@ test('each Basic setting renders one small question-mark trigger, even when unav
     open: true, embedded: true, prefs: normalizeOriginalHookChartPreferences(),
     onChange: () => {}, onApplyStrategy: () => {}, onClose: () => {},
   }));
-  assert.equal((html.match(/aria-label="Пояснення: /g) || []).length, 68);
-  assert.equal((html.match(/class="visualSettingHelp mainSettingHelp"/g) || []).length, 68);
+  assert.equal((html.match(/aria-label="Пояснення: /g) || []).length, 66);
+  assert.equal((html.match(/class="visualSettingHelp mainSettingHelp"/g) || []).length, 66);
   assert.match(html, /Пояснення: Зі сповіщень відкривати графіки в новому вікні/);
   assert.match(html, /Пояснення: Показувати колонку OI/);
   assert.match(html, /Пояснення: Кількість свічок Pavg/);
@@ -116,4 +116,10 @@ test('dedicated Levels tab owns the auto levels, S/R and round-number settings w
   const saved = normalizeOriginalHookChartPreferences({ levelLineWidth: 1, levelLabelSize: 11 });
   assert.equal(saved.levelLineWidth, 1);
   assert.equal(saved.levelLabelSize, 11, 'saved preferences survive the new defaults');
+});
+
+test('deprecated HookChart Data and Sorting controls are absent from the editor', () => {
+  const source = code('../src/components/hookchart/OriginalHookChartSettings.tsx');
+  assert.doesNotMatch(source, /Дані та сортування|Типи та порядок сортування|Інтервали аналізу/);
+  assert.doesNotMatch(source, /sortEnabled|sortDisabled|analyzedIntervals/);
 });
