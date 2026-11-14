@@ -1299,7 +1299,7 @@ const HookChartCanvas = forwardRef<HookChartHandle, HookChartCanvasProps>(functi
               }
             }}
           >
-            <MapIcon size={17} strokeWidth={1.9} aria-hidden="true" />
+            <MapIcon size={15} strokeWidth={1.9} aria-hidden="true" />
           </button>
         </div>}
         {!replay && <button
