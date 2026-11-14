@@ -23,6 +23,7 @@ const locale: LocaleFile = {
     "screenerVolume24h": "Объём 24 ч:",
     "screenerVolumeTo": "До",
     "screenerVolumeFrom": "От",
+    "screenerVolumeUnlimited": "Без ограничений",
     "addToSurveillance": "Добавить в наблюдение",
     "language": "Язык сайта",
     "allExchanges": "Все биржи",
