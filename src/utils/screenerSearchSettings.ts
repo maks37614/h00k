@@ -206,6 +206,9 @@ export function matchesAdvancedScreenerFilters(
   if (config.minBreakoutRvol > 0 && !scanned?.formations?.some(formation =>
     formation.validation?.breakoutConfirmed === true
     && formation.validation?.closedCandleOnly === true
+    && formation.validation?.lookAheadSafe === true
+    && formation.validation?.finiteData === true
+    && formation.validation?.enoughData === true
     && Number.isFinite(formation.validation.volumeRatio)
     && formation.validation.volumeRatio >= config.minBreakoutRvol)) return false;
   return true;
