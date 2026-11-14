@@ -157,3 +157,13 @@ test('Terminal favorite preset construction indexes quotes and workspace blocks 
   assert.match(panel, /workspaceBlocksByMarket\.get\(coinMarketKey\(/);
   assert.doesNotMatch(panel, /snapshot\.coins\.filter\(coin => coin\.symbol === symbol/);
 });
+
+test('hidden Terminal market-presets menu only ranks the active category while preserving auto-refresh', () => {
+  const panel = readFileSync(new URL('../src/components/terminal/TerminalPresetPanel.tsx', import.meta.url), 'utf8');
+  const page = readFileSync(new URL('../src/components/TerminalPage.tsx', import.meta.url), 'utf8');
+  assert.match(page, /menuOpen=\{showCoinPresets\}/);
+  assert.match(panel, /const ids = menuOpen \? MARKET_PRESETS\.map\(preset => preset\.id\)/);
+  assert.match(panel, /: activePreset \? \[activePreset\] : \[\]/);
+  assert.match(panel, /if \(activePreset && autoUpdate && !error && readyCoins\[activePreset\]\.length\)/);
+  assert.match(panel, /selectMarketPresetCoins\(snapshot\.coins, id, selection, Number\.POSITIVE_INFINITY\)/);
+});
