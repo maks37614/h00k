@@ -302,7 +302,8 @@ export const TerminalChartWidget: React.FC<TerminalChartWidgetProps> = ({
       volume24hUsd: 0,
       formations: [],
       timeframe: block.timeframe,
-      lastUpdated: Date.now(),
+      // No exchange quote exists for this instrument yet; don't mark it fresh.
+      lastUpdated: 0,
       exchangeUrl: '',
     };
   }, [
