@@ -223,3 +223,35 @@ pinned taskbar shortcut still shows an old image, unpin the old shortcut, remove
 the existing desktop shortcut if needed, and pin the new h00k Desktop executable
 after installing v0.1.5. That is a Windows icon cache behavior, not a reason
 to overwrite or restart the h00k VPS.
+
+## v0.1.7 — four-language Windows installer and translated first-run guide
+
+The real NSIS setup (not just the design mockup) now offers a first-page
+language selector: **English (default), Polski, Русский, Українська**.
+English is the initial choice even on non-English Windows installations.
+Choosing a language changes the native NSIS wizard labels, h00k welcome,
+desktop-shortcut prompt, and the post-install onboarding pages. The installer
+remembers the explicit selection for later upgrades; the uninstaller uses
+that language too.
+
+After the application files install, three translated onboarding pages explain:
+
+1. Starting h00k Desktop and selecting a MetaScalp, Tiger.Trade or Vataga window.
+2. Full-site / selected page / floating window modes, placement on all sides,
+   automatic follow, and the gear shortcut for quick settings.
+3. Existing MetaScalp/Tiger symbol linking, current limits of the Vataga API,
+   and safe read-only exchange API keys (when used in supported h00k features).
+
+**Security:** h00k Smart Dock does **not** need API keys; never give trading
+or withdrawal permissions to a read-only connection. Docking Vataga windows
+is supported, but automatic ticker linking over a Vataga API has not been
+implemented because the external protocol has not been confirmed.
+
+The translations are maintained centrally in
+`desktop/i18n/installer.json`. Run `npm run installer-locales` to regenerate
+`desktop/build/installer-locales.nsh`; `npm test` and `npm run dist` regenerate
+it automatically. Silent installations support an explicit
+`/H00K_LANG=en`, `/H00K_LANG=pl`, `/H00K_LANG=ru`, or `/H00K_LANG=uk`.
+Without a previous choice, silent installs also default to English.
+Windows CI smoke-tests English default, Polish, Russian and Ukrainian choices
+and persisted registry language, while preserving the shortcut preference.
