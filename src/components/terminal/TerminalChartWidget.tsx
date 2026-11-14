@@ -542,14 +542,16 @@ export const TerminalChartWidget: React.FC<TerminalChartWidgetProps> = ({
   // Embedded TradingView is reserved for a focused chart; grid cards use the lighter local chart.
   const shouldUseTradingViewEmbed = isSingleBlock || isMaximized;
 
-  // Filtered coins for in-place switcher
+  // With up to 50 chart cards, do not scan the full market list for closed
+  // switchers whenever the Terminal refreshes its shared market snapshot.
   const filteredCoins = useMemo(() => {
+    if (!isCoinPickerOpen) return [];
     if (!coinSearch.trim()) return allCoins.slice(0, 30);
     const q = coinSearch.toLowerCase().trim();
     return allCoins
       .filter((c) => c.symbol.toLowerCase().includes(q) || c.baseAsset.toLowerCase().includes(q))
       .slice(0, 30);
-  }, [allCoins, coinSearch]);
+  }, [allCoins, coinSearch, isCoinPickerOpen]);
 
   // Compute CSS column span class
   const colSpanClass = useMemo(() => {
