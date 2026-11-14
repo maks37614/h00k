@@ -1,4 +1,5 @@
 import test from 'node:test';
+import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
 import { getTerminalPresetPage, pageAfterLimitChange, resolveTerminalPresetPageSize, TERMINAL_PRESET_PAGE_SIZES } from '../src/utils/terminalPresetPaging';
 import { blocksForMarketPreset, normalizeTerminalPresets } from '../src/utils/terminalPresets';
@@ -48,4 +49,15 @@ test('changing page size preserves the first visible coin and produces 50 distin
   }]);
   assert.equal(saved[0].blocks.length, 50);
   assert.equal(saved[0].blocks.at(-1)?.symbol, 'C49USDT');
+});
+
+test('changing Terminal timeframe keeps the selected automatic market preset and current page', () => {
+  const page = readFileSync(new URL('../src/components/TerminalPage.tsx', import.meta.url), 'utf8');
+  const start = page.indexOf('const handleApplyGlobalTimeframe =');
+  const end = page.indexOf('const handleTimeframeSelect =', start);
+  assert.ok(start >= 0 && end > start);
+  const handler = page.slice(start, end);
+  assert.match(handler, /updateBlocks\(\(prev\) => prev\.map/);
+  assert.doesNotMatch(handler, /setBlocks\(/);
+  assert.match(page, /const setBlocks: typeof updateBlocks = useCallback/);
 });
