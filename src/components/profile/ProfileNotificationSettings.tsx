@@ -269,11 +269,11 @@ export const ProfileNotificationSettings: React.FC = () => {
           <input type="checkbox" checked={settings.onlyFavorites} onChange={e => update({ onlyFavorites: e.target.checked })} className="accent-cyan-400"/>
           Лише мої обрані монети
         </label>
-        <label className="block space-y-1 text-xs">Пошук лише за монетами (необов’язково)
-          <input value={symbols} onChange={e => setSymbols(e.target.value)} onBlur={() => update({ scopeSymbols: normalizeSymbolList(symbols) })}
+        <div className="block space-y-1 text-xs">
+          <input aria-label="Монети для сповіщень" value={symbols} onChange={e => setSymbols(e.target.value)} onBlur={() => update({ scopeSymbols: normalizeSymbolList(symbols) })}
             placeholder="BTC, ETH, SOL — пусто означає всі" maxLength={250}
             className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white"/>
-        </label>
+        </div>
         <p className="text-xs leading-relaxed text-slate-500">Використовуються лише вже доступні котирування. Увімкнення сповіщень не запускає додатковий повний скан усіх бірж.</p>
       </section>
 
@@ -399,7 +399,7 @@ export const ProfileNotificationSettings: React.FC = () => {
         <button type="button" onClick={reset} className="inline-flex items-center gap-2 rounded-lg border border-rose-700/50 px-3 py-2 text-xs text-rose-300">
           <BellOff className="h-4 w-4"/> Вимкнути всі сповіщення сайту
         </button>
-        <span className="text-xs text-slate-400">Зміни зберігаються автоматично</span>
+        <span className="text-sm font-medium text-slate-300">Зміни зберігаються автоматично</span>
       </div>
       {formError && <p role="alert" className="rounded-lg border border-rose-500/40 p-3 text-xs text-rose-300"><ShieldAlert className="mr-1 inline h-4 w-4" />{formError}</p>}
       {message && <p role="status" className="text-xs text-emerald-300">{message}</p>}
