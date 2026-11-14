@@ -2652,20 +2652,24 @@
 }
 .hookchart-root .hookchart-toolbar .liqHeatmapTools button.liqHeatmapSwitch {
   display:inline-flex;
-  width:auto;
-  min-width:max-content;
-  height:25px;
-  min-height:25px;
+  flex:0 0 30px;
+  width:30px;
+  min-width:30px;
+  height:27px;
+  min-height:27px;
   align-items:center;
   justify-content:center;
-  gap:4px;
-  padding:0 6px;
+  padding:0;
   border:1px solid #304457;
-  border-radius:5px;
+  border-radius:6px;
   color:#aabace;
-  font-size:10px;
-  font-weight:650;
-  white-space:nowrap;
+  background:#101d2b;
+}
+.hookchart-root .hookchart-toolbar .liqHeatmapTools button.liqHeatmapSwitch svg {
+  display:block;
+  width:17px;
+  height:17px;
+  flex-shrink:0;
 }
 .hookchart-root .hookchart-toolbar .liqHeatmapTools button.liqHeatmapSwitch.active {
   border-color:#c45153;
