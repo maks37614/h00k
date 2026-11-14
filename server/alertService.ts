@@ -45,6 +45,8 @@ let indexedAlerts: PriceAlert[] | null = null;
 let isAlertsLoaded = false;
 
 let historyCache: AlertHistoryItem[] = [];
+let processedHistoryIndex: Map<string, AlertHistoryItem> | null = null;
+let indexedHistory: AlertHistoryItem[] | null = null;
 let isHistoryLoaded = false;
 
 let monitorInterval: any = null;
@@ -152,6 +154,8 @@ export function saveHistory(items: AlertHistoryItem[]): boolean {
   try {
     ensureDataDir();
     historyCache = items;
+    processedHistoryIndex = null;
+    indexedHistory = null;
     fs.writeFileSync(HISTORY_FILE, JSON.stringify(items, null, 2), 'utf-8');
     return true;
   } catch (err) {
@@ -162,12 +166,20 @@ export function saveHistory(items: AlertHistoryItem[]): boolean {
 
 /** Completed alert cycles remain terminal across stale browser syncs and server restarts. */
 function findProcessedAlertHistory(alert: PriceAlert): AlertHistoryItem | undefined {
-  const epoch = alert.deliveryEpoch ?? 0;
-  return loadHistory().find(item =>
-    item.userId === alert.userId &&
-    item.alertId === alert.id &&
-    (item.deliveryEpoch ?? 0) === epoch
-  );
+  const history = loadHistory();
+  if (indexedHistory !== history || !processedHistoryIndex) {
+    const next = new Map<string, AlertHistoryItem>();
+    for (const item of history) {
+      // Preserve the first match in history order, as Array.find did.
+      const key = JSON.stringify([item.userId, item.alertId, item.deliveryEpoch ?? 0]);
+      if (!next.has(key)) next.set(key, item);
+    }
+    processedHistoryIndex = next;
+    indexedHistory = history;
+  }
+  return processedHistoryIndex.get(JSON.stringify([
+    alert.userId, alert.id, alert.deliveryEpoch ?? 0,
+  ]));
 }
 
 export function getAlertHistory(userId?: string): AlertHistoryItem[] {
