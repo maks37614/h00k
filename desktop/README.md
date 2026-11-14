@@ -391,3 +391,10 @@ this maintains their existing gapless terminal alignment.
 - CI validates logic using simulated windows plus a read-only Win32 agent
   smoke test. Physical tests with all three real terminals (Windows 10/11,
   admin/UAC, multi-monitor, DPI and minimized windows) are still needed.
+
+Window pinning safety: in the active app session a manually selected terminal
+is identified by HWND + PID + executable, and the panel stays hidden if that
+exact window closes; it does not jump to a different instance. On a later
+relaunch, only the persisted executable/title hint survives, and automatic
+recovery is allowed only when the match is unique. With multiple same-process
+windows and changed titles, the user must select the correct window again.

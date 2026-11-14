@@ -201,7 +201,7 @@ test('a reused HWND or ambiguous pinned terminal never switches to another insta
   engine.setSettings({setupComplete:true,profiles:{metascalp:{
     enabled:true,autoAttach:true,targetHint:{exe:'MetaScalp',title:'Chosen terminal'},
   }}});
-  engine.manualTargets.set('metascalp','100');
+  engine.manualTargets.set('metascalp',{id:'100',pid:metaCompact.pid,exe:'MetaScalp'});
   const other={...metaCompact,id:'101',title:'Other terminal'};
   const recycled={...metaCompact,id:'100',exe:'explorer',title:'Explorer'};
   const third={...metaCompact,id:'102',title:'Another terminal'};
@@ -209,7 +209,10 @@ test('a reused HWND or ambiguous pinned terminal never switches to another insta
   assert.equal(engine.findTarget('metascalp'),null,'do not follow reused HWND into a different executable');
   assert.equal(engine.getWindows().has('metascalp'),false,'ambiguous pinned target remains hidden');
   engine.acceptWindows([recycled,other]);
-  assert.equal(engine.findTarget('metascalp')?.id,'101','unambiguous same-exe recovery remains supported');
+  assert.equal(engine.findTarget('metascalp'),null,'a pinned window must not switch after it closes');
+  engine.manualTargets.delete('metascalp'); // on a later app run only the persisted hint remains
+  engine.acceptWindows([recycled,other]);
+  assert.equal(engine.findTarget('metascalp')?.id,'101','unambiguous restart recovery remains supported');
   assert.ok(engine.getWindows().get('metascalp')?.get('full')?.isVisible());
 });
 
@@ -235,4 +238,17 @@ test('macOS and Linux do not start the Windows native discovery agent',()=>{
     assert.equal(engine.getWindows().size,0);
   }
   assert.equal(simulateDesktop('win32').engine.snapshot().nativeWindowAttachment,true);
+});
+
+test('manual pin remains bound to PID when Windows recycles HWND within the same executable',()=>{
+  const {engine}=simulateDesktop('win32');
+  engine.setSettings({setupComplete:true,profiles:{metascalp:{
+    enabled:true,autoAttach:true,targetHint:{exe:'MetaScalp',title:'Original'},
+  }}});
+  engine.manualTargets.set('metascalp',{id:'777',pid:500,exe:'MetaScalp'});
+  engine.acceptWindows([{...metaCompact,id:'777',pid:501,title:'Another MetaScalp'}]);
+  assert.equal(engine.findTarget('metascalp'),null);
+  assert.equal(engine.getWindows().has('metascalp'),false);
+  engine.acceptWindows([{...metaCompact,id:'777',pid:500,title:'Original changed title'}]);
+  assert.equal(engine.findTarget('metascalp')?.id,'777');
 });

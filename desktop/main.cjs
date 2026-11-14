@@ -411,13 +411,15 @@ function candidateWindows() {
 }
 function findTarget(provider) {
   const all = candidateWindows();
-  const manualId = manualTargets.get(provider);
+  const pinned = manualTargets.get(provider);
   const hint = settings.profiles[provider].targetHint;
-  // Windows can recycle HWNDs after a window closes. Never attach to an unrelated
-  // process merely because it inherited a previous manual window ID.
-  const explicit = all.find(item => item.id === manualId
-    && (!hint || item.exe.toLowerCase() === hint.exe.toLowerCase()));
-  if (explicit) return explicit;
+  if (pinned) {
+    // During this session a manually selected HWND stays bound to its original
+    // PID and executable. A recycled HWND or vanished instance must not silently
+    // switch to another window. Re-select manually if the window was recreated.
+    return all.find(item => item.id === pinned.id && item.pid === pinned.pid
+      && item.exe.toLowerCase() === pinned.exe.toLowerCase()) || null;
+  }
   if (hint) {
     const sameExecutable = all.filter(item => item.exe.toLowerCase() === hint.exe.toLowerCase());
     const exactTitle = sameExecutable.filter(item => item.title === hint.title);
@@ -589,7 +591,7 @@ function snapshot() {
     settings, platform: process.platform, nativeWindowAttachment: process.platform === 'win32',
     terminals: PROVIDERS.map(provider=>({
       id:provider, label:LABELS[provider],
-      target:findTarget(provider), selectedWindowId:manualTargets.get(provider) || null,
+      target:findTarget(provider), selectedWindowId:manualTargets.get(provider)?.id || null,
       status:lastDockStatus[provider] || 'Очікування',
     })),
     windows:candidateWindows().map(item=>({
@@ -663,7 +665,7 @@ function registerIpc() {
     } else {
       const target = candidateWindows().find(item => item.id === id);
       if (!target) throw new Error('Window not found');
-      manualTargets.set(provider,id);
+      manualTargets.set(provider,{id:target.id,pid:target.pid,exe:target.exe});
       settings.profiles[provider].targetHint = {exe:target.exe,title:target.title};
     }
     saveSettings(); syncWindows(); pushSnapshot(); return snapshot();
