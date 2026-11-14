@@ -957,7 +957,9 @@ export const CoinScreenerPage: React.FC<CoinScreenerPageProps> = ({
           <div className="space-y-1">
             <h3 className="text-base font-bold text-white">Монет не знайдено</h3>
             <p className="text-xs text-slate-400 max-w-md mx-auto">
-              За заданими параметрами та фільтрами монет не знайдено. Спробуйте збільшити верхню межу обсягу, змінити фільтр або очистити пошук.
+              За заданими параметрами та фільтрами монет не знайдено. {volumeMode === 'from'
+                ? 'Спробуйте зменшити нижню межу обсягу, змінити фільтр або очистити пошук.'
+                : 'Спробуйте збільшити верхню межу обсягу, змінити фільтр або очистити пошук.'}
             </p>
           </div>
           <button
