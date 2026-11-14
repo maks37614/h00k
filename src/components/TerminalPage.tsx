@@ -724,7 +724,13 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
   }, [blocks.length, config.autoFitScreen, config.blockHeight, config.columns]);
 
   // A loaded quote snapshot is not proof of an active WebSocket stream.
-  const quotesAvailable = marketSnapshot.timestamp !== null && !marketError && !marketSnapshot.warning;
+  // Having a snapshot does not make it fresh forever (for example after
+  // resuming a background tab or an interrupted market connection).
+  const quotesAvailable = marketSnapshot.timestamp !== null
+    && Number.isFinite(marketSnapshot.timestamp)
+    && Date.now() - marketSnapshot.timestamp >= 0
+    && Date.now() - marketSnapshot.timestamp <= 90_000
+    && !marketError && !marketSnapshot.warning;
 
   // Header shortcuts have a unique target only when the Terminal displays one
   // chart and its loaded instrument matches that chart. Grid cards carry their
