@@ -72,7 +72,8 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
   const { preferences } = useAppPreferences();
   const { user, profile } = useAuth();
   const { blocks, config, customPresets, setBlocks: updateBlocks, setConfig, setCustomPresets,
-    syncError, syncConflict, backupFailed, retrySync, downloadLocalBackup, restoreCloudWorkspace } = useTerminalWorkspace();
+    syncError, syncConflict, backupFailed, retrySync, downloadLocalBackup, importWorkspaceBackup,
+    restoreCloudWorkspace } = useTerminalWorkspace();
   const [activeMarketPreset, setActiveMarketPreset] = useState<TerminalMarketPreset | null>(null);
   const [presetMatches, setPresetMatches] = useState<MarketCoin[]>([]);
   const [presetPage, setPresetPage] = useState(0);
@@ -614,6 +615,20 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
     if (activeMarketPreset && presetMatches.length) applyPresetPage(presetMatches, presetPageRef.current);
   }, [activeMarketPreset, presetMatches, applyPresetPage]);
 
+  const handleImportWorkspaceBackup = useCallback((json: string) => {
+    const imported = importWorkspaceBackup(json);
+    if (imported) {
+      // A live automatic market preset must not immediately replace restored charts.
+      setActiveMarketPreset(null);
+      setPresetMatches([]);
+      presetPageRef.current = 0;
+      setPresetPage(0);
+      setWorkspacePage(0);
+      setMaximizedBlockId(null);
+    }
+    return imported;
+  }, [importWorkspaceBackup]);
+
   const handleSaveCoinPreset = (name: string, selected: TerminalChartBlock[]) => {
     const preset: TerminalSavedPreset = {
       id: `preset-${crypto.randomUUID()}`, name, blocks: selected.map(block => ({ ...block })),
@@ -994,7 +1009,8 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
             onApplyCoins={handleApplyMarketCoins} onSavePreset={handleSaveCoinPreset}
             onLoadPreset={handleLoadCoinPreset} onDeletePreset={id => setCustomPresets(current => current.filter(preset => preset.id !== id))}
             syncError={syncError} syncConflict={syncConflict} onRetrySync={retrySync}
-            onDownloadLocalBackup={downloadLocalBackup} signedIn={Boolean(user)}
+            onDownloadLocalBackup={downloadLocalBackup} onImportWorkspaceBackup={handleImportWorkspaceBackup}
+            signedIn={Boolean(user)}
           />
         </div>
       </div>
