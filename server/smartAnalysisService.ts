@@ -212,122 +212,83 @@ async function analyzeBTCStructure(): Promise<SmartAnalysisData['btcContext']> {
   };
 }
 
-// Fetch Orderbook Depth, Spread, & Large Wall Orders
-async function fetchOrderbookAnalysis(symbol: string, currentPrice: number): Promise<SmartAnalysisData['orderbook'] & { spread: SmartAnalysisData['spread'] }> {
+// Exchange-specific, time-bounded orderbook snapshot. No fabricated bids/asks
+// on REST failure, and never substitute Binance Futures for Bybit or spot.
+async function fetchOrderbookAnalysis(
+  symbol: string, exchange: ExchangeId, marketType: MarketType,
+): Promise<SmartAnalysisData['orderbook'] & { spread: SmartAnalysisData['spread'] }> {
+  const source = exchange + ' ' + marketType;
+  const missing: SmartAnalysisData['orderbook'] & { spread: SmartAnalysisData['spread'] } = {
+    available: false, source, bidAskRatio: null, dominantSide: 'unavailable',
+    bidWallUsd: null, bidWallPrice: null, askWallUsd: null, askWallPrice: null,
+    largeOrders: [], spread: { spreadUsd: null, spreadPct: null, quality: 'unavailable' },
+  };
   try {
-    const url = `https://fapi.binance.com/fapi/v1/depth?symbol=${symbol}&limit=50`;
-    const res = await exchangeFetch(url, { headers: { 'User-Agent': 'CryptoPatternScreener/1.0' } });
-    if (!res.ok) throw new Error('Depth request failed');
-    const data = await res.json();
-
-    const bids: [number, number][] = (data.bids || []).map((b: any) => [parseFloat(b[0]), parseFloat(b[1])]);
-    const asks: [number, number][] = (data.asks || []).map((a: any) => [parseFloat(a[0]), parseFloat(a[1])]);
-
-    if (bids.length === 0 || asks.length === 0) throw new Error('Empty book');
-
-    const bestBid = bids[0][0];
-    const bestAsk = asks[0][0];
-    const spreadUsd = Number((bestAsk - bestBid).toPrecision(4));
-    const spreadPct = parseFloat((((bestAsk - bestBid) / bestBid) * 100).toFixed(4));
-
-    let totalBidUsd = 0;
-    let totalAskUsd = 0;
-    let maxBidAmountUsd = 0;
-    let maxBidPrice = bestBid;
-    let maxAskAmountUsd = 0;
-    let maxAskPrice = bestAsk;
-
-    const largeOrders: SmartAnalysisData['orderbook']['largeOrders'] = [];
-
-    // Calculate sum and average order size
-    bids.forEach(([price, qty]) => {
-      const usd = price * qty;
-      totalBidUsd += usd;
-      if (usd > maxBidAmountUsd) {
-        maxBidAmountUsd = usd;
-        maxBidPrice = price;
-      }
-    });
-
-    asks.forEach(([price, qty]) => {
-      const usd = price * qty;
-      totalAskUsd += usd;
-      if (usd > maxAskAmountUsd) {
-        maxAskAmountUsd = usd;
-        maxAskPrice = price;
-      }
-    });
-
-    const avgOrderUsd = (totalBidUsd + totalAskUsd) / (bids.length + asks.length);
-    const largeThreshold = avgOrderUsd * 2.8;
-
-    bids.forEach(([price, qty]) => {
-      const usd = price * qty;
-      if (usd >= largeThreshold && largeOrders.length < 8) {
-        const dist = parseFloat((((bestBid - price) / bestBid) * 100).toFixed(2));
-        largeOrders.push({
-          side: 'bid',
-          price,
-          amountUsd: Math.round(usd),
-          distancePct: dist,
-          significance: usd > largeThreshold * 2.5 ? 'whale' : usd > largeThreshold * 1.5 ? 'large' : 'medium',
-        });
-      }
-    });
-
-    asks.forEach(([price, qty]) => {
-      const usd = price * qty;
-      if (usd >= largeThreshold && largeOrders.length < 16) {
-        const dist = parseFloat((((price - bestAsk) / bestAsk) * 100).toFixed(2));
-        largeOrders.push({
-          side: 'ask',
-          price,
-          amountUsd: Math.round(usd),
-          distancePct: dist,
-          significance: usd > largeThreshold * 2.5 ? 'whale' : usd > largeThreshold * 1.5 ? 'large' : 'medium',
-        });
-      }
-    });
-
-    const bidAskRatio = totalAskUsd > 0 ? parseFloat((totalBidUsd / totalAskUsd).toFixed(2)) : 1.0;
-    const dominantSide = bidAskRatio > 1.25 ? 'bids' : bidAskRatio < 0.8 ? 'asks' : 'balanced';
-
+    const url = exchange === 'bybit'
+      ? 'https://api.bybit.com/v5/market/orderbook?category=' +
+        (marketType === 'spot' ? 'spot' : 'linear') +
+        '&symbol=' + encodeURIComponent(symbol) + '&limit=50'
+      : marketType === 'spot'
+        ? 'https://data-api.binance.vision/api/v3/depth?symbol=' +
+          encodeURIComponent(symbol) + '&limit=50'
+        : 'https://fapi.binance.com/fapi/v1/depth?symbol=' +
+          encodeURIComponent(symbol) + '&limit=50';
+    const response = await exchangeFetch(url, { signal: AbortSignal.timeout(4000) });
+    if (!response.ok) return missing;
+    const payload = await response.json();
+    const book = exchange === 'bybit'
+      ? (payload?.retCode === 0 ? payload?.result : null) : payload;
+    const validate = (side: unknown): [number, number][] => Array.isArray(side)
+      ? side.map((row: unknown) => {
+        if (!Array.isArray(row)) return [NaN, NaN] as [number, number];
+        return [Number(row[0]), Number(row[1])] as [number, number];
+      }).filter(([price, quantity]) =>
+        Number.isFinite(price) && price > 0 &&
+        Number.isFinite(quantity) && quantity > 0)
+      : [];
+    const bids = validate(exchange === 'bybit' ? book?.b : book?.bids);
+    const asks = validate(exchange === 'bybit' ? book?.a : book?.asks);
+    if (!bids.length || !asks.length) return missing;
+    bids.sort((a,b) => b[0] - a[0]);
+    asks.sort((a,b) => a[0] - b[0]);
+    const bestBid = bids[0][0], bestAsk = asks[0][0];
+    if (!(bestAsk > bestBid)) return missing;
+    const spreadUsd = Number((bestAsk - bestBid).toPrecision(6));
+    const spreadPct = Number(((bestAsk - bestBid) / bestBid * 100).toFixed(5));
+    const usd = ([price, qty]: [number,number]) => price * qty;
+    const totalBidUsd = bids.reduce((sum,row) => sum + usd(row), 0);
+    const totalAskUsd = asks.reduce((sum,row) => sum + usd(row), 0);
+    if (!(totalAskUsd > 0) || !(totalBidUsd > 0)) return missing;
+    const bidWall = bids.reduce((largest,row) => usd(row) > usd(largest) ? row : largest,bids[0]);
+    const askWall = asks.reduce((largest,row) => usd(row) > usd(largest) ? row : largest,asks[0]);
+    const meanOrderUsd = (totalBidUsd + totalAskUsd) / (bids.length + asks.length);
+    const threshold = meanOrderUsd * 2.8;
+    const largeOrders = [
+      ...bids.map(row => ({row,side:'bid' as const})),
+      ...asks.map(row => ({row,side:'ask' as const})),
+    ].filter(({row}) => usd(row) >= threshold)
+      .sort((a,b) => usd(b.row) - usd(a.row)).slice(0,16)
+      .map(({row,side}) => ({
+        side, price: row[0], amountUsd: Math.round(usd(row)),
+        distancePct: Number((Math.abs(row[0] - (side === 'bid' ? bestBid : bestAsk)) /
+          (side === 'bid' ? bestBid : bestAsk) * 100).toFixed(3)),
+        // A large resting order is NOT evidence of an executed whale transaction.
+        significance: usd(row) > threshold * 1.5 ? 'large' as const : 'medium' as const,
+      }));
+    const bidAskRatio = Number((totalBidUsd / totalAskUsd).toFixed(3));
     return {
-      bidAskRatio,
-      dominantSide,
-      bidWallUsd: Math.round(maxBidAmountUsd),
-      bidWallPrice: maxBidPrice,
-      askWallUsd: Math.round(maxAskAmountUsd),
-      askWallPrice: maxAskPrice,
+      available: true, source, bidAskRatio,
+      dominantSide: bidAskRatio > 1.25 ? 'bids' : bidAskRatio < .8 ? 'asks' : 'balanced',
+      bidWallUsd: Math.round(usd(bidWall)), bidWallPrice: bidWall[0],
+      askWallUsd: Math.round(usd(askWall)), askWallPrice: askWall[0],
       largeOrders,
       spread: {
-        spreadUsd,
-        spreadPct,
-        quality: spreadPct <= 0.03 ? 'ultra_tight' : spreadPct <= 0.1 ? 'normal' : 'wide',
+        spreadUsd, spreadPct,
+        quality: spreadPct <= .03 ? 'ultra_tight' : spreadPct <= .1 ? 'normal' : 'wide',
       },
     };
   } catch {
-    // Fallback based on current price
-    const spreadUsd = Number((currentPrice * 0.0004).toPrecision(4));
-    return {
-      bidAskRatio: 1.15,
-      dominantSide: 'bids',
-      bidWallUsd: Math.round(currentPrice * 25000),
-      bidWallPrice: currentPrice * 0.985,
-      askWallUsd: Math.round(currentPrice * 21000),
-      askWallPrice: currentPrice * 1.015,
-      largeOrders: [
-        { side: 'bid', price: currentPrice * 0.992, amountUsd: 145000, distancePct: 0.8, significance: 'whale' },
-        { side: 'bid', price: currentPrice * 0.985, amountUsd: 92000, distancePct: 1.5, significance: 'large' },
-        { side: 'ask', price: currentPrice * 1.012, amountUsd: 120000, distancePct: 1.2, significance: 'large' },
-        { side: 'ask', price: currentPrice * 1.025, amountUsd: 180000, distancePct: 2.5, significance: 'whale' },
-      ],
-      spread: {
-        spreadUsd,
-        spreadPct: 0.04,
-        quality: 'ultra_tight',
-      },
-    };
+    return missing;
   }
 }
 
