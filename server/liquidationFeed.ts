@@ -10,7 +10,7 @@ export type LiquidationRow = {
 type Exchange = 'binance' | 'bybit';
 type Entry = {
   key: string; exchange: Exchange; symbol: string;
-  rows: LiquidationRow[]; clients: Set<WebSocket>;
+  rows: LiquidationRow[]; clients: Set<WebSocket>; bulkClients: Set<WebSocket>;
   upstream: WebSocket | null; ping: ReturnType<typeof setInterval> | null;
   reconnect: ReturnType<typeof setTimeout> | null;
   failures: number; idleAt: number; lastEventAt: number;
@@ -105,7 +105,7 @@ export class SharedLiquidationFeed {
   }
 
   private makeEntry(exchange: Exchange, symbol: string, rows: LiquidationRow[] = []): Entry {
-    return { key: `${exchange}:${symbol}`, exchange, symbol, rows, clients: new Set(),
+    return { key: `${exchange}:${symbol}`, exchange, symbol, rows, clients: new Set(), bulkClients: new Set(),
       upstream: null, ping: null, reconnect: null, failures: 0,
       idleAt: Date.now(), lastEventAt: rows.length ? Math.max(...rows.map(r => r.t)) : 0,
       pooledStop: null, pooledConnected: false };
@@ -119,13 +119,15 @@ export class SharedLiquidationFeed {
       maxMarkets: MAX_MARKETS, maxClients: MAX_CLIENTS, upstreamPool,
       connectedMarkets: all.filter(e =>
         e.pooledConnected || e.upstream?.readyState === WebSocket.OPEN).length,
-      viewers: all.reduce((count, e) => count + e.clients.size, 0),
+      viewers: all.reduce((count, e) => count + e.clients.size + e.bulkClients.size, 0),
       storedEvents: all.reduce((count, e) => count + e.rows.length, 0),
-      byInstrument: all.map(e => ({ source: e.key, viewers: e.clients.size,
+      byInstrument: all.map(e => ({ source: e.key, viewers: e.clients.size + e.bulkClients.size,
         connected: e.pooledConnected || e.upstream?.readyState === WebSocket.OPEN,
         events: e.rows.length,
         lastEventAt: e.lastEventAt || null })) };
   }
+
+  private hasViewers(entry: Entry) { return entry.clients.size > 0 || entry.bulkClients.size > 0; }
 
   private send(client: WebSocket, packet: unknown) {
     if (client.readyState !== WebSocket.OPEN) return;
@@ -139,6 +141,17 @@ export class SharedLiquidationFeed {
       if (client.readyState !== WebSocket.OPEN) continue;
       if (client.bufferedAmount > 1_000_000) client.close(1013, 'Slow consumer');
       else client.send(encoded);
+    }
+    // Multiplex clients receive the SAME event with an explicit scope. No
+    // changes to the legacy chart/notification protocol.
+    if (entry.bulkClients.size) {
+      const scoped = JSON.stringify({ ...(packet as object),
+        exchange: entry.exchange, symbol: entry.symbol });
+      for (const client of entry.bulkClients) {
+        if (client.readyState !== WebSocket.OPEN) continue;
+        if (client.bufferedAmount > 1_000_000) client.close(1013, 'Slow consumer');
+        else client.send(scoped);
+      }
     }
   }
 
@@ -233,7 +246,7 @@ export class SharedLiquidationFeed {
       if (entry.ping) clearInterval(entry.ping);
       entry.ping = null;
       this.broadcast(entry, { type: 'status', connected: false });
-      if (entry.clients.size || Date.now() - entry.idleAt < IDLE_GRACE_MS) this.retry(entry);
+      if (this.hasViewers(entry) || Date.now() - entry.idleAt < IDLE_GRACE_MS) this.retry(entry);
     });
   }
 
@@ -244,7 +257,7 @@ export class SharedLiquidationFeed {
     entry.reconnect = setTimeout(() => {
       entry.reconnect = null;
       if (this.entries.get(entry.key) === entry &&
-          (entry.clients.size || Date.now() - entry.idleAt < IDLE_GRACE_MS)) this.connect(entry);
+          (this.hasViewers(entry) || Date.now() - entry.idleAt < IDLE_GRACE_MS)) this.connect(entry);
     }, delay + Math.floor(Math.random() * 300));
     entry.reconnect.unref?.();
   }
@@ -253,7 +266,7 @@ export class SharedLiquidationFeed {
     const key = `${exchange}:${symbol}`;
     let entry = this.entries.get(key);
     if (!entry && this.entries.size >= MAX_MARKETS) {
-      const idle = [...this.entries.values()].filter(e => !e.clients.size)
+      const idle = [...this.entries.values()].filter(e => !this.hasViewers(e))
         .sort((a, b) => a.idleAt - b.idleAt)[0];
       if (idle) {
         this.stopUpstream(idle);
@@ -285,15 +298,56 @@ export class SharedLiquidationFeed {
     client.on('message', () => client.close(1008, 'Read-only stream'));
     client.on('close', () => {
       current.clients.delete(client);
-      if (!current.clients.size) current.idleAt = Date.now();
+      if (!this.hasViewers(current)) current.idleAt = Date.now();
     });
+  }
+
+  /**
+   * Attach one browser WS to many independent market scopes. The existing
+   * addClient() endpoint retains its original read-only protocol.
+   */
+  addBulkClient(client: WebSocket, exchange: Exchange, symbol: string, liveOnly = false): boolean {
+    const key = exchange + ':' + symbol;
+    let entry = this.entries.get(key);
+    if (!entry && this.entries.size >= MAX_MARKETS) {
+      const idle = [...this.entries.values()].filter(e => !this.hasViewers(e))
+        .sort((a,b) => a.idleAt - b.idleAt)[0];
+      if (idle) {
+        this.stopUpstream(idle);
+        this.entries.delete(idle.key);
+        this.revision++;
+      }
+    }
+    if (!entry && this.entries.size >= MAX_MARKETS) {
+      this.counters.rejectedClients++;
+      this.send(client, {type:'status', exchange, symbol, connected:false, capacity:true});
+      return false;
+    }
+    if (!entry) {
+      entry = this.makeEntry(exchange, symbol);
+      this.entries.set(key, entry);
+    }
+    entry.bulkClients.add(client);
+    this.prune(entry);
+    const connected = entry.pooledConnected || entry.upstream?.readyState === WebSocket.OPEN;
+    if (liveOnly) this.send(client,{type:'status',exchange,symbol,connected});
+    else this.send(client,{type:'snapshot',exchange,symbol,connected,events:entry.rows});
+    if (!entry.pooledStop && !entry.upstream && !entry.reconnect) this.connect(entry);
+    return true;
+  }
+
+  removeBulkClient(client: WebSocket, exchange: Exchange, symbol: string) {
+    const entry = this.entries.get(exchange + ':' + symbol);
+    if (!entry) return;
+    entry.bulkClients.delete(client);
+    if (!this.hasViewers(entry)) entry.idleAt = Date.now();
   }
 
   startPersistence() {
     const timer = setInterval(() => {
       for (const [key, entry] of this.entries) {
         this.prune(entry);
-        if (!entry.clients.size && Date.now() - entry.idleAt >= IDLE_GRACE_MS) {
+        if (!this.hasViewers(entry) && Date.now() - entry.idleAt >= IDLE_GRACE_MS) {
           this.stopUpstream(entry);
           if (!entry.rows.length) {
             this.entries.delete(key);
