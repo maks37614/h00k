@@ -6,14 +6,14 @@ const BYBIT_API = 'https://api.bybit.com';
 const FUNDING_POLL_MS = 60_000;
 const HISTORY_POLL_MS = 15 * 60_000;
 
-export type FundingSnapshot = Readonly<{ rate: number; history: readonly number[] }>;
+export type FundingSnapshot = Readonly<{ rate: number; history: number[] }>;
 export type FundingPacket = {
   rate: number;
   history?: number[];
   nextFundingAt?: number;
 };
 export const EMPTY_FUNDING: FundingSnapshot = Object.freeze({
-  rate: Number.NaN, history: Object.freeze([] as number[]),
+  rate: Number.NaN, history: [],
 });
 
 type Loader = (exchange: ExchangeId, symbol: string, refreshHistory: boolean) => Promise<FundingPacket>;
