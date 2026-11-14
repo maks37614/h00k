@@ -87,3 +87,19 @@ test('floating panels use branded shell without covering remote site or adding r
   assert.match(main,/site\.setBounds\(\{ x: 0, y: SHELL_HEIGHT/);
   assert.match(main,/if \(win\.__remoteContents\) win\.__remoteContents\.on\('before-input-event'/);
 });
+
+test('main h00k gear provides attach/detach, side, mode and immediate terminal preferences', () => {
+  const main = read('main.cjs');
+  const a = main.indexOf('function showStandaloneMenu(');
+  const b = main.indexOf('function openStandaloneWindow(');
+  const menu = main.slice(a,b);
+  for (const item of ['Прикріпити зараз','Відкріпити','Розташування','Режим',
+                      'Автоматичне прикріплення','Слідувати за терміналом',
+                      'Поверх інших вікон','Повні налаштування']) {
+    assert.ok(menu.includes(item),'Missing main gear action: '+item);
+  }
+  assert.match(menu,/manualAttached\.add\(id\)/);
+  assert.match(menu,/manualAttached\.delete\(id\)/);
+  assert.match(menu,/patchQuickProfile\(id, \{ side \}\)/);
+  assert.match(menu,/patchQuickProfile\(id, \{ mode,/);
+});

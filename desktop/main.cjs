@@ -294,6 +294,29 @@ function showStandaloneMenu(win) {
       submenu: [
         { label: 'Повні налаштування…', click: () => openSettingsWindow(id) },
         { type: 'separator' },
+        { label: 'Прикріпити зараз', click: () => {
+          settings.profiles[id].enabled = true;
+          manualAttached.add(id);
+          saveSettings(); syncWindows(); pushSnapshot();
+        } },
+        { label: 'Відкріпити', click: () => {
+          settings.profiles[id].enabled = false;
+          manualAttached.delete(id);
+          saveSettings(); closeProvider(id); pushSnapshot();
+        } },
+        { label: 'Розташування', submenu: [
+          ['right', 'Праворуч'], ['left', 'Ліворуч'], ['top', 'Зверху'], ['bottom', 'Знизу'],
+        ].map(([side, label]) => ({
+          label, type: 'radio', checked: settings.profiles[id].side === side,
+          click: () => patchQuickProfile(id, { side }),
+        })) },
+        { label: 'Режим', submenu: [
+          ['full', 'Увесь h00k'], ['blocks', 'Вибрані блоки'], ['floating', 'Плаваючі вікна'],
+        ].map(([mode, label]) => ({
+          label, type: 'radio', checked: settings.profiles[id].mode === mode,
+          click: () => patchQuickProfile(id, { mode, follow: mode !== 'floating' }),
+        })) },
+        { type: 'separator' },
         { label: 'Автоматичне прикріплення', type: 'checkbox',
           checked: settings.profiles[id].autoAttach,
           click: () => patchQuickProfile(id, { autoAttach: !settings.profiles[id].autoAttach }) },
