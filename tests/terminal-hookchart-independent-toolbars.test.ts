@@ -17,7 +17,10 @@ test('each Terminal chart block owns independent top and side toolbars, includin
   assert.match(widget, /onExtraToolsOpenChange: setExtraToolsOpen/);
   assert.match(widget, /onDrawingToolsOpenChange: setDrawingToolsOpen/);
   assert.match(widget, /terminalToolbarVisibility=\{useIntegratedHookChartToolbar \? terminalToolbarVisibility : undefined\}/);
-  const scopedState = widget.slice(widget.indexOf('const [extraToolsOpen'), widget.indexOf('const [showDrawingToolbar'));
+  const stateStart = widget.indexOf('const [extraToolsOpen');
+  const stateEnd = widget.indexOf('const blockRootRef', stateStart);
+  assert.ok(stateStart >= 0 && stateEnd > stateStart);
+  const scopedState = widget.slice(stateStart, stateEnd);
   assert.doesNotMatch(scopedState, /localStorage|queueSave|WebSocket|fetch|setInterval/);
 });
 
