@@ -91,8 +91,8 @@ test('terminal chart initial view is passed only through terminal widgets to Hoo
 test('single-chart Terminal renders the timeframe saved on its block instead of stale global selection', () => {
   const page = source('../src/components/TerminalPage.tsx');
   assert.match(page, /const activeTimeframe = blocks\.length === 1 \? blocks\[0\]\.timeframe : timeframe/);
-  assert.match(page, /switch \(activeTimeframe\)/);
-  assert.match(page, /timeframe=\{activeTimeframe\}/);
+  assert.match(page, /timeframe=\{blocks\[0\]\.timeframe\}/);
+  assert.match(page, /const activeTimeframe = blocks\.length === 1/);
   assert.match(page, /activeTimeframe === tf/);
   assert.match(page, /Таймфрейм: <strong[^>]*>\{activeTimeframe\}<\/strong>/);
 });
@@ -102,7 +102,8 @@ test('maximizing one Terminal chart suspends other visible charts without changi
   const widget = source('../src/components/terminal/TerminalChartWidget.tsx');
   assert.match(page, /isSuspended=\{maximizedBlockId !== null && !isMaximized\}/);
   assert.match(widget, /const shouldLoadWidgets = !isSuspended && \(isSingleBlock \|\| isMaximized \|\| isNearViewport\)/);
-  assert.match(widget, /if \(!shouldLoadWidgets \|\| useIntegratedHookChartToolbar\) return;/);
+  assert.doesNotMatch(widget, /new WebSocket\(/, 'HookChart already owns its quote stream');
+  assert.match(widget, /onLivePriceUpdate=\{useIntegratedHookChartToolbar \? handleChartPrice : undefined\}/);
   assert.match(widget, /\{shouldLoadWidgets \? \(/);
 });
 
@@ -177,7 +178,7 @@ test('Terminal preserves actual quote timestamp instead of claiming every refres
 test('favorite click is visible in multi-chart mode and never wipes existing charts', () => {
   const page = source('../src/components/TerminalPage.tsx');
   const start = page.indexOf('const handleSelectFavoriteCoin =');
-  const end = page.indexOf('// Build TradingView Embed URL', start);
+  const end = page.indexOf('// Block management', start);
   assert.ok(start >= 0 && end > start);
   const handler = page.slice(start, end);
   assert.match(handler, /setIsFavoritesDrawerOpen\(false\)/);
@@ -278,7 +279,7 @@ test('Terminal sync conflicts are visible outside hidden menus and can be recove
   assert.match(banner, /Недостатньо місця у сховищі браузера/);
   assert.match(hook, /saveConflictBackup\(uid: string, value: WorkspaceSnapshot\): boolean/);
   assert.match(hook, /localStorage\.setItem\(terminalStorageKey\(CONFLICT_KEY, uid\)/);
-  assert.match(hook, /if \(uid && syncConflictRef\.current\) saveConflictBackup\(uid, workspace\)/);
+  assert.match(hook, /if \(uid && syncConflictRef\.current\) \{\s*const stored = saveConflictBackup\(uid, workspace\)/);
   assert.match(hook, /if \(revision\.current === 0 && !syncConflictRef\.current\)/);
   assert.match(hook, /window\.confirm\(/);
   assert.match(hook, /window\.location\.reload\(\)/);
