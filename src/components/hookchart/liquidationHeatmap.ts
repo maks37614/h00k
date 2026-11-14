@@ -81,7 +81,7 @@ export type HeatmapRect = {
   side: 'LONG' | 'SHORT'; alpha: number;
 };
 
-const lowerBoundTime = (bins: LiquidationHeatmapBin[], target: number) => {
+const lowerBoundTime = (bins: readonly LiquidationHeatmapBin[], target: number) => {
   let lo=0, hi=bins.length;
   while (lo<hi) {
     const mid=(lo+hi)>>>1;
