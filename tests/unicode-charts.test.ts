@@ -92,7 +92,7 @@ test('terminal charts respect provider selection while fullscreen always uses Ho
     const auth: NonNullable<React.ContextType<typeof AuthContext>> = {
       user: { uid } as H00kUser, profile: { uid, defaultChartProvider: provider }, loading: false,
       signInWithEmail: async () => {}, registerWithEmail: async () => {},
-      updateProfileData: async () => {}, logout: async () => {},
+      updateProfileData: async () => {}, updateTerminalWorkspace: async () => null, logout: async () => {},
       resendVerification: async () => {}, requestPasswordReset: async () => {}, resetPassword: async () => {},
       resetToken: null, authNotice: null, listSessions: async () => [], revokeSession: async () => {}, logoutAll: async () => {},
       authError: null, authErrorCode: null, clearAuthError: noop,
