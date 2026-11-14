@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { randomUUID } from 'node:crypto';
 import { persistenceMetrics } from './persistenceMetrics';
+import { writePrivateJsonAtomic } from './privateAtomicJson';
 import { publishSurveillance } from './surveillanceEvents';
 import {
   SurveillanceCoin,
@@ -141,7 +142,6 @@ export function loadSurveillanceStore(): UserSurveillanceStore {
 export function saveSurveillanceStore(store: UserSurveillanceStore): boolean {
   const started = performance.now();
   let bytes = 0;
-  let temporaryFile: string | null = null;
   try {
     ensureDataDir();
     let safeStore: UserSurveillanceStore = store;
@@ -157,32 +157,12 @@ export function saveSurveillanceStore(store: UserSurveillanceStore): boolean {
     }
     const payload = JSON.stringify(safeStore);
     bytes = Buffer.byteLength(payload);
-    // Remove an abandoned predictable name from older deployments without
-    // opening or following it (including if an attacker made it a symlink).
-    try { fs.unlinkSync(`${SURVEILLANCE_FILE}.tmp`); }
-    catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
-    }
-    // Never truncate/reuse a predictable .tmp file: previous deployments may
-    // have left it world-readable, or an attacker may have placed a symlink.
-    // O_EXCL ('wx') creates a fresh, unpredictable 0600 file BEFORE bytes
-    // are written. A failed write/rename is cleaned up without touching the
-    // original, durable surveillance.json.
-    temporaryFile = `${SURVEILLANCE_FILE}.${randomUUID()}.tmp`;
-    fs.writeFileSync(temporaryFile, payload, {
-      encoding: 'utf-8', flag: 'wx', mode: 0o600,
-    });
-    fs.renameSync(temporaryFile, SURVEILLANCE_FILE);
-    temporaryFile = null;
+    writePrivateJsonAtomic(SURVEILLANCE_FILE, payload);
     // A failed disk write must never replace the authoritative in-memory copy.
     storeCache = safeStore;
     persistenceMetrics.record('surveillance', performance.now() - started, bytes, true);
     return true;
   } catch (err) {
-    if (temporaryFile) {
-      try { fs.rmSync(temporaryFile, { force: true }); }
-      catch (cleanupError) { console.error('Failed to clean up surveillance temp file:', cleanupError); }
-    }
     persistenceMetrics.record('surveillance', performance.now() - started, bytes, false);
     console.error('Failed to save surveillance.json:', err);
     return false;

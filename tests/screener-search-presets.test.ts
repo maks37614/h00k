@@ -103,7 +103,9 @@ test('account switching and failed preset writes cannot leak search settings', (
   assert.match(editor, /if \(saved\) setEditingId\(id\)/);
   assert.match(editor, /if \(saved && editingId === id\)/);
   assert.match(editor, /return false;/);
-  assert.match(screener, /const cachedUi = screenerUiSession\.get\(user\?\.uid \|\| 'guest'\)/);
+  assert.match(screener, /const previousUiSession = screenerUiSession\.get\(user\?\.uid \|\| 'guest'\)/);
+  assert.match(screener, /const cachedUi = previousUiSession\?\.savedConfigKey === savedConfigKey \? previousUiSession : undefined/,
+    'only compatible user-session filters should be restored');
 });
 
 test('empty symbol search explains and preserves full-market filtering', () => {
@@ -143,7 +145,7 @@ test('Screener volume arrow changes only local filter mode, preserving preset an
   assert.match(screener, /if \(sortBy === 'volume'\) setSortOrder\(preferredVolumeSortOrder\(volumeMode\)\)/);
   assert.match(screener, /isVolumeWithinCap\(coin\.volumeUsd, maxVolumeUsd, volumeMode\)/);
   assert.match(screener, /mode=\{volumeMode\}/);
-  assert.match(screener, /volumeMode, advancedFilters, sortBy/);
+  assert.match(screener, /volumeMode, savedConfigKey, advancedFilters, sortBy/);
   assert.match(dropdown, /option\.label\.replace\(/);
   assert.match(editor, /setField\('volumeMode', draft\.volumeMode === 'to' \? 'from' : 'to'\)/);
   // Direction control is icon-only on the right; the amount shows ≤ or ≥.

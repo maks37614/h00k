@@ -33,9 +33,23 @@ export interface CronSystemStatus {
   };
 }
 
-class CronManager {
+export class CronManager {
   private startTime: number = Date.now();
   private timers: Map<string, NodeJS.Timeout> = new Map();
+  private startupTimers = new Map<string, NodeJS.Timeout>();
+  private stopped = false;
+
+  /** An initial one-shot run must be cancelled on stop or reinitialization,
+   * just like the periodic timers. */
+  private scheduleStartup(jobId: string, run: () => Promise<void>, delayMs: number) {
+    const old = this.startupTimers.get(jobId);
+    if (old) clearTimeout(old);
+    const timer = setTimeout(() => {
+      this.startupTimers.delete(jobId);
+      if (!this.stopped) void run();
+    }, delayMs);
+    this.startupTimers.set(jobId, timer);
+  }
   // Continue large surveillance passes fairly instead of always starting at user #1.
   private surveillanceCursor = 0;
 
@@ -79,6 +93,7 @@ class CronManager {
   };
 
   public init() {
+    this.stopped = false;
     console.log('[CRON] Initializing unified background notification cron system...');
     try {
       surveillanceManager.start();
@@ -96,7 +111,7 @@ class CronManager {
     if (this.timers.has(job.id)) clearInterval(this.timers.get(job.id)!);
 
     const run = async () => {
-      if (job.isRunning || !job.enabled) return;
+      if (this.stopped || job.isRunning || !job.enabled) return;
       job.isRunning = true;
       const start = Date.now();
       try {
@@ -115,7 +130,7 @@ class CronManager {
     };
 
     // Run first iteration after 1.5s
-    setTimeout(run, 1500);
+    this.scheduleStartup(job.id, run, 1500);
     const timer = setInterval(run, job.intervalMs);
     this.timers.set(job.id, timer);
   }
@@ -126,7 +141,7 @@ class CronManager {
     if (this.timers.has(job.id)) clearInterval(this.timers.get(job.id)!);
 
     const run = async () => {
-      if (job.isRunning || !job.enabled) return;
+      if (this.stopped || job.isRunning || !job.enabled) return;
       job.isRunning = true;
       const start = Date.now();
       let lastPersistAt = start;
@@ -141,6 +156,7 @@ class CronManager {
           const first = this.surveillanceCursor % count;
           let examined = 0;
           for (; examined < count; examined++) {
+            if (this.stopped) break;
             const { userId, coin } = activeItems[(first + examined) % count];
             const key = JSON.stringify([userId, coin.id]);
             const now = Date.now();
@@ -209,7 +225,7 @@ class CronManager {
       }
     };
 
-    setTimeout(run, 3000);
+    this.scheduleStartup(job.id, run, 3000);
     const timer = setInterval(run, job.intervalMs);
     this.timers.set(job.id, timer);
   }
@@ -220,7 +236,7 @@ class CronManager {
     if (this.timers.has(job.id)) clearInterval(this.timers.get(job.id)!);
 
     const run = async () => {
-      if (job.isRunning || !job.enabled) return;
+      if (this.stopped || job.isRunning || !job.enabled) return;
       job.isRunning = true;
       const start = Date.now();
       try {
@@ -239,7 +255,7 @@ class CronManager {
       }
     };
 
-    setTimeout(run, 10000);
+    this.scheduleStartup(job.id, run, 10000);
     const timer = setInterval(run, job.intervalMs);
     this.timers.set(job.id, timer);
   }
@@ -321,7 +337,7 @@ class CronManager {
     return {
       uptimeSeconds: Math.floor((Date.now() - this.startTime) / 1000),
       startedAt: new Date(this.startTime).toISOString(),
-      isHealthy: Object.values(this.jobs).every((j) =>
+      isHealthy: !this.stopped && Object.values(this.jobs).every((j) =>
         isCronJobHealthy(j, this.startTime)),
       jobs: this.jobs,
       stats: {
@@ -335,9 +351,10 @@ class CronManager {
 
   // --- Stop all cron jobs cleanly ---
   public stop() {
-    for (const [id, timer] of this.timers.entries()) {
-      clearInterval(timer);
-    }
+    this.stopped = true;
+    for (const timer of this.startupTimers.values()) clearTimeout(timer);
+    this.startupTimers.clear();
+    for (const timer of this.timers.values()) clearInterval(timer);
     this.timers.clear();
     console.log('[CRON] All cron background jobs stopped.');
   }

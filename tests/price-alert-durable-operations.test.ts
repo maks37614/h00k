@@ -36,15 +36,15 @@ test('price alert edits, deletion and history survive simulated disk failures', 
       fs.renameSync = failingRename;
     };
 
-    // Spy on the write itself: a stale permissive .tmp must be secured
-    // before bytes containing user data are written, not only at rename.
+    // Every new file descriptor must be private at its first write. Never
+    // reuse the legacy, predictable .tmp path.
     const assertPrivateDuringWrite = (destination: string, operation: () => void) => {
       const previousWrite = fs.writeFileSync;
       let inspected = 0;
       fs.writeFileSync = ((target: fs.PathOrFileDescriptor, ...args: any[]) => {
-        if (String(target) === `${destination}.tmp`) {
+        if (typeof target === 'number') {
           inspected++;
-          assert.equal(fs.statSync(String(target)).mode & 0o777, 0o600,
+          assert.equal(fs.fstatSync(target).mode & 0o777, 0o600,
             'temporary file must already be private before personal data is written');
         }
         return (previousWrite as any)(target, ...args);
@@ -123,21 +123,19 @@ test('price alert edits, deletion and history survive simulated disk failures', 
     assert.equal(svc.deleteAlert(retryId, owner), true);
     assert.equal(svc.getAllAlerts(owner).some(row => row.id === retryId), false);
 
-    // Failure while tightening a reused temp file must not replace the last
-    // persisted alert state or publish a successful user edit.
-    const originalChmod = fs.chmodSync;
+    // A pre-rename fsync failure must not publish an unflushed edit.
+    const originalFsync = fs.fsyncSync;
     const lastDurable = fs.readFileSync(alertFile, 'utf8');
-    fs.chmodSync = ((target, mode) => {
-      if (String(target) === `${alertFile}.tmp`)
-        throw new Error('simulated permission failure');
-      return originalChmod(target, mode);
-    }) as typeof fs.chmodSync;
+    fs.fsyncSync = ((fd) => {
+      if (fs.fstatSync(fd).isFile()) throw new Error('simulated fsync failure');
+      return originalFsync(fd);
+    }) as typeof fs.fsyncSync;
     try {
       assert.throws(() => svc.toggleAlert(data.id, owner, true), /Не вдалося зберегти/);
       assert.equal(fs.readFileSync(alertFile, 'utf8'), lastDurable);
       assert.equal(svc.getAllAlerts(owner)[0].isActive, false);
     } finally {
-      fs.chmodSync = originalChmod;
+      fs.fsyncSync = originalFsync;
     }
   } finally {
     fs.renameSync = originalRename;

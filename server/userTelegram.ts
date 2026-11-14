@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { writePrivateJsonAtomic } from './privateAtomicJson';
 import { normalizeLanguage, type SupportedLanguage } from '../src/locales';
 
 interface StoredTelegram {
@@ -19,18 +20,7 @@ const configFile = path.join(process.cwd(), 'server/data/user_telegram.json');
 let cache: Map<string, StoredTelegram> | undefined;
 function persist(next: Map<string, StoredTelegram>) {
   fs.mkdirSync(path.dirname(configFile), { recursive: true });
-  const temp = `${configFile}.tmp`;
-  // A leftover temporary file may have mode 0644. Restrict it *before*
-  // writing personal chat IDs, not only when exposing the final filename.
-  try {
-    fs.chmodSync(temp, 0o600);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
-  }
-  fs.writeFileSync(temp, JSON.stringify(Object.fromEntries(next), null, 2),
-    { encoding: 'utf8', mode: 0o600 });
-  fs.chmodSync(temp, 0o600);
-  fs.renameSync(temp, configFile);
+  writePrivateJsonAtomic(configFile, JSON.stringify(Object.fromEntries(next), null, 2));
   // Never expose a new Telegram connection or a migrated configuration in
   // memory before its disk checkpoint is durable.
   cache = next;

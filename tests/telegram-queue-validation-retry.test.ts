@@ -11,6 +11,7 @@ test('Telegram queue rejects malformed pending records and keeps processing afte
   const originalRename = fs.renameSync;
   const originalWrite = fs.writeFileSync;
   const originalChmod = fs.chmodSync;
+  const originalFsync = fs.fsyncSync;
   const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'h00k-telegram-retry-isolation-'));
   process.chdir(temp);
   process.env.TELEGRAM_BOT_TOKEN = '999:queue-fixture';
@@ -60,10 +61,10 @@ test('Telegram queue rejects malformed pending records and keeps processing afte
     let checkedPrivateBeforeWrite = 0;
     let failedFirstAck = false;
     fs.writeFileSync = ((target: fs.PathOrFileDescriptor, ...args: any[]) => {
-      if (String(target) === `${file}.tmp`) {
+      if (typeof target === 'number') {
         checkedPrivateBeforeWrite++;
-        assert.equal(fs.statSync(String(target)).mode & 0o777, 0o600,
-          'old temp files must be restricted before writing private messages');
+        assert.equal(fs.fstatSync(target).mode & 0o777, 0o600,
+          'a new exclusive temp must be private before writing private messages');
       }
       return (originalWrite as any)(target, ...args);
     }) as typeof fs.writeFileSync;
@@ -89,22 +90,23 @@ test('Telegram queue rejects malformed pending records and keeps processing afte
     fs.renameSync = originalRename;
     fs.writeFileSync = originalWrite;
     const before = fs.readFileSync(file, 'utf8');
-    fs.chmodSync = ((target, mode) => {
-      if (String(target) === `${file}.tmp`) throw new Error('permission change rejected');
-      return originalChmod(target, mode);
-    }) as typeof fs.chmodSync;
+    fs.fsyncSync = ((fd) => {
+      if (fs.fstatSync(fd).isFile()) throw new Error('temp file fsync rejected');
+      return originalFsync(fd);
+    }) as typeof fs.fsyncSync;
     await assert.rejects(
-      delivery.sendUserTelegramMessage('queue-owner', 'Not durably queued', 'blocked-by-permission'),
-      /permission change rejected/,
+      delivery.sendUserTelegramMessage('queue-owner', 'Not durably queued', 'blocked-by-fsync'),
+      /temp file fsync rejected/,
     );
-    assert.equal(requests, 2, 'failed chmod must prevent any network request');
+    assert.equal(requests, 2, 'failed fsync must prevent any network request');
     assert.equal(fs.readFileSync(file, 'utf8'), before,
-      'permission failure must preserve the last durable snapshot');
-    assert.equal(delivery.lastTelegramDeliveryAt('queue-owner', 'blocked-by-permission'), 0);
+      'fsync failure must preserve the last durable snapshot');
+    assert.equal(delivery.lastTelegramDeliveryAt('queue-owner', 'blocked-by-fsync'), 0);
   } finally {
     fs.renameSync = originalRename;
     fs.writeFileSync = originalWrite;
     fs.chmodSync = originalChmod;
+    fs.fsyncSync = originalFsync;
     globalThis.fetch = previousFetch;
     if (previousBot === undefined) delete process.env.TELEGRAM_BOT_TOKEN;
     else process.env.TELEGRAM_BOT_TOKEN = previousBot;
