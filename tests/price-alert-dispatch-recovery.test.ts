@@ -57,7 +57,11 @@ test('durable fired price alerts recover queue and history failures without dupl
     const stale = { ...alerts.getAllAlerts('outbox-owner')[0], deliveryPending: false };
     alerts.syncUserAlerts('outbox-owner', [stale]);
     assert.equal(alerts.getAllAlerts('outbox-owner')[0].deliveryPending, true);
-    assert.throws(() => alerts.toggleAlert(one.id, 'outbox-owner', true), /очікує збереження доставки/);
+    assert.throws(() => alerts.toggleAlert(one.id, 'outbox-owner', true), error =>
+      error instanceof alerts.AlertDispatchPendingError && /очікує збереження доставки/.test(error.message));
+    const api = fs.readFileSync(new URL('../server.ts', import.meta.url), 'utf8');
+    assert.match(api, /err instanceof AlertDispatchPendingError/);
+    assert.match(api, /res.status\(409\)\.setHeader\('Retry-After', '5'\)/);
 
     fs.renameSync = rename;
     await alerts.checkAlertsOnce('outbox-owner');
