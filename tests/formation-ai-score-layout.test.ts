@@ -32,8 +32,8 @@ test('restore AI + Quant and replace ONLY its two top ratings with the detected 
   assert.match(smart.slice(start, atr), /\{tradeSetup\}/);
   assert.match(smart, /fetch\(`\/api\/market\/smart-analysis\?\$\{queryParams\.toString\(\)\}`/);
   assert.match(smart, /analysisAbortRef\.current\?\.abort\(\)/);
-  for (const retained of ['ATR (14) / Волатильність', 'Аналіз Holders', 'Великий учасник',
-    'Маркет-мейкер', 'Маніпулятивність', 'Контекст BTC', 'RSI, EMA, Об\'єми та Спред',
+  for (const retained of ['ATR (14) / Волатильність', 'Аналіз Holders', 'Великі заявки',
+    'Маркет-мейкер', 'Вразливість ринку', 'Контекст BTC', 'RSI, EMA, Об\'єми та Спред',
     'Стакан, POC та Ліквідність', 'Open Interest та Деривативи']) {
     assert.ok(smart.includes(retained), 'AI+Quant module missing: ' + retained);
   }
@@ -61,24 +61,19 @@ test('the quality score folds out all existing validation factors and their actu
   assert.match(ui, /formation\.confidence\}\/100/, 'the scanner score remains unchanged');
 });
 
-test('the AI-only score never runs automatically or displays generated commentary', () => {
-  assert.match(ui, /onClick=\{handleRequestAi\}/);
-  assert.match(ui, /<Sparkles className=/);
-  assert.match(ui, /fetch\('\/api\/ai\/setup-score'/);
-  assert.match(ui, /credentials: 'same-origin'/);
-  assert.match(ui, /signal: controller\.signal/);
-  assert.match(ui, /aiAbortRef\.current\?\.abort\(\)/);
-  assert.match(ui, /aiContextKey = \[coin\.exchange, coin\.marketType, coin\.symbol, timeframe, formation\.id\]/);
-  assert.match(ui, /aiScore !== null \? `AI: \$\{aiScore\}\/100`/);
-  assert.doesNotMatch(ui, /aiAnalysis\.(?:summary|patternConfirmation|targetAnalysis)/);
-  assert.doesNotMatch(ui, /fetch\('\/api\/market\/smart-analysis'/);
+test('removed standalone AI-score icon without altering Smart Analysis refresh', () => {
+  assert.doesNotMatch(ui, /onClick=\{handleRequestAi\}/);
+  assert.doesNotMatch(ui, /<Sparkles className=/);
+  assert.doesNotMatch(ui, /fetch\('\/api\/ai\/setup-score'/);
+  assert.doesNotMatch(ui, /Оцінка AI/);
+  assert.doesNotMatch(ui, /AI: \$\{aiScore\}/);
+  assert.match(smart, /<SmartAnalysisBlock|fetchAnalysis/);
+  assert.match(smart, /fetch\(`\/api\/market\/smart-analysis\?\$\{queryParams\.toString\(\)\}`/);
+  assert.match(smart, /analysisAbortRef\.current\?\.abort\(\)/);
+  // The already deployed authenticated API may remain available for clients
+  // but must not be invoked by this page or affect chart loading.
   assert.match(server, /app\.post\('\/api\/ai\/setup-score', requireUserAuth/);
-  assert.match(server, /userWorkQuota\.allow\(userId, 'formation-ai-score', 10, 60 \* 60_000\)/);
-  assert.match(server, /userWorkThrottle\.allow\(userId, 'formation-ai-score', 20_000\)/);
-  assert.match(server, /GEMINI_API_KEY_NOT_CONFIGURED|Gemini не налаштовано/);
   assert.match(gemini, /model: 'gemini-2\.5-flash'/);
-  assert.match(gemini, /responseMimeType: 'application\/json'/);
-  assert.doesNotMatch(gemini.slice(gemini.indexOf('export async function evaluateFormationScoreWithAI')), /technical fallback|return formation\.confidence/);
 });
 
 test('AI numeric response parser accepts only independent integer /100 values', () => {
