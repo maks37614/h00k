@@ -39,7 +39,12 @@ function authorized(req: Request): boolean {
  * user IDs, API keys, chat IDs, or application data.
  */
 export function installOpsMetrics(app: Express,
-  chartDepth: () => { activeMarkets: number; clients: number } | null = () => null) {
+  chartDepth: () => { activeMarkets: number; clients: number } | null = () => null,
+  chartKlines: () => {
+    activeMarkets: number; clients: number; upstreamSockets: number;
+    accepted: number; rejected: number; reconnects: number; failures: number;
+    sent: number; slowConsumers: number;
+  } | null = () => null) {
   // The event-loop histogram starts only after the first authorized operator
   // request, so it adds zero measurement overhead on unconfigured deployments.
   let runtime: RuntimeMetrics | null = null;
@@ -81,6 +86,7 @@ export function installOpsMetrics(app: Express,
         totalSubscribers: shared.reduce((sum, x) => sum + x.subscribers, 0),
         byInstrument: shared },
       hookChartDepth: chartDepth(),
+      hookChartKlineRelay: chartKlines(),
     });
   });
 }

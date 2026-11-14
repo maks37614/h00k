@@ -53,6 +53,7 @@ import { installPaperFeed } from './server/paperFeed';
 import { installMonMarketFeed } from './server/monMarketFeed';
 import { formationDensityFeed } from './server/formationDensityFeed';
 import { installHookChartDepthStream } from './server/hookChartDepth';
+import { installHookChartKlineRelay } from './server/hookChartKlineRelay';
 import { installLiquidationStream } from './server/liquidationFeed';
 import { installOpsMetrics } from './server/opsMetrics';
 import { subscribeSurveillance } from './server/surveillanceEvents';
@@ -76,7 +77,9 @@ async function startServer() {
 
   // Read-only operator endpoint is disabled unless H00K_OPS_TOKEN is configured.
   let chartDepthMetrics: (() => { activeMarkets: number; clients: number }) | null = null;
-  installOpsMetrics(app, () => chartDepthMetrics?.() ?? null);
+  let chartKlineMetrics: (() => ReturnType<ReturnType<typeof installHookChartKlineRelay>['stats']>) | null = null;
+  installOpsMetrics(app, () => chartDepthMetrics?.() ?? null,
+    () => chartKlineMetrics?.() ?? null);
 
   // Dedicated read-only Bearer credential for the PHP bot on external hosting.
   installPaperFeed(app);
@@ -912,13 +915,15 @@ async function startServer() {
     binanceTickerStream.start();
   });
   const depthFeed = installHookChartDepthStream(httpServer);
+  const klineRelay = installHookChartKlineRelay(httpServer);
   installLiquidationStream(httpServer);
   if (process.env.NODE_ENV === 'production') {
     // Both site WebSocket handlers use noServer routing. Do not leave unknown
     // upgrade paths hanging with an open socket on a public VPS.
     httpServer.on('upgrade', (request, socket) => {
       const pathname = (request.url || '').split('?')[0];
-      if (pathname !== '/api/hookchart/depth' && pathname !== '/api/hookchart/liquidations') {
+      if (pathname !== '/api/hookchart/depth' && pathname !== '/api/hookchart/liquidations' &&
+          pathname !== '/api/hookchart/klines') {
         socket.destroy();
       }
     });
@@ -926,6 +931,7 @@ async function startServer() {
   chartDepthMetrics = () => ({
     activeMarkets: depthFeed.activeMarkets(), clients: depthFeed.activeClients(),
   });
+  chartKlineMetrics = () => klineRelay.stats();
 }
 
 startServer();

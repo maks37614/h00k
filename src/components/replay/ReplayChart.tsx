@@ -2,6 +2,7 @@ import { HookChart } from '../HookChart';
 import type { HookChartHandle } from '../hookchart/engine';
 import { useChartProvider } from '../../utils/useChartProvider';
 import { replayChartMarkers } from '../../utils/hookchartData';
+import { replayHistoryChange } from '../../utils/replayHistoryChange';
 import React, { useEffect, useRef, useState, useCallback, useImperativeHandle, forwardRef, useMemo } from 'react';
 import {
   createChart,
@@ -86,6 +87,7 @@ export const ReplayChart = forwardRef<ReplayChartHandle, ReplayChartProps>(({
   const savedRangeRef = useRef<{ scope: string; range: { from: number; to: number } } | null>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const candleSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null);
+  const renderedHistoricalRows = useRef<{ scope: string; rows: readonly Kline[] } | null>(null);
   const volumeSeriesRef = useRef<ISeriesApi<'Histogram'> | null>(null);
 
   // Same sizing as the Screener fullscreen chart: the surrounding block
@@ -385,6 +387,7 @@ export const ReplayChart = forwardRef<ReplayChartHandle, ReplayChartProps>(({
       savedRangeRef.current = range ? { scope: rendererScope, range } : null;
       chart.remove();
       chartRef.current = null;
+      renderedHistoricalRows.current = null;
       candleSeriesRef.current = null;
       volumeSeriesRef.current = null;
       entryLineRef.current = null;
@@ -394,28 +397,41 @@ export const ReplayChart = forwardRef<ReplayChartHandle, ReplayChartProps>(({
     };
   }, [chartProvider, chartContainer, rendererScope]);
 
-  // Update data when visibleCandles change
+  // Historical-only incremental renderer. Moving one saved candle forward
+  // updates two series in O(1); rewind, another date or changed earlier bars
+  // perform an exact full reset. Never use a live market feed for Replay.
   useEffect(() => {
     if (!candleSeriesRef.current || !volumeSeriesRef.current) return;
-    if (visibleCandles.length === 0) return;
-
-    const candleData = visibleCandles.map((c) => ({
-      time: c.time as Time,
-      open: c.open,
-      high: c.high,
-      low: c.low,
-      close: c.close,
-    }));
-
-    const volumeData = visibleCandles.map((c) => ({
+    const previous = renderedHistoricalRows.current;
+    const change = replayHistoryChange(
+      previous?.scope === rendererScope ? previous.rows : null,
+      visibleCandles,
+    );
+    if (change === 'same') return;
+    if (!visibleCandles.length) {
+      candleSeriesRef.current.setData([]);
+      volumeSeriesRef.current.setData([]);
+      renderedHistoricalRows.current = { scope: rendererScope, rows: visibleCandles };
+      return;
+    }
+    const newest = visibleCandles.at(-1)!;
+    const candle = (c: Kline) => ({
+      time: c.time as Time, open: c.open, high: c.high, low: c.low, close: c.close,
+    });
+    const volume = (c: Kline) => ({
       time: c.time as Time,
       value: c.volume,
       color: c.close >= c.open ? 'rgba(16, 185, 129, 0.35)' : 'rgba(239, 68, 68, 0.35)',
-    }));
-
-    candleSeriesRef.current.applyOptions({ priceFormat: getChartPriceFormat(visibleCandles.at(-1)!.close) });
-    candleSeriesRef.current.setData(candleData);
-    volumeSeriesRef.current.setData(volumeData);
+    });
+    candleSeriesRef.current.applyOptions({ priceFormat: getChartPriceFormat(newest.close) });
+    if (change === 'append' || change === 'replace-last') {
+      candleSeriesRef.current.update(candle(newest));
+      volumeSeriesRef.current.update(volume(newest));
+    } else {
+      candleSeriesRef.current.setData(visibleCandles.map(candle));
+      volumeSeriesRef.current.setData(visibleCandles.map(volume));
+    }
+    renderedHistoricalRows.current = { scope: rendererScope, rows: visibleCandles };
     const savedRange = savedRangeRef.current;
     if (savedRange?.scope === rendererScope) {
       chartRef.current?.timeScale().setVisibleLogicalRange(savedRange.range);

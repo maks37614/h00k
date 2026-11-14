@@ -1,6 +1,7 @@
 import type { ExchangeId, Kline, MarketType } from '../../types';
 import { normalizeExchangeSymbol } from '../../utils/marketSymbols';
 import { validCandle } from '../../utils/hookchartData';
+import { recordChartKline, recordChartReconnect, recordChartTransportError } from './chartDiagnostics';
 
 export type LiveKline = Kline & { eventTime?: number };
 type Scope = { exchange: ExchangeId; marketType: MarketType; symbol: string; timeframe: string };
@@ -58,6 +59,7 @@ export function createSharedKlineSubscriptions(socketFactory: SocketFactory = ur
     listeners: Set<Listener>; socket: WebSocket | null; closed: boolean;
     ping: ReturnType<typeof setInterval> | null; retry: ReturnType<typeof setTimeout> | null;
     failures: number; connected: boolean; last: LiveKline | null; stop: () => void;
+    relayFallback: boolean;
   };
   const entries = new Map<string, Entry>();
   const subscribe = (scope: Scope, listener: Listener): (() => void) => {
@@ -87,6 +89,7 @@ export function createSharedKlineSubscriptions(socketFactory: SocketFactory = ur
     const shared: Entry = {
       listeners: new Set([listener]), socket: null, closed: false, ping: null,
       retry: null, failures: 0, connected: false, last: null, stop: () => {},
+      relayFallback: false,
     };
     entries.set(key, shared);
     const status = (connected: boolean) => {
@@ -101,6 +104,7 @@ export function createSharedKlineSubscriptions(socketFactory: SocketFactory = ur
       shared.ping = null;
     };
     const reconnect = () => {
+      recordChartReconnect();
       clearPing();
       status(false);
       if (shared.closed || shared.retry !== null) return;
@@ -114,21 +118,44 @@ export function createSharedKlineSubscriptions(socketFactory: SocketFactory = ur
     const connect = () => {
       if (shared.closed) return;
       let ws: WebSocket;
+      // Cross-user relay is preferred on the site origin; direct exchange WS
+      // remains a fail-open fallback if the VPS is full or cannot connect.
+      const useRelay = !shared.relayFallback &&
+        typeof window !== 'undefined' && /^https?:$/.test(window.location.protocol);
+      let startupWatch: ReturnType<typeof setTimeout> | null = null;
       try {
-        const url = scope.exchange === 'binance'
-          ? BINANCE_WS[scope.marketType] + '/' + encodeURIComponent(symbol.toLowerCase()) +
-            '@kline_' + BINANCE_INTERVAL[scope.timeframe]
-          : BYBIT_WS[scope.marketType];
+        let url: string;
+        if (useRelay) {
+          const destination = new URL('/api/hookchart/klines', window.location.href);
+          destination.protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+          destination.searchParams.set('exchange', scope.exchange);
+          destination.searchParams.set('market', scope.marketType);
+          destination.searchParams.set('symbol', symbol);
+          destination.searchParams.set('timeframe', scope.timeframe);
+          url = destination.toString();
+        } else {
+          url = scope.exchange === 'binance'
+            ? BINANCE_WS[scope.marketType] + '/' + encodeURIComponent(symbol.toLowerCase()) +
+              '@kline_' + BINANCE_INTERVAL[scope.timeframe]
+            : BYBIT_WS[scope.marketType];
+        }
         ws = socketFactory(url);
       } catch {
+        if (useRelay) shared.relayFallback = true;
         reconnect();
         return;
       }
       shared.socket = ws;
+      if (useRelay) startupWatch = setTimeout(() => {
+        if (!shared.closed && shared.socket === ws && !shared.last) {
+          shared.relayFallback = true;
+          try { ws.close(); } catch {}
+        }
+      }, 10_000);
       ws.onopen = () => {
         if (shared.closed || shared.socket !== ws) return;
         shared.failures = 0;
-        if (scope.exchange === 'bybit') {
+        if (!useRelay && scope.exchange === 'bybit') {
           try {
             ws.send(JSON.stringify({ op: 'subscribe',
               args: ['kline.' + BYBIT_INTERVAL[scope.timeframe] + '.' + symbol] }));
@@ -139,13 +166,34 @@ export function createSharedKlineSubscriptions(socketFactory: SocketFactory = ur
             }
           }, 20_000);
         }
-        status(true);
+        if (!useRelay) status(true);
       };
       ws.onmessage = event => {
         if (shared.closed || shared.socket !== ws) return;
         try {
-          const candle = parseSharedKlineMessage(scope.exchange, JSON.parse(String(event.data)), symbol, scope.timeframe);
+          const packet = JSON.parse(String(event.data));
+          if (useRelay && packet?.type === 'status') {
+            if (!packet.connected) {
+              status(false);
+              // Let the shared VPS upstream reconnect first. Otherwise one
+              // exchange hiccup would open hundreds of direct exchange sockets
+              // at once. REST fallback remains active while the relay recovers.
+              if (startupWatch === null) startupWatch = setTimeout(() => {
+                if (shared.closed || shared.socket !== ws) return;
+                shared.relayFallback = true;
+                try { ws.close(); } catch {}
+              }, 10_000 + Math.floor(Math.random() * 2000));
+            }
+            return;
+          }
+          const candle: LiveKline | null = useRelay
+            ? packet?.type === 'kline' && validCandle(packet.candle) &&
+                Number.isSafeInteger(packet.candle.time) ? packet.candle : null
+            : parseSharedKlineMessage(scope.exchange, packet, symbol, scope.timeframe);
           if (!candle) return;
+          recordChartKline(useRelay ? 'relay' : 'exchange', Number(candle.eventTime));
+          if (startupWatch !== null) { clearTimeout(startupWatch); startupWatch = null; }
+          if (useRelay) status(true);
           if (shared.last) {
             if (candle.time < shared.last.time) return;
             if (candle.time === shared.last.time) {
@@ -162,8 +210,14 @@ export function createSharedKlineSubscriptions(socketFactory: SocketFactory = ur
           }
         } catch {}
       };
-      ws.onerror = () => { if (!shared.closed && shared.socket === ws) try { ws.close(); } catch {} };
-      ws.onclose = () => { if (shared.socket === ws) reconnect(); };
+      ws.onerror = () => { if (!shared.closed && shared.socket === ws) { recordChartTransportError(); try { ws.close(); } catch {} } };
+      ws.onclose = () => {
+        if (startupWatch !== null) clearTimeout(startupWatch);
+        if (shared.socket === ws) {
+          if (useRelay) shared.relayFallback = true;
+          reconnect();
+        }
+      };
     };
     shared.stop = () => {
       shared.closed = true;
