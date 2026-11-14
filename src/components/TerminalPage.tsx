@@ -36,11 +36,11 @@ import { ExchangeCandlestickChart } from './ExchangeCandlestickChart';
 import { getTradingViewSymbol } from '../utils/marketSymbols';
 import { AddChartModal } from './terminal/AddChartModal';
 import { TerminalSettingsDrawer } from './terminal/TerminalSettingsDrawer';
-import { formatCryptoPrice, formatVolume } from '../utils/formatters';
+import { formatVolume } from '../utils/formatters';
 import { getStoredPreferences, useAppPreferences } from '../utils/userPreferences';
 import { useAuth } from '../context/AuthContext';
 import { useTerminalWorkspace } from '../utils/useTerminalWorkspace';
-import { blocksForMarketPreset, normalizeTerminalMarketPair, MAX_TERMINAL_CHARTS } from '../utils/terminalPresets';
+import { blocksForMarketPreset, normalizeTerminalMarketPair, formatTerminalQuotedPrice, MAX_TERMINAL_CHARTS } from '../utils/terminalPresets';
 import { getTerminalPresetPage, pageAfterLimitChange, resolveTerminalPresetPageSize } from '../utils/terminalPresetPaging';
 import { MARKET_PRESETS, coinMarketKey, type TerminalMarketPreset } from '../utils/marketPresets';
 import { loadMarketCoins, type MarketCoinSnapshot } from '../utils/marketCoinLoader';
@@ -1026,12 +1026,12 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
             </span>
             {activeCoin.highPrice24h ? (
               <span className="flex items-center gap-1 text-emerald-400">
-                Max 24г: <strong>${formatCryptoPrice(activeCoin.highPrice24h)}</strong>
+                Max 24г: <strong>{formatTerminalQuotedPrice(activeCoin.highPrice24h, activeCoin.quoteAsset)}</strong>
               </span>
             ) : null}
             {activeCoin.lowPrice24h ? (
               <span className="flex items-center gap-1 text-rose-400">
-                Min 24г: <strong>${formatCryptoPrice(activeCoin.lowPrice24h)}</strong>
+                Min 24г: <strong>{formatTerminalQuotedPrice(activeCoin.lowPrice24h, activeCoin.quoteAsset)}</strong>
               </span>
             ) : null}
           </div>
@@ -1155,7 +1155,7 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
                       <div className="text-right">
                         {favCoin.currentPrice > 0 && (
                           <div className="font-mono text-xs font-semibold text-slate-200">
-                            ${formatCryptoPrice(favCoin.currentPrice)}
+                            {formatTerminalQuotedPrice(favCoin.currentPrice, favCoin.quoteAsset)}
                           </div>
                         )}
                         <div
