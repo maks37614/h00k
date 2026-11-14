@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { ExchangeStreamClient } from '../server/surveillance/exchangeStream';
 import { acquireExchangeStream, getSharedExchangeStreamStats } from '../server/surveillance/sharedExchangeStream';
+import { OrderBookEngine } from '../server/surveillance/orderBookEngine';
 
 test('multiple users share one public exchange connection but retain isolated event listeners', t => {
   let opened = 0, destroyed = 0;
@@ -102,5 +103,74 @@ test('emergency rollback flag restores independent exchange streams per worker',
     second?.destroy();
     if (previous === undefined) delete process.env.H00K_SHARED_STREAMS;
     else process.env.H00K_SHARED_STREAMS = previous;
+  }
+});
+
+test('unobserved shared WebSocket error is handled before a worker attaches', t => {
+  t.mock.method(ExchangeStreamClient.prototype, 'connect', () => {});
+  const warnings: unknown[][] = [];
+  t.mock.method(console, 'warn', (...args: unknown[]) => { warnings.push(args); });
+  const early = acquireExchangeStream('LINKUSDT','bybit','futures');
+  const source = (early as any).entry.source as ExchangeStreamClient;
+  try {
+    assert.equal(source.listenerCount('error'), 1,
+      'one fallback listener exists even before a personalized worker listener');
+    assert.doesNotThrow(() => source.emit('error', new Error('bootstrap socket failed')),
+      'EventEmitter error without a worker must never terminate the server');
+    assert.equal(warnings.length, 1);
+    assert.match(String(warnings[0][0]), /SharedExchangeStream/);
+    assert.doesNotThrow(() => source.emit('error', new Error('repeated failure')));
+    assert.equal(warnings.length, 1, 'unobserved connection errors are rate limited');
+
+    const later = acquireExchangeStream('LINKUSDT','bybit','futures');
+    let delivered = 0;
+    try {
+      later.on('error', () => { delivered++; });
+      source.emit('error', new Error('later failure'));
+      assert.equal(delivered,1,'attached worker still receives public stream errors');
+      assert.equal(warnings.length,1,'fallback does not duplicate a worker error log');
+    } finally {
+      later.destroy();
+    }
+  } finally {
+    early.destroy();
+  }
+  assert.ok(!getSharedExchangeStreamStats().some(row =>
+    row.scope === 'bybit:futures:LINKUSDT:full'),
+    'release drops the shared source and its fallback listener');
+});
+
+test('shared cached snapshots use normalized numbers even for string depth tuples', async t => {
+  t.mock.method(ExchangeStreamClient.prototype, 'connect', () => {});
+  const early = acquireExchangeStream('ATOMUSDT','bybit','futures');
+  const source = (early as any).entry.source as ExchangeStreamClient;
+  const now = Date.now();
+  const late = acquireExchangeStream('ATOMUSDT','bybit','futures');
+  try {
+    source.emit('depth', {isSnapshot:true,sequence:100,eventTime:now,
+      bids:[['100','4'],['99','3']],asks:[['101','2'],['102','1']]});
+    source.emit('depth', {sequence:101,eventTime:now,
+      bids:[['100','0'],['98','8']],asks:[['101','5']]});
+    const replay: any[] = [];
+    late.on('depth', packet => replay.push(packet));
+    await new Promise<void>(resolve => queueMicrotask(resolve));
+    assert.equal(replay.length,1);
+    assert.equal(replay[0].sequence,101);
+    assert.deepEqual(replay[0].bids.sort((a: number[],b: number[])=>b[0]-a[0]),
+      [[99,3],[98,8]]);
+    assert.deepEqual(replay[0].asks.sort((a: number[],b: number[])=>a[0]-b[0]),
+      [[101,5],[102,1]]);
+    for(const [price,quantity] of [...replay[0].bids,...replay[0].asks]) {
+      assert.equal(typeof price,'number');
+      assert.equal(typeof quantity,'number');
+    }
+    const book=new OrderBookEngine('ATOMUSDT','bybit','futures');
+    book.applyDepth(replay[0]);
+    assert.equal(book.getState().status,'LIVE');
+    assert.equal(book.bestBid,99);
+    assert.equal(book.bestAsk,101);
+  } finally {
+    late.destroy();
+    early.destroy();
   }
 });
