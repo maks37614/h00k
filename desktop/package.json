@@ -31,7 +31,11 @@
       "settings.css",
       "toolbar.html",
       "toolbar-preload.cjs",
-      "workspace.cjs"
+      "workspace.cjs",
+      "window-shell.html",
+      "window-shell.css",
+      "window-shell.js",
+      "window-shell-preload.cjs"
     ],
     "extraResources": [
       {

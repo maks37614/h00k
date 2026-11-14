@@ -339,3 +339,22 @@ nested installer folder in an unisolated checkout.
 Manual checks remaining: first launch on Windows, caption/theme under light-mode
 Windows, toolbar overlay against actual h00k pages, focus and DPI at 100–150%,
 and re-launch from a pre-existing smartdock.json file.
+
+## Unreleased: branded main application frame
+
+The main h00k window now uses a **local 54 px h00k title bar** with the original
+robot logo and the dark/cyan h00k palette. Native minimize/maximize/close controls
+are implemented by a sender-checked, minimal local IPC bridge, and the right-side
+gear opens docking and per-terminal quick settings. Remote h00k.top content stays in
+an isolated sandboxed WebContentsView **below** the title bar; its web session is
+shared with other panels using the existing `persist:h00k` partition. No credentials
+or website APIs are exposed to the title bar.
+
+A fresh install opens docking setup first, then after initial Save/Attach launches
+the branded main window. Subsequent application launches open the main window
+directly; Ctrl+, or the gear provides access to setup. Existing persisted profiles
+are treated as configured and retained.
+
+Important: visually test Win10/11 frameless-window resizing, keyboard shortcut,
+site navigation/authentication, multi-DPI/monitors, docking modes and sleep/resume
+before publishing a final installer.

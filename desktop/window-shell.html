@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="uk">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src 'self'; style-src 'self'; script-src 'self'">
+  <title>h00k Desktop</title>
+  <link rel="stylesheet" href="./window-shell.css">
+</head>
+<body>
+  <header class="titlebar" role="banner">
+    <div class="identity">
+      <img src="./robot-logo.svg" width="78" height="38" alt="h00k">
+      <span class="desktop-title">Desktop</span>
+      <span class="title-divider" aria-hidden="true"></span>
+      <span class="website-label"><span class="led" aria-hidden="true"></span> h00k.top</span>
+    </div>
+    <div class="window-actions">
+      <button type="button" id="settings" data-action="settings" class="settings-btn" title="Налаштування прикріплення (Ctrl+,)" aria-label="Налаштування прикріплення та програми">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2.8l1.8.4.7 2.1 1.7.7 2-.8 1.7 1.7-.8 2 .7 1.7 2.1.7.4 1.8-.4 1.8-2.1.7-.7 1.7.8 2-1.7 1.7-2-.8-1.7.7-.7 2.1-1.8.4-1.8-.4-.7-2.1-1.7-.7-2 .8-1.7-1.7.8-2-.7-1.7-2.1-.7-.4-1.8.4-1.8 2.1-.7.7-1.7-.8-2 1.7-1.7 2 .8 1.7-.7.7-2.1z"/><circle cx="12" cy="12" r="3"/></svg>
+      </button>
+      <span class="action-divider" aria-hidden="true"></span>
+      <button type="button" data-action="minimize" title="Згорнути" aria-label="Згорнути"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 17h14"/></svg></button>
+      <button type="button" data-action="toggle-maximize" id="maximize" title="Розгорнути" aria-label="Розгорнути"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="1"/></svg></button>
+      <button type="button" data-action="close" class="close-btn" title="Закрити" aria-label="Закрити"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </div>
+  </header>
+  <script src="./window-shell.js" defer></script>
+</body>
+</html>

@@ -53,7 +53,7 @@ test('Win32 agent uses visible DWM bounds and faster tracking snapshots', () => 
 
 test('independent full h00k window gets the same isolated settings gear', () => {
   const main = read('main.cjs');
-  assert.match(main, /attachDockToolbar\(standalone, null\)/);
+  assert.match(main, /openStandaloneWindow\(\)/);
   assert.match(main, /if \(!provider\) \{/);
   assert.match(main, /PROVIDERS\.map\(id =>/);
   assert.match(main, /settings\.setupComplete && profile\.enabled/);
@@ -66,4 +66,12 @@ test('quick menu exposes auto-attach, follow and always-on-top toggles', () => {
   for (const field of ['autoAttach', 'follow', 'alwaysOnTop']) {
     assert.ok(main.includes(field + ': !profile.' + field));
   }
+});
+
+test('local shell is the sole owner of window control IPC', () => {
+  const main = read('main.cjs'), preload = read('window-shell-preload.cjs');
+  assert.match(main, /event\.sender !== standalone\.webContents/);
+  assert.match(main, /ipcMain\.on\('desktop:shell-command'/);
+  assert.match(preload, /contextBridge\.exposeInMainWorld\('h00kShell'/);
+  assert.doesNotMatch(preload, /desktop:save|desktop:pick|desktop:attach/);
 });

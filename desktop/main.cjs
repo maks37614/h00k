@@ -26,6 +26,7 @@ let windows = new Map(); // provider -> Map(panel -> BrowserWindow)
 let previousSnapshots = '';
 let lastDockStatus = {};
 let standalone = null;
+const SHELL_HEIGHT = 54; // Local chrome never overlaps the remote website.
 const toolbarOwners = new Map(); // local-only WebContentsView IDs, never exposed to h00k.top
 const lastLayoutKeys = new Map(); // detect explicit side/mode/size changes, even when follow is off
 const hiddenProviders = new Map(); // reclaim hidden webviews after prolonged terminal absence
@@ -60,11 +61,12 @@ function webURL(id) {
   return url.href;
 }
 function guardWebsite(win) {
-  win.webContents.setWindowOpenHandler(({ url }) => {
+  const contents = win.webContents;
+  contents.setWindowOpenHandler(({ url }) => {
     if (/^https:\/\//i.test(url)) void shell.openExternal(url);
     return { action: 'deny' };
   });
-  win.webContents.on('will-navigate', (event, url) => {
+  contents.on('will-navigate', (event, url) => {
     if (!isTrustedWebURL(url)) {
       event.preventDefault();
       if (/^https:\/\//i.test(url)) void shell.openExternal(url);
@@ -197,17 +199,7 @@ function openToolbarMenu(event) {
   const { provider, win } = owner;
   // The independent h00k window has no external terminal profile, but its local gear
   // still offers full settings and a direct shortcut to each terminal configuration.
-  if (!provider) {
-    const standaloneMenu = Menu.buildFromTemplate([
-      { label: '⚙ Налаштування прикріплення…', click: () => openSettingsWindow() },
-      { type: 'separator' },
-      ...PROVIDERS.map(id => ({ label: 'Налаштувати ' + LABELS[id], click: () => openSettingsWindow(id) })),
-      { type: 'separator' },
-      { label: 'Відкрити h00k.top у браузері', click: () => void shell.openExternal(WEBSITE) },
-    ]);
-    standaloneMenu.popup({ window: win });
-    return;
-  }
+  if (!provider) { showStandaloneMenu(win); return; }
   const profile = settings.profiles[provider];
   const label = LABELS[provider];
   const sides = [
@@ -244,6 +236,110 @@ function openToolbarMenu(event) {
   ]);
   menu.popup({ window: win });
 }
+
+function showStandaloneMenu(win) {
+  if (!win || win.isDestroyed()) return;
+  const menu = Menu.buildFromTemplate([
+    { label: '⚙ Налаштування прикріплення…', click: () => openSettingsWindow() },
+    { type: 'separator' },
+    ...PROVIDERS.map(id => ({
+      label: LABELS[id],
+      submenu: [
+        { label: 'Повні налаштування…', click: () => openSettingsWindow(id) },
+        { type: 'separator' },
+        { label: 'Автоматичне прикріплення', type: 'checkbox',
+          checked: settings.profiles[id].autoAttach,
+          click: () => patchQuickProfile(id, { autoAttach: !settings.profiles[id].autoAttach }) },
+        { label: 'Слідувати за терміналом', type: 'checkbox',
+          checked: settings.profiles[id].follow,
+          click: () => patchQuickProfile(id, { follow: !settings.profiles[id].follow }) },
+        { label: 'Поверх інших вікон', type: 'checkbox',
+          checked: settings.profiles[id].alwaysOnTop,
+          click: () => patchQuickProfile(id, { alwaysOnTop: !settings.profiles[id].alwaysOnTop }) },
+      ],
+    })),
+    { type: 'separator' },
+    { label: 'Відкрити h00k.top у браузері', click: () => void shell.openExternal(WEBSITE) },
+  ]);
+  menu.popup({ window: win });
+}
+
+// The full desktop app is a local branded window with a remote, unprivileged
+// WebContentsView starting BELOW its title bar. The website never receives
+// the local window preload or any native window-management IPC capability.
+function openStandaloneWindow() {
+  if (standalone && !standalone.isDestroyed()) {
+    if (standalone.isMinimized()) standalone.restore();
+    standalone.show();
+    standalone.focus();
+    return standalone;
+  }
+  const win = new BrowserWindow({
+    title: 'h00k Desktop',
+    width: 1280, height: 850, minWidth: 500, minHeight: 360,
+    backgroundColor: '#070d18',
+    frame: false, thickFrame: true, resizable: true,
+    autoHideMenuBar: true,
+    webPreferences: {
+      preload: path.join(__dirname, 'window-shell-preload.cjs'),
+      nodeIntegration: false, contextIsolation: true, sandbox: true, webSecurity: true,
+    },
+  });
+  standalone = win;
+  const site = new WebContentsView({
+    webPreferences: {
+      partition: 'persist:h00k',
+      nodeIntegration: false, contextIsolation: true, sandbox: true, webSecurity: true,
+      backgroundThrottling: true,
+    },
+  });
+  site.setBackgroundColor('#070d18');
+  win.contentView.addChildView(site);
+  const placeSite = () => {
+    if (win.isDestroyed()) return;
+    const { width, height } = win.getContentBounds();
+    site.setBounds({ x: 0, y: SHELL_HEIGHT, width, height: Math.max(0, height - SHELL_HEIGHT) });
+  };
+  placeSite();
+  win.on('resize', placeSite);
+  guardWebsite(site);
+  const onSettingsShortcut = (event, input) => {
+    if (input.type === 'keyDown' && (input.control || input.meta) && input.key === ',') {
+      event.preventDefault();
+      openSettingsWindow();
+    }
+  };
+  site.webContents.on('before-input-event', onSettingsShortcut);
+  win.webContents.on('before-input-event', onSettingsShortcut);
+  const sendWindowState = () => {
+    if (!win.isDestroyed() && !win.webContents.isLoading()) {
+      win.webContents.send('desktop:window-state', { maximized: win.isMaximized() });
+    }
+  };
+  win.on('maximize', sendWindowState);
+  win.on('unmaximize', sendWindowState);
+  win.webContents.on('did-finish-load', sendWindowState);
+  win.loadFile(path.join(__dirname, 'window-shell.html'))
+    .catch(error => console.error('h00k Desktop chrome error:', error.message));
+  site.webContents.loadURL(WEBSITE)
+    .catch(error => console.warn('h00k website load error:', error.message));
+  win.on('closed', () => {
+    if (!site.webContents.isDestroyed()) site.webContents.close();
+    if (standalone === win) standalone = null;
+  });
+  return win;
+}
+
+// First-run setup is deliberately local. Complete it before launching or
+// auto-attaching the h00k website, then open the branded application window.
+function finishInitialSetup() {
+  setTimeout(() => {
+    if (quitting || !settings.setupComplete) return;
+    openStandaloneWindow();
+    if (settingsWindow && !settingsWindow.isDestroyed()) settingsWindow.close();
+  }, 350);
+}
+
 function candidateWindows() {
   // Only native OS window metadata is exposed to the local settings panel.
   // Exclude only this app, not every Electron.exe window (some terminals use Electron).
@@ -457,12 +553,14 @@ function registerIpc() {
     verifySettingsSender(event);
     if (!PROVIDERS.includes(provider) || !patch || typeof patch !== 'object') throw new Error('Invalid profile');
     const previous = settings.profiles[provider];
+    const firstRun = !settings.setupComplete;
     const update = normalizeProfile(provider,{...previous,...patch});
     // Floating panels are manually draggable by default.
     if (previous.mode !== 'floating' && update.mode === 'floating' && !Object.hasOwn(patch,'follow')) update.follow = false;
     settings.profiles[provider] = update;
     settings.setupComplete = true; // Saving the first-run configuration completes onboarding.
     saveSettings(); syncWindows(); pushSnapshot();
+    if (firstRun) finishInitialSetup();
     return snapshot();
   });
   ipcMain.handle('desktop:pick',(event,provider,id) => {
@@ -483,10 +581,13 @@ function registerIpc() {
   ipcMain.handle('desktop:attach',(event,provider) => {
     verifySettingsSender(event);
     if (!PROVIDERS.includes(provider)) throw new Error('Invalid terminal');
+    const firstRun = !settings.setupComplete;
     settings.profiles[provider].enabled = true;
     settings.setupComplete = true;
     manualAttached.add(provider);
-    saveSettings(); syncWindows(); pushSnapshot(); return snapshot();
+    saveSettings(); syncWindows(); pushSnapshot();
+    if (firstRun) finishInitialSetup();
+    return snapshot();
   });
   ipcMain.handle('desktop:detach',(event,provider) => {
     verifySettingsSender(event);
@@ -501,26 +602,32 @@ function registerIpc() {
   });
   ipcMain.handle('desktop:standalone',event => {
     verifySettingsSender(event);
-    if (!standalone || standalone.isDestroyed()) {
-      standalone = new BrowserWindow({
-        title:'h00k Desktop', width:1280,height:850,minWidth:400,minHeight:300,
-        backgroundColor:'#070d18',autoHideMenuBar:true,
-        webPreferences:{sandbox:true,nodeIntegration:false,contextIsolation:true,
-          partition:'persist:h00k',webSecurity:true},
-      });
-      guardWebsite(standalone);
-      attachDockToolbar(standalone, null); // A persistent right-hand quick-settings gear, isolated from h00k.top.
-      standalone.loadURL(WEBSITE).catch(err=>console.warn('h00k load error:',err.message));
-      standalone.on('closed',()=>{standalone=null;});
-    } else standalone.show();
+    openStandaloneWindow();
     return true;
+  });
+  ipcMain.on('desktop:shell-command', (event, action) => {
+    // Only the local shell may manage windows: the unprivileged remote website
+    // is in a DIFFERENT WebContentsView and never gets this preload.
+    if (!standalone || standalone.isDestroyed() || event.sender !== standalone.webContents) return;
+    if (action === 'settings') showStandaloneMenu(standalone);
+    else if (action === 'minimize') standalone.minimize();
+    else if (action === 'toggle-maximize') {
+      if (standalone.isMaximized()) standalone.unmaximize();
+      else standalone.maximize();
+    } else if (action === 'close') standalone.close();
   });
 }
 if(!app.requestSingleInstanceLock()) app.quit();
 else {
-  app.on('second-instance', () => openSettingsWindow());
+  app.on('second-instance', () => {
+    if (!settings.setupComplete) openSettingsWindow();
+    else openStandaloneWindow();
+  });
   app.whenReady().then(() => {
-    loadSettings();registerIpc();createSettingsWindow();runAgent();
+    loadSettings(); registerIpc();
+    if (settings.setupComplete) openStandaloneWindow();
+    else createSettingsWindow();
+    runAgent();
     if (process.platform !== 'win32') {
       for (const provider of PROVIDERS) lastDockStatus[provider] = 'Прикріплення вікон підтримується лише у Windows';
     }
