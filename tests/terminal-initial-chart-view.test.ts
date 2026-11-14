@@ -269,6 +269,9 @@ test('Terminal sync conflicts are visible outside hidden menus and can be recove
   assert.match(banner, /role="alert"/);
   assert.match(banner, /onClick={downloadLocalBackup}/);
   assert.match(banner, /onClick={restoreCloudWorkspace}/);
+  assert.match(banner, /backupFailed/);
+  assert.match(banner, /Недостатньо місця у сховищі браузера/);
+  assert.match(hook, /saveConflictBackup\(uid: string, value: WorkspaceSnapshot\): boolean/);
   assert.match(hook, /localStorage\.setItem\(terminalStorageKey\(CONFLICT_KEY, uid\)/);
   assert.match(hook, /if \(uid && syncConflictRef\.current\) saveConflictBackup\(uid, workspace\)/);
   assert.match(hook, /if \(revision\.current === 0 && !syncConflictRef\.current\)/);
