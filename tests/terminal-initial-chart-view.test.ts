@@ -258,3 +258,20 @@ test('Terminal always chooses native HookChart, never legacy TradingView even on
   assert.match(widget, /<ExchangeCandlestickChart\s+forceHookChart/);
   assert.match(wrapper, /forceHookChart=\{forceHookChart\}/);
 });
+
+test('Terminal sync conflicts are visible outside hidden menus and can be recovered safely', () => {
+  const page = source('../src/components/TerminalPage.tsx');
+  const hook = source('../src/utils/useTerminalWorkspace.ts');
+  const start = page.indexOf('{syncConflict && (');
+  const end = page.indexOf('ref={presetsMenuRef}', start);
+  assert.ok(start >= 0 && end > start, 'conflict warning must remain visible above the hidden preset picker');
+  const banner = page.slice(start, end);
+  assert.match(banner, /role="alert"/);
+  assert.match(banner, /onClick={downloadLocalBackup}/);
+  assert.match(banner, /onClick={restoreCloudWorkspace}/);
+  assert.match(hook, /localStorage\.setItem\(terminalStorageKey\(CONFLICT_KEY, uid\)/);
+  assert.match(hook, /if \(uid && syncConflictRef\.current\) saveConflictBackup\(uid, workspace\)/);
+  assert.match(hook, /if \(revision\.current === 0 && !syncConflictRef\.current\)/);
+  assert.match(hook, /window\.confirm\(/);
+  assert.match(hook, /window\.location\.reload\(\)/);
+});
