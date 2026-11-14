@@ -70,8 +70,8 @@ function calculateATR(klines: Kline[], period: number = 14): number {
 }
 
 // Calculate Volume POC (Point of Control)
-function calculatePOC(klines: Kline[], currentPrice: number): { pocPrice: number; pocVolumePct: number } {
-  if (klines.length === 0) return { pocPrice: currentPrice, pocVolumePct: 22 };
+function calculatePOC(klines: Kline[]): { pocPrice: number | null; pocVolumePct: number | null } {
+  if (klines.length < 10) return { pocPrice: null, pocVolumePct: null };
 
   let minPrice = Infinity;
   let maxPrice = -Infinity;
@@ -81,7 +81,7 @@ function calculatePOC(klines: Kline[], currentPrice: number): { pocPrice: number
   }
 
   if (minPrice >= maxPrice || minPrice === Infinity) {
-    return { pocPrice: currentPrice, pocVolumePct: 22 };
+    return { pocPrice: null, pocVolumePct: null };
   }
 
   const BINS = 24;
@@ -106,11 +106,11 @@ function calculatePOC(klines: Kline[], currentPrice: number): { pocPrice: number
   });
 
   const pocPrice = minPrice + (maxBinIdx + 0.5) * binSize;
-  const pocVolumePct = totalVol > 0 ? Math.round((maxBinVol / totalVol) * 100) : 22;
-
+  if (totalVol <= 0 || maxBinVol <= 0) return { pocPrice: null, pocVolumePct: null };
+  const pocVolumePct = Math.round((maxBinVol / totalVol) * 100);
   return {
     pocPrice: Number(pocPrice.toPrecision(6)),
-    pocVolumePct: Math.max(pocVolumePct, 15),
+    pocVolumePct,
   };
 }
 
@@ -386,15 +386,19 @@ export async function generateSmartAnalysis(params: {
     return cached.data;
   }
 
-  // Get or fetch klines
+  // At least 200 bars for EMA200; do not invent RSI/EMA on insufficient history.
   let klines = params.klines || [];
-  if (klines.length < 20) {
-    klines = (await fetchKlines(exchange, marketType, symbol, tf, 90)) || [];
+  if (klines.length < 201) {
+    klines = (await fetchKlines(exchange, marketType, symbol, tf, 220)) || [];
   }
-
-  const currentPrice =
-    params.currentPrice ||
-    (klines.length > 0 ? klines[klines.length - 1].close : 100);
+  const finiteBar = (c: Kline) => c &&
+    [c.time, c.open, c.high, c.low, c.close, c.volume].every(Number.isFinite) &&
+    c.close > 0 && c.high >= c.low && c.volume >= 0;
+  if (klines.length < 201 || !klines.every(finiteBar)) {
+    throw new Error('Недостатньо достовірних свічок для індикаторів (EMA200)');
+  }
+  // Use a real exchange close, not a user-supplied price or arbitrary $100.
+  const currentPrice = klines[klines.length - 1].close;
 
   const closes = klines.map((k) => k.close);
   const highs = klines.map((k) => k.high);
@@ -430,57 +434,60 @@ export async function generateSmartAnalysis(params: {
       ? `Ціна вище EMA20 на +${(((currentPrice - ema20) / ema20) * 100).toFixed(2)}% (Імпульсний контроль покупців)`
       : `Ціна нижче EMA20 на -${(((ema20 - currentPrice) / ema20) * 100).toFixed(2)}% (Корекційний відкат під опір)`;
 
-  // Highs and Lows in recent candles
-  const dayHigh = Math.max(...highs.slice(-24), currentPrice * 1.03);
-  const dayLow = Math.min(...lows.slice(-24), currentPrice * 0.97);
-  const dayRange = dayHigh - dayLow;
-  const positionInDayRangePct = dayRange > 0 ? Math.round(((currentPrice - dayLow) / dayRange) * 100) : 50;
-  const dailyRangePct = parseFloat(((dayRange / dayLow) * 100).toFixed(2));
+  // Independently measure 24h from 24 *completed* one-hour candles, never
+  // from 24 bars of an arbitrary selected timeframe.
+  const hourly = tf === '1h' ? klines :
+    (await fetchKlines(exchange, marketType, symbol, '1h', 26).catch(() => [])) || [];
+  const closedHours = hourly.filter((c) => finiteBar(c) &&
+    c.time * 1000 + 60 * 60_000 <= Date.now()).slice(-24);
+  const has24h = closedHours.length === 24;
+  const barUsd = (bar: Kline) => Number.isFinite(bar.quoteVolume)
+    ? bar.quoteVolume! : bar.volume * bar.close;
+  const total24hVolUsd = has24h
+    ? closedHours.reduce((sum, c) => sum + barUsd(c), 0) : null;
+  const last1hVolUsd = has24h ? barUsd(closedHours[closedHours.length - 1]) : null;
+  const mean1h = has24h
+    ? closedHours.slice(0, -1).reduce((sum,c) => sum + barUsd(c),0) / 23 : null;
+  const volume1hSpikeRatio = mean1h !== null && mean1h > 0 && last1hVolUsd !== null
+    ? Number((last1hVolUsd / mean1h).toFixed(2)) : null;
+  const hasVolumeSpike = volume1hSpikeRatio !== null && volume1hSpikeRatio >= 1.7;
 
-  // Volume metrics
-  let total24hVolUsd = 0;
-  let last1hVolUsd = 0;
-  const recentCandles = klines.slice(-24);
-  recentCandles.forEach((c) => {
-    total24hVolUsd += c.volume * c.close;
-  });
-  if (klines.length > 0) {
-    last1hVolUsd = klines[klines.length - 1].volume * currentPrice;
-  }
-  const avgHourlyVol = total24hVolUsd > 0 ? total24hVolUsd / 24 : last1hVolUsd;
-  const volume1hSpikeRatio = avgHourlyVol > 0 ? parseFloat((last1hVolUsd / avgHourlyVol).toFixed(2)) : 1.0;
-  const hasVolumeSpike = volume1hSpikeRatio >= 1.7;
+  const dayHigh = has24h ? Math.max(...closedHours.map(c => c.high)) : null;
+  const dayLow = has24h ? Math.min(...closedHours.map(c => c.low)) : null;
+  const dayRange = dayHigh !== null && dayLow !== null ? dayHigh - dayLow : null;
+  const positionInDayRangePct = dayRange !== null && dayRange > 0 && dayLow !== null
+    ? Math.max(0,Math.min(100,Math.round((currentPrice-dayLow)/dayRange*100))) : null;
+  const dailyRangePct = dayRange !== null && dayLow !== null && dayLow > 0
+    ? Number((dayRange/dayLow*100).toFixed(2)) : null;
 
-  // POC and Support/Resistance
-  const { pocPrice, pocVolumePct } = calculatePOC(klines, currentPrice);
-  const strongSupport = Number((Math.min(...lows.slice(-15)) * 0.996).toPrecision(6));
+  // The POC is a candle-typical-price approximation, NOT tick volume-at-price.
+  const { pocPrice, pocVolumePct } = calculatePOC(klines);
+  const strongSupport = Number((Math.min(...lows.slice(-15)) * .996).toPrecision(6));
   const strongResistance = Number((Math.max(...highs.slice(-15)) * 1.004).toPrecision(6));
-
-  const liquidityLevels: SmartAnalysisData['levels']['liquidityLevels'] = [
-    {
-      label: 'Sell-Side Liquidity (Стопи шортистів над хаєм)',
-      price: Number(dayHigh.toPrecision(6)),
-      type: 'sell_side',
-      distancePct: parseFloat((((dayHigh - currentPrice) / currentPrice) * 100).toFixed(2)),
-    },
-    {
-      label: 'POC Volume Pool (Ядро накопиченого обсягу)',
-      price: pocPrice,
-      type: 'buy_side',
-      distancePct: parseFloat((((pocPrice - currentPrice) / currentPrice) * 100).toFixed(2)),
-    },
-    {
-      label: 'Buy-Side Liquidity (Стопи лонгістів під лоєм)',
-      price: Number(dayLow.toPrecision(6)),
-      type: 'buy_side',
-      distancePct: parseFloat((((currentPrice - dayLow) / currentPrice) * 100).toFixed(2)),
-    },
-  ];
+  const liquidityLevels: SmartAnalysisData['levels']['liquidityLevels'] = [];
+  if (dayHigh !== null && dayLow !== null) {
+    liquidityLevels.push({
+      label: 'Максимум 24 закритих 1h свічок (можлива зона стопів)',
+      price: dayHigh, type: 'sell_side',
+      distancePct: Number(((dayHigh-currentPrice)/currentPrice*100).toFixed(2)),
+    }, {
+      label: 'Мінімум 24 закритих 1h свічок (можлива зона стопів)',
+      price: dayLow, type: 'buy_side',
+      distancePct: Number(((currentPrice-dayLow)/currentPrice*100).toFixed(2)),
+    });
+  }
+  if (pocPrice !== null) {
+    liquidityLevels.push({
+      label: 'Оціночний POC за обсягами OHLCV (не ордери стопів)',
+      price: pocPrice, type: 'buy_side',
+      distancePct: Number(((pocPrice-currentPrice)/currentPrice*100).toFixed(2)),
+    });
+  }
 
   // Async parallel external data
   const [btcContext, orderbookData, derivatives] = await Promise.all([
     analyzeBTCStructure(),
-    fetchOrderbookAnalysis(symbol, currentPrice),
+    fetchOrderbookAnalysis(symbol, exchange, marketType),
     fetchDerivatives(symbol, marketType),
   ]);
 
