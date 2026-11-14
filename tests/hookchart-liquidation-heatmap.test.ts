@@ -114,3 +114,39 @@ test('map switch is under expanded tools, disabled by default, absent on replay/
   assert.match(source,/setInterval\(\(\)=>void refresh\(\),60_000\)/);
   assert.match(source,/document\.visibilityState==='hidden'/);
 });
+
+test('one chart-tab fetch for concurrent same-symbol heatmap requests; no market websocket', async () => {
+  const previous=globalThis.fetch;
+  let calls=0;
+  globalThis.fetch=(async()=>{
+    calls++;
+    return new Response(JSON.stringify({success:true,data:raw('DUMMYUSDT')}),{
+      status:200,headers:{'Content-Type':'application/json'},
+    });
+  }) as typeof fetch;
+  try {
+    const {fetchSharedObservedHeatmap}=await import('../src/components/hookchart/LiquidationHeatmapLoader');
+    const results=await Promise.all(Array.from({length:12},()=>
+      fetchSharedObservedHeatmap('binance','DUMMYUSDT','24h')));
+    assert.equal(calls,1,'same-market Terminal cards share one in-flight request');
+    assert.ok(results.every(r=>r.status==='available'&&r.data?.bins.length===1));
+    await fetchSharedObservedHeatmap('binance','DUMMYUSDT','24h');
+    assert.equal(calls,1,'repeat request hits short-lived memory cache');
+  }finally {globalThis.fetch=previous;}
+});
+
+test('disabled PostgreSQL Liq archive is acknowledged only after user opts in', async () => {
+  const prev=globalThis.fetch;
+  let calls=0;
+  globalThis.fetch=(async()=>{
+    calls++;
+    return new Response('Not Found',{status:404});
+  }) as typeof fetch;
+  try {
+    const {fetchSharedObservedHeatmap}=await import('../src/components/hookchart/LiquidationHeatmapLoader');
+    const result=await fetchSharedObservedHeatmap('bybit','NOTARCHIVEDUSDT','7d');
+    assert.equal(calls,1);
+    assert.equal(result.status,'disabled');
+    assert.equal(result.data,null);
+  }finally {globalThis.fetch=prev;}
+});
