@@ -1590,6 +1590,7 @@ export default function App() {
           />
         ) : activePage === 'screener' ? (
           <CoinScreenerPage
+            key={user?.uid || 'guest'}
             onSelectCoin={handleSelectPair}
             onSendMetaScalp={(coin) => handleSendToMetaScalp(coin, 'screener')}
             metaScalpBinding={activeTerminalGroup}
