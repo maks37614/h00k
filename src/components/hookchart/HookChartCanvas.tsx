@@ -19,6 +19,7 @@ import { fetchDirectKlines } from '../../utils/directExchangeClient';
 import { fetchSharedAnalysisKlines } from '../../utils/sharedAnalysisKlines';
 import { sharedAnalysisHookCandles } from '../../utils/sharedAnalysisCandles';
 import { aggregateHookChartCandles, updateHookChartAggregation, type AggregationCache } from './aggregationCache';
+import { visibleScopedRemoteSeries, type ScopedRemoteSeries } from './scopedRemoteSeries';
 import { fetchSharedChartJson } from '../../utils/sharedChartRequests';
 import { candlesBeforeHistoryEnd, clampHookChartHistory, extendHookChartHistory, scopedHookChartHistoryRows, type ScopedHookChartHistory } from '../../utils/hookChartHistory';
 import { createChartCrosshairStore } from './crosshairState';
@@ -161,7 +162,9 @@ const HookChartCanvas = forwardRef<HookChartHandle, HookChartCanvasProps>(functi
   const [historyState, setHistoryState] = useState<{ scope: string; status: 'idle' | 'loading' | 'limited' | 'error' }>({ scope: historyScope, status: 'idle' });
   const historyStatus = historyState.scope === historyScope ? historyState.status : 'idle';
   const [historyRetry, setHistoryRetry] = useState(0);
-  const [remoteSeries, setRemoteSeries] = useState<Record<string, Candle[]>>({});
+  const [remoteState, setRemoteState] = useState<ScopedRemoteSeries<Candle> | null>(null);
+  // The prior request may still be in-flight after the chart changes coin or TF.
+  const remoteSeries = visibleScopedRemoteSeries(remoteState, historyScope, !replay && !externalData);
   // One immutable rolling aggregate per local higher timeframe, not a
   // 5,000-candle rebuild every time a live trade updates the last bar.
   const aggregateCache = useRef(new Map<string, AggregationCache>());
@@ -387,7 +390,7 @@ const HookChartCanvas = forwardRef<HookChartHandle, HookChartCanvasProps>(functi
 
   useEffect(() => {
     const exchangeSymbol = /^[A-Z0-9]+$/i.test(symbol);
-    if (replay || externalData || !exchangeSymbol) { setRemoteSeries({}); return; }
+    if (replay || externalData || !exchangeSymbol) { setRemoteState(null); return; }
     let cancelled = false;
     let pulling = false;
     const controller = new AbortController();
@@ -396,7 +399,7 @@ const HookChartCanvas = forwardRef<HookChartHandle, HookChartCanvasProps>(functi
       pulling = true;
       try {
       const requested = analysisTfs.filter(tf => tf !== timeframe && TIMEFRAMES.includes(tf as Timeframe));
-      if (!requested.length) { if (!cancelled) setRemoteSeries({}); return; }
+      if (!requested.length) { if (!cancelled) setRemoteState({ scope: historyScope, series: {} }); return; }
       const rows = await Promise.all(requested.map(async tf => {
         try {
           const limit = Math.min(1000, Math.max(250, settings.levelHistory || 500, settings.trendHistory || 300));
@@ -406,7 +409,10 @@ const HookChartCanvas = forwardRef<HookChartHandle, HookChartCanvasProps>(functi
           return [tf, [] as Candle[]] as const;
         }
       }));
-      if (!cancelled && !controller.signal.aborted) setRemoteSeries(Object.fromEntries(rows.filter(([, values]) => values.length)));
+      if (!cancelled && !controller.signal.aborted) setRemoteState({
+        scope: historyScope,
+        series: Object.fromEntries(rows.filter(([, values]) => values.length)),
+      });
       } finally {
         pulling = false;
       }
@@ -414,7 +420,7 @@ const HookChartCanvas = forwardRef<HookChartHandle, HookChartCanvasProps>(functi
     void pull();
     const timer = setInterval(() => void pull(), 60_000);
     return () => { cancelled = true; controller.abort(); clearInterval(timer); };
-  }, [exchange, marketType, symbol, timeframe, replay, !!externalData, analysisTfKey, settings.levelHistory, settings.trendHistory]);
+  }, [exchange, marketType, symbol, timeframe, replay, !!externalData, analysisTfKey, settings.levelHistory, settings.trendHistory, historyScope]);
 
   const analysisSeries = useMemo(() => {
     const series: Record<string, Candle[]> = { [timeframe]: candles };
