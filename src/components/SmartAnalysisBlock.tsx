@@ -205,12 +205,44 @@ export const SmartAnalysisBlock: React.FC<SmartAnalysisBlockProps> = ({
   const selectedTab = selectVisibleTab(activeTab, visible.modules);
   const showModule = (module: SmartAnalysisModule) =>
     visible.modules[module] && (selectedTab === 'all' || selectedTab === module);
+  const joinPresent = (...names: Array<string | false | null | undefined>) =>
+    names.filter((name): name is string => typeof name === 'string').join(' / ');
   const tabs: Array<{ id: SmartAnalysisModule; label: string }> = [
-    { id: 'btc', label: 'Контекст BTC (15m → 5m → 1m)' },
-    { id: 'tech', label: "RSI, EMA, Об'єми та Спред" },
-    { id: 'orderbook', label: 'Стакан, POC та Ліквідність' },
-    { id: 'derivatives', label: 'Open Interest та Деривативи' },
-    { id: 'institutional', label: 'Holders / Заявки / ММ / Ризики' },
+    {
+      id: 'btc',
+      label: visible.btcTimeframes.length > 0
+        ? 'Контекст BTC (15m → 5m → 1m)' : 'BTC/USDT',
+    },
+    {
+      id: 'tech',
+      label: visible.rsi && visible.emas && (visible.volume1h || visible.volume24h) && visible.spread
+        ? "RSI, EMA, Об'єми та Спред"
+        : joinPresent(visible.rsi && 'RSI', visible.emas && 'EMA',
+          (visible.volume1h || visible.volume24h) && 'Об’єми',
+          visible.spread && 'Спред', visible.dayRange && 'High/Low'),
+    },
+    {
+      id: 'orderbook',
+      label: (visible.bid || visible.ask || visible.imbalance) && visible.poc && visible.liquidityLevels
+        ? 'Стакан, POC та Ліквідність'
+        : joinPresent((visible.bid || visible.ask || visible.imbalance) && 'Стакан',
+          visible.poc && 'POC', visible.liquidityLevels && 'Ліквідність',
+          (visible.support || visible.resistance) && 'S/R'),
+    },
+    {
+      id: 'derivatives',
+      label: (visible.binanceOI || visible.bybitOI) && (visible.binanceFunding || visible.bybitFunding)
+        ? 'Open Interest та Деривативи'
+        : joinPresent((visible.binanceOI || visible.bybitOI || visible.totalOI) && 'Open Interest',
+          (visible.binanceFunding || visible.bybitFunding) && 'Funding Rate'),
+    },
+    {
+      id: 'institutional',
+      label: visible.holders && visible.largeOrders && visible.marketMaker && visible.vulnerability
+        ? 'Holders / Заявки / ММ / Ризики'
+        : joinPresent(visible.holders && 'Holders', visible.largeOrders && 'Заявки',
+          visible.marketMaker && 'Маркет-мейкер', visible.vulnerability && 'Ризики'),
+    },
   ];
 
   const priceOrNA = (value: number | null) => value === null ? 'н/д' : formatCryptoPrice(value);
@@ -517,7 +549,7 @@ export const SmartAnalysisBlock: React.FC<SmartAnalysisBlockProps> = ({
             {(visible.volume1h || visible.volume24h) && (
             <div className="p-3 rounded-lg bg-slate-900/80 border border-slate-800 space-y-1.5">
               <div className="flex items-center justify-between text-slate-400">
-                <span>Обсяг останньої закритої 1h свічки (≈ USD)</span>
+                <span>{visible.volume1h ? 'Обсяг останньої закритої 1h свічки (≈ USD)' : 'Обсяг 24 закритих 1h свічок (≈ USD)'}</span>
                 {data.volumeMetrics.hasVolumeSpike && (
                   <span className="px-1.5 py-0.2 rounded text-[10px] bg-amber-500/20 text-amber-300 font-bold border border-amber-500/40">
                     СПЛЕСК x{data.volumeMetrics.volume1hSpikeRatio}
