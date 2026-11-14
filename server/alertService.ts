@@ -308,6 +308,14 @@ export function deleteHistoryItem(id: string, userId?: string): boolean {
   return false;
 }
 
+/** Rearming while an old delivery is unresolved would erase its durable intent. */
+export class AlertDispatchPendingError extends Error {
+  constructor() {
+    super('Сповіщення ще очікує збереження доставки. Спробуйте пізніше.');
+    this.name = 'AlertDispatchPendingError';
+  }
+}
+
 // Get all alerts (strictly filtered by user, never leaked to guests)
 export function getAllAlerts(userId?: string): PriceAlert[] {
   if (!userId || userId === 'guest') return [];
@@ -666,7 +674,7 @@ export function toggleAlert(id: string, userId?: string, isActive?: boolean): Pr
     if (alert.isActive && alert.triggered) {
       // Restarting an unfinished cycle would erase its only durable dispatch
       // intent. Explicit deletion/clear remains available to cancel it.
-      if (alert.deliveryPending) throw new Error('Сповіщення ще очікує збереження доставки. Спробуйте пізніше.');
+      if (alert.deliveryPending) throw new AlertDispatchPendingError();
       alert.deliveryEpoch = (alert.deliveryEpoch ?? 0) + 1;
       alert.triggered = false;
       alert.triggeredAt = undefined;
