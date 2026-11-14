@@ -4,12 +4,22 @@ import { ExchangeStreamClient, type RawDepthDelta } from './exchangeStream';
 import { isFreshDepthTime, parseDepthLevels } from '../../src/utils/orderBookValidation';
 
 type Listener = (...args: any[]) => void;
+
+/** Public exchange ticker. No user settings or private data. */
+export type SharedMarketTicker = {
+  price: number;
+  high24h: number;
+  low24h: number;
+  change24h: number;
+  volume24hUsd: number;
+};
 type Entry = {
   key: string;
   source: ExchangeStreamClient;
   refs: number;
   lastResyncAt: number;
   lastErrorLoggedAt: number;
+  ticker: SharedMarketTicker;
   bids: Map<number, number>;
   asks: Map<number, number>;
   depthSequence: number;
@@ -44,6 +54,7 @@ export class SharedExchangeStreamHandle {
       // The registry still drops each consumer's listeners at release time.
       source.setMaxListeners(0);
       entry = { key, source, refs: 0, lastResyncAt: 0, lastErrorLoggedAt: 0,
+        ticker: { price: 0, high24h: 0, low24h: 0, change24h: 0, volume24hUsd: 0 },
         bids: new Map(), asks: new Map(), depthSequence: 0, depthEventTime: 0, depthReceivedAt: 0 };
       entries.set(key, entry);
       // Maintain an instrument-level snapshot so a subscriber joining an
@@ -63,6 +74,22 @@ export class SharedExchangeStreamHandle {
         shared.lastErrorLoggedAt = now;
         console.warn(`[SharedExchangeStream] ${shared.key}: initial stream error:`,
           error instanceof Error ? error.message : 'unknown exchange stream error');
+      });
+      // Update price once per market rather than once for every owner.
+      // Workers read the same public values but retain their own alert state.
+      source.on('price', (data: {
+        price: number; high24h: number; low24h: number;
+        volume24hUsd: number; change24h?: number;
+      }) => {
+        if (Number.isFinite(data.price) && data.price > 0) shared.ticker.price = data.price;
+        if (Number.isFinite(data.high24h) && data.high24h >= 0) shared.ticker.high24h = data.high24h;
+        if (Number.isFinite(data.low24h) && data.low24h >= 0) shared.ticker.low24h = data.low24h;
+        if (Number.isFinite(data.volume24hUsd) && data.volume24hUsd >= 0)
+          shared.ticker.volume24hUsd = data.volume24hUsd;
+        if (Number.isFinite(data.change24h)) shared.ticker.change24h = data.change24h!;
+      });
+      source.on('trade', (trade: { price: number }) => {
+        if (Number.isFinite(trade.price) && trade.price > 0) shared.ticker.price = trade.price;
       });
       source.on('status', (status: string) => {
         if (status !== 'LIVE') {
@@ -100,6 +127,7 @@ export class SharedExchangeStreamHandle {
   }
 
   get status() { return this.entry.source.status; }
+  get marketTicker(): Readonly<SharedMarketTicker> { return this.entry.ticker; }
 
   on(event: string, listener: Listener): this {
     if (this.disposed) return this;

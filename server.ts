@@ -127,10 +127,26 @@ async function startServer() {
         return res.status(429).setHeader('Retry-After', String(windowMs / 1000)).json({
           success: false, error: 'Повторна ручна перевірка буде доступна пізніше.',
         });
-      if (jobId !== 'surveillance') await checkAlertsOnce(res.locals.userId);
-      if (jobId !== 'price_alerts') await checkAllUserCoins(res.locals.userId);
-      const result = { success: true, message: 'Ваші сповіщення перевірено' };
-      res.json(result);
+      // Run the user's independent pipelines even when one fails. A partial
+      // result is never advertised as success, and no other user is scanned.
+      const checks: Promise<unknown>[] = [];
+      if (jobId !== 'surveillance') checks.push(checkAlertsOnce(res.locals.userId));
+      if (jobId !== 'price_alerts') checks.push(checkAllUserCoins(res.locals.userId));
+      const results = await Promise.allSettled(checks);
+      const failures = results.filter((item): item is PromiseRejectedResult =>
+        item.status === 'rejected');
+      if (failures.length) {
+        const reasons = failures.map(item => item.reason);
+        const retryable = reasons.some(error =>
+          error instanceof SurveillanceCheckIncompleteError ||
+          error instanceof AlertManualQueueBusyError);
+        return res.status(retryable ? 503 : 500).setHeader('Retry-After', '10').json({
+          success: false,
+          error: 'Частина ручних перевірок завершилася помилкою. Повторіть спробу пізніше.',
+          failedTasks: failures.length,
+        });
+      }
+      res.json({ success: true, message: 'Ваші сповіщення перевірено' });
     } catch (err: any) {
       if (err instanceof SurveillanceCheckIncompleteError)
         return res.status(503).setHeader('Retry-After', '10').json({

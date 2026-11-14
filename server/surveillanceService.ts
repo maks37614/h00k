@@ -141,6 +141,7 @@ export function loadSurveillanceStore(): UserSurveillanceStore {
 export function saveSurveillanceStore(store: UserSurveillanceStore): boolean {
   const started = performance.now();
   let bytes = 0;
+  let temporaryFile: string | null = null;
   try {
     ensureDataDir();
     let safeStore: UserSurveillanceStore = store;
@@ -154,20 +155,34 @@ export function saveSurveillanceStore(store: UserSurveillanceStore): boolean {
         }
       }
     }
-    const temporaryFile = `${SURVEILLANCE_FILE}.tmp`;
     const payload = JSON.stringify(safeStore);
     bytes = Buffer.byteLength(payload);
-    // This file contains private account selections, alert event history and
-    // strategy settings. A pre-existing .tmp file may have permissive mode;
-    // chmod before rename so the final name is never published as world-readable.
-    fs.writeFileSync(temporaryFile, payload, { encoding: 'utf-8', mode: 0o600 });
-    fs.chmodSync(temporaryFile, 0o600);
+    // Remove an abandoned predictable name from older deployments without
+    // opening or following it (including if an attacker made it a symlink).
+    try { fs.unlinkSync(`${SURVEILLANCE_FILE}.tmp`); }
+    catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+    }
+    // Never truncate/reuse a predictable .tmp file: previous deployments may
+    // have left it world-readable, or an attacker may have placed a symlink.
+    // O_EXCL ('wx') creates a fresh, unpredictable 0600 file BEFORE bytes
+    // are written. A failed write/rename is cleaned up without touching the
+    // original, durable surveillance.json.
+    temporaryFile = `${SURVEILLANCE_FILE}.${randomUUID()}.tmp`;
+    fs.writeFileSync(temporaryFile, payload, {
+      encoding: 'utf-8', flag: 'wx', mode: 0o600,
+    });
     fs.renameSync(temporaryFile, SURVEILLANCE_FILE);
+    temporaryFile = null;
     // A failed disk write must never replace the authoritative in-memory copy.
     storeCache = safeStore;
     persistenceMetrics.record('surveillance', performance.now() - started, bytes, true);
     return true;
   } catch (err) {
+    if (temporaryFile) {
+      try { fs.rmSync(temporaryFile, { force: true }); }
+      catch (cleanupError) { console.error('Failed to clean up surveillance temp file:', cleanupError); }
+    }
     persistenceMetrics.record('surveillance', performance.now() - started, bytes, false);
     console.error('Failed to save surveillance.json:', err);
     return false;
@@ -404,6 +419,18 @@ export function findSurveillanceCoinById(
   if (!Array.isArray(list)) return null;
   const index = list.findIndex(coin => coin.id === id);
   return index === -1 ? null : { userId, coin: list[index], index, list };
+}
+
+/** Cheap owner-scoped count for the status endpoint. Never iterate every
+ * user's coins on every authenticated profile refresh. */
+export function countActiveSurveillanceCoins(userId?: string): number {
+  const store = loadSurveillanceStore();
+  if (userId) return (store[userId] || []).reduce((n, coin) => n + Number(coin.isActive), 0);
+  let total = 0;
+  for (const coins of Object.values(store))
+    if (Array.isArray(coins))
+      for (const coin of coins) if (coin.isActive) total++;
+  return total;
 }
 
 export function getAllActiveSurveillanceCoins(): { userId: string; coin: SurveillanceCoin }[] {

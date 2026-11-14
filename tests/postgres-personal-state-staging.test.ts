@@ -40,7 +40,8 @@ test('staging is idempotent, atomic and does not replace JSON canonical state',(
   assert.match(sql,new RegExp('CREATE TABLE IF NOT EXISTS '+name));
  }
  assert.match(cli,/liveCutover:false/);
- assert.match(cli,/Specify exactly --dry-run or --apply/);
+ assert.match(cli,/Specify exactly --dry-run, --backup, --apply or --verify/);
+ assert.match(cli,/createPersonalStateBackup\(snapshot\)/);
 });
 
 test('snapshot fingerprint is stable for exact replays and changes for altered inputs',()=>{

@@ -130,13 +130,13 @@ test('Terminal keeps each exchange instrument quote currency instead of appendin
   assert.deepEqual(normalizeTerminalMarketPair('WBTCUSDT'), { symbol: 'WBTCUSDT', quoteAsset: 'USDT' });
 });
 
-test('Terminal displays non-USD quote assets without a misleading dollar sign', () => {
+test('Terminal keeps asset denominations and the established stablecoin-dollar display convention', () => {
   assert.equal(formatTerminalQuotedPrice(0.025, 'BTC'), '0.02500 BTC');
   assert.equal(formatTerminalQuotedPrice(3.5, 'ETH'), '3.50 ETH');
-  // A stablecoin quote is not a USD-denominated price. UI displays the
-  // instrument's quote asset separately rather than inventing a dollar sign.
-  assert.equal(formatTerminalQuotedPrice(10, 'USDT'), '10.00');
-  assert.equal(formatTerminalQuotedPrice(10, 'USDC'), '10.00');
+  // Header uses an approximate dollar display for USD-pegged quote assets.
+  // This is display formatting only; the underlying market quote remains USDT/USDC.
+  assert.equal(formatTerminalQuotedPrice(10, 'USDT'), '$10.00');
+  assert.equal(formatTerminalQuotedPrice(10, 'USDC'), '$10.00');
 });
 
 test('Terminal preset draft creation never deactivates automatic market refresh', () => {
