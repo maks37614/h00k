@@ -241,7 +241,11 @@ export class CoinWorker {
   public async runDeepAnalysis() {
     // Inactive 24/7 monitors still receive lightweight price state, but must
     // not run costly personal setup/rule evaluation or Telegram dispatches.
-    if (this.isDestroyed || !this.coin.isActive || this.currentPrice <= 0 || this.analysisInFlight) return;
+    // Never produce realtime setups or private notifications from an old
+    // cached quote after a WebSocket disconnect, silent market ticker or
+    // unconfirmed book resync. Historical candles remain available to UI.
+    if (this.isDestroyed || !this.coin.isActive || this.currentPrice <= 0 ||
+        !this.streamClient.hasFreshMarketQuote() || this.analysisInFlight) return;
     this.analysisInFlight = true;
     this.lastAnalysisTimestamp = Date.now();
     try {
@@ -483,7 +487,11 @@ export class CoinWorker {
 
     // 7. Macro & BTC Context
     const btcContext = await this.macroEngine.updateBTCContext();
-    if (this.isDestroyed || !this.coin.isActive) return;
+    // A network/macro fetch can take longer than a quote's freshness
+    // window. Never emit a setup based on the pre-await price if the
+    // market disconnected or traded to a different current price meanwhile.
+    if (this.isDestroyed || !this.coin.isActive ||
+        !this.streamClient.hasFreshMarketQuote() || this.currentPrice !== price) return;
 
     // 8. Setup Detection & Confluence Engine
     this.setups = this.setupEngine.evaluateSetups({
@@ -613,7 +621,7 @@ export class CoinWorker {
       exchange: this.coin.exchange,
       marketType: this.coin.marketType,
       isActive: this.coin.isActive,
-      status: orderBookState.status,
+      status: this.streamClient.hasFreshMarketQuote() ? orderBookState.status : 'STALE',
       currentPrice: this.currentPrice,
       change24h: this.change24h,
       high24h: this.high24h,

@@ -233,7 +233,9 @@ export class ExchangeStreamClient extends EventEmitter {
       const high24h = parseFloat(msg.h || 0);
       const low24h = parseFloat(msg.l || 0);
       const volume24hUsd = parseFloat(msg.q || 0);
-      if (!isNaN(price) && price > 0) {
+      // Binance event clock must be genuine and recent: a delayed ticker
+      // cannot revive a stale quote after an exchange/network interruption.
+      if (Number.isFinite(price) && price > 0 && isFreshDepthTime(msg.E)) {
         this.emit('price', {
           price,
           high24h,
@@ -253,7 +255,8 @@ export class ExchangeStreamClient extends EventEmitter {
       // If buyer is maker, taker is seller -> aggressive SELL. If buyer is taker -> aggressive BUY.
       const side: 'BUY' | 'SELL' = isBuyerMaker ? 'SELL' : 'BUY';
 
-      if (!isNaN(price) && price > 0 && !isNaN(quantity) && quantity > 0) {
+      if (Number.isFinite(price) && price > 0 && Number.isFinite(quantity) && quantity > 0 &&
+          isFreshDepthTime(msg.T ?? msg.E)) {
         const tradeEvent: RawTradeEvent = {
           price,
           quantity,
