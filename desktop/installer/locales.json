@@ -35,7 +35,7 @@
     "step": "Step",
     "of": "of",
     "contact": "h00k.top",
-    "security": "Use read-only exchange API keys only where supported. Smart Dock itself requires no keys.",
+    "security": "Use read-only exchange API keys only where supported. h00k Desktop itself requires no keys.",
     "unavailable": "The installer files are missing or damaged.",
     "help": "Setup guide"
   },
@@ -75,7 +75,7 @@
     "step": "Krok",
     "of": "z",
     "contact": "h00k.top",
-    "security": "Używaj kluczy giełdowych tylko do odczytu tam, gdzie są obsługiwane. Smart Dock ich nie wymaga.",
+    "security": "Używaj kluczy giełdowych tylko do odczytu tam, gdzie są obsługiwane. h00k Desktop ich nie wymaga.",
     "unavailable": "Brak plików instalatora lub są uszkodzone.",
     "help": "Instrukcja instalacji"
   },
@@ -115,7 +115,7 @@
     "step": "Шаг",
     "of": "из",
     "contact": "h00k.top",
-    "security": "Для поддерживаемых функций используйте API-ключи только для чтения. Smart Dock не требует ключей.",
+    "security": "Для поддерживаемых функций используйте API-ключи только для чтения. h00k Desktop не требует ключей.",
     "unavailable": "Файлы установщика отсутствуют или повреждены.",
     "help": "Руководство по установке"
   },
@@ -155,7 +155,7 @@
     "step": "Крок",
     "of": "із",
     "contact": "h00k.top",
-    "security": "Використовуйте біржові API-ключі лише для читання у підтримуваних функціях. Smart Dock не потребує ключів.",
+    "security": "Використовуйте біржові API-ключі лише для читання у підтримуваних функціях. h00k Desktop не потребує ключів.",
     "unavailable": "Файли інсталятора відсутні або пошкоджені.",
     "help": "Інструкція з встановлення"
   }
