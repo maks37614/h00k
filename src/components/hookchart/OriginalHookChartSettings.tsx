@@ -1,8 +1,9 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useContext, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { ExchangeId, HookChartPreferences, MarketType } from '../../types';
 import { clampHookChartHistory } from '../../utils/hookChartHistory';
 import { normalizeDensityDistance } from './marketAnalytics';
+import { mainSettingHelpText } from './mainSettingsHelp';
 import { applyVisualDefaultsForDevice, VISUAL_ZOOM_MIN, VISUAL_ZOOM_MAX, VISUAL_GAP_MAX, getVisualProfile, makeVisualProfileKey, normalizedVisualProfiles, patchVisualProfile, selectableVisualContexts, visibleScaleContext, visualDeviceForWidth, type VisualContextId, type VisualDevice, type VisualProfileKey } from './visualProfiles';
 import type { Candle, Viewport } from './engine';
 import { HookChartVisualPreview } from './HookChartVisualPreview';
@@ -256,11 +257,16 @@ const HOTKEY_GROUPS: Array<{ title: string; rows: Array<{ id: HookChartHotkeyAct
   ] },
 ];
 
+const MainSettingsHelpContext = React.createContext(false);
+const SettingsSectionContext = React.createContext('');
+
 function Section({ title, help, children }: { title: string; help?: string; children: React.ReactNode }) {
-  return <section className="settingsSection"><h3>{title}{help && <VisualSettingHelp label={title} text={help}/>}</h3>{children}</section>;
+  return <SettingsSectionContext.Provider value={title}>
+    <section className="settingsSection"><h3>{title}{help && <VisualSettingHelp label={title} text={help}/>}</h3>{children}</section>
+  </SettingsSectionContext.Provider>;
 }
 /** Accessible, tap-to-open help. The portal escapes the scroll-clipped chart settings dialog. */
-function VisualSettingHelp({ text, label }: { text: string; label: string }) {
+function VisualSettingHelp({ text, label, compact = false }: { text: string; label: string; compact?: boolean }) {
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const tooltipId = React.useId();
@@ -297,10 +303,15 @@ function VisualSettingHelp({ text, label }: { text: string; label: string }) {
     };
   }, [open, tooltipId]);
 
-  return <span className="visualSettingHelp">
+  return <span className={'visualSettingHelp' + (compact ? ' mainSettingHelp' : '')}>
     <button ref={triggerRef} type="button" className="visualSettingHelpButton"
-      aria-label={`Пояснення: ${label}`} aria-expanded={open} aria-controls={open ? tooltipId : undefined}
-      title={text} onClick={() => setOpen(previous => !previous)}>?</button>
+      aria-label={`Пояснення: ${label}`} aria-expanded={open}
+      aria-describedby={open ? tooltipId : undefined} aria-controls={open ? tooltipId : undefined}
+      onPointerEnter={event => { if (event.pointerType === 'mouse' || event.pointerType === 'pen') setOpen(true); }}
+      onPointerLeave={event => { if (event.pointerType === 'mouse' || event.pointerType === 'pen') setOpen(false); }}
+      onFocus={() => setOpen(true)}
+      onBlur={() => setOpen(false)}
+      onClick={() => setOpen(true)}>?</button>
     {open && typeof document !== 'undefined' && createPortal(
       <span id={tooltipId} className="hookchartVisualHelpPopover" role="tooltip"
         style={{ position: 'fixed', left: position.left, top: position.top, width: position.width }}>
@@ -313,7 +324,11 @@ function LiquidationHelp({ text, label }: { text: string; label: string }) {
   return <span className="liqSettingHelp"><button type="button" aria-label={label + '. ' + text} title={text}>?</button><span role="tooltip">{text}</span></span>;
 }
 function Setting({ label, desc, help, rowClassName, unavailable = false, children }: { label: string; desc?: string; help?: string; rowClassName?: string; unavailable?: boolean; children: React.ReactNode }) {
-  return <div className={'settingRow' + (unavailable ? ' settingUnavailable' : '') + (rowClassName ? ' ' + rowClassName : '')}><div className="settingText"><b>{label}{help && <LiquidationHelp label={label} text={help} />}</b>{desc && <small>{desc}</small>}{unavailable && <small className="settingUnavailableNote">Ще не реалізовано</small>}</div><div className="settingControl">{unavailable ? <fieldset disabled className="settingUnavailableControl" aria-label={label}>{children}</fieldset> : children}</div></div>;
+  const mainSettings = useContext(MainSettingsHelpContext);
+  const section = useContext(SettingsSectionContext);
+  const explanation = mainSettings ? (mainSettingHelpText(section, label) || help || desc) : help;
+  const tooltip = explanation && unavailable ? `${explanation} Ця функція ще не реалізована.` : explanation;
+  return <div className={'settingRow' + (unavailable ? ' settingUnavailable' : '') + (rowClassName ? ' ' + rowClassName : '')}><div className="settingText"><b>{label}{mainSettings ? (tooltip && <VisualSettingHelp label={label} text={tooltip} compact />) : (help && <LiquidationHelp label={label} text={help} />)}</b>{desc && <small>{desc}</small>}{unavailable && <small className="settingUnavailableNote">Ще не реалізовано</small>}</div><div className="settingControl">{unavailable ? <fieldset disabled className="settingUnavailableControl" aria-label={label}>{children}</fieldset> : children}</div></div>;
 }
 function SwitchRow({ label, desc, help, rowClassName, unavailable, value, onChange }: { label: string; desc?: string; help?: string; rowClassName?: string; unavailable?: boolean; value: boolean; onChange: (value: boolean) => void }) {
   return <Setting label={label} desc={desc} help={help} rowClassName={rowClassName} unavailable={unavailable}><label className="settingsSwitch"><input type="checkbox" aria-label={label} checked={value} onChange={event => onChange(event.target.checked)} /><span /></label></Setting>;
@@ -747,6 +762,7 @@ export function OriginalHookChartSettings({
     dialogRef.current?.focus({ preventScroll: true });
     const onKeyDown = (event: KeyboardEvent) => {
       if ((event.key === 'Escape' || event.key === 'Tab') && document.querySelector('.hookchart-visual-context-menu')) return;
+      if (event.key === 'Escape' && document.querySelector('.hookchartVisualHelpPopover')) return;
       if (event.key === 'Escape') {
         event.preventDefault();
         onClose();
@@ -825,7 +841,7 @@ export function OriginalHookChartSettings({
         <button type="button" className={tab === 'hotkeys' ? 'active' : ''} onClick={() => setTab('hotkeys')}>Гарячі клавіші</button>
       </div>
       <div className="settingsBody">
-        {tab === 'main' ? <>
+        {tab === 'main' ? <MainSettingsHelpContext.Provider value={true}>
           <Section title="Застосунок">
             <Choice label="Мова" values={['uk', 'pl', 'ru', 'en']} labels={['Українська', 'Polski', 'Русский', 'English']} value={prefs.language} set={value => set('language', value)} />
             <Choice label="Часовий пояс" values={['Europe/Warsaw', 'UTC', 'Europe/Kyiv', 'America/New_York']} labels={['Europe/Warsaw', 'UTC', 'Europe/Kyiv', 'America/New_York']} value={prefs.timezone} set={value => set('timezone', value)} />
@@ -1017,7 +1033,7 @@ export function OriginalHookChartSettings({
             <SwitchRow label="Різниця із середньою кількістю угод (колонка TR)" value={prefs.tradesTR !== false} onChange={value => set('tradesTR', value)} />
             <Setting label="Кількість свічок"><Num value={prefs.tradesCandles ?? 100} min={2} max={1500} set={value => set('tradesCandles', value)} /></Setting>
           </Section>
-        </> : tab === 'chart' ? (
+        </MainSettingsHelpContext.Provider> : tab === 'chart' ? (
           <VisualProfileEditor
             visualContext={visualContext}
             visualDevice={visualDevice}
