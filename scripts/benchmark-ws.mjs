@@ -22,15 +22,17 @@ if (!Number.isSafeInteger(clients) || clients < 1 || clients > 5000 ||
     !Number.isSafeInteger(seconds) || seconds < 5 || seconds > 300 ||
     !Number.isSafeInteger(ramp) || ramp < 1 || ramp > 100)
   throw new Error('Limits: --clients 1..5000, --seconds 5..300, --ramp 1..100 per second.');
-if (!url.pathname.endsWith('/api/hookchart/depth'))
-  throw new Error('Only the read-only /api/hookchart/depth endpoint is supported.');
+const isDepth = url.pathname === '/api/hookchart/depth';
+const isKline = url.pathname === '/api/hookchart/klines';
+if (!isDepth && !isKline)
+  throw new Error('Only read-only HookChart depth and Kline endpoints are supported.');
 if (Math.ceil(clients / ramp) > seconds)
   process.stderr.write('Warning: not all requested clients can be launched within this duration.\n');
 
 const results = {
   target: url.origin, clientsRequested: clients, durationSeconds: seconds, rampPerSecond: ramp,
   attempted: 0, opened: 0, rejected: 0, peakOpen: 0, messages: 0, livePackets: 0,
-  errors: 0, closed: 0, finalActive: 0, firstPacketLatencyMs: [],
+  errors: 0, closed: 0, finalActive: 0, klinePackets: 0, firstPacketLatencyMs: [],
 };
 const sockets = new Set();
 let active = 0;
@@ -50,7 +52,8 @@ function connect() {
     if (!first) { first = true; results.firstPacketLatencyMs.push(Date.now() - started); }
     try {
       const packet = JSON.parse(raw.toString());
-      if (packet.status === 'LIVE' && packet.update) results.livePackets++;
+      if (isDepth && packet.status === 'LIVE' && packet.update) results.livePackets++;
+      if (isKline && packet.type === 'kline' && packet.candle) results.klinePackets++;
     } catch { /* payload format is not a load-test assertion */ }
   });
   socket.on('error', () => { results.errors++; });
