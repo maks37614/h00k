@@ -19,14 +19,36 @@ const configFile = path.join(process.cwd(), 'server/data/user_telegram.json');
 let cache: Map<string, StoredTelegram> | undefined;
 function persist(next: Map<string, StoredTelegram>) {
   fs.mkdirSync(path.dirname(configFile), { recursive: true });
-  fs.writeFileSync(`${configFile}.tmp`, JSON.stringify(Object.fromEntries(next), null, 2), { mode: 0o600 });
-  fs.renameSync(`${configFile}.tmp`, configFile);
+  const temp = `${configFile}.tmp`;
+  // A leftover temporary file may have mode 0644. Restrict it *before*
+  // writing personal chat IDs, not only when exposing the final filename.
+  try {
+    fs.chmodSync(temp, 0o600);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+  }
+  fs.writeFileSync(temp, JSON.stringify(Object.fromEntries(next), null, 2),
+    { encoding: 'utf8', mode: 0o600 });
+  fs.chmodSync(temp, 0o600);
+  fs.renameSync(temp, configFile);
+  // Never expose a new Telegram connection or a migrated configuration in
+  // memory before its disk checkpoint is durable.
   cache = next;
 }
 export function loadUserTelegram(): Map<string, StoredTelegram> {
   if (!cache) {
-    const stored = fs.existsSync(configFile) ? JSON.parse(fs.readFileSync(configFile, 'utf8')) : {};
-    if (!stored || typeof stored !== 'object' || Array.isArray(stored)) throw new Error('Invalid user Telegram configuration');
+    let raw: string | null;
+    try {
+      raw = fs.readFileSync(configFile, 'utf8');
+    } catch (error) {
+      // Only an absent file is a fresh configuration. Permission / I/O
+      // failures must not silently replace existing accounts with {}.
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+      raw = null;
+    }
+    const stored: unknown = raw === null ? {} : JSON.parse(raw);
+    if (!stored || typeof stored !== 'object' || Array.isArray(stored))
+      throw new Error('Invalid user Telegram configuration');
     const next = new Map<string, StoredTelegram>();
     let migrated = false;
     const allowed = new Set(['mode', 'botId', 'chatId', 'username', 'language', 'updatedAt', 'confirmedAt', 'needsConfirmation']);
@@ -55,10 +77,18 @@ export function loadUserTelegram(): Map<string, StoredTelegram> {
         if (Object.keys(item).some(key => key !== 'language' && key !== 'updatedAt')) migrated = true;
       }
     }
-    cache = next;
-    if (migrated) persist(next);
+    if (migrated) {
+      // Legacy personal bot tokens are removed only by a successful atomic
+      // migration. If rename fails, re-read the original on the next request.
+      persist(next);
+    } else {
+      // Existing shared-bot files from an older release may have been saved
+      // with a permissive umask. Secure them even if no user edits a setting.
+      if (raw !== null) fs.chmodSync(configFile, 0o600);
+      cache = next;
+    }
   }
-  return cache;
+  return cache!;
 }
 export function getUserTelegram(userId?: string): UserTelegramData | undefined {
   if (!userId || userId === 'guest') return undefined;
