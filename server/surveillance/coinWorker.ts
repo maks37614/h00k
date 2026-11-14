@@ -5,7 +5,7 @@ import { notificationRouter } from '../notificationRouter';
 import { createSetupAlertsGroup, getUserLanguage } from '../alertService';
 import type { RawDepthDelta } from './exchangeStream';
 import { acquireExchangeStream, type SharedExchangeStreamHandle } from './sharedExchangeStream';
-import { publishSurveillance } from '../surveillanceEvents';
+import { publishSurveillance, publishSurveillanceAlert } from '../surveillanceEvents';
 import { sharedMarketAnalysis } from './sharedMarketAnalysis';
 import { sharedWorkerAnalysisClock } from './sharedWorkerAnalysisClock';
 import { AutoSetupGroupGate } from './autoSetupGroupGate';
