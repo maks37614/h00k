@@ -82,18 +82,19 @@ export function ProfileScreenerSearchSettings() {
     const name = presetName.trim();
     if (!name) { setError('Введіть назву пресета.'); return; }
     const presets = stored.presets || [];
-    if (!editingId && presets.length >= MAX_SCREENER_SEARCH_PRESETS) {
+    const isEditingExisting = !!editingId && presets.some(item => item.id === editingId);
+    if (!isEditingExisting && presets.length >= MAX_SCREENER_SEARCH_PRESETS) {
       setError('Досягнуто ліміт 12 пресетів. Видаліть непотрібний.'); return;
     }
     if (presets.some(item => item.name.toLowerCase() === name.toLowerCase() && item.id !== editingId)) {
       setError('Пресет із такою назвою вже існує.'); return;
     }
-    const id = editingId && presets.some(item => item.id === editingId) ? editingId
+    const id = isEditingExisting ? editingId!
       : (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
         ? crypto.randomUUID() : `preset-${Date.now()}-${Math.random().toString(36).slice(2)}`);
     const item = { id, name: name.slice(0, 40), config: normalizeScreenerSearchConfig(draft, fallback) };
-    const next = editingId ? presets.map(p => p.id === editingId ? item : p) : [...presets, item];
-    void write({ ...stored, presets: next }, editingId ? 'Пресет оновлено.' : 'Пресет створено.');
+    const next = isEditingExisting ? presets.map(p => p.id === editingId ? item : p) : [...presets, item];
+    void write({ ...stored, presets: next }, isEditingExisting ? 'Пресет оновлено.' : 'Пресет створено.');
     setEditingId(id);
   };
 
