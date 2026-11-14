@@ -114,173 +114,102 @@ function calculatePOC(klines: Kline[], currentPrice: number): { pocPrice: number
   };
 }
 
-// Analyze Multi-Timeframe BTC Structure
+// Verified BTC futures context. Never substitute made-up price, structure, or calendar events.
 async function analyzeBTCStructure(): Promise<SmartAnalysisData['btcContext']> {
-  try {
-    const fetchWithMirrors = async (path: string) => {
-      const mirrors = [
-        `https://fapi.binance.com${path}`,
-        `https://data-api.binance.vision${path.replace('/fapi/v1', '/api/v3')}`,
-        `https://api.binance.com${path.replace('/fapi/v1', '/api/v3')}`,
-      ];
-      for (const url of mirrors) {
-        try {
-          const res = await exchangeFetch(url, {
-            headers: { 'User-Agent': 'CryptoPatternScreener/1.0' },
-            signal: AbortSignal.timeout(3000),
-          });
-          if (res.ok) {
-            const data = await res.json();
-            if (Array.isArray(data) && data.length > 0) return data;
-            if (!Array.isArray(data) && data && Object.keys(data).length > 0) return data;
-          }
-        } catch {}
-      }
-      return [];
+  const get = async (path: string): Promise<unknown> => {
+    try {
+      const response = await exchangeFetch('https://fapi.binance.com' + path, {
+        signal: AbortSignal.timeout(4000),
+      });
+      if (!response.ok) return null;
+      return await response.json();
+    } catch { return null; }
+  };
+  const [raw15m, raw5m, raw1m, ticker] = await Promise.all([
+    get('/fapi/v1/klines?symbol=BTCUSDT&interval=15m&limit=25'),
+    get('/fapi/v1/klines?symbol=BTCUSDT&interval=5m&limit=25'),
+    get('/fapi/v1/klines?symbol=BTCUSDT&interval=1m&limit=25'),
+    get('/fapi/v1/ticker/24hr?symbol=BTCUSDT'),
+  ]);
+  type Slice = SmartAnalysisData['btcContext']['timeframes']['15m'];
+  const unavailable: Slice = {
+    direction: 'sideways', structure: 'unknown', label: 'Немає даних біржі',
+  };
+  const parse = (raw: unknown, minutes: number): Slice => {
+    if (!Array.isArray(raw)) return unavailable;
+    const now = Date.now();
+    const candles = raw.filter((entry): entry is unknown[] =>
+      Array.isArray(entry) && entry.length >= 5 &&
+      Number.isFinite(Number(entry[0])) && Number(entry[0]) + minutes * 60_000 <= now &&
+      [entry[2], entry[3], entry[4]].every(value => Number.isFinite(Number(value)) && Number(value) > 0));
+    if (candles.length < 6) return unavailable;
+    const previous = candles.slice(-6, -3);
+    const recent = candles.slice(-3);
+    const prevHigh = Math.max(...previous.map(c => Number(c[2])));
+    const prevLow = Math.min(...previous.map(c => Number(c[3])));
+    const lastHigh = Math.max(...recent.map(c => Number(c[2])));
+    const lastLow = Math.min(...recent.map(c => Number(c[3])));
+    if (lastHigh > prevHigh && lastLow > prevLow) return {
+      direction: 'up', structure: 'HH_HL', label: 'Вищі максимуми та мінімуми',
     };
-
-    const [res15m, res5m, res1m, resTicker] = await Promise.all([
-      fetchWithMirrors('/fapi/v1/klines?symbol=BTCUSDT&interval=15m&limit=25'),
-      fetchWithMirrors('/fapi/v1/klines?symbol=BTCUSDT&interval=5m&limit=25'),
-      fetchWithMirrors('/fapi/v1/klines?symbol=BTCUSDT&interval=1m&limit=25'),
-      fetchWithMirrors('/fapi/v1/ticker/24hr?symbol=BTCUSDT'),
-    ]);
-
-    const tickerObj = (Array.isArray(resTicker) ? resTicker[0] : resTicker) || {} as any;
-    const btcPrice = parseFloat(tickerObj?.lastPrice || '') || 85000;
-    const change24h = parseFloat(tickerObj?.priceChangePercent || '') || 1.2;
-
-    const parseTfStructure = (raw: any[]) => {
-      if (!Array.isArray(raw) || raw.length < 5) {
-        return { direction: 'up' as const, structure: 'HH_HL' as const, label: 'Бичача структура (HH/HL)' };
-      }
-      const candles = raw.map((c) => ({
-        high: parseFloat(c[2]),
-        low: parseFloat(c[3]),
-        close: parseFloat(c[4]),
-        open: parseFloat(c[1]),
-      }));
-
-      const last3 = candles.slice(-3);
-      const prev3 = candles.slice(-6, -3);
-
-      const lastMax = Math.max(...last3.map((c) => c.high));
-      const prevMax = Math.max(...prev3.map((c) => c.high));
-      const lastMin = Math.min(...last3.map((c) => c.low));
-      const prevMin = Math.min(...prev3.map((c) => c.low));
-
-      const isHH = lastMax > prevMax;
-      const isHL = lastMin > prevMin;
-      const isLH = lastMax < prevMax;
-      const isLL = lastMin < prevMin;
-
-      if (isHH && isHL) {
-        return { direction: 'up' as const, structure: 'HH_HL' as const, label: 'Higher Highs & Higher Lows (Бичачий висхідний тренд)' };
-      }
-      if (isLH && isLL) {
-        return { direction: 'down' as const, structure: 'LH_LL' as const, label: 'Lower Highs & Lower Lows (Низхідний тиск продавців)' };
-      }
-      return {
-        direction: candles[candles.length - 1].close >= candles[candles.length - 4].close ? 'up' as const : 'down' as const,
-        structure: 'range' as const,
-        label: 'Консолідація у флеті (Баланс сил)',
-      };
+    if (lastHigh < prevHigh && lastLow < prevLow) return {
+      direction: 'down', structure: 'LH_LL', label: 'Нижчі максимуми та мінімуми',
     };
-
-    const tf15 = parseTfStructure(res15m);
-    const tf5 = parseTfStructure(res5m);
-    const tf1 = parseTfStructure(res1m);
-
-    // Detect impulse in 5m or 1m
-    let hasSharpImpulse = false;
-    let impulseType: 'pump' | 'dump' | 'none' = 'none';
-    let impulseDescription = 'Ринковий рух стабільний без аномальних імпульсних свічок';
-
-    if (Array.isArray(res5m) && res5m.length > 2) {
-      const last5m = res5m[res5m.length - 1];
-      const open5m = parseFloat(last5m[1]);
-      const close5m = parseFloat(last5m[4]);
-      const pct5m = ((close5m - open5m) / open5m) * 100;
-
-      if (Math.abs(pct5m) >= 0.75) {
-        hasSharpImpulse = true;
-        impulseType = pct5m > 0 ? 'pump' : 'dump';
-        impulseDescription = pct5m > 0
-          ? `Різкий бичачий спайк +${pct5m.toFixed(2)}% на 5m свічці BTC (приплив агресивного покупця)`
-          : `Різкий пролив -${Math.abs(pct5m).toFixed(2)}% на 5m свічці BTC (ліквідація довгих позицій)`;
+    return { direction: 'sideways', structure: 'range', label: 'Змішана структура / діапазон' };
+  };
+  const tf15 = parse(raw15m, 15);
+  const tf5 = parse(raw5m, 5);
+  const tf1 = parse(raw1m, 1);
+  const tickerValue = ticker && typeof ticker === 'object' ? ticker as Record<string, unknown> : null;
+  const priceValue = Number(tickerValue?.lastPrice);
+  const changeValue = Number(tickerValue?.priceChangePercent);
+  const btcPrice = tickerValue?.lastPrice != null && Number.isFinite(priceValue) && priceValue > 0
+    ? priceValue : null;
+  const change24h = tickerValue?.priceChangePercent != null && Number.isFinite(changeValue)
+    ? changeValue : null;
+  const valid15 = tf15.structure !== 'unknown';
+  const valid5 = tf5.structure !== 'unknown';
+  const overallStructure: SmartAnalysisData['btcContext']['overallStructure'] =
+    !valid15 || !valid5 ? 'unknown'
+      : tf15.structure === tf5.structure ? tf15.structure : 'range';
+  const overallStructureLabel = overallStructure === 'unknown'
+    ? 'Структура BTC недоступна: потрібні підтверджені свічки Binance Futures'
+    : overallStructure === 'HH_HL'
+      ? 'Вищі максимуми та мінімуми BTC на 15m і 5m'
+      : overallStructure === 'LH_LL'
+        ? 'Нижчі максимуми та мінімуми BTC на 15m і 5m'
+        : 'Структура BTC неоднозначна на 15m і 5m';
+  let hasSharpImpulse = false;
+  let impulseType: SmartAnalysisData['btcContext']['impulseType'] = 'none';
+  let impulseDescription = 'Немає підтвердженого імпульсу в останній закритій 5m свічці';
+  if (Array.isArray(raw5m)) {
+    const complete = raw5m.filter(row => Array.isArray(row) &&
+      Number(row[0]) + 5 * 60_000 <= Date.now() &&
+      Number(row[1]) > 0 && Number.isFinite(Number(row[4])));
+    const last = complete.at(-1);
+    if (last) {
+      const change = (Number(last[4]) / Number(last[1]) - 1) * 100;
+      hasSharpImpulse = Number.isFinite(change) && Math.abs(change) >= 0.75;
+      if (hasSharpImpulse) {
+        impulseType = change > 0 ? 'pump' : 'dump';
+        impulseDescription = 'Остання закрита 5m свічка BTC: ' +
+          (change > 0 ? '+' : '') + change.toFixed(2) + '%';
       }
+    } else {
+      impulseDescription = 'Дані 5m недоступні';
     }
-
-    const overallStructure: 'HH_HL' | 'LH_LL' | 'range' =
-      tf15.structure === 'HH_HL' && tf5.structure === 'HH_HL'
-        ? 'HH_HL'
-        : tf15.structure === 'LH_LL' && tf5.structure === 'LH_LL'
-        ? 'LH_LL'
-        : tf15.structure;
-
-    const overallStructureLabel =
-      overallStructure === 'HH_HL'
-        ? 'BTC упевнено формує Higher High / Higher Low на старших таймфреймах (Позитивний фон для альтів)'
-        : overallStructure === 'LH_LL'
-        ? 'BTC формує Lower High / Lower Low (Обережно: ризик дампа по альткоїнах)'
-        : 'BTC рухається в локальному боковику (Альтернативний сетап працює від рівнів)';
-
-    // Upcoming news / macro calendar
-    const now = new Date();
-    const upcomingNews = [
-      {
-        title: 'Розрахунок Funding Rate на біржах (Binance/Bybit 8h cycle)',
-        timeUntil: 'кожні 8 годин',
-        impact: 'medium' as const,
-      },
-      {
-        title: 'Відкриття американської торгової сесії (Wall Street Open / CME)',
-        timeUntil: now.getUTCHours() < 13 ? 'через ~4-6 год' : 'активна сесія',
-        impact: 'high' as const,
-      },
-      {
-        title: 'Макроекономічні звіти США (CPI / Core Inflation / FED Rates)',
-        timeUntil: 'тижневий реліз',
-        impact: 'high' as const,
-      },
-    ];
-
-    return {
-      btcPrice,
-      change24h,
-      timeframes: {
-        '15m': tf15,
-        '5m': tf5,
-        '1m': tf1,
-      },
-      overallStructure,
-      overallStructureLabel,
-      hasSharpImpulse,
-      impulseType,
-      impulseDescription,
-      upcomingNews,
-    };
-  } catch (err) {
-    console.warn('Failed to fetch real BTC structure, using fallback:', err);
-    return {
-      btcPrice: 85200,
-      change24h: 1.8,
-      timeframes: {
-        '15m': { direction: 'up', structure: 'HH_HL', label: 'HH/HL Бичачий висхідний рух' },
-        '5m': { direction: 'up', structure: 'HH_HL', label: 'HH/HL Короткостроковий імпульс' },
-        '1m': { direction: 'up', structure: 'range', label: 'Локальна консолідація' },
-      },
-      overallStructure: 'HH_HL',
-      overallStructureLabel: 'BTC формує Higher High / Higher Low (Сприятливий фон)',
-      hasSharpImpulse: false,
-      impulseType: 'none',
-      impulseDescription: 'Свічки в межах середньої волатильності',
-      upcomingNews: [
-        { title: 'Розрахунок фандингу 8h', timeUntil: 'через 2 год', impact: 'medium' },
-        { title: 'Сесія США (CME Futures)', timeUntil: 'активна сесія', impact: 'high' },
-      ],
-    };
+  } else {
+    impulseDescription = 'Дані 5m недоступні';
   }
+  return {
+    btcPrice, change24h,
+    available: btcPrice !== null || valid15 || valid5 || tf1.structure !== 'unknown',
+    timeframes: { '15m': tf15, '5m': tf5, '1m': tf1 },
+    overallStructure, overallStructureLabel,
+    hasSharpImpulse, impulseType, impulseDescription,
+    // No calendar provider is connected; synthetic CPI/session countdowns are misleading.
+    upcomingNews: [],
+  };
 }
 
 // Fetch Orderbook Depth, Spread, & Large Wall Orders
