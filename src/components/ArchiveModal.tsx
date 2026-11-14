@@ -54,6 +54,8 @@ export const ArchiveModal: React.FC<ArchiveModalProps> = ({
   const [proofBusyId, setProofBusyId] = useState<string | null>(null);
   const [proofCopiedId, setProofCopiedId] = useState<string | null>(null);
   const [proofError, setProofError] = useState<string>('');
+  const [handoffBusyId, setHandoffBusyId] = useState<string | null>(null);
+  const [handoffError, setHandoffError] = useState<string>('');
 
   const filteredFormations = useMemo(() => {
     return archivedFormations.filter((item) => {
@@ -125,6 +127,29 @@ export const ArchiveModal: React.FC<ArchiveModalProps> = ({
       setProofError(error instanceof Error ? error.message : 'Не вдалося скопіювати оцінку');
     } finally {
       setProofBusyId(null);
+    }
+  };
+
+  const handleSendToCommunity = async (id: string, event: React.MouseEvent) => {
+    event.stopPropagation();
+    if (handoffBusyId) return;
+    setHandoffBusyId(id);
+    setHandoffError('');
+    try {
+      const response = await apiFetch('/api/account/archive/' + encodeURIComponent(id) + '/community-handoff');
+      const data = await response.json();
+      if (!response.ok || typeof data?.url !== 'string')
+        throw new Error(data?.error || 'Не вдалося підготувати знімок');
+      const destination = new URL(data.url);
+      if (!['https://community-stage.h00k.top','https://community.h00k.top'].includes(destination.origin) ||
+          destination.pathname !== '/' || !destination.hash.startsWith('#community?section=feed&handoff='))
+        throw new Error('Адреса Community недійсна');
+      // One explicit click navigates this tab; the user may return via Back.
+      // The fragment contains no account cookie, secrets or private notes.
+      window.location.assign(destination.href);
+    } catch (error) {
+      setHandoffError(error instanceof Error ? error.message : 'Не вдалося передати формацію');
+      setHandoffBusyId(null);
     }
   };
 
@@ -322,6 +347,7 @@ export const ArchiveModal: React.FC<ArchiveModalProps> = ({
           </div>
         </div>
 
+        {(proofError || handoffError) && <p role="alert" className="mx-4 text-xs text-rose-300">{proofError || handoffError}</p>}
         {/* Formations List Container */}
         <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain p-4 sm:p-6 space-y-3 sm:space-y-4 sm:min-h-[300px]">
           {loading ? (
@@ -455,6 +481,16 @@ export const ArchiveModal: React.FC<ArchiveModalProps> = ({
                       )}
                     </div>
 
+                    <button
+                      type="button"
+                      disabled={handoffBusyId !== null}
+                      onClick={event => void handleSendToCommunity(item.id, event)}
+                      title="Передати свічки та авторські Entry/SL/TP у чернетку Community. Публікація лише після вашого підтвердження."
+                      className="flex items-center gap-1 px-2.5 py-1 rounded-xl border border-teal-700/50 bg-teal-900/20 text-teal-200 text-xs disabled:opacity-50"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" aria-hidden="true" />
+                      {handoffBusyId === item.id ? 'Готуємо графік…' : 'У Community'}
+                    </button>
                     {item.formation?.validation?.confluence && item.formation?.patternKey !== 'manual' && (
                       <button
                         type="button"
