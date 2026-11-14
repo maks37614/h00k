@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { Server } from 'node:http';
-import WebSocket, { WebSocketServer } from 'ws';
+import WebSocket, { WebSocketServer, type RawData } from 'ws';
 import { sharedLiquidationUpstreams } from './liquidationUpstreamPool';
 
 export type LiquidationRow = {
@@ -408,7 +408,7 @@ export function installLiquidationStream(server: Server) {
       const MAX_TOPICS_PER_CLIENT = 64;
       let commandWindowStart = Date.now();
       let commands = 0;
-      const handle = (raw: WebSocket.RawData) => {
+      const handle = (raw: RawData) => {
         const now = Date.now();
         if (now - commandWindowStart >= 60_000) {
           commandWindowStart = now;
