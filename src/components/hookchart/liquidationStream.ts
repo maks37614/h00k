@@ -20,13 +20,23 @@ function validLiquidation(row: unknown): row is Liquidation {
     typeof item.usd === 'number' && Number.isFinite(item.usd) && item.usd > 0;
 }
 
-/** One browser-to-site socket; the server multiplexes one exchange WS per coin. */
+/** The first snapshot is sent immediately by the site's liquidation relay. */
+const INITIAL_SNAPSHOT_TIMEOUT_MS = 15_000;
+const STABLE_SNAPSHOT_CONNECTION_MS = 30_000;
+
+/**
+ * One browser-to-site liquidation socket per scope (shared across HookCharts).
+ * Do not time out a healthy, quiet market after its first snapshot: actual
+ * liquidations can be arbitrarily rare. Only the initial synchronization and
+ * explicit socket failures trigger recovery.
+ */
 export function connectHookChartLiquidations({
   exchange, symbol, onSnapshot, onLiquidation, onStatus,
 }: Options): () => void {
   let stopped = false;
   let socket: WebSocket | null = null;
   let retry: ReturnType<typeof setTimeout> | null = null;
+  let snapshotDeadline: ReturnType<typeof setTimeout> | null = null;
   let failures = 0;
 
   const url = new URL('/api/hookchart/liquidations', window.location.origin);
@@ -34,48 +44,88 @@ export function connectHookChartLiquidations({
   url.searchParams.set('exchange', exchange);
   url.searchParams.set('symbol', symbol);
 
+  // UI handlers may be disposed or throw during navigation. They must never
+  // prevent the transport from returning a disposer or scheduling a retry.
+  const reportStatus = (connected: boolean) => {
+    try { onStatus(connected); } catch { /* isolate the chart */ }
+  };
+  const clearSnapshotDeadline = () => {
+    if (snapshotDeadline !== null) clearTimeout(snapshotDeadline);
+    snapshotDeadline = null;
+  };
+  const schedule = () => {
+    if (stopped || retry) return;
+    const delay = Math.min(30_000, 1000 * 2 ** Math.min(failures++, 5));
+    retry = setTimeout(() => {
+      retry = null;
+      connect();
+    }, delay);
+  };
+
   const connect = () => {
     if (stopped) return;
     let current: WebSocket;
     try { current = new WebSocket(url.toString()); }
     catch { schedule(); return; }
     socket = current;
-    current.onmessage = event => {
-      if (stopped || socket !== current) return;
-      try {
-        const packet = JSON.parse(String(event.data)) as Record<string, unknown>;
-        if (packet.type === 'snapshot' && Array.isArray(packet.events)) {
-          failures = 0;
-          onSnapshot(packet.events.slice(-1500).filter(validLiquidation), packet.connected === true);
-        } else if (packet.type === 'liquidation' && validLiquidation(packet.event)) {
-          onLiquidation(packet.event);
-        } else if (packet.type === 'status') {
-          onStatus(packet.connected === true);
-        }
-      } catch { /* reject invalid or unrelated messages */ }
-    };
-    current.onerror = () => { try { current.close(); } catch {} };
-    current.onclose = () => {
-      if (socket !== current || stopped) return;
-      onStatus(false);
+    let hasSnapshot = false;
+    let snapshotAt = 0;
+
+    const reconnect = () => {
+      // Close/error/timeout can all race. Only the current socket may affect
+      // shared timers; an obsolete socket cannot interrupt its replacement.
+      if (stopped || socket !== current || retry) return;
       socket = null;
+      clearSnapshotDeadline();
+      // An immediate open/snapshot/close loop is not healthy. Preserve the
+      // exponential retry budget until a socket is genuinely stable.
+      if (hasSnapshot && Date.now() - snapshotAt >= STABLE_SNAPSHOT_CONNECTION_MS) failures = 0;
+      reportStatus(false);
       schedule();
+      try { current.close(); } catch {}
     };
-  };
-  const schedule = () => {
-    if (stopped || retry) return;
-    retry = setTimeout(() => {
-      retry = null;
-      connect();
-    }, Math.min(30_000, 1000 * 2 ** Math.min(failures++, 5)));
+
+    current.onmessage = event => {
+      if (stopped || socket !== current || retry) return;
+      let packet: Record<string, unknown> | null;
+      try { packet = JSON.parse(String(event.data)) as Record<string, unknown> | null; }
+      catch { return; }
+      if (!packet || typeof packet !== 'object') return;
+      if (packet.type === 'snapshot' && Array.isArray(packet.events)) {
+        // Only a real snapshot, even an empty one, completes synchronization.
+        // Status-only frames and unrelated packets cannot keep a broken
+        // connection alive indefinitely.
+        const rows = packet.events.slice(-1500).filter(validLiquidation);
+        if (!hasSnapshot) {
+          hasSnapshot = true;
+          snapshotAt = Date.now();
+          clearSnapshotDeadline();
+        }
+        try { onSnapshot(rows, packet.connected === true); } catch { /* isolate the chart */ }
+      } else if (packet.type === 'liquidation' && validLiquidation(packet.event)) {
+        try { onLiquidation(packet.event); } catch { /* isolate the chart */ }
+      } else if (packet.type === 'status') {
+        reportStatus(packet.connected === true);
+      }
+    };
+    current.onerror = reconnect;
+    current.onclose = reconnect;
+    // Browser WebSocket.connect may hang indefinitely, or the relay may
+    // accept the socket without delivering the required initial snapshot.
+    snapshotDeadline = setTimeout(() => {
+      if (!hasSnapshot) reconnect();
+    }, INITIAL_SNAPSHOT_TIMEOUT_MS);
   };
 
-  onStatus(false);
+  reportStatus(false);
   connect();
   return () => {
     stopped = true;
+    clearSnapshotDeadline();
     if (retry) clearTimeout(retry);
     retry = null;
-    try { socket?.close(); } catch {}
+    const current = socket;
+    socket = null;
+    try { current?.close(); } catch {}
   };
 }
