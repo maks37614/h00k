@@ -9,6 +9,24 @@ const HOLDERS_TTL = 12 * 60 * 60_000;
 const CATALOG_TTL = 24 * 60 * 60_000;
 const NEGATIVE_TTL = 30 * 60_000;
 const MAX_CACHE = 1500;
+// Native blockchain assets are not ERC20/SPL contracts. Never present
+// holders of wrapped BTC/ETH as owners of the native asset.
+const NATIVE_COINS: Record<string, string> = {
+  BTC: 'Bitcoin', ETH: 'Ethereum', SOL: 'Solana',
+  BNB: 'BNB Chain', XRP: 'XRP Ledger', DOGE: 'Dogecoin',
+  ADA: 'Cardano', LTC: 'Litecoin', BCH: 'Bitcoin Cash',
+  DOT: 'Polkadot', XLM: 'Stellar', TRX: 'Tron',
+  AVAX: 'Avalanche', ATOM: 'Cosmos', NEAR: 'NEAR',
+  TON: 'TON', SUI: 'Sui', APT: 'Aptos',
+  HBAR: 'Hedera', ICP: 'Internet Computer',
+  ETC: 'Ethereum Classic', XMR: 'Monero', ZEC: 'Zcash',
+};
+// Mainnet token contract verified in the Chainlink project's own registry.
+// Never assume the symbol identifies an asset without an exact contract.
+export const VERIFIED_TOKEN_CONTRACTS: Record<string, { network: string; address: string }> = {
+  LINK: { network: 'eth', address: '0x514910771AF9Ca656af840dff83E8264EcF986CA' },
+};
+
 const QUOTES = ['USDT', 'USDC', 'FDUSD', 'BUSD', 'TUSD', 'USD', 'BTC', 'ETH', 'EUR', 'TRY'] as const;
 
 // CoinGecko coin-list platform IDs -> GeckoTerminal onchain network IDs.
@@ -30,8 +48,8 @@ const PLATFORM_IDS: Record<string, string> = {
   linea: 'linea',
 };
 export type HolderStatus =
-  'available' | 'not_configured' | 'unmapped' | 'ambiguous' |
-  'unavailable' | 'rate_limited' | 'upstream_error';
+  'available' | 'not_configured' | 'native_unsupported' |
+  'unmapped' | 'ambiguous' | 'unavailable' | 'rate_limited' | 'upstream_error';
 
 
 type Contract = { network: string; address: string };
@@ -131,7 +149,10 @@ export function createCoinGeckoHoldersService(options: {
   const storageFile = options.storageFile || null;
   const monthlyCap = Math.min(9500, Math.max(1, options.maxMonthlyCalls ?? 8000));
   const overrides = new Map<string, Contract>();
-  for (const [symbol, raw] of Object.entries(options.tokenMap || {})) {
+  for (const [symbol, raw] of Object.entries({
+    ...VERIFIED_TOKEN_CONTRACTS,
+    ...(options.tokenMap || {}),
+  })) {
     const contract = validateContract(raw);
     if (contract && /^[A-Z0-9]{2,36}$/.test(symbol.toUpperCase())) {
       overrides.set(symbol.toUpperCase(), contract);
@@ -238,6 +259,10 @@ export function createCoinGeckoHoldersService(options: {
   const get = async (rawSymbol: unknown): Promise<CoinGeckoHolderSnapshot> => {
     const symbol = getBaseTicker(rawSymbol);
     if (!symbol) return unavailable('', 'unmapped', 'Некоректний символ монети.');
+    if (NATIVE_COINS[symbol]) return unavailable(symbol, 'native_unsupported',
+      symbol + ' — нативна монета мережі ' + NATIVE_COINS[symbol] +
+      '. CoinGecko Demo Token Info показує власників контрактних токенів, ' +
+      'а не загальну кількість власників нативної монети. Дані н/д, не помилка API.');
     if (!key) return unavailable(symbol, 'not_configured',
       'Для Holders потрібен безкоштовний COINGECKO_DEMO_API_KEY на сервері.');
     const hit = cached.get(symbol);
