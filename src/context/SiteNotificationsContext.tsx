@@ -431,10 +431,13 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
     let retries = 0;
     let lastProcessedAt = 0;
     const onPrice = (price: number) => {
+      if (!Number.isFinite(price) || price <= 0) return;
+      // A WS handshake without market data is not a healthy recovered stream.
+      retries = 0;
       const now = Date.now();
       if (now - lastProcessedAt < 400) return;
       lastProcessedAt = now;
-      const outcome = tracker.push(price, now, config.impulseThresholdPct);
+      const outcome = tracker.push(price, now, settingsRef.current.impulseThresholdPct);
       if (!outcome) return;
       const sign = outcome.changePct >= 0 ? '+' : '';
       const elapsed = outcome.durationSeconds < 60
@@ -466,7 +469,6 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
       try {
         socket = new WebSocket(url);
         socket.onopen = () => {
-          retries = 0;
           if (!isBinance) {
             socket?.send(JSON.stringify({ op: 'subscribe', args: ['publicTrade.' + symbol] }));
             heartbeat = setInterval(() => {
@@ -488,11 +490,14 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
         socket.onclose = () => {
           if (heartbeat) clearInterval(heartbeat);
           heartbeat = undefined;
-          if (!stopped) reconnect = setTimeout(connect, Math.min(30_000, 1000 * 2 ** Math.min(retries++, 5)));
+          if (!stopped) {
+            const baseDelay = Math.min(30_000, 2000 * 2 ** Math.min(retries++, 4));
+            reconnect = setTimeout(connect, baseDelay + Math.floor(Math.random() * 5_000));
+          }
         };
         socket.onerror = () => socket?.close();
       } catch {
-        if (!stopped) reconnect = setTimeout(connect, 10_000);
+        if (!stopped) reconnect = setTimeout(connect, 10_000 + Math.floor(Math.random() * 5_000));
       }
     };
     connect();
@@ -508,7 +513,7 @@ export const SiteNotificationsProvider: React.FC<{ children: React.ReactNode }> 
     };
   }, [uid, settings.enabled, settings.impulses, settings.impulseSymbol,
     settings.impulseExchange, settings.impulseMarket, settings.impulseWindowMinutes,
-    settings.impulseThresholdPct, emit]);
+    emit]);
 
   // Explicit opt-in chart-feed liquidation monitor. No additional REST polling.
   // Uses a single selected symbol and ignores the server's historical snapshot.
