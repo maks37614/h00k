@@ -2,6 +2,7 @@ import type { BookUpdate } from '../../utils/binanceOrderBook';
 import { chartDepthScope, type ChartDepthStatus } from '../../utils/hookChartDepthProtocol';
 import { isFreshDepthTime, parseDepthLevels } from '../../utils/orderBookValidation';
 import { connectHookChartDepth } from './depthStream';
+import { applyDepthSide } from './depthBestPrice';
 
 type Options = Parameters<typeof connectHookChartDepth>[0];
 type Subscriber = Pick<Options, 'onBook' | 'onStatus'>;
@@ -15,6 +16,8 @@ type Entry = {
   eventTime: number;
   bids: Map<number, number>;
   asks: Map<number, number>;
+  bestBid: number;
+  bestAsk: number;
   stop: () => void;
 };
 
@@ -74,7 +77,8 @@ export function createSharedDepthSubscriptions(connect: Connector = connectHookC
 
     entry = {
       listeners: new Set([listener]), failed: new Set(), status: 'connecting', sequence: 0,
-      eventTime: 0, bids: new Map(), asks: new Map(), stop: () => {},
+      eventTime: 0, bids: new Map(), asks: new Map(), bestBid: -Infinity,
+      bestAsk: Infinity, stop: () => {},
     };
     const current = entry;
     active.set(key, current);
@@ -83,6 +87,8 @@ export function createSharedDepthSubscriptions(connect: Connector = connectHookC
       current.eventTime = 0;
       current.bids.clear();
       current.asks.clear();
+      current.bestBid = -Infinity;
+      current.bestAsk = Infinity;
     };
     const fanoutStatus = (status: ChartDepthStatus) => {
       current.status = status;
@@ -106,30 +112,25 @@ export function createSharedDepthSubscriptions(connect: Connector = connectHookC
           if (update.isSnapshot) clear();
           else if (!current.sequence) return false;
           else if (update.sequence <= current.sequence) return true;
-          const apply = (rows: [number, number][], levels: Map<number, number>) => {
-            for (const [price, size] of rows) {
-              if (size > 0) levels.set(price, size);
-              else levels.delete(price);
-            }
-          };
-          apply(bids, current.bids);
-          apply(asks, current.asks);
-          if (!current.bids.size || !current.asks.size ||
-              Math.max(...current.bids.keys()) >= Math.min(...current.asks.keys())) {
+          current.bestBid = applyDepthSide(current.bids, bids, current.bestBid, true);
+          current.bestAsk = applyDepthSide(current.asks, asks, current.bestAsk, false);
+          if (!current.bids.size || !current.asks.size || current.bestBid >= current.bestAsk) {
             clear();
             return false;
           }
           current.sequence = update.sequence;
           current.eventTime = eventTime;
+          // A broken subscriber may need an immediate full-book repair.
+          // Construct it at most once per shared depth packet even if several
+          // charts rejected their delta; healthy charts receive only deltas.
+          let repairSnapshot: BookUpdate | null = null;
           for (const subscriber of [...current.listeners]) {
             try {
               if (!subscriber.onBook(update)) {
-                // Repair one chart from a complete local snapshot; do not
-                // restart every chart's socket when one subscriber is stale.
-                const snapshot = {
+                const snapshot = repairSnapshot ?? (repairSnapshot = {
                   isSnapshot: true, sequence: current.sequence, eventTime,
                   bids: [...current.bids], asks: [...current.asks],
-                };
+                });
                 if (!subscriber.onBook(snapshot)) {
                   current.failed.add(subscriber);
                   subscriber.onStatus('reconnecting');

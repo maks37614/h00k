@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'reac
 import type { ExchangeId, HookChartPreferences, MarketType } from '../../types';
 import { adaptiveCut, atr, quantile, type MarketPrint } from './marketAnalytics';
 import { getSharedMarketPrints, subscribeMarketTrades } from './marketTradeStream';
-import { fetchSharedChartJson } from '../../utils/sharedChartRequests';
+import { EMPTY_FUNDING, subscribeSharedHookChartFunding, type FundingSnapshot } from './sharedFundingStream';
 import { calcCascadeRisk, type Candle, type Density, type Liquidation } from './engine';
 import { normalizeExchangeSymbol } from '../../utils/marketSymbols';
 import type { ChartDepthStatus } from '../../utils/hookChartDepthProtocol';
@@ -32,9 +32,6 @@ const EMPTY_LIQUIDATIONS: Liquidation[] = [];
 const EMPTY_AUTO_STATS: DensityAutoStats = {
   baseline: 0, bidCut: 0, askCut: 0, buy5m: 0, sell5m: 0,
 };
-
-const BINANCE_FUTURES_API = 'https://fapi.binance.com';
-const BYBIT_API = 'https://api.bybit.com';
 
 export function useOriginalHookChartLiveFeed({
   exchange,
@@ -68,8 +65,7 @@ export function useOriginalHookChartLiveFeed({
   const [densityCut, setDensityCut] = useState(0);
   const [densityAutoStats, setDensityAutoStats] = useState<DensityAutoStats>(EMPTY_AUTO_STATS);
   const [book, setBook] = useState<{ b: BookLevel[]; a: BookLevel[] }>(EMPTY_DEPTH_BOOK);
-  const [fundingRate, setFundingRate] = useState(Number.NaN);
-  const [fundingHistory, setFundingHistory] = useState<number[]>([]);
+  const [funding, setFunding] = useState<FundingSnapshot>(EMPTY_FUNDING);
   const [depthReady, setDepthReady] = useState(false);
   const [depthStatus, setDepthStatus] = useState<ChartDepthStatus>('connecting');
   const depthScopeRef = useRef('');
@@ -312,74 +308,15 @@ export function useOriginalHookChartLiveFeed({
     };
   }, [exchange, marketType, symbol, replay]);
 
+  // Funding has one exchange/symbol timer and parsed snapshot per tab,
+  // regardless of the number of HookCharts watching the same instrument.
   useEffect(() => {
     const exchangeSymbol = /^[\p{L}\p{M}\p{N}]+$/u.test(symbol);
     if (replay || !exchangeSymbol || marketType !== 'futures') {
-      setFundingRate(Number.NaN);
-      setFundingHistory([]);
+      setFunding(EMPTY_FUNDING);
       return;
     }
-    let dead = false;
-    let pulling = false;
-    let lastHistoryFetchAt = 0;
-    let nextFundingAt = 0;
-    setFundingRate(Number.NaN);
-    setFundingHistory([]);
-
-    const pull = async () => {
-      if (dead || pulling) return;
-      pulling = true;
-      try {
-        const refreshHistory = Date.now() - lastHistoryFetchAt >= 15 * 60_000 ||
-          (nextFundingAt > 0 && Date.now() >= nextFundingAt);
-        if (exchange === 'binance') {
-          const [premium, history] = await Promise.all([
-            fetchSharedChartJson(`${BINANCE_FUTURES_API}/fapi/v1/premiumIndex?symbol=${encodeURIComponent(symbol)}`),
-            refreshHistory
-              ? fetchSharedChartJson(`${BINANCE_FUTURES_API}/fapi/v1/fundingRate?symbol=${encodeURIComponent(symbol)}&limit=100`, 'funding-history')
-              : Promise.resolve(null),
-          ]);
-          if (dead) return;
-          const futureFundingAt = Number(premium?.nextFundingTime);
-          if (Number.isFinite(futureFundingAt) && futureFundingAt > Date.now())
-            nextFundingAt = futureFundingAt;
-          setFundingRate(premium?.lastFundingRate == null ? Number.NaN : Number(premium.lastFundingRate));
-          if (refreshHistory) {
-            setFundingHistory((Array.isArray(history) ? history : [])
-              .map((row: any) => Number(row.fundingRate)).filter(Number.isFinite));
-            lastHistoryFetchAt = Date.now();
-          }
-        } else {
-          const [ticker, history] = await Promise.all([
-            fetchSharedChartJson(`${BYBIT_API}/v5/market/tickers?category=linear&symbol=${encodeURIComponent(symbol)}`),
-            refreshHistory
-              ? fetchSharedChartJson(`${BYBIT_API}/v5/market/funding/history?category=linear&symbol=${encodeURIComponent(symbol)}&limit=100`, 'funding-history')
-              : Promise.resolve(null),
-          ]);
-          if (dead) return;
-          const value = ticker?.result?.list?.[0]?.fundingRate;
-          const futureFundingAt = Number(ticker?.result?.list?.[0]?.nextFundingTime);
-          if (Number.isFinite(futureFundingAt) && futureFundingAt > Date.now())
-            nextFundingAt = futureFundingAt;
-          setFundingRate(ticker?.retCode === 0 && value != null ? Number(value) : Number.NaN);
-          if (refreshHistory) {
-            setFundingHistory((history?.result?.list || [])
-              .map((row: any) => Number(row.fundingRate)).filter(Number.isFinite));
-            lastHistoryFetchAt = Date.now();
-          }
-        }
-      } catch {
-        if (!dead) { setFundingRate(Number.NaN); setFundingHistory([]); }
-      } finally {
-        pulling = false;
-      }
-    };
-    void pull();
-    const timer = setInterval(() => void pull(), 60_000);
-    return () => {
-      dead = true;
-      clearInterval(timer);
-    };
+    return subscribeSharedHookChartFunding(exchange, symbol, setFunding);
   }, [exchange, marketType, symbol, replay]);
 
   // Display thresholds never mutate the incoming events or the session totals.
@@ -411,8 +348,8 @@ export function useOriginalHookChartLiveFeed({
     densityCut: currentDepth ? densityCut : 0,
     densityAutoStats: currentDepth ? densityAutoStats : EMPTY_AUTO_STATS,
     book: currentDepth ? book : EMPTY_DEPTH_BOOK,
-    fundingRate,
-    fundingHistory,
+    fundingRate: funding.rate,
+    fundingHistory: funding.history,
     depthReady: currentDepth,
     depthStatus,
   };

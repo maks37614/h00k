@@ -11,11 +11,24 @@ type Entry = {
   hasSnapshot: boolean;
   connected: boolean;
   rows: Map<string, Liquidation>;
+  lastPrunedAt: number;
   stop: () => void;
 };
 
 const RETAIN_MS = 30 * 60_000;
 const MAX_ROWS = 1500;
+
+/** Expiration needs a full scan only occasionally, not on every liquidation.
+ * Hard cap enforcement still runs on every update to avoid unbounded memory.
+ */
+function trimSharedLiquidations(entry: Entry, now = Date.now(), force = false): void {
+  if (force || now - entry.lastPrunedAt >= 2000) {
+    const oldest = now - RETAIN_MS;
+    for (const [id, row] of entry.rows) if (row.t < oldest) entry.rows.delete(id);
+    entry.lastPrunedAt = now;
+  }
+  while (entry.rows.size > MAX_ROWS) entry.rows.delete(entry.rows.keys().next().value!);
+}
 
 /** Share a single site-bound liquidation WS per coin in the current browser tab. */
 export function createSharedLiquidationSubscriptions(connect: Connector = connectHookChartLiquidations) {
@@ -30,6 +43,7 @@ export function createSharedLiquidationSubscriptions(connect: Connector = connec
     };
     let entry = active.get(key);
     if (entry) {
+      trimSharedLiquidations(entry, Date.now(), true);
       entry.listeners.add(listener);
       try {
         if (entry.hasSnapshot) listener.onSnapshot([...entry.rows.values()], entry.connected);
@@ -45,16 +59,10 @@ export function createSharedLiquidationSubscriptions(connect: Connector = connec
     }
     entry = {
       listeners: new Set([listener]), hasSnapshot: false, connected: false,
-      rows: new Map(), stop: () => {},
+      rows: new Map(), lastPrunedAt: 0, stop: () => {},
     };
     const current = entry;
     active.set(key, current);
-
-    const trim = () => {
-      const oldest = Date.now() - RETAIN_MS;
-      for (const [id, row] of current.rows) if (row.t < oldest) current.rows.delete(id);
-      while (current.rows.size > MAX_ROWS) current.rows.delete(current.rows.keys().next().value!);
-    };
 
     try {
       current.stop = connect({
@@ -76,7 +84,7 @@ export function createSharedLiquidationSubscriptions(connect: Connector = connec
             if (!newer || row.usd > newer.usd) merged.set(id, row);
           }
           current.rows = merged;
-          trim();
+          trimSharedLiquidations(current, Date.now(), true);
           current.hasSnapshot = true;
           current.connected = connected;
           // Each independent chart still receives the initial snapshot so it
@@ -94,7 +102,7 @@ export function createSharedLiquidationSubscriptions(connect: Connector = connec
           if (old && row.usd <= old.usd) return;
           if (old) current.rows.delete(id);
           current.rows.set(id, row);
-          trim();
+          trimSharedLiquidations(current);
           for (const subscriber of [...current.listeners]) {
             try { subscriber.onLiquidation(row); } catch {}
           }
