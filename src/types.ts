@@ -803,7 +803,8 @@ export interface SmartAnalysisData {
     rsiLabel: string;
     ema20: number;
     ema50: number;
-    ema200: number;
+    /** Unavailable if the exchange has fewer than 200 confirmed valid candles. */
+    ema200: number | null;
     priceVsEma: string;
     crossSignal: 'golden_cross' | 'death_cross' | 'bullish_alignment' | 'bearish_alignment' | 'compression';
     crossSignalLabel: string;
