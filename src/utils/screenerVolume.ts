@@ -23,6 +23,15 @@ export const SCREENER_VOLUME_CAPS = [
   { value: 50_000_000_000, label: 'До $50B' },
 ] as const;
 
-export function isVolumeWithinCap(volumeUsd: number, maxVolumeUsd: number): boolean {
-  return maxVolumeUsd === 0 || volumeUsd <= maxVolumeUsd;
+/** A selected 24-hour volume threshold can be either a ceiling or a floor. */
+export type ScreenerVolumeMode = 'to' | 'from';
+
+export function isVolumeWithinCap(
+  volumeUsd: number,
+  limitUsd: number,
+  mode: ScreenerVolumeMode = 'to',
+): boolean {
+  // 0 means "Без обмежень" in both modes. The boundary itself is inclusive.
+  if (limitUsd === 0) return true;
+  return mode === 'from' ? volumeUsd >= limitUsd : volumeUsd <= limitUsd;
 }
