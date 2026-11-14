@@ -196,10 +196,8 @@ Function h00kGuideBasicsCreate
   ${If} $0 == error
     Abort
   ${EndIf}
-  ${NSD_CreateMLText} 0 0 100% 100% "$(h00kGuide1)$\r$\n$\r$\n$(h00kGuide2)$\r$\n$\r$\n$(h00kGuide3)"
+  nsDialogs::CreateControl EDIT ${DEFAULT_STYLES}|${WS_TABSTOP}|${ES_MULTILINE}|${ES_AUTOVSCROLL}|${WS_VSCROLL}|${ES_READONLY} ${WS_EX_CLIENTEDGE} 0 0 100% 100% "$(h00kGuide1)$\r$\n$\r$\n$(h00kGuide2)$\r$\n$\r$\n$(h00kGuide3)"
   Pop $R6
-  ${NSD_RemoveStyle} $R6 ${WS_HSCROLL}|${ES_AUTOHSCROLL}
-  ${NSD_Edit_SetReadOnly} $R6 1
   nsDialogs::Show
 FunctionEnd
 
@@ -213,10 +211,8 @@ Function h00kGuideLayoutCreate
   ${If} $0 == error
     Abort
   ${EndIf}
-  ${NSD_CreateMLText} 0 0 100% 100% "$(h00kGuide4)$\r$\n$\r$\n$(h00kGuide5)$\r$\n$\r$\n$(h00kApi1)$\r$\n$\r$\n$(h00kApi2)"
+  nsDialogs::CreateControl EDIT ${DEFAULT_STYLES}|${WS_TABSTOP}|${ES_MULTILINE}|${ES_AUTOVSCROLL}|${WS_VSCROLL}|${ES_READONLY} ${WS_EX_CLIENTEDGE} 0 0 100% 100% "$(h00kGuide4)$\r$\n$\r$\n$(h00kGuide5)$\r$\n$\r$\n$(h00kApi1)$\r$\n$\r$\n$(h00kApi2)"
   Pop $R6
-  ${NSD_RemoveStyle} $R6 ${WS_HSCROLL}|${ES_AUTOHSCROLL}
-  ${NSD_Edit_SetReadOnly} $R6 1
   nsDialogs::Show
 FunctionEnd
 
@@ -230,10 +226,8 @@ Function h00kGuideApiCreate
   ${If} $0 == error
     Abort
   ${EndIf}
-  ${NSD_CreateMLText} 0 0 100% 100% "$(h00kApi3)$\r$\n$\r$\n$(h00kApi4)$\r$\n$\r$\n$(h00kApi5)$\r$\n$\r$\n$(h00kGuideFooter)"
+  nsDialogs::CreateControl EDIT ${DEFAULT_STYLES}|${WS_TABSTOP}|${ES_MULTILINE}|${ES_AUTOVSCROLL}|${WS_VSCROLL}|${ES_READONLY} ${WS_EX_CLIENTEDGE} 0 0 100% 100% "$(h00kApi3)$\r$\n$\r$\n$(h00kApi4)$\r$\n$\r$\n$(h00kApi5)$\r$\n$\r$\n$(h00kGuideFooter)"
   Pop $R6
-  ${NSD_RemoveStyle} $R6 ${WS_HSCROLL}|${ES_AUTOHSCROLL}
-  ${NSD_Edit_SetReadOnly} $R6 1
   nsDialogs::Show
 FunctionEnd
 
