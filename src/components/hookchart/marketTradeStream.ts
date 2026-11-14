@@ -304,9 +304,13 @@ class SharedMarketTradeStream {
           '/' + encodeURIComponent(symbol.toLowerCase()) + '@aggTrade')
         : new WebSocket(BYBIT_WS[marketType]);
       this.socket = ws;
+      // A socket that opens but closes immediately is not a successful
+      // recovery. Preserve exponential backoff until the connection has
+      // remained established for a meaningful interval.
+      let openedAt = 0;
       ws.onopen = () => {
         if (this.stopped || this.socket !== ws) return;
-        this.retries = 0;
+        openedAt = Date.now();
         if (exchange !== 'binance') {
           try {
             ws.send(JSON.stringify({ op: 'subscribe', args: ['publicTrade.' + symbol] }));
@@ -345,8 +349,14 @@ class SharedMarketTradeStream {
         } catch {}
       };
       const reconnect = () => {
-        if (this.ping) { clearInterval(this.ping); this.ping = null; }
+        // A late close/error from an older socket must NEVER cancel the
+        // heartbeat belonging to the already established replacement.
         if (this.stopped || this.socket !== ws || this.reconnectTimer) return;
+        if (this.ping) { clearInterval(this.ping); this.ping = null; }
+        // Only a stable connection resets the retry budget. Otherwise an
+        // exchange that briefly accepts then drops connections would induce
+        // a permanent one-second reconnect storm across Terminal coins.
+        if (openedAt > 0 && Date.now() - openedAt >= 30_000) this.retries = 0;
         const delay = marketTradeReconnectDelay(this.retries++);
         this.reconnectTimer = setTimeout(() => {
           this.reconnectTimer = null;
