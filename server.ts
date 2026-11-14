@@ -735,8 +735,11 @@ async function startServer() {
     res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
     res.setHeader('Cache-Control', 'no-store, no-transform');
     res.setHeader('X-Accel-Buffering', 'no');
-    const unsubscribe = subscribeSurveillance(userId, version => {
-      if (!res.writableEnded && !res.write(`event: changed\ndata: ${version}\n\n`)) {
+    const unsubscribe = subscribeSurveillance(userId, (version, urgent) => {
+      // One authenticated invalidation only; never stream private signals or
+      // exchange data across accounts. Critical alerts bypass routine polling.
+      const event = urgent ? 'alert' : 'changed';
+      if (!res.writableEnded && !res.write(`event: ${event}\ndata: ${version}\n\n`)) {
         res.end(); // disconnect slow clients rather than buffer indefinitely
       }
     });
