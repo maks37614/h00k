@@ -33,6 +33,23 @@ export function nextLiquidationCascadeTransition(
   return earliest;
 }
 
+/**
+ * The adaptive Liq display cutoff looks at events at most 15 minutes old,
+ * including the exact boundary. Cache its quantile until the oldest eligible
+ * event becomes too old; changes in the event buffer invalidate separately.
+ */
+export function nextLiquidationAdaptiveCutExpiry(
+  rows: readonly { t: number; usd: number }[], now: number,
+): number {
+  let earliest = Infinity;
+  for (const row of rows) {
+    if (!Number.isFinite(row.t) || !Number.isFinite(row.usd) || row.usd <= 0) continue;
+    const expiresAt = row.t + 15 * 60_000;
+    if (expiresAt >= now && expiresAt < earliest) earliest = expiresAt;
+  }
+  return earliest;
+}
+
 /** Fresh empty arrays and unchanged depth counters must not trigger a React
  * redraw in each idle chart's once-per-second hold-time refresh. */
 export function equalDepthAutoStats(
