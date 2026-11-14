@@ -47,5 +47,6 @@ test('surveillance endpoints do not report a successful manual scan without new 
   assert.match(createCoin, /return res\.json\(\{ success: true, pending: true/);
   assert.match(checkAll, /if \(!hasFreshSurveillanceCheck\(coin, updated\)\)/);
   assert.match(checkAll, /if \(!wasSurveillanceCheckCommitted\(updated, committed\)\)/);
-  assert.match(checkAll, /if \(failedChecks\) throw new SurveillanceCheckIncompleteError/);\n  assert.match(server, /err instanceof SurveillanceCheckIncompleteError/);
+  assert.match(checkAll, /if \(failedChecks\) throw new SurveillanceCheckIncompleteError/);
+  assert.match(server, /err instanceof SurveillanceCheckIncompleteError/);
 });
