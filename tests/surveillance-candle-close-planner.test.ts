@@ -72,3 +72,21 @@ test('all requested bar-close intervals must be up to date',()=>{
  assert.equal(planner.hasLatestClosedBars(modes,processed,now),true);
  assert.equal(planner.hasLatestClosedBars(config(['realtime']),undefined,now),true);
 });
+
+test('production CRON respects candle-close scheduling and persists routine checks in batches', () => {
+ const cron=readFileSync(new URL('../server/cronService.ts',import.meta.url),'utf8');
+ assert.match(cron,/candleCloseCheckPlanner\.due\(key, coin\.config, now\)/);
+ assert.match(cron,/candleCloseCheckPlanner\.hasLatestClosedBars\(/);
+ assert.match(cron,/candleCloseCheckPlanner\.failed\(/);
+ assert.match(cron,/candleCloseCheckPlanner\.succeeded\(/);
+ assert.match(cron,/commitSurveillanceCheck\(checked, \{ deferPersist: true \}\)/);
+ assert.match(cron,/flushDeferredSurveillanceChecks\(\)/);
+ assert.match(cron,/surveillanceCursor/);
+});
+
+test('open price alert pages poll without submitting redundant alert snapshots', () => {
+ const client=readFileSync(new URL('../src/context/AlertsContext.tsx',import.meta.url),'utf8');
+ const fromPoll=client.slice(client.indexOf('const pollSync = async () =>'));
+ assert.match(fromPoll,/apiFetch\('\/api\/alerts\?userId='/);
+ assert.doesNotMatch(fromPoll.slice(0,fromPoll.indexOf('const interval = setInterval')),/apiFetch\('\/api\/alerts\/sync'/);
+});
