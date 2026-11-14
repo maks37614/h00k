@@ -98,7 +98,7 @@ test('HTTP tracking is explicit; deleting the last coin stays empty after refres
     assert.equal(manualCheck.status, 503, 'offline manual checks must report unavailable market data');
     assert.equal((await manualCheck.json()).success, false);
     const checkAll = await post('/api/surveillance/check-all', { userId: 'owner' });
-    assert.equal(checkAll.status, 500, 'check-all must not return false success when candles are missing');
+    assert.equal(checkAll.status, 503, 'check-all must signal a retryable exchange-data failure');
     assert.equal((await checkAll.json()).success, false);
     assert.deepEqual((await list('owner')).map((c: any) => c.symbol), ['SOLUSDT'],
       'failed analysis never removes or overwrites the saved coin');
