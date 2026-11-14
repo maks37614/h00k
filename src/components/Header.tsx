@@ -250,10 +250,10 @@ export const Header: React.FC<HeaderProps> = ({
               id="refresh-screener-btn"
               onClick={onRefresh}
               disabled={isLoading}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all shadow-sm ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-semibold transition-all shadow-sm ${
                 isLoading
-                  ? 'bg-slate-800 text-slate-400 cursor-not-allowed'
-                  : 'bg-cyan-600 hover:bg-cyan-500 text-white shadow-cyan-900/30'
+                  ? 'border-slate-700 bg-slate-800 text-slate-400 cursor-not-allowed'
+                  : 'border-cyan-400/40 bg-cyan-600 hover:bg-cyan-500 text-white shadow-cyan-900/30'
               }`}
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />

@@ -88,12 +88,6 @@ article,
   scroll-behavior: smooth;
 }
 
-/* Borderless icon controls on Screener and Formations pages. */
-.app-header:is([data-page="screener"], [data-page="patterns"]) button,
-.app-header:is([data-page="screener"], [data-page="patterns"]) button * {
-  border-width: 0;
-}
-
 /* Chart controls respond to their own block, including narrow desktop columns. */
 .terminal-chart-block {
   container: terminal-chart / inline-size;

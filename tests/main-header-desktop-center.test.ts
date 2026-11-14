@@ -3,6 +3,7 @@ import test from 'node:test';
 import { readFileSync } from 'node:fs';
 
 const source = readFileSync(new URL('../src/components/Header.tsx', import.meta.url), 'utf8');
+const css = readFileSync(new URL('../src/index.css', import.meta.url), 'utf8');
 const brand = source.slice(
   source.indexOf('<div data-header-brand-row'),
   source.indexOf('{/* Navigation Category Tabs */}'),
@@ -33,4 +34,12 @@ test('desktop quick formation totals are removed without removing nav formation 
   assert.doesNotMatch(desktop, /bullishCount|bearishCount/);
   assert.match(source, /\{formationsCount\}/);
   assert.match(source, /id="nav-category-patterns-btn"/);
+});
+
+
+test('site header action borders remain visible on Screener and Formations', () => {
+  assert.doesNotMatch(css, /\.app-header:is\(\[data-page="screener"\], \[data-page="patterns"\]\) button/);
+  assert.match(source, /id="refresh-screener-btn"[\s\S]*?rounded-lg border text-xs/);
+  assert.match(source, /'border-cyan-400\/40 bg-cyan-600/);
+  assert.match(source, /'border-slate-700 bg-slate-800/);
 });
