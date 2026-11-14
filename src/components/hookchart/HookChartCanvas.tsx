@@ -17,6 +17,8 @@ import { fetchHistoricalReplayCandles } from '../../utils/replayService';
 import { normalizeExchangeSymbol } from '../../utils/marketSymbols';
 import { fetchDirectKlines } from '../../utils/directExchangeClient';
 import { fetchSharedAnalysisKlines } from '../../utils/sharedAnalysisKlines';
+import { sharedAnalysisHookCandles } from '../../utils/sharedAnalysisCandles';
+import { aggregateHookChartCandles, updateHookChartAggregation, type AggregationCache } from './aggregationCache';
 import { fetchSharedChartJson } from '../../utils/sharedChartRequests';
 import { candlesBeforeHistoryEnd, clampHookChartHistory, extendHookChartHistory, scopedHookChartHistoryRows, type ScopedHookChartHistory } from '../../utils/hookChartHistory';
 import { createChartCrosshairStore } from './crosshairState';
@@ -28,7 +30,7 @@ import { FibIcon, IndicatorIcon, OverlayIcon } from './ToolbarIcons';
 import { HookChartTimeframePicker } from './HookChartTimeframePicker';
 import { DEFAULT_HOOKCHART_HOTKEYS, OriginalHookChartSettings, hotkeyMatches, normalizeOriginalHookChartPreferences } from './OriginalHookChartSettings';
 import { evaluateStrategy, strategyPreset, strategyPreferencePatch } from './strategyEngine';
-import { chartMarketStatistics, deriveAutoLevels, formatUsd, normalizeDensityDistance, type LevelTf } from './marketAnalytics';
+import { chartMarketStatistics, memoizedAutoLevels, formatUsd, normalizeDensityDistance, type LevelTf } from './marketAnalytics';
 import { useOriginalHookChartLiveFeed } from './useOriginalHookChartLiveFeed';
 import { connectChartDiagnostics } from './chartDiagnostics';
 import { visibleChartDensities } from './reactionPotential';
@@ -101,32 +103,6 @@ const TIMEFRAMES: Timeframe[] = ['1m', '5m', '15m', '1h', '4h', '1d'];
 const TF_MS: Record<string, number> = { '1s': 1000, '5s': 5000, '15s': 15000, '1m': 60_000, '5m': 300_000, '15m': 900_000, '30m': 1_800_000, '1h': 3_600_000, '4h': 14_400_000, '1d': 86_400_000 };
 const LEVEL_TFS = new Set<LevelTf>(['5m', '15m', '1h', '4h', '1d']);
 
-function aggregateCandles(source: Candle[], sourceTf: string, targetTf: string): Candle[] {
-  const sourceMs = TF_MS[sourceTf] || 0;
-  const targetMs = TF_MS[targetTf] || 0;
-  if (!source.length || !sourceMs || !targetMs || targetMs < sourceMs) return targetTf === sourceTf ? source : [];
-  if (targetMs === sourceMs) return source;
-  const out: Candle[] = [];
-  let current: Candle | null = null;
-  let bucket = -1;
-  for (const candle of source) {
-    const nextBucket = Math.floor(candle.t / targetMs) * targetMs;
-    if (!current || nextBucket !== bucket) {
-      if (current) out.push(current);
-      bucket = nextBucket;
-      current = { ...candle, t: nextBucket };
-    } else {
-      current.h = Math.max(current.h, candle.h);
-      current.l = Math.min(current.l, candle.l);
-      current.c = candle.c;
-      current.v += candle.v || 0;
-      current.n += candle.n || 0;
-      current.tb = (current.tb || 0) + (candle.tb || 0);
-    }
-  }
-  if (current) out.push(current);
-  return out;
-}
 const OVERLAYS = [
   ['sr', 'Підтримка та опір'], ['prevDay', 'Хай / лой минулого дня'], ['dayOpen', 'Відкриття дня'],
   ['vwap', 'VWAP'], ['localHL', 'Локальні екстремуми'], ['roundLevels', 'Круглі рівні'], ['poc', 'POC'],
@@ -186,6 +162,9 @@ const HookChartCanvas = forwardRef<HookChartHandle, HookChartCanvasProps>(functi
   const historyStatus = historyState.scope === historyScope ? historyState.status : 'idle';
   const [historyRetry, setHistoryRetry] = useState(0);
   const [remoteSeries, setRemoteSeries] = useState<Record<string, Candle[]>>({});
+  // One immutable rolling aggregate per local higher timeframe, not a
+  // 5,000-candle rebuild every time a live trade updates the last bar.
+  const aggregateCache = useRef(new Map<string, AggregationCache>());
   const [oi, setOi] = useState(EMPTY_OI);
   const [oiError, setOiError] = useState(false);
   const [saveError, setSaveError] = useState(false);
@@ -422,7 +401,7 @@ const HookChartCanvas = forwardRef<HookChartHandle, HookChartCanvasProps>(functi
         try {
           const limit = Math.min(1000, Math.max(250, settings.levelHistory || 500, settings.trendHistory || 300));
           const result = await fetchSharedAnalysisKlines(exchange, marketType, symbol, tf as Timeframe, limit);
-          return [tf, toHookCandles(result)] as const;
+          return [tf, sharedAnalysisHookCandles(result)] as const;
         } catch {
           return [tf, [] as Candle[]] as const;
         }
@@ -445,16 +424,27 @@ const HookChartCanvas = forwardRef<HookChartHandle, HookChartCanvasProps>(functi
         series[tf] = remoteSeries[tf];
         continue;
       }
-      const aggregated = aggregateCandles(candles, timeframe, tf);
-      if (aggregated.length) series[tf] = aggregated;
+      if (replay || externalData) {
+        const aggregated = aggregateHookChartCandles(candles, timeframe, tf);
+        if (aggregated.length) series[tf] = aggregated;
+        continue;
+      }
+      const key = `${historyScope}:${tf}`;
+      const next = updateHookChartAggregation(candles, timeframe, tf, aggregateCache.current.get(key));
+      aggregateCache.current.set(key, next);
+      // Keep only a few cached instrument/timeframe pairs if the user switches
+      // coins or timeframe repeatedly within a mounted Terminal chart.
+      while (aggregateCache.current.size > 16)
+        aggregateCache.current.delete(aggregateCache.current.keys().next().value!);
+      if (next.candles.length) series[tf] = next.candles;
     }
     return series;
-  }, [candles, timeframe, analysisTfKey, remoteSeries]);
+  }, [candles, timeframe, analysisTfKey, remoteSeries, historyScope, replay, !!externalData]);
   const autoLevels = useMemo(() => (settings.levelIntervals || []).flatMap(tf => {
     if (!LEVEL_TFS.has(tf as LevelTf)) return [];
     const series = analysisSeries[tf] || [];
     if (series.length < 40) return [];
-    return deriveAutoLevels(series, tf as LevelTf, {
+    return memoizedAutoLevels(series, tf as LevelTf, {
       count: settings.levelCount ?? 3,
       allowedDiffPct: settings.levelDiff ?? .18,
       historyDepth: settings.levelHistory ?? 500,
