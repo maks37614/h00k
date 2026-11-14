@@ -41,7 +41,7 @@ function saveSettings() {
     fs.writeFileSync(temp, JSON.stringify(settings, null, 2), { mode: 0o600 });
     fs.renameSync(temp, statePath);
   } catch (err) {
-    console.error('Cannot persist Smart Dock settings:', err.message);
+    console.error('Не вдалося зберегти налаштування h00k Desktop:', err.message);
   }
 }
 function isTrustedWebURL(value) {
@@ -91,7 +91,7 @@ function attachDockToolbar(win, provider) {
   toolbar.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   toolbar.webContents.on('will-navigate', event => event.preventDefault());
   toolbar.webContents.loadFile(path.join(__dirname, 'toolbar.html'))
-    .catch(error => console.error('Smart Dock toolbar failed:', error.message));
+    .catch(error => console.error('h00k Desktop toolbar failed:', error.message));
   const toolbarId = toolbar.webContents.id;
   toolbarOwners.set(toolbarId, { win, provider });
   win.on('closed', () => {
@@ -159,7 +159,7 @@ function makeContentWindow(provider, id, mode = 'full') {
 }
 function createSettingsWindow() {
   settingsWindow = new BrowserWindow({
-    title: 'h00k Desktop • Smart Dock', width: 740, height: 810, minWidth: 550, minHeight: 590,
+    title: 'h00k Desktop • Налаштування прикріплення', width: 740, height: 810, minWidth: 550, minHeight: 590,
     backgroundColor: '#070a12', autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'), nodeIntegration: false,
@@ -497,7 +497,7 @@ else {
   app.whenReady().then(() => {
     loadSettings();registerIpc();createSettingsWindow();runAgent();
     if (process.platform !== 'win32') {
-      for (const provider of PROVIDERS) lastDockStatus[provider] = 'Smart Dock підтримується лише у Windows';
+      for (const provider of PROVIDERS) lastDockStatus[provider] = 'Прикріплення вікон підтримується лише у Windows';
     }
   });
   app.on('before-quit',()=>{quitting=true;if(agent){agent.kill();agent=null;}});
