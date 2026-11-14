@@ -54,10 +54,10 @@ test('Bybit packet row reordering does not create new IDs', () => {
 });
 
 test('liquidation WebSocket accepts Unicode contracts and rejects malformed symbols', async t => {
-  const received: string[] = [];
+  const received: Array<{ symbol: string; liveOnly: boolean }> = [];
   t.mock.method(liquidationFeed, 'startPersistence', () => {});
-  t.mock.method(liquidationFeed, 'addClient', (client: WebSocket, _exchange: string, symbol: string) => {
-    received.push(symbol);
+  t.mock.method(liquidationFeed, 'addClient', (client: WebSocket, _exchange: string, symbol: string, liveOnly = false) => {
+    received.push({ symbol, liveOnly });
     client.close(1000);
   });
   const server = http.createServer();
@@ -67,13 +67,14 @@ test('liquidation WebSocket accepts Unicode contracts and rejects malformed symb
   const port = (server.address() as { port: number }).port;
   for (const [symbol, expected] of [['龙虾USDT', 1000], ['E\u0301USDT', 1000], ['BTCUSDT', 1000], ['BTC/USDT', 1008], ['A'.repeat(81), 1008]] as const) {
     const code = await new Promise<number>((resolve, reject) => {
-      const client = new WebSocket(`ws://127.0.0.1:${port}/api/hookchart/liquidations?exchange=binance&symbol=${encodeURIComponent(symbol)}`);
+      const client = new WebSocket(`ws://127.0.0.1:${port}/api/hookchart/liquidations?exchange=binance&symbol=${encodeURIComponent(symbol)}${symbol === 'BTCUSDT' ? '&live=1' : ''}`);
       client.on('close', resolve);
       client.on('error', reject);
     });
     assert.equal(code, expected, symbol);
   }
-  assert.deepEqual(received, ['龙虾USDT', 'E\u0301USDT', 'BTCUSDT']);
+  assert.deepEqual(received, [{ symbol: '龙虾USDT', liveOnly: false },
+    { symbol: 'E\u0301USDT', liveOnly: false }, { symbol: 'BTCUSDT', liveOnly: true }]);
   const url = new URL(liquidationUpstreamUrl('binance', '龙虾USDT'));
   assert.equal(url.hostname, 'fstream.binance.com');
   assert.equal(decodeURIComponent(url.pathname), '/market/ws/龙虾usdt@forceOrder');
