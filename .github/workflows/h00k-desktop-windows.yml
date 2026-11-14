@@ -1,4 +1,7 @@
 name: h00k Desktop Windows
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 on:
   workflow_dispatch:
   pull_request:
@@ -45,6 +48,8 @@ jobs:
       - name: Test compact setup security, progress and locales
         run: npm test --prefix installer
       - name: Build animated h00k Setup
+        env:
+          DEBUG: electron-builder
         run: npm run dist --prefix installer
       - name: Verify branded icon in animated setup EXE
         shell: pwsh
