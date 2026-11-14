@@ -123,13 +123,13 @@ Function h00kLanguagePageCreate
   ${EndIf}
   ${NSD_CreateLabel} 0 3u 100% 20u "$(h00kLanguagePrompt)"
   Pop $1
-  ${NSD_CreateRadioButton} 0 32u 100% 21u "English (default)"
+  ${NSD_CreateRadioButton} 0 28u 100% 20u "English"
   Pop $h00kRadioEn
-  ${NSD_CreateRadioButton} 0 62u 100% 21u "Polski"
+  ${NSD_CreateRadioButton} 0 54u 100% 20u "Polski"
   Pop $h00kRadioPl
-  ${NSD_CreateRadioButton} 0 92u 100% 21u "Русский"
+  ${NSD_CreateRadioButton} 0 80u 100% 20u "Русский"
   Pop $h00kRadioRu
-  ${NSD_CreateRadioButton} 0 122u 100% 21u "Українська"
+  ${NSD_CreateRadioButton} 0 106u 100% 20u "Українська"
   Pop $h00kRadioUk
   ${If} $LANGUAGE == 1045
     ${NSD_Check} $h00kRadioPl
@@ -196,12 +196,10 @@ Function h00kGuideBasicsCreate
   ${If} $0 == error
     Abort
   ${EndIf}
-  ${NSD_CreateLabel} 0 5u 100% 35u "$(h00kGuide1)"
-  Pop $1
-  ${NSD_CreateLabel} 0 58u 100% 35u "$(h00kGuide2)"
-  Pop $1
-  ${NSD_CreateLabel} 0 108u 100% 66u "$(h00kGuide3)"
-  Pop $1
+  ${NSD_CreateMLText} 0 0 100% 100% "$(h00kGuide1)$\r$\n$\r$\n$(h00kGuide2)$\r$\n$\r$\n$(h00kGuide3)"
+  Pop $R6
+  ${NSD_RemoveStyle} $R6 ${WS_HSCROLL}|${ES_AUTOHSCROLL}
+  ${NSD_Edit_SetReadOnly} $R6 1
   nsDialogs::Show
 FunctionEnd
 
@@ -215,14 +213,10 @@ Function h00kGuideLayoutCreate
   ${If} $0 == error
     Abort
   ${EndIf}
-  ${NSD_CreateLabel} 0 3u 100% 36u "$(h00kGuide4)"
-  Pop $1
-  ${NSD_CreateLabel} 0 47u 100% 58u "$(h00kGuide5)"
-  Pop $1
-  ${NSD_CreateLabel} 0 114u 100% 36u "$(h00kApi1)"
-  Pop $1
-  ${NSD_CreateLabel} 0 157u 100% 45u "$(h00kApi2)"
-  Pop $1
+  ${NSD_CreateMLText} 0 0 100% 100% "$(h00kGuide4)$\r$\n$\r$\n$(h00kGuide5)$\r$\n$\r$\n$(h00kApi1)$\r$\n$\r$\n$(h00kApi2)"
+  Pop $R6
+  ${NSD_RemoveStyle} $R6 ${WS_HSCROLL}|${ES_AUTOHSCROLL}
+  ${NSD_Edit_SetReadOnly} $R6 1
   nsDialogs::Show
 FunctionEnd
 
@@ -236,14 +230,10 @@ Function h00kGuideApiCreate
   ${If} $0 == error
     Abort
   ${EndIf}
-  ${NSD_CreateLabel} 0 1u 100% 45u "$(h00kApi3)"
-  Pop $1
-  ${NSD_CreateLabel} 0 57u 100% 65u "$(h00kApi4)"
-  Pop $1
-  ${NSD_CreateLabel} 0 133u 100% 52u "$(h00kApi5)"
-  Pop $1
-  ${NSD_CreateLabel} 0 192u 100% 19u "$(h00kGuideFooter)"
-  Pop $1
+  ${NSD_CreateMLText} 0 0 100% 100% "$(h00kApi3)$\r$\n$\r$\n$(h00kApi4)$\r$\n$\r$\n$(h00kApi5)$\r$\n$\r$\n$(h00kGuideFooter)"
+  Pop $R6
+  ${NSD_RemoveStyle} $R6 ${WS_HSCROLL}|${ES_AUTOHSCROLL}
+  ${NSD_Edit_SetReadOnly} $R6 1
   nsDialogs::Show
 FunctionEnd
 
