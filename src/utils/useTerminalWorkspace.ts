@@ -186,15 +186,9 @@ export function useTerminalWorkspace() {
     }
   }, [uid, profile]);
 
-  useEffect(() => {
-    // A still-unhydrated or conflicted tab must not inherit the cloud version
-    // and then mistakenly use that version to publish its stale local state.
-    if (uid && hydrated.current && profile?.uid === uid && !syncConflictRef.current
-        && revision.current === savedRevision.current) {
-      // Never replace the compare-and-swap version while local edits are pending.
-      serverVersion.current = profile.terminalSettings?.version ?? null;
-    }
-  }, [uid, profile?.uid, profile?.terminalSettings?.version, syncConflict]);
+  // CAS is deliberately pinned to the version this tab actually loaded
+  // (or received from its own successful save). A newer profile update from
+  // another device must NOT silently grant this tab permission to overwrite it.
 
   const setField = useCallback(<K extends keyof typeof workspace>(field: K, update: SetStateAction<(typeof workspace)[K]>) => {
     setWorkspace(current => {
