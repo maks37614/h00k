@@ -62,6 +62,16 @@ export class NotificationRouter {
   // Scoped timestamps: `${source}:${userId}:${coinId}:${exchange}:${marketType}:${eventType}:${eventIdentity}` -> timestamp
   private inFlight = new Set<string>();
   private scopedAlertTimestamps = new NotificationCooldownCache();
+  private lastGateFailureLoggedAt = 0;
+  private logGateFailure(error: unknown) {
+    const now = Date.now();
+    if (this.lastGateFailureLoggedAt && now - this.lastGateFailureLoggedAt < 30_000) return;
+    this.lastGateFailureLoggedAt = now;
+    // A corrupted/unreadable private JSON store must fail closed without
+    // crashing the Node process or producing a log line per watching user.
+    console.error('[NotificationRouter] Telegram delivery gate unavailable:',
+      error instanceof Error ? error.message : 'unknown persistence error');
+  }
 
   // Default cooldowns per eventType in ms
   private readonly defaultCooldowns: Record<string, number> = {
@@ -234,28 +244,39 @@ export class NotificationRouter {
    * Main dispatch method - gates, sends, updates scoped timestamp
    */
   public async dispatch(payload: NotificationEventPayload): Promise<boolean> {
-    const gateResult = this.shouldNotify({
-      source: payload.source,
-      userId: payload.userId,
-      coin: payload.coin,
-      coinId: payload.coinId,
-      symbol: payload.symbol,
-      exchange: payload.exchange,
-      marketType: payload.marketType,
-      timeframe: payload.timeframe,
-      eventType: payload.eventType,
-      eventIdentity: payload.eventIdentity,
-      triggerMode: payload.triggerMode,
-      customCooldownMs: payload.customCooldownMs,
-      forceNotify: payload.forceNotify,
-    });
+    let gateResult: ShouldNotifyResult;
+    try {
+      gateResult = this.shouldNotify({
+        source: payload.source,
+        userId: payload.userId,
+        coin: payload.coin,
+        coinId: payload.coinId,
+        symbol: payload.symbol,
+        exchange: payload.exchange,
+        marketType: payload.marketType,
+        timeframe: payload.timeframe,
+        eventType: payload.eventType,
+        eventIdentity: payload.eventIdentity,
+        triggerMode: payload.triggerMode,
+        customCooldownMs: payload.customCooldownMs,
+        forceNotify: payload.forceNotify,
+      });
+    } catch (error) {
+      this.logGateFailure(error);
+      return false;
+    }
 
     if (!gateResult.allowed || this.inFlight.has(gateResult.scopedKey)) {
       return false;
     }
 
-    const userTg = getUserTelegram(payload.userId);
-    if (!userTg?.botToken || !userTg?.chatId) {
+    // The Telegram link may be edited between the gate and actual dispatch.
+    // Never let a damaged credentials file reject an unawaited CoinWorker call.
+    try {
+      const userTg = getUserTelegram(payload.userId);
+      if (!userTg?.botToken || !userTg?.chatId) return false;
+    } catch (error) {
+      this.logGateFailure(error);
       return false;
     }
 
