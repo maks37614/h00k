@@ -57,7 +57,8 @@ test('holder wallets, iceberg trades, HFT algorithms and manipulation are not fa
   assert.doesNotMatch(service, /185000|140000|45000|top10ConcentrationPct = total24hVolUsd/);
   assert.doesNotMatch(service, /TWAP-набір|Айсберг у стакані|активних адрес за добу/);
   assert.doesNotMatch(ui, /54\}%|62% Whales & Insiders|HFT_GRID|95% Conf|320000/);
-  assert.match(ui, /Ончейн-джерело не підключене/);
+  assert.match(ui, /CoinGecko Holders недоступні/);
+  assert.match(ui, /holderSnapshot\?\.status === 'available'/);
   assert.match(ui, /Одного зрізу стакана недостатньо/);
   assert.match(ui, /Евристика, не доказ маніпуляцій/);
   assert.match(ui, /Підтверджений спред вибраного ринку/);
