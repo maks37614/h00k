@@ -1,6 +1,7 @@
 import { publicPriceFeed } from './publicPriceFeed';
 import { AlertCheckScheduler } from './alertCheckScheduler';
 import { persistenceMetrics } from './persistenceMetrics';
+import { writePrivateJsonAtomic } from './privateAtomicJson';
 import { exchangeFetch } from './exchangeHttp';
 import { forEachBounded, selectRoundRobinBatch } from './priceAlertFallback';
 import fs from 'fs';
@@ -72,13 +73,8 @@ function loadDeletedAlertIds() {
 
 function saveDeletedAlertIds() {
   ensureDataDir();
-  const temporary = `${DELETED_ALERTS_FILE}.tmp`;
-  // Tombstones contain owner/alert identities. Restrict an old temp file
-  // before writing data, not just before its atomic rename.
-  protectExistingAlertTemp(temporary);
-  fs.writeFileSync(temporary, JSON.stringify([...deletedAlertIds]), { encoding: 'utf-8', mode: 0o600 });
-  fs.chmodSync(temporary, 0o600);
-  fs.renameSync(temporary, DELETED_ALERTS_FILE);
+  // Must be durable before deleting the corresponding alert snapshot.
+  writePrivateJsonAtomic(DELETED_ALERTS_FILE, JSON.stringify([...deletedAlertIds]));
 }
 
 export function getUserLanguage(userId?: string): SupportedLanguage {
@@ -109,17 +105,6 @@ function commitAlertDeletion(identities: string[], next: PriceAlert[]): void {
     alertsByUser = null;
     indexedAlerts = null;
     console.error('[Alerts] Tombstone saved but alerts.json rewrite failed; deletion remains effective');
-  }
-}
-
-/** Secure a temp file from an older release *before* writing personal data.
- * writeFileSync's mode applies only at creation; an existing 0644 file keeps
- * its old permissions unless they are tightened in advance. */
-function protectExistingAlertTemp(temp: string): void {
-  try {
-    fs.chmodSync(temp, 0o600);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
   }
 }
 
@@ -171,15 +156,9 @@ export function saveAlerts(alerts: PriceAlert[]): boolean {
   let bytes = 0;
   try {
     ensureDataDir();
-    const temp = `${ALERTS_FILE}.tmp`;
     const payload = JSON.stringify(alerts);
     bytes = Buffer.byteLength(payload);
-    // Price alerts contain personal settings. Restrict a reused temporary
-    // file before any personal data is written to it.
-    protectExistingAlertTemp(temp);
-    fs.writeFileSync(temp, payload, { encoding: 'utf-8', mode: 0o600 });
-    fs.chmodSync(temp, 0o600);
-    fs.renameSync(temp, ALERTS_FILE);
+    writePrivateJsonAtomic(ALERTS_FILE, payload);
     alertsCache = alerts;
     alertsByUser = null;
     indexedAlerts = null;
@@ -219,14 +198,9 @@ export function saveHistory(items: AlertHistoryItem[]): boolean {
   let bytes = 0;
   try {
     ensureDataDir();
-    const temp = `${HISTORY_FILE}.tmp`;
     const payload = JSON.stringify(items);
     bytes = Buffer.byteLength(payload);
-    // Alert history contains personal trigger and delivery information.
-    protectExistingAlertTemp(temp);
-    fs.writeFileSync(temp, payload, { encoding: 'utf-8', mode: 0o600 });
-    fs.chmodSync(temp, 0o600);
-    fs.renameSync(temp, HISTORY_FILE);
+    writePrivateJsonAtomic(HISTORY_FILE, payload);
     // A failed write must never make unpersisted history look durable.
     historyCache = items;
     historyByUser = null;
