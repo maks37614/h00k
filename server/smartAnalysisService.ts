@@ -565,212 +565,107 @@ export async function generateSmartAnalysis(params: {
       ? '1.0% - 1.5% від депозиту (плече не більше 2x - 3x). Фіксація 50% на TP1.'
       : 'Консервативно: до 0.8% від капіталу без надмірного плеча через змішаний фон.';
 
-  // 1. Аналіз Holders
-  const holdersStatus: 'accumulation' | 'distribution' | 'neutral' =
-    hasVolumeSpike && crossSignal === 'bullish_alignment'
-      ? 'accumulation'
-      : rsi > 76 || (crossSignal === 'death_cross' && !hasVolumeSpike)
-      ? 'distribution'
-      : 'neutral';
+  // 1. Actual holder concentration and wallet activity require an on-chain
+  // indexer. OHLCV and depth cannot establish who owns tokens or where they move.
+  const holdersStatus: SmartAnalysisData['participants']['holders']['status'] = 'unavailable';
+  const holdersStatusLabel = 'Ончейн-дані не підключено';
+  const top10ConcentrationPct: number | null = null;
+  const activeWalletsGrowthPct: number | null = null;
+  const retailVsWhaleRatio: string | null = null;
+  const phaseDescription = 'Немає підтверджених ончейн-даних про топ-10 гаманців, активні адреси та накопичення. Біржовий обсяг не дозволяє встановити ці показники.';
 
-  const holdersStatusLabel =
-    holdersStatus === 'accumulation'
-      ? 'Активна фаза накопичення великими гаманцями (Smart Accumulation)'
-      : holdersStatus === 'distribution'
-      ? 'Фаза фіксації прибутку та скидання монет у роздріб (Distribution)'
-      : 'Нейтральний баланс утримання позицій (Holding Balance)';
+  // 2. A snapshot shows RESTING LIMIT ORDERS, never executed whale trades,
+  // institutional identity, TWAP executions, iceberg orders or absorption.
+  const whaleOrders = orderbookData.largeOrders;
+  const largePlayerDetected: boolean | null = orderbookData.available ? whaleOrders.length > 0 : null;
+  const clusterVolumeUsd: number | null = orderbookData.available
+    ? whaleOrders.reduce((sum, order) => sum + order.amountUsd, 0) : null;
+  const actionType: SmartAnalysisData['participants']['largePlayer']['actionType'] = 'none';
+  const actionLabel = orderbookData.available
+    ? 'Великі лімітні заявки у поточному стакані (не виконані угоди)'
+    : 'Немає даних стакана';
+  const trackedClusters: SmartAnalysisData['participants']['largePlayer']['trackedClusters'] =
+    whaleOrders.slice(0, 8).map(order => ({
+      type: 'limit_order',
+      side: order.side === 'bid' ? 'buy' : 'sell',
+      price: order.price, volumeUsd: order.amountUsd,
+      timestampDesc: 'Поточний знімок стакана, виконання не підтверджено',
+    }));
+  const largePlayerNote = orderbookData.available
+    ? 'Ці заявки реально присутні у знімку стакана ' + orderbookData.source +
+      '. Особа власника, виконання, айсберги та інституційна активність не встановлені.'
+    : 'Дані про великі заявки недоступні для вибраного ринку.';
 
-  const top10ConcentrationPct = total24hVolUsd > 1e9 ? 34 : total24hVolUsd > 50e6 ? 52 : total24hVolUsd > 5e6 ? 66 : 82;
-  const activeWalletsGrowthPct = holdersStatus === 'accumulation' ? 6.4 : holdersStatus === 'distribution' ? -3.1 : 0.8;
-  const retailVsWhaleRatio = total24hVolUsd > 1e9 ? '38% Retail / 62% Whales' : '18% Retail / 82% Whales & Insiders';
-  const phaseDescription =
-    holdersStatus === 'accumulation'
-      ? `Концентрація монет у топ-10 гаманців складає ~${top10ConcentrationPct}%. Зафіксовано приплив у приватні холодні гаманці (+${activeWalletsGrowthPct}% активних адрес за добу). Дрібні гравці продають, великі акумулюють за лімітними ордерами.`
-      : holdersStatus === 'distribution'
-      ? `Топ-10 гаманців володіють ~${top10ConcentrationPct}% пропозиції. Зафіксовано відтік на біржові депозити (-${Math.abs(activeWalletsGrowthPct)}% активних адрес), що свідчить про розподіл монет на локальних хаях.`
-      : `Стабільний баланс: топ-10 утримують ~${top10ConcentrationPct}%. Показники активних гаманців без різких відхилень, переважно середньостроковий холдинг.`;
+  // 3. Maker identity, HFT algorithm and replenishment speed cannot be
+  // verified from one snapshot. The actual quoted spread is shown separately.
+  const marketMakerDetected: boolean | null = null;
+  const activityLevel: SmartAnalysisData['participants']['marketMaker']['activityLevel'] = 'unknown';
+  const activityLabel = 'Немає підтверджених даних про маркет-мейкера';
+  const algorithmType: SmartAnalysisData['participants']['marketMaker']['algorithmType'] = null;
+  const spreadSupportScore: number | null = null;
+  const orderbookReplenishmentSpeed: SmartAnalysisData['participants']['marketMaker']['orderbookReplenishmentSpeed'] = 'unknown';
+  const antiSqueezeProtection: boolean | null = null;
+  const marketMakerNote = 'Один знімок стакана не визначає HFT/grid-алгоритм, швидкість поновлення заявок або захист від сквизів.';
 
-  // 2. Авто-виявлення Великого Учасника (Whale / Smart Money)
-  const whaleOrders = orderbookData.largeOrders.filter((o) => o.significance === 'whale');
-  const largePlayerDetected = hasVolumeSpike || whaleOrders.length > 0 || total24hVolUsd > 15e6;
-  const clusterVolumeUsd = whaleOrders.reduce((sum, o) => sum + o.amountUsd, 0) || Math.round(currentPrice * 45000);
-
-  const actionType: 'accumulation' | 'absorption' | 'twap_buying' | 'distribution' | 'none' =
-    whaleOrders.some((o) => o.side === 'bid') && hasVolumeSpike
-      ? 'absorption'
-      : orderbookData.dominantSide === 'bids' && crossSignal !== 'bearish_alignment'
-      ? 'twap_buying'
-      : orderbookData.dominantSide === 'asks'
-      ? 'distribution'
-      : largePlayerDetected
-      ? 'accumulation'
-      : 'none';
-
-  const actionLabel =
-    actionType === 'absorption'
-      ? 'Агресивне поглинання лімітними покупками (Absorption Wall)'
-      : actionType === 'twap_buying'
-      ? 'Алгоритмічний TWAP-набір позиції частинами'
-      : actionType === 'distribution'
-      ? 'Прихована роздача позиції через верхні айсберги'
-      : actionType === 'accumulation'
-      ? 'Пасивне накопичення в діапазоні ліквідності'
-      : 'Явної присутності смарт-мані не зафіксовано';
-
-  const trackedClusters: SmartAnalysisData['participants']['largePlayer']['trackedClusters'] = [
-    {
-      type: 'iceberg',
-      side: orderbookData.dominantSide === 'asks' ? 'sell' : 'buy',
-      price: orderbookData.dominantSide === 'asks' ? orderbookData.askWallPrice : orderbookData.bidWallPrice,
-      volumeUsd: Math.round(clusterVolumeUsd * 0.45) || 185000,
-      timestampDesc: '5-15 хв тому (Айсберг у стакані)',
-    },
-    {
-      type: 'absorption',
-      side: 'buy',
-      price: Number(pocPrice.toPrecision(6)),
-      volumeUsd: Math.round(clusterVolumeUsd * 0.35) || 140000,
-      timestampDesc: 'Поглинання у ядрі POC',
-    },
-  ];
-
-  if (whaleOrders.length > 0) {
-    trackedClusters.unshift({
-      type: 'block_trade',
-      side: whaleOrders[0].side === 'bid' ? 'buy' : 'sell',
-      price: whaleOrders[0].price,
-      volumeUsd: whaleOrders[0].amountUsd,
-      timestampDesc: 'Остання велика лімітна стіна',
-    });
-  }
-
-  const largePlayerNote = largePlayerDetected
-    ? `Зафіксовано активність Smart Money: ${actionLabel.toLowerCase()}. Загальний обсяг відстежених великих кластерів складає $${(clusterVolumeUsd / 1e3).toFixed(0)}K.`
-    : 'Переважно роздрібний потік угод; відсутні явні сліди концентрованого інституційного капіталу.';
-
-  // 3. Авто-виявлення Маркет-Мейкерів
-  const isUltraTight = orderbookData.spread.quality === 'ultra_tight';
-  const marketMakerDetected = isUltraTight || total24hVolUsd > 1e6;
-  const activityLevel: 'high' | 'moderate' | 'low' =
-    isUltraTight && total24hVolUsd > 10e6 ? 'high' : marketMakerDetected ? 'moderate' : 'low';
-
-  const activityLabel =
-    activityLevel === 'high'
-      ? 'Висока активність інституційного алгоритмічного маркет-мейкінгу'
-      : activityLevel === 'moderate'
-      ? 'Помірна робота автоматизованого постачальника ліквідності'
-      : 'Низька присутність маркет-мейкера (Тонка ліквідність)';
-
-  const algorithmType: 'hft_grid' | 'spread_arbitrage' | 'synthetic_liquidity' | 'passive_quoting' =
-    isUltraTight ? 'hft_grid' : total24hVolUsd > 20e6 ? 'spread_arbitrage' : 'passive_quoting';
-
-  const spreadSupportScore = isUltraTight ? 95 : orderbookData.spread.quality === 'normal' ? 76 : 42;
-  const orderbookReplenishmentSpeed: 'ultra_fast' | 'normal' | 'slow' =
-    isUltraTight ? 'ultra_fast' : orderbookData.spread.quality === 'normal' ? 'normal' : 'slow';
-
-  const antiSqueezeProtection = spreadSupportScore > 70;
-  const marketMakerNote = marketMakerDetected
-    ? `Алгоритмічний маркет-мейкінг активний (${algorithmType.toUpperCase()}): спред ${orderbookData.spread.spreadPct}%, швидкість поновлення стакану ${orderbookReplenishmentSpeed === 'ultra_fast' ? 'миттєва' : 'нормальна'}. Захист від сквизів ${antiSqueezeProtection ? 'активний' : 'помірний'}.`
-    : 'Маркет-мейкер мінімізував присутність: розширений спред створює ризик раптових прослизань.';
-
-  // 4. Авто-виявлення Маніпулятивних Монет
-  let riskScore = 15;
+  // 4. Quantitative MARKET VULNERABILITY signals (not proof of manipulation).
+  // Skip each factor completely when its required market data is unavailable.
   const signals: SmartAnalysisData['participants']['manipulativeCoin']['signals'] = [];
-
-  const isLowVol = total24hVolUsd < 800000;
-  if (isLowVol) {
-    riskScore += 35;
+  let riskPoints = 10;
+  let measuredSignals = 0;
+  if (total24hVolUsd !== null) {
+    const thinVolume = total24hVolUsd < 800_000;
+    measuredSignals++;
+    if (thinVolume) riskPoints += 35;
     signals.push({
-      name: 'Низька добова ліквідність (<$800k)',
-      detected: true,
-      severity: 'high',
-      description: `Добовий обсяг лише $${(total24hVolUsd / 1e3).toFixed(0)}K дозволяє окремим гравцям маніпулювати ціною з малим депозитом.`,
-    });
-  } else {
-    signals.push({
-      name: 'Низька добова ліквідність (<$800k)',
-      detected: false,
-      severity: 'low',
-      description: `Добовий обсяг $${(total24hVolUsd / 1e6).toFixed(1)}M достатній для захисту від дрібних маніпуляцій.`,
+      name: 'Низький обсяг за 24 закриті 1h свічки (<800k USDT)',
+      detected: thinVolume, severity: thinVolume ? 'high' : 'low',
+      description: 'Виміряний обсяг ≈ ' + (total24hVolUsd / 1000).toFixed(0) +
+        'K у котируваній валюті. Це показник ліквідності, а не доказ маніпуляції.',
     });
   }
-
-  const isHighDailyRange = dailyRangePct > 24;
-  if (isHighDailyRange) {
-    riskScore += 25;
+  if (dailyRangePct !== null) {
+    const highRange = dailyRangePct > 24;
+    measuredSignals++;
+    if (highRange) riskPoints += 25;
     signals.push({
-      name: 'Аномальна амплітуда коливань',
-      detected: true,
-      severity: 'high',
-      description: `Денний розмах ${dailyRangePct}% свідчить про агресивні виноси стопів та штучне розгойдування.`,
-    });
-  } else {
-    signals.push({
-      name: 'Аномальна амплітуда коливань',
-      detected: false,
-      severity: 'low',
-      description: `Денний розмах ${dailyRangePct}% знаходиться в межах стандартної ринкової волатильності.`,
+      name: 'Великий діапазон 24 закритих 1h свічок (>24%)',
+      detected: highRange, severity: highRange ? 'high' : 'low',
+      description: 'Виміряний діапазон ' + dailyRangePct +
+        '%. Велика волатильність сама по собі не доводить маніпуляцій.',
     });
   }
-
-  const isThinBook = orderbookData.largeOrders.length === 0;
-  if (isThinBook) {
-    riskScore += 20;
+  if (orderbookData.bidAskRatio !== null) {
+    const extremeImbalance = orderbookData.bidAskRatio > 3 ||
+      orderbookData.bidAskRatio < 1/3;
+    measuredSignals++;
+    if (extremeImbalance) riskPoints += 20;
     signals.push({
-      name: 'Тонкий стакан ордерів (Thin Book)',
-      detected: true,
-      severity: 'medium',
-      description: 'Відсутність великих лімітних бар’єрів робить монету вразливою до ліквідаційних каскадів.',
-    });
-  } else {
-    signals.push({
-      name: 'Тонкий стакан ордерів (Thin Book)',
-      detected: false,
-      severity: 'low',
-      description: 'У стакані виявлені щільні лімітні заявки покупців та продавців.',
+      name: 'Значний дисбаланс заявок Bid/Ask (>3× або <1/3×)',
+      detected: extremeImbalance, severity: extremeImbalance ? 'medium' : 'low',
+      description: 'Зріз стакана ' + orderbookData.source + ': Bid/Ask = ' +
+        orderbookData.bidAskRatio + '. Дисбаланс не доводить спуфінгу.',
     });
   }
-
-  const hasSpoofingRisk = orderbookData.bidAskRatio > 3.0 || orderbookData.bidAskRatio < 0.33;
-  if (hasSpoofingRisk) {
-    riskScore += 15;
-    signals.push({
-      name: 'Ризик спуфінгу (Spoofing & Fake Walls)',
-      detected: true,
-      severity: 'medium',
-      description: `Критичний перекіс заявок (Bid/Ask = ${orderbookData.bidAskRatio}) може бути психологічним блефом для введення трейдерів в оману.`,
-    });
-  } else {
-    signals.push({
-      name: 'Ризик спуфінгу (Spoofing & Fake Walls)',
-      detected: false,
-      severity: 'low',
-      description: 'Співвідношення заявок на купівлю та продаж збалансоване без ознак фіктивних стін.',
-    });
-  }
-
-  riskScore = Math.min(Math.max(riskScore, 5), 98);
-  const manipulativeRiskLevel: 'low' | 'medium' | 'high' | 'extreme' =
-    riskScore >= 75 ? 'extreme' : riskScore >= 50 ? 'high' : riskScore >= 30 ? 'medium' : 'low';
-
-  const riskLabel =
-    manipulativeRiskLevel === 'low'
-      ? 'Низький ризик (Органічний інституційний актив)'
+  const riskScore: number | null = measuredSignals >= 2
+    ? Math.max(0, Math.min(100, riskPoints)) : null;
+  const manipulativeRiskLevel: SmartAnalysisData['participants']['manipulativeCoin']['riskLevel'] =
+    riskScore === null ? 'unknown' : riskScore >= 75 ? 'extreme' :
+    riskScore >= 50 ? 'high' : riskScore >= 30 ? 'medium' : 'low';
+  const riskLabel = riskScore === null
+    ? 'Індекс вразливості: даних недостатньо'
+    : manipulativeRiskLevel === 'low'
+      ? 'Низька вразливість за доступними факторами'
       : manipulativeRiskLevel === 'medium'
-      ? 'Помірний ризик (Робоча волатильність)'
-      : manipulativeRiskLevel === 'high'
-      ? 'Підвищений ризик (Можливі маніпулятивні сквизи)'
-      : 'Екстремальний ризик (Ознаки Pump & Dump / Тонкий ринок)';
-
-  const warningSummary =
-    manipulativeRiskLevel === 'low'
-      ? 'Монета демонструє здорову органічну ліквідність, вузький спред і стабільний стакан без слідів спуфінгу.'
-      : manipulativeRiskLevel === 'medium'
-      ? 'Присутні помірні фактори волатильності; рекомендовано виставляти лімітні стоп-лоси та не перевищувати розмір позиції.'
-      : 'УВАГА: висока ймовірність штучних проколів тінями (wick hunting) та збору ліквідності. Торгувати суворо зі зниженим плечем!';
-
-  const isManipulativeCoin = manipulativeRiskLevel === 'high' || manipulativeRiskLevel === 'extreme';
-  const manipulativeReasons = signals.filter((s) => s.detected).map((s) => s.description);
+        ? 'Помірна вразливість за доступними факторами'
+        : manipulativeRiskLevel === 'high'
+          ? 'Підвищена вразливість за доступними факторами'
+          : 'Висока вразливість за доступними факторами';
+  const warningSummary = riskScore === null
+    ? 'Недостатньо виміряних показників, щоб оцінювати ринкову вразливість.'
+    : 'Це евристичний індекс вразливості на основі ' + measuredSignals +
+      ' виміряних індикаторів. Маніпуляції, спуфінг і Pump & Dump не доведені.';
+  const isManipulativeCoin: boolean | null = null;
+  const manipulativeReasons = signals.filter(item => item.detected === true).map(item => item.description);
 
   // Comprehensive Ukrainian auto-summary
   const summary = `Комплексний інституційний аудит для ${symbol}: технічний рейтинг ${score}/10 (${verdictLabel}). ` +
