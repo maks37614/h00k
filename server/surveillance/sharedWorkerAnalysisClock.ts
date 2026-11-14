@@ -8,6 +8,9 @@ export class SharedWorkerAnalysisClock {
   private timer: ReturnType<typeof setInterval> | null = null;
   private ticks = 0;
   private failures = 0;
+  private lastDispatchMs = 0;
+  private peakDispatchMs = 0;
+  private overBudgetTicks = 0;
 
   constructor(private readonly intervalMs = 6000) {
     if (!Number.isFinite(intervalMs) || intervalMs < 100)
@@ -39,6 +42,7 @@ export class SharedWorkerAnalysisClock {
   }
 
   runTick() {
+    const startedAt = performance.now();
     this.ticks++;
     for (const group of this.groups.values()) {
       for (const callback of group) {
@@ -46,12 +50,19 @@ export class SharedWorkerAnalysisClock {
         catch { this.failures++; }
       }
     }
+    // This captures the synchronous analysis work kicked off by callbacks,
+    // not their later network awaits. No account or market IDs are exported.
+    this.lastDispatchMs = Math.max(0, performance.now() - startedAt);
+    this.peakDispatchMs = Math.max(this.peakDispatchMs, this.lastDispatchMs);
+    if (this.lastDispatchMs > this.intervalMs) this.overBudgetTicks++;
   }
   stats() {
     let subscribers = 0;
     for (const group of this.groups.values()) subscribers += group.size;
     return { instruments: this.groups.size, subscribers, timers: this.timer ? 1 : 0,
-      ticks: this.ticks, callbackFailures: this.failures };
+      ticks: this.ticks, callbackFailures: this.failures,
+      lastDispatchMs: this.lastDispatchMs, peakDispatchMs: this.peakDispatchMs,
+      overBudgetTicks: this.overBudgetTicks };
   }
 }
 export const sharedWorkerAnalysisClock = new SharedWorkerAnalysisClock();
