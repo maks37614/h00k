@@ -126,16 +126,18 @@ export function ProfileScreenerSearchSettings() {
   }, 'Обраний пресет застосовуватиметься при відкритті Скрінера.');
 
   const removePreset = (id: string) => {
-    if (editingId === id) {
-      setEditingId(null);
-      setPresetName('');
-      setDraft(normalizeScreenerSearchConfig(stored.defaultConfig, fallback));
-    }
     void write({
       ...stored,
       presets: (stored.presets || []).filter(item => item.id !== id),
       defaultPresetId: stored.defaultPresetId === id ? null : stored.defaultPresetId,
-    }, 'Пресет видалено.');
+    }, 'Пресет видалено.').then(saved => {
+      // On failed profile writes, preserve the selected preset and any unsaved edits.
+      if (saved && editingId === id) {
+        setEditingId(null);
+        setPresetName('');
+        setDraft(normalizeScreenerSearchConfig(stored.defaultConfig, fallback));
+      }
+    });
   };
 
   if (!user?.uid || profile?.uid !== user.uid) return <p className="text-sm text-slate-400">Завантаження налаштувань пошуку…</p>;
