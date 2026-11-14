@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Activity, ChevronDown, ChevronUp, Plus, Save, Star, Trash2, TrendingDown, TrendingUp, X } from 'lucide-react';
+import { Activity, ChevronDown, ChevronUp, Download, Plus, Save, Star, Trash2, TrendingDown, TrendingUp, Upload, X } from 'lucide-react';
 import type { MarketCoin, TerminalChartBlock, TerminalSavedPreset, Timeframe } from '../../types';
 import type { MarketCoinSnapshot, MarketSelection } from '../../utils/marketCoinLoader';
 import { MARKET_PRESETS, coinMarketKey, selectMarketPresetCoins, type TerminalMarketPreset } from '../../utils/marketPresets';
@@ -27,6 +27,7 @@ interface Props {
   syncConflict: boolean;
   onRetrySync: () => void;
   onDownloadLocalBackup: () => void;
+  onImportWorkspaceBackup: (json: string) => boolean;
   signedIn: boolean;
 }
 
@@ -34,7 +35,7 @@ const ICONS = { active: Activity, top_gainers: TrendingUp, top_losers: TrendingD
 const controlClass = 'rounded-lg border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:ring-2 focus:ring-cyan-500';
 
 export function TerminalPresetPanel({ blocks, watchlist, presets, selection, timeframe, activePreset, autoUpdate, menuOpen, snapshot, loading, error,
-  onActivePresetChange, onPresetChosen, onApplyCoins, onSavePreset, onLoadPreset, onDeletePreset, syncError, syncConflict, onRetrySync, onDownloadLocalBackup, signedIn }: Props) {
+  onActivePresetChange, onPresetChosen, onApplyCoins, onSavePreset, onLoadPreset, onDeletePreset, syncError, syncConflict, onRetrySync, onDownloadLocalBackup, onImportWorkspaceBackup, signedIn }: Props) {
   const { exchange, marketType } = selection;
   const [showPresets, setShowPresets] = useState(false);
   const [showForm, setShowForm] = useState(false);
@@ -118,6 +119,22 @@ export function TerminalPresetPanel({ blocks, watchlist, presets, selection, tim
     setShowPresets(true);
   }, [favoriteBlocks, blocks]);
 
+  const handleBackupFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.currentTarget.files?.[0];
+    event.currentTarget.value = '';
+    if (!file) return;
+    try {
+      if (file.size > 2_000_000) throw new Error('JSON-копія перевищує 2 МБ.');
+      const restored = onImportWorkspaceBackup(await file.text());
+      if (restored) {
+        setShowForm(false);
+        setMessage('Робочу область відновлено з JSON-копії.');
+      }
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'Не вдалося імпортувати JSON-копію.');
+    }
+  };
+
   const savePreset = (event: React.FormEvent) => {
     event.preventDefault();
     const cleanName = name.trim();
@@ -161,6 +178,15 @@ export function TerminalPresetPanel({ blocks, watchlist, presets, selection, tim
           className="flex items-center gap-1.5 rounded-lg border border-slate-700 px-3 py-2 text-slate-300 hover:bg-slate-800 disabled:opacity-40">
           <Save className="h-3.5 w-3.5" />Зберегти монети термінала
         </button>
+        <button type="button" onClick={onDownloadLocalBackup}
+          className="flex items-center gap-1.5 rounded-lg border border-slate-700 px-3 py-2 text-slate-300 hover:bg-slate-800">
+          <Download className="h-3.5 w-3.5" />Експорт JSON
+        </button>
+        <label className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-slate-700 px-3 py-2 text-slate-300 hover:bg-slate-800 focus-within:ring-2 focus-within:ring-cyan-500">
+          <Upload className="h-3.5 w-3.5" />Імпорт JSON
+          <input type="file" accept=".json,application/json" aria-label="Імпортувати JSON-копію Термінала"
+            className="sr-only" onChange={event => { void handleBackupFile(event); }} />
+        </label>
         {!signedIn && <span className="text-slate-500">Пресети зберігаються на цьому пристрої. Увійдіть для збереження у профілі.</span>}
       </div>
       {syncError && (
