@@ -394,18 +394,24 @@ const HookChartCanvas = forwardRef<HookChartHandle, HookChartCanvasProps>(functi
   useEffect(() => {
     const exchangeSymbol = /^[A-Z0-9]+$/i.test(symbol);
     if (replay || externalData || !exchangeSymbol) { setRemoteState(null); return; }
+    const requested = analysisTfs.filter(tf => tf !== timeframe && TIMEFRAMES.includes(tf as Timeframe));
+    if (!requested.length) {
+      // Do not create an idle per-chart 60-second poller when the current
+      // layout, overlays and strategy need no additional timeframes.
+      setRemoteState(current => current?.scope === historyScope &&
+        !Object.keys(current.series).length ? current : { scope: historyScope, series: {} });
+      return;
+    }
     let cancelled = false;
     let pulling = false;
     const controller = new AbortController();
+    const limit = Math.min(1000, Math.max(250, settings.levelHistory || 500, settings.trendHistory || 300));
     const pull = async () => {
       if (cancelled || pulling) return;
       pulling = true;
       try {
-      const requested = analysisTfs.filter(tf => tf !== timeframe && TIMEFRAMES.includes(tf as Timeframe));
-      if (!requested.length) { if (!cancelled) setRemoteState({ scope: historyScope, series: {} }); return; }
       const rows = await Promise.all(requested.map(async tf => {
         try {
-          const limit = Math.min(1000, Math.max(250, settings.levelHistory || 500, settings.trendHistory || 300));
           const result = await fetchSharedAnalysisKlines(exchange, marketType, symbol, tf as Timeframe, limit);
           return [tf, sharedAnalysisHookCandles(result)] as const;
         } catch {

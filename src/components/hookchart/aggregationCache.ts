@@ -8,6 +8,43 @@ const TF_MS: Record<string, number> = {
   '1h': 3_600_000, '4h': 14_400_000, '1d': 86_400_000,
 };
 
+/**
+ * Several higher timeframes evaluate the same immutable source-array change.
+ * Cache the shared prefix comparison by old/new array identities, so 5m, 15m,
+ * 1h, 4h do not each walk several thousand unchanged candle references.
+ *
+ * Both keys are weak; discarded histories and price ticks are collectible.
+ * The input contract is the same immutable-array contract already required
+ * by updateHookChartAggregation. A mutable in-place edit must be represented
+ * by a fresh candle object/array.
+ */
+type PrefixCheck = { matched: number; mismatchAt: number | null };
+const sharedPrefixChecks = new WeakMap<Candle[], WeakMap<Candle[], PrefixCheck>>();
+
+export function haveSameCandlePrefix(old: Candle[], next: Candle[], prefixLength: number): boolean {
+  if (!Number.isSafeInteger(prefixLength) || prefixLength < 0 ||
+      prefixLength > old.length || prefixLength > next.length) return false;
+  if (old === next || prefixLength === 0) return true;
+  let comparisons = sharedPrefixChecks.get(old);
+  if (!comparisons) {
+    comparisons = new WeakMap<Candle[], PrefixCheck>();
+    sharedPrefixChecks.set(old, comparisons);
+  }
+  const check = comparisons.get(next);
+  if (check?.mismatchAt !== null && check?.mismatchAt !== undefined &&
+      check.mismatchAt < prefixLength) return false;
+  if (check && check.matched >= prefixLength) return true;
+  const startingAt = check?.matched ?? 0;
+  for (let i = startingAt; i < prefixLength; i++) {
+    if (old[i] !== next[i]) {
+      comparisons.set(next, { matched: i, mismatchAt: i });
+      return false;
+    }
+  }
+  comparisons.set(next, { matched: prefixLength, mismatchAt: null });
+  return true;
+}
+
 export type AggregationCache = Readonly<{
   source: Candle[];
   sourceTf: string;
@@ -85,7 +122,7 @@ export function updateHookChartAggregation(
   if (!append && !replaceLast) return full();
 
   const prefixLength = replaceLast ? old.length - 1 : old.length;
-  for (let i = 0; i < prefixLength; i++) if (old[i] !== source[i]) return full();
+  if (!haveSameCandlePrefix(old, source, prefixLength)) return full();
 
   const oldLast = old.at(-1)!;
   const newest = source.at(-1)!;
