@@ -54,6 +54,7 @@ export class OrderBookEngine {
     revision: number; bids?: number[]; asks?: number[];
   } | null = null;
   private sortedPriceComputations = 0;
+  private bestPriceFullScans = 0;
 
   constructor(
     public readonly symbol: string,
@@ -126,20 +127,45 @@ export class OrderBookEngine {
       this.status = 'SYNCING';
     }
 
+    // Most incremental depth packets do not remove the current best price.
+    // Track top-of-book directly from changed levels; only search the whole
+    // side when that exact best price is deleted. A snapshot starts afresh.
+    let bestBid = delta.isSnapshot ? 0 : this.bestBid;
+    let bestAsk = delta.isSnapshot ? Infinity : (this.bestAsk || Infinity);
+    let bidDeletedAtBest = false;
+    let askDeletedAtBest = false;
     for (const [price, qty] of delta.bids) {
-      if (Number.isFinite(price) && price > 0 && Number.isFinite(qty) && qty >= 0)
-        qty === 0 ? this.bids.delete(price) : this.bids.set(price, qty);
+      if (!Number.isFinite(price) || price <= 0 ||
+          !Number.isFinite(qty) || qty < 0) continue;
+      if (qty === 0) {
+        this.bids.delete(price);
+        if (price === bestBid) bidDeletedAtBest = true;
+      } else {
+        this.bids.set(price, qty);
+        if (price > bestBid) bestBid = price;
+      }
     }
     for (const [price, qty] of delta.asks) {
-      if (Number.isFinite(price) && price > 0 && Number.isFinite(qty) && qty >= 0)
-        qty === 0 ? this.asks.delete(price) : this.asks.set(price, qty);
+      if (!Number.isFinite(price) || price <= 0 ||
+          !Number.isFinite(qty) || qty < 0) continue;
+      if (qty === 0) {
+        this.asks.delete(price);
+        if (price === bestAsk) askDeletedAtBest = true;
+      } else {
+        this.asks.set(price, qty);
+        if (price < bestAsk) bestAsk = price;
+      }
     }
-
-    // Scan prices once instead of materializing every level as call arguments.
-    let bestBid = 0;
-    let bestAsk = Infinity;
-    for (const price of this.bids.keys()) if (price > bestBid) bestBid = price;
-    for (const price of this.asks.keys()) if (price < bestAsk) bestAsk = price;
+    if (bidDeletedAtBest) {
+      bestBid = 0;
+      for (const price of this.bids.keys()) if (price > bestBid) bestBid = price;
+      this.bestPriceFullScans++;
+    }
+    if (askDeletedAtBest) {
+      bestAsk = Infinity;
+      for (const price of this.asks.keys()) if (price < bestAsk) bestAsk = price;
+      this.bestPriceFullScans++;
+    }
     this.bestBid = bestBid;
     this.bestAsk = bestAsk === Infinity ? 0 : bestAsk;
     if (this.bestBid > 0 && this.bestAsk > this.bestBid) {
@@ -218,7 +244,8 @@ export class OrderBookEngine {
 
   public thresholdStats() {
     return { medianComputations: this.medianComputations, bookRevision: this.bookRevision,
-      sortedPriceComputations: this.sortedPriceComputations };
+      sortedPriceComputations: this.sortedPriceComputations,
+      bestPriceFullScans: this.bestPriceFullScans };
   }
 
   private newlyAppearedDensities: DensityItem[] = [];
@@ -237,11 +264,14 @@ export class OrderBookEngine {
     const threshold = this.calculateAdaptiveThreshold();
     const seen = new Set<string>();
 
-    const minBidInBook = this.bids.size > 0 ? Math.min(...this.bids.keys()) : 0;
-    const maxAskInBook = this.asks.size > 0 ? Math.max(...this.asks.keys()) : Infinity;
-
+    // Track the book edges during the existing density pass instead of
+    // allocating spread arguments for two additional full-book scans.
+    let minBidInBook = Infinity;
+    let maxAskInBook = 0;
     const scan = (book: Map<number, number>, side: 'BID'|'ASK') => {
       for (const [price, qty] of book.entries()) {
+        if (side === 'BID') minBidInBook = Math.min(minBidInBook, price);
+        else maxAskInBook = Math.max(maxAskInBook, price);
         const notional = price * qty;
         if (notional < threshold) continue;
         const id = `${side.toLowerCase()}_${price}`;
@@ -251,6 +281,8 @@ export class OrderBookEngine {
       }
     };
     scan(this.bids,'BID'); scan(this.asks,'ASK');
+    if (!this.bids.size) minBidInBook = 0;
+    if (!this.asks.size) maxAskInBook = Infinity;
 
     for (const [id, item] of this.activeDensities.entries()) {
       if (seen.has(id)) continue;
