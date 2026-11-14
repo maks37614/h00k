@@ -90,6 +90,15 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
   const [marketError, setMarketError] = useState<string | null>(null);
   const marketCoins = marketSnapshot.coins;
   const terminalCoinCount = blocks.length;
+  // Legacy workspaces can contain more than the current 50-chart limit. Keep
+  // their full saved data, but mount only one page of charts at a time.
+  const [workspacePage, setWorkspacePage] = useState(0);
+  const workspacePageCount = Math.max(1, Math.ceil(blocks.length / MAX_TERMINAL_CHARTS));
+  const visibleWorkspacePage = Math.min(workspacePage, workspacePageCount - 1);
+  const visibleWorkspaceStart = visibleWorkspacePage * MAX_TERMINAL_CHARTS;
+  const visibleWorkspaceBlocks = useMemo(() => blocks.slice(
+    visibleWorkspaceStart, visibleWorkspaceStart + MAX_TERMINAL_CHARTS,
+  ), [blocks, visibleWorkspaceStart]);
   const [autoScaleCharts, setAutoScaleCharts] = useState<boolean>(() => {
     try { return localStorage.getItem('terminal_auto_scale_charts') === 'true'; }
     catch { return false; }
@@ -394,6 +403,8 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
     // existing matching chart or add the favorite without replacing other rows.
     const alreadyOpen = blocks.find(block => coinMarketKey(block) === coinMarketKey(favCoin));
     if (alreadyOpen) {
+      const blockIndex = blocks.findIndex(block => block.id === alreadyOpen.id);
+      setWorkspacePage(Math.floor(blockIndex / MAX_TERMINAL_CHARTS));
       setMaximizedBlockId(alreadyOpen.id);
       return;
     }
@@ -703,7 +714,7 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
   );
 
   const gridColsClass = useMemo(() => {
-    if (blocks.length === 1) return 'grid-cols-1';
+    if (visibleWorkspaceBlocks.length === 1) return 'grid-cols-1';
     switch (config.columns) {
       case 1: return 'grid-cols-1';
       case 2: return 'grid-cols-1 md:grid-cols-2';
@@ -713,7 +724,7 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
       case 6: return 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6';
       default: return 'grid-cols-1 md:grid-cols-2';
     }
-  }, [config.columns, blocks.length]);
+  }, [config.columns, visibleWorkspaceBlocks.length]);
 
   const computedHeightStyle = useMemo(() => {
     if (blocks.length === 1) {
@@ -730,8 +741,7 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
     }
 
     const cols = config.columns || 2;
-    const total = blocks.length;
-    const rows = Math.ceil(total / cols);
+    const rows = Math.ceil(visibleWorkspaceBlocks.length / cols);
 
     if (rows <= 1) {
       return 'calc(100vh - 110px)';
@@ -740,7 +750,7 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
     } else {
       return 'calc((100vh - 130px) / 3)';
     }
-  }, [blocks.length, config.autoFitScreen, config.blockHeight, config.columns]);
+  }, [blocks.length, visibleWorkspaceBlocks.length, config.autoFitScreen, config.blockHeight, config.columns]);
 
   // A loaded quote snapshot is not proof of an active WebSocket stream.
   // Having a snapshot does not make it fresh forever (for example after
@@ -1285,7 +1295,7 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
             ) : (
               <>
               <div className={`grid ${gridColsClass} gap-2 sm:gap-3 transition-all duration-200`}>
-                {blocks.map((block, index) => {
+                {visibleWorkspaceBlocks.map((block, index) => {
                   const coinData = getCoinForBlock(block);
                   const isMaximized = maximizedBlockId === block.id;
 
@@ -1309,19 +1319,19 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
                       onSendMetaScalp={onSendMetaScalp}
                       metaScalpBinding={metaScalpBinding}
                       onOpenTelegramAlerts={onOpenTelegramAlerts}
-                      onDragStart={() => handleDragStart(index)}
+                      onDragStart={() => handleDragStart(visibleWorkspaceStart + index)}
                       onDragOver={handleDragOver}
                       onDrop={(e) => {
                         e.preventDefault();
-                        handleDrop(index);
+                        handleDrop(visibleWorkspaceStart + index);
                       }}
                       heightStyle={computedHeightStyle}
                     />
                   );
                 })}
 
-                {/* "+ Додати графік" Tile Card at the end of grid */}
-                <div
+                {/* Existing >50-chart workspaces are view-only for additions until reduced. */}
+                {blocks.length < MAX_TERMINAL_CHARTS && <div
                   onClick={() => {
                     setIsAddModalOpen(true);
                   }}
@@ -1339,8 +1349,22 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
                       2,400+ монет на біржі ($50k - $10B)
                     </span>
                   </div>
-                </div>
+                </div>}
               </div>
+              {workspacePageCount > 1 && (
+                <nav aria-label="Сторінки великої робочої області" className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-800 bg-slate-900/80 px-3 py-2 text-xs text-slate-300">
+                  <span>Збережено {blocks.length} графіків · показано {visibleWorkspaceStart + 1}–{Math.min(visibleWorkspaceStart + MAX_TERMINAL_CHARTS, blocks.length)}</span>
+                  <div className="flex items-center gap-2">
+                    <button type="button" disabled={visibleWorkspacePage === 0}
+                      onClick={() => { setWorkspacePage(visibleWorkspacePage - 1); setMaximizedBlockId(null); chartListRef.current?.scrollTo({ top: 0 }); }}
+                      className="rounded-md border border-slate-700 px-3 py-1.5 disabled:opacity-40">← Назад</button>
+                    <span>Сторінка {visibleWorkspacePage + 1} / {workspacePageCount}</span>
+                    <button type="button" disabled={visibleWorkspacePage >= workspacePageCount - 1}
+                      onClick={() => { setWorkspacePage(visibleWorkspacePage + 1); setMaximizedBlockId(null); chartListRef.current?.scrollTo({ top: 0 }); }}
+                      className="rounded-md border border-slate-700 px-3 py-1.5 disabled:opacity-40">Далі →</button>
+                  </div>
+                </nav>
+              )}
               {presetPagination}
               </>
             )}
