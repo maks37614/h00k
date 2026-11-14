@@ -10,7 +10,7 @@ import { installMarketQuoteRoutes, publicQuoteResponseCache } from './server/mar
 import { installFavoriteQuoteRoutes } from './server/favoriteQuotes';
 import { installFullEarlyScanRoutes } from './server/earlyScanRoutes';
 import { fetch24hTradeCount } from './server/chartMarketStats';
-import { analyzeFormationWithAI } from './server/geminiService';
+import { analyzeFormationWithAI, evaluateFormationScoreWithAI } from './server/geminiService';
 import { generateSmartAnalysis } from './server/smartAnalysisService';
 import { calculateMarketSentiment, SentimentDataUnavailableError } from './server/sentimentService';
 import { installTelegramRoutes } from './server/telegramRoutes';
@@ -42,7 +42,7 @@ import {
   commitSurveillanceCheck,
   validateSurveillanceConfig,
 } from './server/surveillanceService';
-import { ExchangeId, MarketType, Timeframe } from './src/types';
+import { ExchangeId, MarketType, Timeframe, type Kline, type DetectedFormation } from './src/types';
 import { normalizeLanguage, telegramText } from './src/locales';
 import { normalizeExchangeSymbol } from './src/utils/marketSymbols';
 import { cronManager } from './server/cronService';
@@ -328,6 +328,58 @@ async function startServer() {
       res.json({ success: true, ...history });
     } catch {
       res.status(503).json({ success: false, error: 'Open interest history is temporarily unavailable' });
+    }
+  });
+
+  // On-demand independent AI setup score. Authenticated, rate-limited, never
+  // performs any market scan or substitutes a deterministic score for Gemini.
+  app.post('/api/ai/setup-score', requireUserAuth, async (req, res) => {
+    const data = req.body || {};
+    const symbol = typeof data.symbol === 'string' ? data.symbol.toUpperCase() : '';
+    const formation = data.formation as DetectedFormation | undefined;
+    const validFinite = (value: unknown): value is number =>
+      typeof value === 'number' && Number.isFinite(value);
+    if (!/^[A-Z0-9]{3,30}$/.test(symbol) ||
+        !['binance', 'bybit'].includes(data.exchange) ||
+        !['spot', 'futures'].includes(data.marketType) ||
+        !['1m', '5m', '15m', '1h', '4h', '1d'].includes(data.timeframe) ||
+        !formation || typeof formation !== 'object' ||
+        typeof formation.patternKey !== 'string' || formation.patternKey.length > 60 ||
+        !['bullish', 'bearish', 'neutral'].includes(formation.bias) ||
+        !formation.levels || !validFinite(formation.levels.entryPrice) ||
+        !validFinite(formation.levels.targetPrice) || !validFinite(formation.levels.stopLossPrice) ||
+        !validFinite(formation.confidence) || !validFinite(formation.riskRewardRatio) ||
+        !validFinite(data.currentPrice) || !Array.isArray(data.recentCandles) ||
+        data.recentCandles.length > 12) {
+      return res.status(400).json({ success: false, error: 'Недостатньо коректних даних формації' });
+    }
+    const candles = data.recentCandles as Kline[];
+    if (candles.some(c => !c || !validFinite(c.time) ||
+        !validFinite(c.open) || !validFinite(c.high) ||
+        !validFinite(c.low) || !validFinite(c.close) || !validFinite(c.volume))) {
+      return res.status(400).json({ success: false, error: 'Некоректні дані свічок' });
+    }
+    if (!process.env.GEMINI_API_KEY || process.env.GEMINI_API_KEY === 'MY_GEMINI_API_KEY') {
+      return res.status(503).json({ success: false, error: 'AI недоступний: Gemini не налаштовано' });
+    }
+    const userId = res.locals.userId as string;
+    if (!userWorkQuota.allow(userId, 'formation-ai-score', 10, 60 * 60_000) ||
+        !userWorkThrottle.allow(userId, 'formation-ai-score', 20_000)) {
+      return res.status(429).setHeader('Retry-After', '20').json({
+        success: false, error: 'Повторну оцінку AI можна виконати пізніше',
+      });
+    }
+    try {
+      const score = await evaluateFormationScoreWithAI({
+        symbol, exchange: data.exchange, marketType: data.marketType,
+        timeframe: data.timeframe, formation, currentPrice: data.currentPrice,
+        recentCandles: candles,
+      });
+      res.setHeader('Cache-Control', 'no-store');
+      return res.json({ success: true, score });
+    } catch (error) {
+      console.warn('AI setup score unavailable:', error instanceof Error ? error.message : 'unknown');
+      return res.status(503).json({ success: false, error: 'AI недоступний, спробуйте пізніше' });
     }
   });
 
