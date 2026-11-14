@@ -236,3 +236,40 @@ export function deriveAutoLevels(c:Candle[],tf:LevelTf,settings?:Partial<LevelSe
   const cap=tf==='1d'?10:tf==='4h'?12:tf==='1h'?14:16;
   return [...active,...broken.slice(0,6)].slice(0,cap);
 }
+
+
+/** Reuse pure structural-level analysis when higher-timeframe candle history
+ * is unchanged. The cache is scoped to the immutable candle array identity;
+ * a live update, data correction, new timeframe, or new settings gets fresh
+ * results. WeakMap prevents old market histories from being retained.
+ */
+const autoLevelCache = new WeakMap<Candle[], Map<string, AutoLevel[]>>();
+const AUTO_LEVEL_SETTINGS_CACHE_LIMIT = 16;
+
+export function memoizedAutoLevels(candles: Candle[], tf: LevelTf, settings?: Partial<LevelSettings>): AutoLevel[] {
+  // Normalize effective configuration before keying. Identical settings from
+  // separate Terminal charts must map to the same cached computation.
+  const config: LevelSettings = {
+    count: 3, allowedDiffPct: .18, historyDepth: 500,
+    breakPct: .35, minSeparationBars: 2, pivotBars: 15,
+    allowWickPenetration: true, ...settings,
+  };
+  const key = [
+    tf, config.count, config.allowedDiffPct, config.historyDepth,
+    config.breakPct, config.minSeparationBars, config.pivotBars,
+    config.allowWickPenetration,
+  ].join(':');
+  let variants = autoLevelCache.get(candles);
+  if (!variants) {
+    variants = new Map();
+    autoLevelCache.set(candles, variants);
+  }
+  const cached = variants.get(key);
+  if (cached) return cached;
+  const calculated = deriveAutoLevels(candles, tf, config);
+  variants.set(key, calculated);
+  // A single chart history can appear under many edited preferences.
+  while (variants.size > AUTO_LEVEL_SETTINGS_CACHE_LIMIT)
+    variants.delete(variants.keys().next().value!);
+  return calculated;
+}
