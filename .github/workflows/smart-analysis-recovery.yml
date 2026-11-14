@@ -5,6 +5,10 @@ on:
     branches: [main]
     paths:
       - 'server/smartAnalysisService.ts'
+      - 'server/verifiedBtcContext.ts'
+      - 'server/estimatedPoc.ts'
+      - 'tests/verified-btc-context.test.ts'
+      - 'tests/smart-analysis-poc.test.ts'
       - 'server.ts'
       - 'src/components/SmartAnalysisBlock.tsx'
       - 'src/types.ts'
@@ -14,6 +18,10 @@ on:
     branches: [main]
     paths:
       - 'server/smartAnalysisService.ts'
+      - 'server/verifiedBtcContext.ts'
+      - 'server/estimatedPoc.ts'
+      - 'tests/verified-btc-context.test.ts'
+      - 'tests/smart-analysis-poc.test.ts'
       - 'server.ts'
       - 'src/components/SmartAnalysisBlock.tsx'
       - 'src/types.ts'
@@ -34,4 +42,4 @@ jobs:
       - name: TypeScript check
         run: npm run lint
       - name: Smart Analysis data integrity tests
-        run: node --import ./tests/fixtures/offline-network.mjs --import tsx --test tests/smart-analysis-trust.test.ts tests/coingecko-holders.test.ts
+        run: node --import ./tests/fixtures/offline-network.mjs --import tsx --test tests/smart-analysis-trust.test.ts tests/coingecko-holders.test.ts tests/verified-btc-context.test.ts tests/smart-analysis-poc.test.ts
