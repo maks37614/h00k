@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { writePrivateJsonAtomic } from './privateAtomicJson';
 import { randomUUID } from 'node:crypto';
 import { getUserTelegram } from './userTelegram';
 import { sendTelegramMessage, editTelegramMessage } from './telegramService';
@@ -98,17 +99,7 @@ function commitRecords(records: TelegramDelivery[]) {
     retained.set(item.userId, count + 1);
     return count < 500;
   }).reverse();
-  const temporary = `${filePath}.tmp`;
-  // Creation mode does not fix a temp file left with 0644 permissions by an
-  // older release. Restrict it BEFORE writing private chat IDs and messages.
-  try {
-    fs.chmodSync(temporary, 0o600);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
-  }
-  fs.writeFileSync(temporary, JSON.stringify(next), { mode: 0o600 });
-  fs.chmodSync(temporary, 0o600);
-  fs.renameSync(temporary, filePath);
+  writePrivateJsonAtomic(filePath, JSON.stringify(next));
   deliveries = next;
   indexRecords(next);
 }
