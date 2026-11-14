@@ -73,7 +73,8 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
   const chartProvider = useChartProvider();
   const { preferences } = useAppPreferences();
   const { user, profile } = useAuth();
-  const { blocks, config, customPresets, setBlocks: updateBlocks, setConfig, setCustomPresets, syncError, retrySync } = useTerminalWorkspace();
+  const { blocks, config, customPresets, setBlocks: updateBlocks, setConfig, setCustomPresets,
+    syncError, syncConflict, retrySync, downloadLocalBackup } = useTerminalWorkspace();
   const [activeMarketPreset, setActiveMarketPreset] = useState<TerminalMarketPreset | null>(null);
   const [presetMatches, setPresetMatches] = useState<MarketCoin[]>([]);
   const [presetPage, setPresetPage] = useState(0);
@@ -1037,7 +1038,8 @@ export const TerminalPage: React.FC<TerminalPageProps> = ({
             onPresetChosen={() => setShowCoinPresets(false)}
             onApplyCoins={handleApplyMarketCoins} onSavePreset={handleSaveCoinPreset}
             onLoadPreset={handleLoadCoinPreset} onDeletePreset={id => setCustomPresets(current => current.filter(preset => preset.id !== id))}
-            syncError={syncError} onRetrySync={retrySync} signedIn={Boolean(user)}
+            syncError={syncError} syncConflict={syncConflict} onRetrySync={retrySync}
+            onDownloadLocalBackup={downloadLocalBackup} signedIn={Boolean(user)}
           />
         </div>
       </div>
