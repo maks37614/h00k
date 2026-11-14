@@ -38,6 +38,41 @@ jobs:
           $installer = Get-ChildItem dist -Filter '*.exe' | Select-Object -First 1
           if (-not $installer) { throw 'Windows installer not found' }
           & ./scripts/smoke-installer.ps1 -Installer $installer.FullName
+      - name: Prepare animated compact setup and embed checked NSIS payload
+        run: node installer/prepare.cjs
+      - name: Install compact setup dependencies
+        run: npm install --prefix installer --no-audit --no-fund
+      - name: Test compact setup security, progress and locales
+        run: npm test --prefix installer
+      - name: Build animated h00k Setup
+        run: npm run dist --prefix installer
+      - name: Verify branded icon in animated setup EXE
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem installer/dist -Filter '*.exe' | Select-Object -First 1
+          if (-not $setup) { throw 'Animated h00k Setup not found' }
+          & ./scripts/verify-installer-icon.ps1 -Installer $setup.FullName -RobotIcon ./build/h00k-installer.ico
+      - name: Verify portable setup actually contains the NSIS payload
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem installer/dist -Filter '*.exe' | Select-Object -First 1
+          if (-not $setup) { throw 'Animated h00k Setup not found' }
+          $proc = Start-Process -FilePath $setup.FullName -ArgumentList '--self-test' -Wait -PassThru
+          if ($proc.ExitCode -ne 0) { throw "Animated setup integrity test failed: $($proc.ExitCode)" }
+      - name: Publish SHA-256 for animated setup
+        shell: pwsh
+        run: |
+          $setup = Get-ChildItem installer/dist -Filter '*.exe' | Select-Object -First 1
+          if (-not $setup) { throw 'Animated h00k Setup not found' }
+          $hash = (Get-FileHash -LiteralPath $setup.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  $($setup.Name)" | Set-Content -LiteralPath installer/dist/SHA256SUMS.txt -Encoding ascii
+      - uses: actions/upload-artifact@v4
+        with:
+          name: h00k-animated-windows-setup
+          path: |
+            desktop/installer/dist/*.exe
+            desktop/installer/dist/SHA256SUMS.txt
+          if-no-files-found: error
       - name: Generate SHA-256 checksum
         shell: pwsh
         run: |
