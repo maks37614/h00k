@@ -56,8 +56,8 @@ test('top-of-book and imbalance share sorting until next depth revision',()=>{
  state.bids[0].quantity=999999;
  assert.deepEqual(book.getSortedBids(1).map(x=>[x.price,x.quantity]),[[100,5]],
    'snapshots are copies; mutating one cannot poison the sorted cache');
- book.applyDepth({sequence:2,bids:[[99,0],[104,10]],asks:[],eventTime:Date.now()});
- assert.deepEqual(book.getSortedBids(3).map(x=>x.price),[104,100,98]);
+ book.applyDepth({sequence:2,bids:[[99,0],[97,10]],asks:[],eventTime:Date.now()});
+ assert.deepEqual(book.getSortedBids(3).map(x=>x.price),[100,98,97]);
  assert.equal(book.thresholdStats().sortedPriceComputations,initial+3);
  assert.deepEqual(book.getSortedAsks(2).map(x=>x.price),[101,102]);
  assert.equal(book.thresholdStats().sortedPriceComputations,initial+4);
