@@ -1,6 +1,8 @@
 import type { Express, Request, Response, NextFunction } from 'express';
 import { captchaConfig, verifyAuthCaptcha } from './authCaptcha';
 import { issueArchivedScoreProof } from './archiveQualityProof';
+import { handoffQuery, createCommunityHandoff, communityHandoffUrl } from './communityArchiveHandoff';
+import { fetchKlines } from './marketService';
 import {
   AuthFailure, COOKIE_NAME, initializeIdentity, registerAccount, checkCredentials,
   verifyEmailToken, resendVerification, sendReset, changePasswordWithToken, readAccount,
@@ -230,6 +232,35 @@ export function installPostgresIdentityRoutes(app: Express) {
   }));
   // Explicit authenticated export of a signed archived score record. GET has
   // no side effects, requires an owner cookie, and does not expose account IDs.
+  // Explicit same-origin, owner-scoped handoff to the separate Community login.
+  // No token or cookies are given to Community; only public market bars and
+  // author-chosen levels cross in the URL fragment after the user clicks.
+  app.get('/api/account/archive/:id/community-handoff', requirePostgresSession, wrap(async (req, res) => {
+    rateLimit(req, 'community-handoff', 4, 60_000, false);
+    const archive = await loadArchiveItem(res.locals.userId, String(req.params.id));
+    if (!archive) throw new AuthFailure(404, 'Формацію не знайдено.', 'ARCHIVE_NOT_FOUND');
+    const { scope, endTime } = handoffQuery(archive);
+    const candles = await fetchKlines(
+      scope.exchange, scope.marketType, scope.symbol, scope.timeframe,
+      70, undefined, endTime, { chart: true },
+    );
+    let qualityProof;
+    if (process.env.H00K_QUALITY_SIGNING_KEY_B64 && archive?.formation?.validation?.confluence) {
+      try {
+        qualityProof = issueArchivedScoreProof(archive, process.env.H00K_QUALITY_SIGNING_KEY_B64);
+      } catch (error) {
+        if (!(error instanceof AuthFailure && error.code === 'QUALITY_NOT_AVAILABLE')) throw error;
+        // Unscored, inconsistent legacy archives may still transfer real bars
+        // with no badge; never substitute an unverified score.
+      }
+    }
+    const handoff = createCommunityHandoff(archive, candles, Date.now(), qualityProof);
+    res.json({
+      success: true,
+      url: communityHandoffUrl(handoff, process.env.H00K_COMMUNITY_HANDOFF_ORIGIN),
+      hasSignedScore: Boolean(qualityProof),
+    });
+  }));
   app.get('/api/account/archive/:id/quality-proof', requirePostgresSession, wrap(async (req, res) => {
     rateLimit(req, 'quality-proof-export', 10, 60_000, false);
     const archive = await loadArchiveItem(res.locals.userId, String(req.params.id));
