@@ -59,16 +59,18 @@ export function ProfileScreenerSearchSettings() {
     setMessage('');
   };
 
-  const write = async (next: SearchUserSettings, successMessage: string) => {
-    if (busy || !user?.uid || profile?.uid !== user.uid) return;
+  const write = async (next: SearchUserSettings, successMessage: string): Promise<boolean> => {
+    if (busy || !user?.uid || profile?.uid !== user.uid) return false;
     setBusy(true);
     setMessage('');
     setError('');
     try {
       await updateProfileData({ searchSettings: normalizeScreenerSearchSettings(next, fallback) });
       setMessage(successMessage);
+      return true;
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Не вдалося зберегти налаштування пошуку');
+      return false;
     } finally {
       setBusy(false);
     }
@@ -94,8 +96,8 @@ export function ProfileScreenerSearchSettings() {
         ? crypto.randomUUID() : `preset-${Date.now()}-${Math.random().toString(36).slice(2)}`);
     const item = { id, name: name.slice(0, 40), config: normalizeScreenerSearchConfig(draft, fallback) };
     const next = isEditingExisting ? presets.map(p => p.id === editingId ? item : p) : [...presets, item];
-    void write({ ...stored, presets: next }, isEditingExisting ? 'Пресет оновлено.' : 'Пресет створено.');
-    setEditingId(id);
+    void write({ ...stored, presets: next }, isEditingExisting ? 'Пресет оновлено.' : 'Пресет створено.')
+      .then(saved => { if (saved) setEditingId(id); });
   };
 
   const choosePreset = (id: string) => {
