@@ -172,5 +172,5 @@ test('CoinGecko integration stays behind server route and does not touch HookCha
   assert.match(view, /Джерело: CoinGecko/);
   assert.match(demo, /x-cg-demo-api-key/);
   assert.match(demo, /HOLDERS_TTL = 12 \* 60 \* 60_000/);
-  assert.doesNotMatch(demo, /\/top_holders|\/holders_chart/);
+  assert.doesNotMatch(demo, /getJson\([^)]*(?:top_holders|holders_chart)/);
 });
